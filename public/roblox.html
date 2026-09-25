@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Level Up - Recargas Roblox</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #050b14;
+      --panel-bg: #0c1527;
+      --card-bg: #101d36;
+      --card-border: #1e3a63;
+      --primary-cyan: #00ffcc;
+      --primary-blue: #0099ff;
+      --primary-gradient: linear-gradient(135deg, #0099ff, #00ffcc);
+      --price-bg: #070e1c;
+      --cyan-text: #00ffcc;
+      --text-main: #ffffff;
+      --text-muted: #94a3b8;
+      --danger: #ff3b3b;
+      --danger-dark: #2a0b10;
+      --warning: #ffcc00;
+      --whatsapp: #1db954;
+      --whatsapp-dark: #0e1e14;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--bg-dark);
+      background-image: radial-gradient(circle at top, #0a2540 0%, #050b14 70%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 12px 8px;
+      overflow-x: hidden;
+    }
+
+    @keyframes slideInUp {
+      0% { opacity: 0; transform: translateY(40px) scale(0.98); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes popIn {
+      0% { opacity: 0; transform: scale(0.85); }
+      70% { transform: scale(1.05); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes floating {
+      0%, 100% { transform: translateY(0); text-shadow: 0 0 15px rgba(0, 255, 204, 0.4); }
+      50% { transform: translateY(-5px); text-shadow: 0 0 25px rgba(0, 255, 204, 0.8); }
+    }
+    @keyframes pulse-whatsapp {
+      0% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0.6); }
+      70% { box-shadow: 0 0 0 15px rgba(29, 185, 84, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0); }
+    }
+    @keyframes toastSlide {
+      0% { opacity: 0; transform: translateY(-20px) scale(0.95); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* ESTILO DE NOTIFICACIÓN FLOTANTE (TOAST) */
+    #toastNotificacion {
+      display: none;
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(12, 21, 39, 0.95);
+      border: 2px solid var(--danger);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 14px;
+      z-index: 2000;
+      box-shadow: 0 10px 30px rgba(255, 59, 59, 0.3);
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+      max-width: 90%;
+      animation: toastSlide 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .anim-slide-up { opacity: 0; animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+
+    .main-card {
+      background: rgba(12, 21, 39, 0.9);
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(0, 255, 204, 0.15);
+      border-radius: 20px;
+      padding: 16px 12px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(0, 255, 204, 0.05);
+      margin-bottom: 20px;
+    }
+
+    .top-nav { margin-bottom: 12px; }
+    .btn-back { color: var(--primary-cyan); text-decoration: none; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; transition: 0.3s; }
+    .btn-back:hover { transform: translateX(-5px); color: #fff; }
+
+    .title-banner { 
+      text-align: center; font-family: 'Montserrat', sans-serif; font-size: 24px; font-weight: 900; 
+      color: var(--primary-cyan); letter-spacing: 1px; margin-bottom: 16px; 
+      text-transform: uppercase; animation: floating 3s ease-in-out infinite;
+    }
+
+    .step-title { font-size: 12px; font-weight: 800; color: var(--text-main); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .step-title::before { content: ''; display: block; width: 5px; height: 14px; background: var(--primary-gradient); border-radius: 4px; }
+
+    .id-section { margin-bottom: 20px; }
+    .id-input-group { display: flex; flex-direction: column; gap: 10px; }
+    .input-field { width: 100%; background: #070e1c; border: 2px solid var(--card-border); border-radius: 12px; padding: 12px 14px; color: var(--cyan-text); font-family: 'Poppins', sans-serif; font-size: 15px; font-weight: 700; outline: none; transition: all 0.3s ease; text-align: center; }
+    .input-field:focus { border-color: var(--primary-cyan); box-shadow: 0 0 12px rgba(0, 255, 204, 0.3); }
+
+    .btn-verify { width: 100%; background: var(--primary-gradient); color: #000; border: none; border-radius: 12px; padding: 12px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; text-transform: uppercase; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 4px 15px rgba(0, 255, 204, 0.3); }
+    .btn-verify:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 255, 204, 0.5); }
+    .btn-verify:active { transform: scale(0.97); }
+    .btn-verify:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+    
+    .id-status { font-size: 12px; margin-top: 8px; display: none; font-weight: 700; text-align: center; padding: 6px; border-radius: 8px; background: rgba(0,0,0,0.2); animation: popIn 0.3s ease; }
+
+    .catalog-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+    .product-card { background: var(--card-bg); border: 2px solid var(--card-border); border-radius: 14px; padding: 14px 8px; text-align: center; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; overflow: hidden; }
+    .product-card:hover { border-color: var(--primary-cyan); transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.4); }
+    .product-card:active { transform: scale(0.97); }
+    .product-card.selected { border-color: var(--primary-cyan); background: rgba(0, 255, 204, 0.08); box-shadow: 0 0 15px rgba(0, 255, 204, 0.35); transform: translateY(-2px) scale(1.01); }
+    .product-card.full-width { grid-column: span 2; }
+    
+    .robux-count { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 17px; color: #ffffff; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .price-box { background: var(--price-bg); border-radius: 10px; padding: 6px 8px; border: 1px solid rgba(255, 255, 255, 0.05); }
+    .price-text { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--cyan-text); letter-spacing: 0.5px; }
+
+    .checkout-section { display: none; background: rgba(0, 0, 0, 0.3); border: 1px dashed rgba(0, 255, 204, 0.4); border-radius: 16px; padding: 16px 12px; margin-top: 16px; animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+    .checkout-section.active { display: block; }
+    
+    .bank-card { background: linear-gradient(135deg, rgba(0,153,255,0.1), rgba(0,255,204,0.02)); border: 1px solid var(--primary-blue); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: inset 0 0 15px rgba(0,153,255,0.05); position: relative; overflow: hidden; }
+    .bank-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; color: #cbd5e1; font-weight: 600; }
+    .bank-row span { color: var(--primary-cyan); font-weight: 900; font-size: 14px; }
+    
+    .btn-copy { background: #070e1c; color: white; border: 1px solid var(--card-border); padding: 12px; border-radius: 12px; width: 100%; cursor: pointer; font-weight: 700; margin-bottom: 16px; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-copy:hover { border-color: var(--primary-cyan); color: var(--primary-cyan); background: #101d36; }
+    .btn-copy:active { transform: scale(0.96); }
+    .btn-copy.copied { background: var(--cyan-text); border-color: var(--cyan-text); color: #000; font-weight: 900; }
+
+    .file-upload-box { margin-bottom: 16px; }
+    input[type="file"] { background: #070e1c; padding: 10px; border-radius: 12px; border: 2px dashed var(--card-border); color: var(--text-muted); font-size: 12px; cursor: pointer; width: 100%; box-sizing: border-box; transition: 0.3s; }
+    input[type="file"]:hover { border-color: var(--primary-cyan); background: rgba(0,255,204,0.03); }
+    input[type="file"]::file-selector-button { background: var(--primary-cyan); color: #000; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 800; cursor: pointer; margin-right: 10px; transition: 0.3s; }
+    
+    .btn-submit-order { width: 100%; background: var(--primary-gradient); color: #000; border: none; padding: 14px; border-radius: 14px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; text-transform: uppercase; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 6px 20px rgba(0, 255, 204, 0.4); margin-top: 8px; }
+    .btn-submit-order:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 10px 25px rgba(0, 255, 204, 0.7); filter: brightness(1.2); }
+    .btn-submit-order:active { transform: scale(0.96); }
+
+    .overlay-pantalla { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 1000; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; }
+    .modal-content { background: var(--panel-bg); border: 2px solid var(--primary-cyan); border-radius: 20px; padding: 24px 18px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(0, 255, 204, 0.2); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; }
+    .modal-titulo { color: var(--primary-cyan); margin-top: 0; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 20px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    .whatsapp-theme { border-color: var(--whatsapp) !important; background: var(--whatsapp-dark) !important; box-shadow: 0 0 40px rgba(29, 185, 84, 0.15) !important; }
+    .whatsapp-theme .modal-titulo { color: var(--whatsapp) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .whatsapp-theme .modal-nota { background: rgba(29, 185, 84, 0.08); border-left: 4px solid var(--whatsapp); color: #a5f3c3; }
+    
+    .monto-detalle { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; margin: 12px 0; text-align: left; }
+    .monto-item { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+    .monto-item span { color: var(--text-main); }
+    .monto-item strong { color: var(--whatsapp); font-size: 14px; }
+    .monto-item:last-child { margin-bottom: 0; }
+    .monto-item.red strong { color: var(--danger); }
+
+    .btn-whatsapp { background: var(--whatsapp); color: white; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 12px; font-weight: 900; font-family: 'Montserrat', sans-serif; text-transform: uppercase; font-size: 13px; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); width: 100%; margin-bottom: 10px; border: none; cursor: pointer; animation: pulse-whatsapp 2s infinite; }
+    .btn-whatsapp:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4); }
+
+    .error-theme { border-color: var(--danger) !important; background: var(--danger-dark) !important; box-shadow: 0 0 40px rgba(255, 59, 59, 0.15) !important; }
+    .error-theme .modal-titulo { color: var(--danger) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .error-theme .modal-nota { background: rgba(255, 59, 59, 0.08); border-left: 4px solid var(--warning); color: #ffcccc; font-size: 12px; text-align: left; margin-top: 12px; }
+
+    .modal-botones { display: flex; gap: 8px; margin-top: 12px; }
+    .btn-revisar, .btn-confirmar { flex: 1; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer; border: none; font-size: 12px; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); text-transform: uppercase; font-family: 'Montserrat', sans-serif; }
+    .btn-revisar { background: #1e3a63; color: white; }
+    .btn-revisar:hover { background: #284c80; }
+    .btn-confirmar { background: var(--primary-gradient); color: #000; }
+    .btn-confirmar:hover { box-shadow: 0 6px 15px rgba(0, 255, 204, 0.6); }
+    
+    .btn-cerrar-dark { background: #101d36; color: white; border: 1px solid #1e3a63; padding: 12px; border-radius: 10px; font-weight: 800; width: 100%; cursor: pointer; transition: 0.3s; font-family: 'Montserrat', sans-serif; font-size: 12px; }
+    .btn-cerrar-dark:hover { background: #192e54; }
+
+    .modal-anime-card { background: var(--panel-bg); border: 2px solid var(--cyan-text); border-radius: 20px; padding: 24px 18px; max-width: 360px; width: 100%; text-align: center; box-shadow: 0 0 40px rgba(0, 255, 204, 0.3); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .anime-avatar-box { width: 120px; height: 120px; margin: 0 auto 15px auto; border-radius: 20px; overflow: hidden; border: 2px solid var(--cyan-text); box-shadow: 0 0 20px rgba(0, 255, 204, 0.4); }
+    .anime-avatar-box img { width: 100%; height: 100%; object-fit: cover; }
+    .anime-status-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--cyan-text); margin-bottom: 15px; }
+    .progress-bar-container { width: 100%; height: 8px; background: #070e1c; border-radius: 8px; overflow: hidden; border: 1px solid var(--card-border); }
+    .progress-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00c6ff, #00ffcc); box-shadow: 0 0 10px #00ffcc; transition: width 0.3s linear; }
+
+    #pantallaExito { display: none; text-align: center; border-color: var(--cyan-text); box-shadow: 0 0 40px rgba(0, 255, 204, 0.2); }
+    .tx-caja { background: #070e1c; border: 2px dashed var(--cyan-text); padding: 12px; border-radius: 12px; margin: 15px 0; font-size: 16px; font-weight: 900; color: var(--cyan-text); letter-spacing: 1px; user-select: all; word-break: break-all; }
+    .btn-volver-inicio { background: var(--primary-gradient); color: #000; padding: 12px 20px; border-radius: 10px; font-weight: 900; text-decoration: none; display: inline-block; width: 100%; transition: 0.3s; font-family: 'Montserrat', sans-serif; font-size: 13px; }
+    .btn-volver-inicio:hover { box-shadow: 0 8px 20px rgba(0, 255, 204, 0.5); }
+  </style>
+</head>
+<body>
+
+  <!-- NOTIFICACIÓN FLOTANTE ESTILO TOAST -->
+  <div id="toastNotificacion">
+    <span id="toastIcono">⚠️</span>
+    <span id="toastTexto">Mensaje de notificación</span>
+  </div>
+
+  <!-- MODAL DE PAGO INSUFICIENTE (WHATSAPP) -->
+  <div id="modalWhatsApp" class="overlay-pantalla">
+    <div class="modal-content whatsapp-theme">
+      <h2 class="modal-titulo">⚠️ PAGO INSUFICIENTE</h2>
+      <p id="textoMotivoWhatsApp" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;"></p>
+      
+      <div class="monto-detalle">
+        <div class="monto-item"><span>Monto Encontrado:</span> <strong id="waMontoEncontrado"></strong></div>
+        <div class="monto-item red"><span>Falta por pagar:</span> <strong id="waMontoFaltante"></strong></div>
+      </div>
+      
+      <div class="modal-nota" style="border-radius: 8px; padding: 10px; margin-bottom: 15px; font-size: 12px;">
+        Para resolver esto rápidamente, haz clic en el botón de abajo y envíanos un mensaje a nuestro WhatsApp oficial <strong>0414-1916377</strong>.
+      </div>
+      
+      <a id="btnWhatsAppLink" href="#" target="_blank" class="btn-whatsapp">
+        SOPORTE WHATSAPP
+      </a>
+      <button class="btn-cerrar-dark" onclick="cerrarModalWhatsApp()">CERRAR VENTANA</button>
+    </div>
+  </div>
+
+  <!-- MODAL DE PAGO RECHAZADO / ERROR -->
+  <div id="modalPagoNoEncontrado" class="overlay-pantalla">
+    <div class="modal-content error-theme">
+      <h2 class="modal-titulo">❌ PAGO RECHAZADO</h2>
+      <p id="textoErrorPago" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;"></p>
+      <div id="notaErrorExtra" class="modal-nota danger">
+        ⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea exacto al valor del paquete.
+      </div>
+      <button class="btn-cerrar-dark" style="margin-top: 12px;" onclick="cerrarModalNoEncontrado()">VOLVER A REVISAR</button>
+    </div>
+  </div>
+
+  <!-- MODAL DE CONFIRMACIÓN DE PEDIDO -->
+  <div id="modalConfirmacion" class="overlay-pantalla">
+    <div class="modal-content">
+      <h2 class="modal-titulo">⚠️ CONFIRMA TU PEDIDO</h2>
+      <div style="background: rgba(0, 0, 0, 0.5); padding: 14px; border-radius: 12px; text-align: left; border: 1px solid var(--card-border); margin-bottom: 12px;">
+        <p style="margin: 6px 0; font-size: 12px; color: var(--text-muted); font-weight: 600;">Usuario Roblox: <span id="resumenId" style="float: right; color: var(--cyan-text); font-weight: 800;"></span></p>
+        <p style="margin: 6px 0; font-size: 12px; color: var(--text-muted); font-weight: 600;">Paquete: <span id="resumenPaquete" style="float: right; color: var(--cyan-text); font-weight: 800;"></span></p>
+        <p style="margin: 6px 0; font-size: 12px; color: var(--text-muted); font-weight: 600;">Tu Pago: <span id="resumenMonto" style="float: right; color: var(--text-main); font-weight: 800;"></span></p>
+      </div>
+      <div style="font-size: 11px; color: var(--warning); background: rgba(255, 204, 0, 0.08); padding: 10px; border-radius: 8px; border-left: 4px solid var(--warning); text-align: left; line-height: 1.4; margin-bottom: 15px;">
+        Por favor, <strong>revisa detalladamente que tu usuario sea correcto</strong> para asegurar que tu pedido se procese sin inconvenientes.
+      </div>
+      <div class="modal-botones">
+        <button class="btn-revisar" onclick="cerrarModal()">REVISAR</button>
+        <button class="btn-confirmar" id="btnConfirmar" onclick="iniciarCargaConTiemposAleatorios()">¡SÍ, ENVIAR!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANTALLA DE PROCESAMIENTO Y ÉXITO -->
+  <div id="pantallaProcesando" class="overlay-pantalla">
+    <div class="modal-anime-card" id="cajaContenedorAnime">
+      <div class="anime-avatar-box"><img src="jugando.gif" alt="Procesando recarga"></div>
+      <div class="anime-status-text" id="textoContadorAnimado">📡 Asignando PIN... (3s)</div>
+      <div class="progress-bar-container"><div class="progress-bar-fill" id="barraProgresoFill"></div></div>
+    </div>
+
+    <div class="modal-content" id="pantallaExito">
+      <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
+      <h2 style="color: var(--cyan-text); margin-top:0; font-family: 'Montserrat', sans-serif; font-size: 20px;">¡CÓDIGO DE ROBLOX LISTO!</h2>
+      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu PIN se ha obtenido exitosamente de la bóveda:</p>
+      <div class="tx-caja" id="codigoPinRoblox">XXXX-XXXX-XXXX</div>
+      <p style="color: var(--primary-cyan); font-size: 11px; font-weight: 700; margin-bottom: 18px; background: rgba(0,255,204,0.1); padding: 8px; border-radius: 8px;">⚠️ Cópialo y canjéalo directamente en roblox.com/redeem.</p>
+      <a href="index.html" class="btn-volver-inicio">VOLVER AL INICIO</a>
+    </div>
+  </div>
+
+  <div class="main-card anim-slide-up">
+    <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a></div>
+    <h1 class="title-banner anim-slide-up delay-1">🟥 ROBLOX 🟥</h1>
+
+    <div class="id-section anim-slide-up delay-2">
+      <div class="step-title">1. INGRESA TU USUARIO DE ROBLOX</div>
+      <div class="id-input-group">
+        <input type="text" id="inputPlayerId" class="input-field" placeholder="Ej: TuNombreDeUsuario" required>
+        <button type="button" id="btnVerifyId" class="btn-verify">CONFIRMAR USUARIO</button>
+      </div>
+      <div id="idStatus" class="id-status"></div>
+    </div>
+
+    <div class="step-title anim-slide-up delay-3">2. SELECCIONA TU PAQUETE DE ROBUX</div>
+    <div class="catalog-grid anim-slide-up delay-3" id="catalogContainer">
+      <div style="text-align: center; grid-column: span 2; color: var(--text-muted); padding: 20px 0; font-size: 13px;">Cargando catálogo de Roblox...</div>
+    </div>
+
+    <div class="checkout-section" id="checkoutSection">
+      <div class="step-title">3. REALIZA EL PAGO MÓVIL</div>
+      <div class="bank-card">
+        <div id="bankInfoContainer">
+          <div class="bank-row">Banco: <span>Venezuela (0102)</span></div>
+          <div class="bank-row">Teléfono: <span>04141916377</span></div>
+          <div class="bank-row">Cédula: <span>28779959</span></div>
+        </div>
+        <hr style="border-color: rgba(0,255,204,0.2); margin: 12px 0;">
+        <div class="bank-row" style="margin-bottom: 0;">Total a pagar: <span id="montoPagar" style="color: var(--cyan-text); font-size: 18px;">0,00 Bs</span></div>
+      </div>
+      <button type="button" id="btnCopiarDatos" class="btn-copy" onclick="copiarDatosBanco()">📋 Copiar datos bancarios</button>
+
+      <div class="file-upload-box">
+        <div class="step-title">4. SUBE TU COMPROBANTE (CAPTURE)</div>
+        <input type="file" id="inputComprobante" accept="image/*" onchange="analizarCapture(this)">
+        <div id="cajaIA" style="display: none; margin-top: 12px; padding: 12px; background: rgba(0, 255, 204, 0.05); border: 1px dashed var(--cyan-text); border-radius: 12px;">
+          <div id="cargandoIA" style="color: var(--cyan-text); font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 8px;">Leyendo comprobante...</div>
+          <div id="resultadoIA" style="display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
+            <span style="color: var(--text-main); font-size: 12px; font-weight: bold;">Referencia detectada: <span id="refIA" style="font-size: 16px; color: var(--primary-cyan); letter-spacing: 1px; display: block; margin-top: 4px;"></span></span>
+            <button type="button" onclick="usarReferenciaIA()" style="background: var(--primary-gradient); color: #000; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-size: 11px;">Usar Número</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-title">5. CONFIRMA TU PAGO</div>
+      <div style="margin-bottom: 16px;">
+        <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputReferencia" class="input-field" placeholder="Solo los últimos 5 dígitos" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+      </div>
+
+      <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🚀 OBTENER CÓDIGO DE ROBLOX</button>
+    </div>
+  </div>
+
+  <script type="module">
+    let paqueteSeleccionado = null; 
+    let usuarioVerificado = false;
+    let datosBancoGlobal = { banco: "Bancamiga (0172)", telefono: "04141916377", cedula: "28779959" }; 
+    let isProcessing = false;
+    
+    const API_ROBLOX = '/api/roblox';
+
+    function mostrarToast(mensaje, icono = "⚠️") {
+      const toast = document.getElementById('toastNotificacion');
+      document.getElementById('toastTexto').textContent = mensaje;
+      document.getElementById('toastIcono').textContent = icono;
+      toast.style.display = 'flex';
+      
+      setTimeout(() => {
+        toast.style.display = 'none';
+      }, 3500);
+    }
+
+    async function cargarCatalogoRoblox() {
+      const container = document.getElementById('catalogContainer');
+      try {
+        const response = await fetch(API_ROBLOX, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo: "obtener_precios" })
+        });
+        
+        const data = await response.json();
+
+        if (data.status === "success" && data.precios) {
+          container.innerHTML = '';
+          const precios = data.precios;
+          let index = 0;
+          for (const producto in precios) {
+            const precio = precios[producto];
+            const card = document.createElement('div');
+            let delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
+            const esUltimoImpar = (Object.keys(precios).length % 2 !== 0) && (index === Object.keys(precios).length - 1);
+            card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar ? 'full-width' : ''}`;
+            card.innerHTML = `<div class="robux-count">${producto}</div><div class="price-box"><div class="price-text">${precio} Bs</div></div>`;
+            card.addEventListener('click', () => seleccionarProducto(card, { producto: producto, precio: precio }));
+            container.appendChild(card);
+            index++;
+          }
+        } else {
+            container.innerHTML = '<div style="text-align:center; grid-column:span 2;">Error al cargar el catálogo de Roblox.</div>';
+        }
+      } catch (error) {
+        console.error("Error al obtener los precios:", error);
+        container.innerHTML = '<div style="text-align:center; grid-column:span 2;">Fallo de conexión al cargar el catálogo.</div>';
+      }
+    }
+
+    function seleccionarProducto(cardElement, paquete) {
+      document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+      cardElement.classList.add('selected'); 
+      paqueteSeleccionado = paquete;
+      document.getElementById('montoPagar').innerText = `${paquete.precio} Bs`;
+      verificarEstadoDesbloqueo();
+    }
+
+    function verificarEstadoDesbloqueo() {
+      const checkoutSection = document.getElementById('checkoutSection');
+      if (usuarioVerificado && paqueteSeleccionado) { checkoutSection.classList.add('active'); } else { checkoutSection.classList.remove('active'); }
+    }
+
+    document.getElementById('btnVerifyId').addEventListener('click', () => {
+      const usuarioInput = document.getElementById('inputPlayerId').value.trim();
+      const statusDiv = document.getElementById('idStatus');
+
+      if (usuarioInput.length < 2) {
+        mostrarToast('Ingresa un usuario de Roblox válido', '❌');
+        usuarioVerificado = false; verificarEstadoDesbloqueo(); return;
+      }
+      
+      usuarioVerificado = true;
+      statusDiv.style.display = 'block';
+      statusDiv.style.color = 'var(--cyan-text)'; 
+      statusDiv.innerHTML = `✔️ Usuario verificado: <strong style="color: #fff;">${usuarioInput}</strong>`;
+      verificarEstadoDesbloqueo();
+    });
+
+    document.getElementById('inputPlayerId').addEventListener('input', () => { 
+      usuarioVerificado = false; 
+      document.getElementById('idStatus').style.display = 'none'; 
+      verificarEstadoDesbloqueo(); 
+    });
+
+    window.analizarCapture = async function(input) {
+      if (!input.files || !input.files[0]) return; const file = input.files[0];
+      const cajaIA = document.getElementById('cajaIA'); const resultadoIA = document.getElementById('resultadoIA'); const refIA = document.getElementById('refIA'); const cargandoIA = document.getElementById('cargandoIA');
+      if (!file.type.startsWith("image/")) return; if (typeof Tesseract === 'undefined') return;
+      cajaIA.style.display = 'block'; cargandoIA.style.display = 'flex'; resultadoIA.style.display = 'none';
+      try {
+        const resultadoOCR = await Tesseract.recognize(file, 'eng+spa');
+        const textoSinFechas = resultadoOCR.data.text.replace(/\b(202[0-9]|20[0-2][0-9]|[0-3][0-9][-\/][0-1][0-9][-\/][0-9]{2,4})\b/g, '');
+        let numerosEncontrados = "";
+        const matchEtiqueta = textoSinFechas.match(/(?:referencia|operacion|nro|ref|doc)[:\s]*([0-9]{5,20})/i);
+        if (matchEtiqueta && matchEtiqueta[1]) { numerosEncontrados = matchEtiqueta[1]; } else {
+          let posiblesNumeros = textoSinFechas.match(/\b[0-9]{5,20}\b/g);
+          if (posiblesNumeros && posiblesNumeros.length > 0) { numerosEncontrados = posiblesNumeros[posiblesNumeros.length - 1]; }
+        }
+        if (numerosEncontrados && numerosEncontrados.length >= 5) {
+          refIA.textContent = numerosEncontrados.slice(-5);
+          cargandoIA.style.display = 'none'; resultadoIA.style.display = 'flex';
+        } else { cajaIA.style.display = 'none'; }
+      } catch (e) { cajaIA.style.display = 'none'; }
+    };
+
+    window.usarReferenciaIA = function() { document.getElementById('inputReferencia').value = document.getElementById('refIA').textContent; };
+
+    window.copiarDatosBanco = function() {
+      navigator.clipboard.writeText(`Banco: ${datosBancoGlobal.banco}\nTeléfono: ${datosBancoGlobal.telefono}\nCédula: ${datosBancoGlobal.cedula}`).then(() => {
+        const btn = document.getElementById('btnCopiarDatos'); btn.innerHTML = "✅ ¡Copiado con éxito!"; btn.classList.add('copied');
+        setTimeout(() => { btn.innerHTML = "📋 Copiar datos bancarios"; btn.classList.remove('copied'); }, 3000);
+      });
+    };
+
+    window.abrirModal = function() {
+      const usuario = document.getElementById('inputPlayerId').value.trim();
+      const ref = document.getElementById('inputReferencia').value.trim();
+      const fileInput = document.getElementById('inputComprobante');
+      
+      // BLOQUEO ANTI-SPAM (VERIFICACIÓN PREVIA)
+      let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo_roblox') || '0');
+      if (Date.now() < tiempoBloqueo) {
+        let faltan = Math.ceil((tiempoBloqueo - Date.now()) / 1000 / 60);
+        mostrarToast(`Has sido bloqueado temporalmente. Espera ${faltan} minutos.`, '⚠️');
+        return;
+      }
+
+      if (!usuario || !usuarioVerificado) {
+        mostrarToast('Confirma tu usuario de Roblox primero', '👤');
+        return;
+      }
+      if (!paqueteSeleccionado) {
+        mostrarToast('Selecciona un paquete de Robux', '🛒');
+        return;
+      }
+      if (!fileInput.files[0]) {
+        mostrarToast('Debes subir el capture del pago', '📸');
+        return;
+      }
+      if (ref.length !== 5) {
+        mostrarToast('Faltan los 5 dígitos de la referencia', '🔢');
+        return;
+      }
+
+      document.getElementById('resumenId').textContent = usuario;
+      document.getElementById('resumenPaquete').textContent = `${paqueteSeleccionado.producto} Robux`; 
+      document.getElementById('resumenMonto').textContent = `${paqueteSeleccionado.precio} Bs`;
+      document.getElementById('modalConfirmacion').style.display = 'flex';
+    };
+
+    window.cerrarModal = function() { document.getElementById('modalConfirmacion').style.display = 'none'; };
+    window.cerrarModalNoEncontrado = function() { document.getElementById('modalPagoNoEncontrado').style.display = 'none'; };
+    window.cerrarModalWhatsApp = function() { document.getElementById('modalWhatsApp').style.display = 'none'; };
+
+    function esperarTiempoAleatorio(mensajeBase) {
+      return new Promise((resolve) => {
+        let segs = Math.floor(Math.random() * 3) + 1;
+        const textoElem = document.getElementById('textoContadorAnimado'); 
+        const barraFill = document.getElementById('barraProgresoFill');
+        barraFill.style.width = '0%';
+        const intv = setInterval(() => {
+          barraFill.style.width = '100%';
+          textoElem.innerHTML = `📡 ${mensajeBase}...`;
+          clearInterval(intv);
+          setTimeout(() => { resolve(); }, 800);
+        }, 500);
+      });
+    }
+
+    window.iniciarCargaConTiemposAleatorios = async function() {
+      const btnConfirmar = document.getElementById('btnConfirmar');
+      if (isProcessing) return; 
+
+      // DOBLE VERIFICACIÓN DE BLOQUEO ANTI-SPAM
+      let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo_roblox') || '0');
+      if (Date.now() < tiempoBloqueo) {
+        let faltan = Math.ceil((tiempoBloqueo - Date.now()) / 1000 / 60);
+        mostrarToast(`Bloqueado por múltiples intentos. Espera ${faltan} minutos.`, '⚠️');
+        return;
+      }
+
+      isProcessing = true; btnConfirmar.disabled = true;
+
+      const referenciaUsuario = document.getElementById('inputReferencia').value.trim();
+      const usuarioRoblox = document.getElementById('inputPlayerId').value.trim();
+      const fileInput = document.getElementById('inputComprobante');
+      
+      cerrarModal(); 
+      document.getElementById('pantallaProcesando').style.display = 'flex';
+
+      try {
+          await esperarTiempoAleatorio("Validando pago en el sistema");
+
+          let respuesta = await fetch(API_ROBLOX, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tipo: "compra",
+                referencia: referenciaUsuario,
+                user: usuarioRoblox,
+                producto: paqueteSeleccionado.producto,
+                url_capture: fileInput.files[0] ? fileInput.files[0].name : "Comprobante subido"
+            })
+          });
+          
+          let resultado = await respuesta.json();
+
+          if (resultado.status !== "success") {
+             
+             // GESTIÓN DEL SISTEMA ANTI-SPAM (SUMAR STRIKE)
+             let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga_roblox') || '0');
+             intentosFallidos++;
+             localStorage.setItem('intentos_recarga_roblox', intentosFallidos);
+             
+             if (intentosFallidos >= 3) {
+                 localStorage.setItem('tiempo_bloqueo_roblox', Date.now() + (5 * 60 * 1000));
+                 mostrarToast("⚠️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "❌");
+             }
+
+             document.getElementById('pantallaProcesando').style.display = 'none';
+
+             if (resultado.insuficiente) {
+                 let pagado = parseFloat(resultado.montoPagado || 0);
+                 let precioReal = parseFloat(resultado.precioOficial || paqueteSeleccionado.precio) || 0;
+                 let faltante = (precioReal > pagado) ? (precioReal - pagado).toFixed(2) : 0;
+                 
+                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (Ref: <strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${paqueteSeleccionado.producto} Robux</strong>.`;
+                 document.getElementById('waMontoEncontrado').innerText = pagado > 0 ? pagado.toFixed(2) + " Bs" : "Monto menor";
+                 document.getElementById('waMontoFaltante').innerText = faltante + " Bs";
+
+                 let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* para Roblox ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Paquete:* ${paqueteSeleccionado.producto} Robux (${paqueteSeleccionado.precio} Bs)%0A*Monto Encontrado:* ${pagado} Bs%0A*Falta:* ${faltante} Bs%0A*Usuario Roblox:* ${usuarioRoblox}`;
+                 document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
+                 document.getElementById('modalWhatsApp').style.display = 'flex';
+             } else {
+                 document.getElementById('textoErrorPago').innerHTML = resultado.message || "La referencia no pudo ser procesada.";
+                 document.getElementById('notaErrorExtra').style.display = 'block';
+                 document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
+             }
+
+             isProcessing = false; 
+             btnConfirmar.disabled = false;
+             return; 
+          }
+
+          // ÉXITO: RESETEO DE STRIKES A CERO
+          localStorage.setItem('intentos_recarga_roblox', '0');
+          localStorage.setItem('tiempo_bloqueo_roblox', '0');
+
+          // Muestra el PIN de Roblox obtenido con animación
+          document.getElementById('codigoPinRoblox').textContent = resultado.code;
+
+          setTimeout(() => {
+            document.getElementById('cajaContenedorAnime').style.display = 'none';
+            document.getElementById('pantallaExito').style.display = 'block';
+            isProcessing = false;
+          }, 500);
+
+      } catch (err) {
+          document.getElementById('pantallaProcesando').style.display = 'none';
+          document.getElementById('textoErrorPago').innerHTML = "⚠️ Error de conexión con el servidor. Inténtalo nuevamente.";
+          document.getElementById('notaErrorExtra').style.display = 'none';
+          document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
+          console.error("Error:", err);
+          isProcessing = false; 
+          btnConfirmar.disabled = false;
+      }
+    };
+
+    cargarCatalogoRoblox();
+  </script>
+</body>
+</html>
