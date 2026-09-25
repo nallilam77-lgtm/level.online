@@ -1,0 +1,164 @@
+export default async function handler(req, res) {
+  // Solo aceptamos peticiones POST
+  if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
+
+  // Convertidor inteligente para mostrar siempre el dinero como "1.520,00 Bs" al usuario
+  const formatearVES = (monto) => {
+    return Number(monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  try {
+    const { id, paquete, referencia, urlImagen } = req.body;
+
+    if (!id || !paquete || !referencia) {
+      return res.status(400).json({ status: "error", message: "Faltan datos obligatorios para procesar la recarga." });
+    }
+
+    const API_KEY_FAZER = process.env.FAZER_API_KEY || "fc_cb682478a17afc111710344a";
+    const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL; 
+
+    // ==========================================
+    // 1. OBTENER PRECIOS DINÁMICOS DESDE GOOGLE SHEETS
+    // ==========================================
+    // Consultamos la hoja "precios" para saber el valor actual real del paquete
+    const resPrecios = await fetch(URL_GOOGLE_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: "obtener_precios" })
+    });
+    const dataPrecios = await resPrecios.json();
+
+    if (!dataPrecios || dataPrecios.status !== "success" || !dataPrecios.catalogo) {
+      return res.status(500).json({ status: "error", message: "Error al leer los precios de la base de datos." });
+    }
+
+    // Extraemos solo los números del paquete solicitado (Ej: "110 Diamantes" -> "110")
+    const numeroDiamantes = String(paquete).replace(/[^0-9]/g, '');
+    
+    // Buscamos ese paquete en lo que respondió Google Sheets
+    const paqueteGsheet = dataPrecios.catalogo.find(p => String(p.diamantes).replace(/[^0-9]/g, '') === numeroDiamantes);
+    
+    if (!paqueteGsheet) {
+      return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado desde el navegador." });
+    }
+
+    // Precio 100% seguro extraído directo de tu Excel
+    const precioReal = Number(paqueteGsheet.precio);
+
+    // ==========================================
+    // 1.5 CÓDIGOS INTERNOS PARA FAZERCARDS
+    // ==========================================
+    // Vercel solo necesita saber cómo se llama el producto en la API del proveedor
+    const mapasFazer = {
+      "110":   { code: "110_diamonds", doble: false },
+      "220":   { code: "110_diamonds", doble: true },
+      "341":   { code: "341_diamonds", doble: false },
+      "572":   { code: "572_diamonds", doble: false },
+      "1166":  { code: "1166_diamonds", doble: false },
+      "2278":  { code: "2398_diamonds", doble: false },
+      "6160":  { code: "6160_diamonds", doble: false }
+    };
+    
+    const productoFazer = mapasFazer[numeroDiamantes];
+    if (!productoFazer) {
+      return res.status(400).json({ status: "error", message: "Código de FazerCards no configurado para este paquete." });
+    }
+
+    // ==========================================
+    // 2. VERIFICAR Y BLOQUEAR EL PAGO EN SHEETS
+    // ==========================================
+    const resVerificacion = await fetch(URL_GOOGLE_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: "verificar_pago", referencia: referencia, monto: precioReal })
+    });
+    
+    const dataVerificacion = await resVerificacion.json();
+
+    if (!dataVerificacion || !dataVerificacion.encontrado) {
+      return res.status(400).json({ status: "error", message: dataVerificacion.message || "Pago no encontrado o ya utilizado." });
+    }
+    
+    // 🛡️ EXCEPCIÓN: Si el pago es insuficiente, devolvemos variables exactas a la web
+    if (dataVerificacion.insuficiente) {
+      // Regresamos el pago a "Verificado" para que el cliente pueda completarlo
+      await fetch(URL_GOOGLE_SCRIPT, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ accion: "marcar_verificado", referencia: dataVerificacion.referencia }) 
+      });
+      
+      const pagado = Number(dataVerificacion.montoPagado) || 0;
+      const faltante = precioReal - pagado;
+
+      return res.status(400).json({ 
+        status: "error", 
+        insuficiente: true,
+        montoPagado: pagado,
+        precioRequerido: precioReal,
+        faltante: faltante,
+        message: `Pago insuficiente: Encontramos ${formatearVES(pagado)} Bs, pero el paquete cuesta ${formatearVES(precioReal)} Bs. Faltan ${formatearVES(faltante)} Bs.` 
+      });
+    }
+
+    // ==========================================
+    // 3. QUEMAR EL PAGO DE INMEDIATO (Se marca como "Usado")
+    // ==========================================
+    await fetch(URL_GOOGLE_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: "marcar_usado", referencia: dataVerificacion.referencia })
+    });
+
+    // ==========================================
+    // 4. INYECTAR LOS DIAMANTES (FAZERCARDS)
+    // ==========================================
+    const enviarRecargaFazer = async () => {
+      const resp = await fetch("https://api.fzr.cards/api/v2/topups/order", {
+        method: "POST",
+        headers: { "X-API-Key": API_KEY_FAZER, "Content-Type": "application/json" },
+        body: JSON.stringify({ category_id: "free_fire_latam", offer_id: productoFazer.code, fields: { player_id: id } })
+      });
+      return await resp.json();
+    };
+
+    let resultadoCompra = await enviarRecargaFazer();
+
+    if (resultadoCompra.ok !== true) {
+      return res.status(400).json({ 
+        status: "error", 
+        message: "Fallo en el servidor de recargas: " + (resultadoCompra.error || "Mantenimiento temporal. Contacta a soporte.") 
+      });
+    }
+
+    // Doble inyección para el paquete de 220
+    if (productoFazer.doble) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      let resultadoCompra2 = await enviarRecargaFazer();
+      if (resultadoCompra2.ok !== true) {
+        console.error("Fallo la 2da inyección de 220 diamantes. Referencia: ", dataVerificacion.referencia);
+      }
+    }
+
+    // ==========================================
+    // 5. GUARDAR EL RECIBO EN FINALIZADOS
+    // ==========================================
+    await fetch(URL_GOOGLE_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        accion: "registrar_finalizado", 
+        idJugador: id, 
+        paquete: paquete, 
+        referencias: dataVerificacion.referencia, 
+        urlImagen: urlImagen || "Sin comprobante" 
+      })
+    });
+
+    return res.status(200).json({ status: "success", message: "Recarga procesada exitosamente." });
+
+  } catch (error) {
+    console.error("Error crítico en recargar.js:", error);
+    return res.status(500).json({ status: "error", message: "Falla interna del servidor." });
+  }
+}
