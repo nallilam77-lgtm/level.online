@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Level Up - En Mantenimiento</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-dark: #050b14;
+      --card-bg: rgba(12, 21, 39, 0.9);
+      --primary-cyan: #00ffcc;
+      --primary-gradient: linear-gradient(135deg, #0099ff, #00ffcc);
+      --text-main: #ffffff;
+      --text-muted: #94a3b8;
+      --whatsapp: #1db954;
+      --whatsapp-dark: #0e1e14;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--bg-dark);
+      background-image: radial-gradient(circle at center, #0a2540 0%, #050b14 70%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      overflow: hidden;
+    }
+
+    /* Animaciones */
+    @keyframes slideUp {
+      0% { opacity: 0; transform: translateY(40px) scale(0.95); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    
+    @keyframes floating {
+      0%, 100% { transform: translateY(0); text-shadow: 0 0 15px rgba(0, 255, 204, 0.4); }
+      50% { transform: translateY(-8px); text-shadow: 0 0 25px rgba(0, 255, 204, 0.8); }
+    }
+
+    @keyframes pulse-whatsapp {
+      0% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0.6); }
+      70% { box-shadow: 0 0 0 20px rgba(29, 185, 84, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0); }
+    }
+
+    @keyframes spin-gear {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .maintenance-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(15px);
+      border: 2px solid rgba(0, 255, 204, 0.2);
+      border-radius: 24px;
+      padding: 40px 24px;
+      width: 100%;
+      max-width: 450px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), inset 0 0 30px rgba(0, 255, 204, 0.05);
+      animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .icon-container {
+      font-size: 60px;
+      margin-bottom: 20px;
+      display: inline-block;
+      color: var(--primary-cyan);
+      animation: floating 3s ease-in-out infinite;
+    }
+
+    .icon-container span {
+      display: inline-block;
+      animation: spin-gear 8s linear infinite;
+    }
+
+    .title {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 26px;
+      font-weight: 900;
+      color: var(--primary-cyan);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .description {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 30px;
+    }
+
+    .description strong {
+      color: #fff;
+    }
+
+    .btn-whatsapp {
+      background: var(--whatsapp);
+      color: white;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 16px 24px;
+      border-radius: 14px;
+      font-weight: 900;
+      font-family: 'Montserrat', sans-serif;
+      text-transform: uppercase;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      width: 100%;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      border: 2px solid transparent;
+      animation: pulse-whatsapp 2s infinite;
+    }
+
+    .btn-whatsapp:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 10px 25px rgba(29, 185, 84, 0.5);
+      border-color: #a5f3c3;
+    }
+
+    .btn-whatsapp:active {
+      transform: scale(0.96);
+    }
+
+    .logo-text {
+      margin-top: 25px;
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 900;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.2);
+      letter-spacing: 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="maintenance-card">
+    <!-- Icono animado -->
+    <div class="icon-container">
+      <span>⚙️</span>
+    </div>
+
+    <!-- Título principal -->
+    <h1 class="title">EN MANTENIMIENTO</h1>
+    
+    <!-- Descripción -->
+    <p class="description">
+      Estamos realizando mejoras y actualizaciones en los servidores de <strong>Level Up</strong> para ofrecerte una plataforma más rápida y segura.<br><br>
+      Si tienes alguna recarga pendiente o necesitas realizar un pedido manual, <strong>nuestro soporte sigue 100% activo</strong>.
+    </p>
+
+    <!-- Botón de WhatsApp con el número +58 414-1916377 -->
+    <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20vengo%20de%20la%20p%C3%A1gina%20en%20mantenimiento.%20Necesito%20ayuda%20con%20una%20recarga." target="_blank" class="btn-whatsapp">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+      </svg>
+      CONTACTAR SOPORTE
+    </a>
+
+    <!-- Footer -->
+    <div class="logo-text">LEVEL UP STORE</div>
+  </div>
+
+</body>
+</html>
