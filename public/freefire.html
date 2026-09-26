@@ -268,8 +268,8 @@
 
     <div class="modal-content" id="pantallaExito">
       <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
-      <h2 style="color: var(--cyan-text); margin-top:0; font-family: 'Montserrat', sans-serif; font-size: 20px;">¡RECARGA FINALIZADA!</h2>
-      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado correctamente por Level Up.</p>
+      <h2 style="color: var(--cyan-text); margin-top:0; font-family: 'Montserrat', sans-serif; font-size: 20px;" id="tituloExitoModal">¡RECARGA FINALIZADA!</h2>
+      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;" id="textoExitoModal">Tu pedido ha sido procesado correctamente por Level Up.</p>
       <div class="tx-caja" id="codigoTxn">TXN-XXXXXX</div>
       <p style="color: var(--primary-orange); font-size: 11px; font-weight: 700; margin-bottom: 18px; background: rgba(255,102,0,0.1); padding: 8px; border-radius: 8px;">⚠️ IMPORTANTE: No cierres la página hasta ver este mensaje. Tus diamantes ya van en camino.</p>
       <a href="index.html" class="btn-volver-inicio">VOLVER AL INICIO</a>
@@ -508,7 +508,6 @@
         return;
       }
 
-      // Validar que el comprobante sea obligatorio
       if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5 || !fileInput.files[0]) { 
         mostrarBurbuja("⚠️ Faltan datos o es obligatorio subir el comprobante de pago.", "var(--danger)"); 
         return; 
@@ -611,18 +610,11 @@
           const resultado = await respuestaServidor.json();
           
           if (resultado.status !== "success") {
-             let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga') || '0');
-             intentosFallidos++;
-             localStorage.setItem('intentos_recarga', intentosFallidos);
-             
-             if (intentosFallidos >= 3) {
-                 localStorage.setItem('tiempo_bloqueo', Date.now() + (5 * 60 * 1000));
-                 mostrarBurbuja("⚠️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
-             }
-
-             document.getElementById('pantallaProcesando').style.display = 'none';
              let msg = resultado.message || "";
              let isInsuficiente = msg.toLowerCase().includes("insuficiente") || resultado.insuficiente;
+             let isNoEncontrado = msg.toLowerCase().includes("no encontrado") || msg.toLowerCase().includes("utilizado") || msg.toLowerCase().includes("pago no");
+
+             document.getElementById('pantallaProcesando').style.display = 'none';
 
              if (isInsuficiente) {
                  let pagado = parseFloat(resultado.montoPagado || 0);
@@ -636,15 +628,20 @@
                  let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Monto que pagué:* ${pagado.toFixed(2)} Bs%0A*Paquete deseado:* ${diamantesClean} Diamantes (${precioReal.toFixed(2)} Bs)%0A*Me faltan:* ${faltante.toFixed(2)} Bs%0A%0A¿Cómo hago para completarlo?`;
                  document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
                  document.getElementById('modalWhatsApp').style.display = 'flex';
-
-             } else {
-                 // SE ENMASCARA EL ERROR REAL DEL SERVIDOR PARA EL CLIENTE
-                 document.getElementById('textoErrorPago').innerHTML = "⚠️ Tuvimos algunos inconvenientes procesando tu recarga. Por favor verifica los datos ingresados o intenta nuevamente.";
+                 isProcessing = false; btnConfirmar.disabled = false;
+                 return; 
+             } 
+             
+             if (isNoEncontrado) {
+                 document.getElementById('textoErrorPago').innerHTML = msg || "No encontramos tu referencia en el banco o ya fue utilizada.";
                  document.getElementById('notaErrorExtra').style.display = 'block';
                  document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
+                 isProcessing = false; btnConfirmar.disabled = false;
+                 return;
              }
-             isProcessing = false; btnConfirmar.disabled = false;
-             return; 
+
+             // 🤫 ERROR TÉCNICO / DE BOT (Se anota internamente en la hoja de cálculo del servidor, 
+             // pero al cliente se le muestra amablemente la pantalla de "Recarga en proceso de 1 a 5 minutos")
           }
 
           localStorage.setItem('intentos_recarga', '0');
@@ -660,20 +657,29 @@
 
           await new Promise(r => setTimeout(r, 1200)); 
 
-          textoElem.innerHTML = "✅ ¡Recarga Exitosa!";
+          textoElem.innerHTML = "✅ ¡Proceso completado!";
           barraFill.style.width = '100%';
 
           setTimeout(() => {
             document.getElementById('cajaContenedorAnime').style.display = 'none';
+            
+            if (resultado.status !== "success") {
+                document.getElementById('tituloExitoModal').textContent = "¡RECARGA EN PROCESO!";
+                document.getElementById('textoExitoModal').textContent = "Su recarga está en proceso y se completará de 1 a 5 minutos.";
+            } else {
+                document.getElementById('tituloExitoModal').textContent = "¡RECARGA FINALIZADA!";
+                document.getElementById('textoExitoModal').textContent = "Tu pedido ha sido procesado correctamente por Level Up.";
+            }
             document.getElementById('pantallaExito').style.display = 'block';
             isProcessing = false;
           }, 600);
 
       } catch (err) {
           document.getElementById('pantallaProcesando').style.display = 'none';
-          document.getElementById('textoErrorPago').innerHTML = "⚠️ Tuvimos algunos inconvenientes de conexión. Por favor intenta nuevamente.";
-          document.getElementById('notaErrorExtra').style.display = 'none';
-          document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
+          document.getElementById('cajaContenedorAnime').style.display = 'none';
+          document.getElementById('tituloExitoModal').textContent = "¡RECARGA EN PROCESO!";
+          document.getElementById('textoExitoModal').textContent = "Su recarga está en proceso y se completará de 1 a 5 minutos.";
+          document.getElementById('pantallaExito').style.display = 'block';
           isProcessing = false; 
           btnConfirmar.disabled = false;
       }
