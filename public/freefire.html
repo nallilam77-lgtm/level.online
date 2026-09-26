@@ -177,7 +177,6 @@
     .btn-volver-inicio { background: var(--primary-gradient); color: #fff; padding: 12px 20px; border-radius: 10px; font-weight: 900; text-decoration: none; display: inline-block; width: 100%; transition: 0.3s; font-family: 'Montserrat', sans-serif; font-size: 13px; }
     .btn-volver-inicio:hover { box-shadow: 0 8px 20px rgba(255, 102, 0, 0.5); }
 
-    /* ESTILOS DE LA BURBUJA DE NOTIFICACIÓN */
     .toast-bubble {
       position: fixed;
       bottom: -100px;
@@ -232,8 +231,8 @@
 
   <div id="modalPagoNoEncontrado" class="overlay-pantalla">
     <div class="modal-content error-theme">
-      <h2 class="modal-titulo">❌ PAGO RECHAZADO</h2>
-      <p id="textoErrorPago" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;"></p>
+      <h2 class="modal-titulo">❌ ATENCIÓN</h2>
+      <p id="textoErrorPago" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;">Tuvimos algunos inconvenientes procesando tu solicitud. Por favor verifica tus datos e intenta nuevamente.</p>
       <div id="notaErrorExtra" class="modal-nota danger">
         ⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea exacto al valor del paquete.
       </div>
@@ -309,8 +308,8 @@
       <button type="button" id="btnCopiarDatos" class="btn-copy" onclick="copiarDatosBanco()">📋 Copiar datos bancarios</button>
 
       <div class="file-upload-box">
-        <div class="step-title">4. SUBE TU COMPROBANTE (CAPTURE)</div>
-        <input type="file" id="inputComprobante" accept="image/*" onchange="analizarCapture(this)">
+        <div class="step-title">4. SUBE TU COMPROBANTE (CAPTURE) <span style="color: var(--danger);">*</span></div>
+        <input type="file" id="inputComprobante" accept="image/*" onchange="analizarCapture(this)" required>
         <div id="cajaIA" style="display: none; margin-top: 12px; padding: 12px; background: rgba(0, 255, 204, 0.05); border: 1px dashed var(--cyan-text); border-radius: 12px;">
           <div id="cargandoIA" style="color: var(--cyan-text); font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 8px;">Leyendo comprobante...</div>
           <div id="resultadoIA" style="display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
@@ -500,6 +499,7 @@
     window.abrirModal = function() {
       const id = document.getElementById('inputPlayerId').value.trim();
       const ref = document.getElementById('inputReferencia').value.trim();
+      const fileInput = document.getElementById('inputComprobante');
       
       let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo') || '0');
       if (Date.now() < tiempoBloqueo) {
@@ -508,8 +508,9 @@
         return;
       }
 
-      if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5) { 
-        mostrarBurbuja("⚠️ Faltan datos. Verifica ID, paquete y los 5 dígitos de la referencia.", "var(--danger)"); 
+      // Validar que el comprobante sea obligatorio
+      if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5 || !fileInput.files[0]) { 
+        mostrarBurbuja("⚠️ Faltan datos o es obligatorio subir el comprobante de pago.", "var(--danger)"); 
         return; 
       }
       
@@ -558,9 +559,6 @@
       });
     }
 
-    // ==========================================
-    // SISTEMA VISUAL ORDENADO Y 100% SINCRONIZADO CON RAILWAY/VERCEL
-    // ==========================================
     window.iniciarCargaConTiemposAleatorios = async function() {
       const btnConfirmar = document.getElementById('btnConfirmar');
       if (isProcessing) return; 
@@ -586,7 +584,6 @@
       const barraFill = document.getElementById('barraProgresoFill');
       
       try {
-          // PASO 1: Subida de Comprobante
           let captureUrl = "Sin comprobante";
           let fileInput = document.getElementById('inputComprobante');
           
@@ -596,7 +593,6 @@
               captureUrl = await subirComprobanteDrive(fileInput.files[0]);
           }
 
-          // PASO 2: Verificación bancaria y búsqueda en Google Sheets
           textoElem.innerHTML = "🔍 Verificando pago y bloqueando referencia...";
           barraFill.style.width = '45%';
           
@@ -614,7 +610,6 @@
           
           const resultado = await respuestaServidor.json();
           
-          // PASO 3: Validación de respuesta del servidor (Fallas, insuficientes, etc.)
           if (resultado.status !== "success") {
              let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga') || '0');
              intentosFallidos++;
@@ -628,7 +623,6 @@
              document.getElementById('pantallaProcesando').style.display = 'none';
              let msg = resultado.message || "";
              let isInsuficiente = msg.toLowerCase().includes("insuficiente") || resultado.insuficiente;
-             let isBloqueada = msg.toLowerCase().includes("bloqueada") || msg.toLowerCase().includes("usado") || msg.toLowerCase().includes("procesando");
 
              if (isInsuficiente) {
                  let pagado = parseFloat(resultado.montoPagado || 0);
@@ -643,12 +637,9 @@
                  document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
                  document.getElementById('modalWhatsApp').style.display = 'flex';
 
-             } else if (isBloqueada) {
-                 document.getElementById('textoErrorPago').innerHTML = "⚠️ " + msg;
-                 document.getElementById('notaErrorExtra').style.display = 'none';
-                 document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
              } else {
-                 document.getElementById('textoErrorPago').innerHTML = msg || "No encontramos tu referencia en el banco.";
+                 // SE ENMASCARA EL ERROR REAL DEL SERVIDOR PARA EL CLIENTE
+                 document.getElementById('textoErrorPago').innerHTML = "⚠️ Tuvimos algunos inconvenientes procesando tu recarga. Por favor verifica los datos ingresados o intenta nuevamente.";
                  document.getElementById('notaErrorExtra').style.display = 'block';
                  document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
              }
@@ -656,7 +647,6 @@
              return; 
           }
 
-          // PASO 4: ÉXITO - El bot invisible en Railway completó el canje
           localStorage.setItem('intentos_recarga', '0');
           localStorage.setItem('tiempo_bloqueo', '0');
 
@@ -681,7 +671,7 @@
 
       } catch (err) {
           document.getElementById('pantallaProcesando').style.display = 'none';
-          document.getElementById('textoErrorPago').innerHTML = "⚠️ Error de conexión con el servidor. Revisa tu internet e intenta nuevamente.";
+          document.getElementById('textoErrorPago').innerHTML = "⚠️ Tuvimos algunos inconvenientes de conexión. Por favor intenta nuevamente.";
           document.getElementById('notaErrorExtra').style.display = 'none';
           document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
           isProcessing = false; 
