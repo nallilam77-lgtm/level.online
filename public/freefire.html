@@ -231,8 +231,8 @@
 
   <div id="modalPagoNoEncontrado" class="overlay-pantalla">
     <div class="modal-content error-theme">
-      <h2 class="modal-titulo">❌ PAGO RECHAZADO</h2>
-      <p id="textoErrorPago" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;"></p>
+      <h2 class="modal-titulo">❌ ATENCIÓN</h2>
+      <p id="textoErrorPago" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;">Tuvimos algunos inconvenientes procesando tu solicitud. Por favor verifica tus datos e intenta nuevamente.</p>
       <div id="notaErrorExtra" class="modal-nota danger">
         ⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea exacto al valor del paquete.
       </div>
@@ -268,8 +268,8 @@
 
     <div class="modal-content" id="pantallaExito">
       <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
-      <h2 style="color: var(--cyan-text); margin-top:0; font-family: 'Montserrat', sans-serif; font-size: 20px;" id="tituloExitoModal">¡RECARGA FINALIZADA!</h2>
-      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;" id="textoExitoModal">Tu pedido ha sido procesado correctamente por Level Up.</p>
+      <h2 style="color: var(--cyan-text); margin-top:0; font-family: 'Montserrat', sans-serif; font-size: 20px;">¡RECARGA FINALIZADA!</h2>
+      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado correctamente por Level Up.</p>
       <div class="tx-caja" id="codigoTxn">TXN-XXXXXX</div>
       <p style="color: var(--primary-orange); font-size: 11px; font-weight: 700; margin-bottom: 18px; background: rgba(255,102,0,0.1); padding: 8px; border-radius: 8px;">⚠️ IMPORTANTE: No cierres la página hasta ver este mensaje. Tus diamantes ya van en camino.</p>
       <a href="index.html" class="btn-volver-inicio">VOLVER AL INICIO</a>
@@ -308,8 +308,8 @@
       <button type="button" id="btnCopiarDatos" class="btn-copy" onclick="copiarDatosBanco()">📋 Copiar datos bancarios</button>
 
       <div class="file-upload-box">
-        <div class="step-title">4. SUBE TU COMPROBANTE (CAPTURE)</div>
-        <input type="file" id="inputComprobante" accept="image/*" onchange="analizarCapture(this)">
+        <div class="step-title">4. SUBE TU COMPROBANTE (CAPTURE) <span style="color: var(--danger);">*</span></div>
+        <input type="file" id="inputComprobante" accept="image/*" onchange="analizarCapture(this)" required>
         <div id="cajaIA" style="display: none; margin-top: 12px; padding: 12px; background: rgba(0, 255, 204, 0.05); border: 1px dashed var(--cyan-text); border-radius: 12px;">
           <div id="cargandoIA" style="color: var(--cyan-text); font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 8px;">Leyendo comprobante...</div>
           <div id="resultadoIA" style="display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
@@ -499,6 +499,7 @@
     window.abrirModal = function() {
       const id = document.getElementById('inputPlayerId').value.trim();
       const ref = document.getElementById('inputReferencia').value.trim();
+      const fileInput = document.getElementById('inputComprobante');
       
       let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo') || '0');
       if (Date.now() < tiempoBloqueo) {
@@ -507,8 +508,9 @@
         return;
       }
 
-      if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5) { 
-        mostrarBurbuja("⚠️ Faltan datos. Verifica ID, paquete y los 5 dígitos de la referencia.", "var(--danger)"); 
+      // Validar que el comprobante sea obligatorio
+      if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5 || !fileInput.files[0]) { 
+        mostrarBurbuja("⚠️ Faltan datos o es obligatorio subir el comprobante de pago.", "var(--danger)"); 
         return; 
       }
       
@@ -557,9 +559,6 @@
       });
     }
 
-    // ==========================================
-    // SISTEMA SILENCIOSO: ERRORES REALES AL EXCEL, CLIENTE VE ÉXITO/PROCESO
-    // ==========================================
     window.iniciarCargaConTiemposAleatorios = async function() {
       const btnConfirmar = document.getElementById('btnConfirmar');
       if (isProcessing) return; 
@@ -585,7 +584,6 @@
       const barraFill = document.getElementById('barraProgresoFill');
       
       try {
-          // PASO 1: Subida de Comprobante
           let captureUrl = "Sin comprobante";
           let fileInput = document.getElementById('inputComprobante');
           
@@ -595,7 +593,6 @@
               captureUrl = await subirComprobanteDrive(fileInput.files[0]);
           }
 
-          // PASO 2: Verificación bancaria y búsqueda en Google Sheets
           textoElem.innerHTML = "🔍 Verificando pago y bloqueando referencia...";
           barraFill.style.width = '45%';
           
@@ -613,13 +610,19 @@
           
           const resultado = await respuestaServidor.json();
           
-          // PASO 3: Validaciones estrictas solo para pagos inexistentes o insuficientes
           if (resultado.status !== "success") {
-             let msg = resultado.message || "";
-             let isInsuficiente = msg.toLowerCase().includes("insuficiente") || resultado.insuficiente;
-             let isNoEncontrado = msg.toLowerCase().includes("no encontrado") || msg.toLowerCase().includes("utilizado") || msg.toLowerCase().includes("pago no");
+             let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga') || '0');
+             intentosFallidos++;
+             localStorage.setItem('intentos_recarga', intentosFallidos);
+             
+             if (intentosFallidos >= 3) {
+                 localStorage.setItem('tiempo_bloqueo', Date.now() + (5 * 60 * 1000));
+                 mostrarBurbuja("⚠️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
+             }
 
              document.getElementById('pantallaProcesando').style.display = 'none';
+             let msg = resultado.message || "";
+             let isInsuficiente = msg.toLowerCase().includes("insuficiente") || resultado.insuficiente;
 
              if (isInsuficiente) {
                  let pagado = parseFloat(resultado.montoPagado || 0);
@@ -633,24 +636,17 @@
                  let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Monto que pagué:* ${pagado.toFixed(2)} Bs%0A*Paquete deseado:* ${diamantesClean} Diamantes (${precioReal.toFixed(2)} Bs)%0A*Me faltan:* ${faltante.toFixed(2)} Bs%0A%0A¿Cómo hago para completarlo?`;
                  document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
                  document.getElementById('modalWhatsApp').style.display = 'flex';
-                 isProcessing = false; btnConfirmar.disabled = false;
-                 return; 
-             } 
-             
-             if (isNoEncontrado) {
-                 // Si el pago no existe realmente o ya fue usado, se le muestra el rechazo por seguridad
-                 document.getElementById('textoErrorPago').innerHTML = msg || "No encontramos tu referencia en el banco o ya fue utilizada.";
+
+             } else {
+                 // SE ENMASCARA EL ERROR REAL DEL SERVIDOR PARA EL CLIENTE
+                 document.getElementById('textoErrorPago').innerHTML = "⚠️ Tuvimos algunos inconvenientes procesando tu recarga. Por favor verifica los datos ingresados o intenta nuevamente.";
                  document.getElementById('notaErrorExtra').style.display = 'block';
                  document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
-                 isProcessing = false; btnConfirmar.disabled = false;
-                 return;
              }
-
-             // 🤫 SILENCIOSO: Si el error fue del bot (timeout o fallo técnico posterior), 
-             // el cliente ve éxito/proceso, mientras el servidor ya guardó el incidente internamente.
+             isProcessing = false; btnConfirmar.disabled = false;
+             return; 
           }
 
-          // PASO 4: ÉXITO TOTAL O EN PROCESO SILENCIOSO PARA EL CLIENTE
           localStorage.setItem('intentos_recarga', '0');
           localStorage.setItem('tiempo_bloqueo', '0');
 
@@ -669,27 +665,15 @@
 
           setTimeout(() => {
             document.getElementById('cajaContenedorAnime').style.display = 'none';
-            // Si hubo algún problema interno con el bot, el servidor ya lo registró en "Incidentes", 
-            // pero el cliente felizmente ve su mensaje de éxito/proceso.
-            if (resultado.status !== "success") {
-                document.getElementById('tituloExitoModal').textContent = "¡RECARGA EN PROCESO!";
-                document.getElementById('textoExitoModal').textContent = "Tu pedido ha sido recibido y está siendo procesado por Level Up.";
-            } else {
-                document.getElementById('tituloExitoModal').textContent = "¡RECARGA FINALIZADA!";
-                document.getElementById('textoExitoModal').textContent = "Tu pedido ha sido procesado correctamente por Level Up.";
-            }
             document.getElementById('pantallaExito').style.display = 'block';
             isProcessing = false;
           }, 600);
 
       } catch (err) {
-          // Si ocurre un error grave de red del cliente pero el pago es válido, 
-          // tratamos la experiencia con calma para no alarmar al usuario
           document.getElementById('pantallaProcesando').style.display = 'none';
-          document.getElementById('cajaContenedorAnime').style.display = 'none';
-          document.getElementById('tituloExitoModal').textContent = "¡RECARGA EN PROCESO!";
-          document.getElementById('textoExitoModal').textContent = "Tu pedido ha sido recibido. Te lo estaremos acreditando en breve.";
-          document.getElementById('pantallaExito').style.display = 'block';
+          document.getElementById('textoErrorPago').innerHTML = "⚠️ Tuvimos algunos inconvenientes de conexión. Por favor intenta nuevamente.";
+          document.getElementById('notaErrorExtra').style.display = 'none';
+          document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
           isProcessing = false; 
           btnConfirmar.disabled = false;
       }
