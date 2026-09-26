@@ -83,7 +83,6 @@ export default async function handler(req, res) {
       const pagado = Number(dataVerificacion.montoPagado) || 0;
       const faltante = precioReal - pagado;
 
-      // 🎯 AQUÍ ENVIAMOS LOS DATOS EXACCIÓN QUE PIDE TU INTERFAZ WEB
       return res.status(400).json({ 
         status: "error", 
         insuficiente: true,
@@ -114,25 +113,22 @@ export default async function handler(req, res) {
       return res.status(400).json({ status: "error", message: dataCodigos.message });
     }
 
-    const pinesExtraidos = dataCodigos.pines; 
+    const pinesExtraidos = dataCodigos.pines; // Contiene 1 pin o 2 pines (si es de 220)
 
     // ==========================================
-    // PASO 4: ATACAR RAILWAY EN SIMULTÁNEO
+    // PASO 4: ATACAR RAILWAY DE FORMA SECUENCIAL (COMPATIBLE CON PLAN GRATIS)
     // ==========================================
     try {
-      const promesasCanje = pinesExtraidos.map(pin => {
-        return fetch(RAILWAY_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-secret-token": RAILWAY_SECRET },
-          body: JSON.stringify({ pin: pin, player_id: id })
-        }).then(res => res.json());
+      const respuestaRailway = await fetch(RAILWAY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-secret-token": RAILWAY_SECRET },
+        body: JSON.stringify({ pins: pinesExtraidos, player_id: id })
       });
 
-      const resultados = await Promise.all(promesasCanje);
+      const resultadoBot = await respuestaRailway.json();
       
-      const fallo = resultados.find(r => r.status !== "success");
-      if (fallo) {
-        throw new Error(fallo.detail || fallo.message || "Fallo en el servidor de Railway.");
+      if (resultadoBot.status !== "success") {
+        throw new Error(resultadoBot.detail || resultadoBot.message || "Fallo en el servidor de Railway.");
       }
     } catch (error) {
       return res.status(400).json({ status: "error", message: "Error interno del Bot de Canje: " + error.message });
