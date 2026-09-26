@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Level Up - Recarga Free Fire</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-dark: #0a0b10;
+      --card-bg: #111424;
+      --primary-cyan: #00ffcc;
+      --orange-btn: linear-gradient(135deg, #ff5e00, #ff2a00);
+      --text-main: #ffffff;
+      --text-muted: #94a3b8;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 500px;
+      margin-top: 20px;
+    }
+
+    .section-title {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      color: #ff5e00;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .section-title::before {
+      content: "";
+      width: 4px;
+      height: 16px;
+      background: #ff5e00;
+      display: inline-block;
+      border-radius: 2px;
+    }
+
+    .input-box {
+      width: 100%;
+      background: #ffffff;
+      border: 2px solid transparent;
+      border-radius: 12px;
+      padding: 15px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #000;
+      text-align: center;
+      outline: none;
+      margin-bottom: 25px;
+      transition: all 0.3s;
+    }
+
+    .input-box:focus {
+      border-color: #ff5e00;
+      box-shadow: 0 0 15px rgba(255, 94, 0, 0.3);
+    }
+
+    .grid-paquetes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .paquete-card {
+      background: var(--card-bg);
+      border: 2px solid #1f2544;
+      border-radius: 16px;
+      padding: 15px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .paquete-card.selected {
+      border-color: var(--primary-cyan);
+      background: rgba(0, 255, 204, 0.05);
+      box-shadow: 0 0 20px rgba(0, 255, 204, 0.2);
+    }
+
+    .paquete-diamantes {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 16px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .paquete-precio {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--primary-cyan);
+    }
+
+    .btn-main {
+      background: var(--orange-btn);
+      color: white;
+      width: 100%;
+      padding: 18px;
+      border: none;
+      border-radius: 12px;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 16px;
+      font-weight: 900;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(255, 94, 0, 0.3);
+      transition: all 0.3s;
+      margin-bottom: 40px;
+    }
+
+    .btn-main:active {
+      transform: scale(0.97);
+    }
+
+    /* ========================================== */
+    /* PANTALLA DE CARGA FLOTANTE (INTOCABLE) */
+    /* ========================================== */
+    .overlay-loading {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(5, 11, 20, 0.95);
+      backdrop-filter: blur(10px);
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .spinner {
+      width: 60px;
+      height: 60px;
+      border: 6px solid rgba(0, 255, 204, 0.2);
+      border-top-color: var(--primary-cyan);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 25px;
+    }
+
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    .loading-title {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 22px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+
+    .loading-subtitle {
+      font-size: 14px;
+      color: var(--primary-cyan);
+      font-weight: 600;
+      margin-bottom: 20px;
+      height: 20px; /* Para que no salte el texto al cambiar */
+    }
+
+    .loading-warning {
+      font-size: 12px;
+      color: #ff4444;
+      font-weight: 700;
+      background: rgba(255, 68, 68, 0.1);
+      padding: 10px 15px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 68, 68, 0.3);
+      max-width: 300px;
+    }
+
+    /* Ícono de Éxito */
+    .success-icon {
+      display: none;
+      font-size: 70px;
+      color: #00ffcc;
+      margin-bottom: 20px;
+      animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .btn-cerrar {
+      display: none;
+      background: transparent;
+      border: 2px solid var(--primary-cyan);
+      color: var(--primary-cyan);
+      padding: 12px 30px;
+      border-radius: 8px;
+      font-weight: 800;
+      margin-top: 20px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <form id="formularioRecarga">
+      <!-- 1. ID DEL JUGADOR -->
+      <div class="section-title">1. INGRESA TU ID DE JUGADOR</div>
+      <input type="number" id="playerId" class="input-box" placeholder="Ej: 8792077932" required>
+
+      <!-- 2. SELECCIONA TU RECARGA -->
+      <div class="section-title">2. SELECCIONA TU RECARGA</div>
+      <div class="grid-paquetes" id="gridPaquetes">
+        <!-- Generado dinámicamente con JS para mantener limpieza -->
+      </div>
+      <input type="hidden" id="paqueteSeleccionado" required>
+
+      <!-- 3. REFERENCIA BANCARIA -->
+      <div class="section-title">3. ÚLTIMOS 5 DÍGITOS DEL PAGO</div>
+      <input type="number" id="referenciaPago" class="input-box" placeholder="Ej: 45678" required>
+
+      <!-- BOTÓN FINAL -->
+      <button type="submit" class="btn-main">PROCESAR PAGO AHORA</button>
+    </form>
+  </div>
+
+  <!-- PANTALLA DE CARGA / ÉXITO (MODAL) -->
+  <div class="overlay-loading" id="pantallaCarga">
+    <div class="spinner" id="spinnerCarga"></div>
+    <div class="success-icon" id="iconoExito">✅</div>
+    
+    <div class="loading-title" id="tituloCarga">Procesando Recarga...</div>
+    <div class="loading-subtitle" id="textoDinamico">Conectando de forma segura...</div>
+    
+    <div class="loading-warning" id="advertenciaCarga">
+      ⚠️ ¡NO CIERRES NI SALGAS DE ESTA PANTALLA!<br>El bot de Level Up está trabajando. Esto puede tardar hasta 1 minuto.
+    </div>
+
+    <button type="button" class="btn-cerrar" id="btnCerrarError" onclick="cerrarModal()">INTENTAR DE NUEVO</button>
+    <button type="button" class="btn-cerrar" id="btnCerrarExito" onclick="finalizarExito()" style="border-color: #00ffcc; background: #00ffcc; color: #000;">ENTENDIDO</button>
+  </div>
+
+  <script>
+    // Catálogo de paquetes basado en tu imagen
+    const paquetes = [
+      { diamantes: "110", precio: "760,00" },
+      { diamantes: "220", precio: "1.520,00" },
+      { diamantes: "341", precio: "2.300,00" },
+      { diamantes: "572", precio: "3.850,00" },
+      { diamantes: "1166", precio: "7.120,00" },
+      { diamantes: "2398", precio: "14.100,00" },
+      { diamantes: "6160", precio: "36.000,00" }
+    ];
+
+    // Renderizar paquetes
+    const grid = document.getElementById('gridPaquetes');
+    paquetes.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'paquete-card';
+      card.innerHTML = `
+        <div class="paquete-diamantes">${p.diamantes} diamantes 💎</div>
+        <div class="paquete-precio">${p.precio} Bs</div>
+      `;
+      card.onclick = () => {
+        document.querySelectorAll('.paquete-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        document.getElementById('paqueteSeleccionado').value = `${p.diamantes} diamantes`;
+      };
+      grid.appendChild(card);
+    });
+
+    // Frases para entretener al usuario mientras el bot de Railway trabaja
+    const frasesCarga = [
+      "Verificando tu pago en el banco...",
+      "Pago confirmado. Extrayendo códigos de seguridad...",
+      "Conectando con el servidor de Free Fire...",
+      "Sorteando sistemas de seguridad (Anti-Bot)...",
+      "Inyectando diamantes directamente a tu ID...",
+      "Esperando la confirmación final de Garena..."
+    ];
+
+    let intervaloFrases;
+
+    // Lógica del Formulario
+    document.getElementById('formularioRecarga').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const id = document.getElementById('playerId').value;
+      const paquete = document.getElementById('paqueteSeleccionado').value;
+      const referencia = document.getElementById('referenciaPago').value;
+
+      if (!paquete) {
+        alert("Por favor, selecciona un paquete de diamantes.");
+        return;
+      }
+
+      // 1. MOSTRAR PANTALLA DE CARGA INQUEBRANTABLE
+      const modal = document.getElementById('pantallaCarga');
+      const spinner = document.getElementById('spinnerCarga');
+      const titulo = document.getElementById('tituloCarga');
+      const texto = document.getElementById('textoDinamico');
+      const warning = document.getElementById('advertenciaCarga');
+      const iconoExito = document.getElementById('iconoExito');
+      const btnError = document.getElementById('btnCerrarError');
+      const btnExito = document.getElementById('btnCerrarExito');
+
+      // Resetear interfaz
+      modal.style.display = 'flex';
+      spinner.style.display = 'block';
+      iconoExito.style.display = 'none';
+      btnError.style.display = 'none';
+      btnExito.style.display = 'none';
+      warning.style.display = 'block';
+      titulo.style.color = "#ffffff";
+      titulo.innerText = "Procesando Recarga...";
+      
+      // 2. ANIMACIÓN DE TEXTOS DE ESPERA
+      let contador = 0;
+      texto.innerText = frasesCarga[0];
+      intervaloFrases = setInterval(() => {
+        contador++;
+        if (contador < frasesCarga.length) {
+          texto.innerText = frasesCarga[contador];
+        } else {
+          texto.innerText = "Tomando más tiempo de lo normal, pero el bot sigue trabajando...";
+        }
+      }, 7000); // Cambia el texto cada 7 segundos
+
+      // 3. ENVIAR A VERCEL
+      try {
+        const respuesta = await fetch('/api/recargar', { // <-- AJUSTA ESTA URL A TU ENDPOINT DE VERCEL SI ES NECESARIO
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: id,
+            paquete: paquete,
+            referencia: referencia
+          })
+        });
+
+        const data = await respuesta.json();
+        clearInterval(intervaloFrases); // Detener textos dinámicos
+
+        if (data.status === "success") {
+          // ==============================
+          // ¡ÉXITO ROTUNDO!
+          // ==============================
+          spinner.style.display = 'none';
+          warning.style.display = 'none';
+          iconoExito.style.display = 'block';
+          titulo.innerText = "¡RECARGA EXITOSA!";
+          titulo.style.color = "#00ffcc";
+          texto.innerText = "Los diamantes ya están en tu cuenta. ¡Ve a revisar!";
+          btnExito.style.display = 'inline-block';
+          
+          // Limpiar formulario para el próximo cliente
+          document.getElementById('formularioRecarga').reset();
+          document.querySelectorAll('.paquete-card').forEach(c => c.classList.remove('selected'));
+          document.getElementById('paqueteSeleccionado').value = "";
+
+        } else {
+          // ==============================
+          // ERROR (Pago insuficiente, ID malo, etc)
+          // ==============================
+          lanzarError(data.message);
+        }
+
+      } catch (error) {
+        clearInterval(intervaloFrases);
+        lanzarError("Falla de conexión con el servidor. Intenta nuevamente.");
+      }
+    });
+
+    function lanzarError(mensaje) {
+      document.getElementById('spinnerCarga').style.display = 'none';
+      document.getElementById('advertenciaCarga').style.display = 'none';
+      document.getElementById('tituloCarga').innerText = "⚠️ Ocurrió un problema";
+      document.getElementById('tituloCarga').style.color = "#ff4444";
+      document.getElementById('textoDinamico').innerText = mensaje;
+      document.getElementById('btnCerrarError').style.display = 'inline-block';
+    }
+
+    function cerrarModal() {
+      document.getElementById('pantallaCarga').style.display = 'none';
+    }
+
+    function finalizarExito() {
+      cerrarModal();
+      // Opcional: Redirigir al usuario al inicio o a su perfil
+      // window.location.href = "/inicio";
+    }
+  </script>
+
+</body>
+</html>
