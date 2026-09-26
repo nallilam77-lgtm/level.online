@@ -28,6 +28,7 @@ export default async function handler(req, res) {
   try {
     const { id, paquete, referencia, urlImagen } = req.body;
 
+    // 🛡️ Blindaje anti-vacíos
     if (!id || !paquete || !referencia) {
       return res.status(400).json({ status: "error", message: "Faltan datos obligatorios para procesar la recarga." });
     }
@@ -37,7 +38,23 @@ export default async function handler(req, res) {
     const RAILWAY_SECRET = process.env.RAILWAY_SECRET || "TuClaveSecretaSuperSegura123"; 
 
     // ==========================================
-    // PASO 1: OBTENER EL PRECIO REAL
+    // ORDEN PASO 1: VERIFICAR QUE LA REFERENCIA EXISTA EN EL BANCO
+    // ==========================================
+    const resVerificacion = await fetch(URL_GOOGLE_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: "verificar_pago_simple", referencia: referencia })
+    });
+    const dataVerificacion = await resVerificacion.json();
+
+    if (!dataVerificacion || !dataVerificacion.encontrado) {
+      return res.status(400).json({ status: "error", message: dataVerificacion.message || "Referencia bancaria no encontrada o ya utilizada." });
+    }
+
+    const montoPagadoReal = limpiarMontoVES(dataVerificacion.montoPagado);
+
+    // ==========================================
+    // ORDEN PASO 2: VERIFICAR PRECIO OFICIAL DEL PAQUETE
     // ==========================================
     const resPrecios = await fetch(URL_GOOGLE_SCRIPT, {
       method: 'POST',
@@ -51,47 +68,37 @@ export default async function handler(req, res) {
     }
 
     const numeroDiamantes = String(paquete).replace(/[^0-9]/g, '');
-    
     const paqueteGsheet = dataPrecios.catalogo.find(p => String(p.diamantes).replace(/[^0-9]/g, '') === numeroDiamantes);
+    
     if (!paqueteGsheet) {
       return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado." });
     }
 
-    const precioReal = limpiarMontoVES(paqueteGsheet.precio);
+    const precioRealOficial = limpiarMontoVES(paqueteGsheet.precio);
 
-    // ==========================================
-    // PASO 2: BUSCAR PAGO Y VERIFICAR
-    // ==========================================
-    const resVerificacion = await fetch(URL_GOOGLE_SCRIPT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: "verificar_pago", referencia: referencia, monto: precioReal })
-    });
-    const dataVerificacion = await resVerificacion.json();
-
-    if (!dataVerificacion || !dataVerificacion.encontrado) {
-      return res.status(400).json({ status: "error", message: dataVerificacion.message || "Pago no encontrado o ya utilizado." });
-    }
-    
-    if (dataVerificacion.insuficiente) {
+    // 🛡️ REVISIÓN ESTRICTA: ¿El monto pagado es menor al precio oficial? (Con tolerancia de 0.50 céntimos por redondeos)
+    if (montoPagadoReal < (precioRealOficial - 0.50)) {
+      // Liberamos el pago de vuelta a verificado para que no quede bloqueado eternamente
       await fetch(URL_GOOGLE_SCRIPT, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify({ accion: "marcar_verificado", referencia: dataVerificacion.referencia }) 
       });
-      
-      const pagado = Number(dataVerificacion.montoPagado) || 0;
-      const faltante = precioReal - pagado;
+
+      const faltante = precioRealOficial - montoPagadoReal;
 
       return res.status(400).json({ 
         status: "error", 
         insuficiente: true,
-        message: `Pago insuficiente: Encontramos ${formatearVES(pagado)} Bs, pero el paquete cuesta ${formatearVES(precioReal)} Bs. Faltan ${formatearVES(faltante)} Bs.` 
+        montoPagado: montoPagadoReal,
+        precioRequerido: precioRealOficial,
+        faltante: faltante,
+        message: `Pago insuficiente: Encontramos ${formatearVES(montoPagadoReal)} Bs, pero el paquete cuesta ${formatearVES(precioRealOficial)} Bs. Faltan ${formatearVES(faltante)} Bs.` 
       });
     }
 
     // ==========================================
-    // PASO 3: EXTRAER LOS CÓDIGOS DE LA HOJA
+    // ORDEN PASO 3: EXTRAER LOS CÓDIGOS DE LA HOJA "codigos"
     // ==========================================
     const resCodigos = await fetch(URL_GOOGLE_SCRIPT, {
       method: 'POST',
@@ -113,7 +120,7 @@ export default async function handler(req, res) {
     const pinesExtraidos = dataCodigos.pines; 
 
     // ==========================================
-    // PASO 4: ATACAR RAILWAY EN SIMULTÁNEO
+    // ORDEN PASO 4: EJECUTAR RECARGA EN RAILWAY (EN SIMULTÁNEO SI SON 2)
     // ==========================================
     try {
       const promesasCanje = pinesExtraidos.map(pin => {
@@ -131,13 +138,11 @@ export default async function handler(req, res) {
         throw new Error(fallo.detail || fallo.message || "Fallo en el servidor de Railway.");
       }
     } catch (error) {
-      // ⚠️ IMPORTANTE: Si Railway falla, NO devolvemos los códigos al Excel (ya fueron revelados/gastados). 
-      // Se debe revisar manualmente, pero no cobramos de nuevo al cliente.
       return res.status(400).json({ status: "error", message: "Error interno del Bot de Canje: " + error.message });
     }
 
     // ==========================================
-    // PASO 5: QUEMAR EL PAGO EN EXCEL
+    // ORDEN PASO 5: QUEMAR EL PAGO EN EXCEL ("Usado")
     // ==========================================
     await fetch(URL_GOOGLE_SCRIPT, {
       method: 'POST',
@@ -146,10 +151,10 @@ export default async function handler(req, res) {
     });
 
     // ==========================================
-    // PASO 6: GUARDAR EN PESTAÑA FINALIZADOS CON LOS CÓDIGOS USADOS
+    // ORDEN PASO 6: GUARDAR EN PESTAÑA FINALIZADOS
     // ==========================================
     const comprobanteSeguro = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
-    const codigosUnidos = pinesExtraidos.join(" | "); // Unimos los pines usados para que queden en 1 celda
+    const codigosUnidos = pinesExtraidos.join(" | "); 
 
     await fetch(URL_GOOGLE_SCRIPT, {
       method: 'POST',
@@ -159,7 +164,7 @@ export default async function handler(req, res) {
         idJugador: id, 
         paquete: paquete, 
         referencias: dataVerificacion.referencia, 
-        codigosUsados: codigosUnidos,  // ¡AQUÍ ENVIAMOS LOS PINES QUEMADOS AL EXCEL!
+        codigosUsados: codigosUnidos, 
         urlImagen: comprobanteSeguro 
       })
     });
