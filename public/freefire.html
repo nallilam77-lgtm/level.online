@@ -21,8 +21,10 @@
       --danger: #ff3b3b;
       --danger-dark: #2a0b10;
       --warning: #ffcc00;
+      --warning-dark: #2a2000;
       --whatsapp: #1db954;
       --whatsapp-dark: #0e1e14;
+      --success: #00cc66;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -58,6 +60,7 @@
       70% { box-shadow: 0 0 0 15px rgba(29, 185, 84, 0); }
       100% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0); }
     }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
 
     .anim-slide-up { opacity: 0; animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     .delay-1 { animation-delay: 0.1s; }
@@ -155,6 +158,15 @@
     .error-theme .modal-titulo { color: var(--danger) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .error-theme .modal-nota { background: rgba(255, 59, 59, 0.08); border-left: 4px solid var(--warning); color: #ffcccc; font-size: 12px; text-align: left; margin-top: 12px; }
 
+    /* Tema amarillo para recargas en proceso / demoradas */
+    .warning-theme { border-color: var(--warning) !important; background: var(--warning-dark) !important; box-shadow: 0 0 40px rgba(255, 204, 0, 0.15) !important; }
+    .warning-theme .modal-titulo { color: var(--warning) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .warning-theme .modal-nota { background: rgba(255, 204, 0, 0.08); border-left: 4px solid var(--warning); color: #ffe680; font-size: 12px; text-align: left; margin-top: 12px; }
+
+    /* Tema verde para éxito */
+    .success-theme { border-color: var(--success) !important; background: rgba(0, 204, 102, 0.05) !important; box-shadow: 0 0 40px rgba(0, 204, 102, 0.15) !important; }
+    .success-theme .modal-titulo { color: var(--success) !important; }
+
     .modal-botones { display: flex; gap: 8px; margin-top: 12px; }
     .btn-revisar, .btn-confirmar { flex: 1; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer; border: none; font-size: 12px; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); text-transform: uppercase; font-family: 'Montserrat', sans-serif; }
     .btn-revisar { background: #2b1f47; color: white; }
@@ -172,8 +184,10 @@
     .progress-bar-container { width: 100%; height: 8px; background: #1a122c; border-radius: 8px; overflow: hidden; border: 1px solid var(--card-border); }
     .progress-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00c6ff, #00ffcc); box-shadow: 0 0 10px #00ffcc; transition: width 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 
-    #pantallaExito { display: none; text-align: center; border-color: var(--cyan-text); box-shadow: 0 0 40px rgba(0, 255, 204, 0.2); }
     .tx-caja { background: #1a122c; border: 2px dashed var(--cyan-text); padding: 12px; border-radius: 12px; margin: 15px 0; font-size: 18px; font-weight: 900; color: var(--cyan-text); letter-spacing: 2px; user-select: all; }
+    .tx-caja.warning { border-color: var(--warning); color: var(--warning); }
+    .tx-caja.success { border-color: var(--success); color: var(--success); }
+    
     .btn-volver-inicio { background: var(--primary-gradient); color: #fff; padding: 12px 20px; border-radius: 10px; font-weight: 900; text-decoration: none; display: inline-block; width: 100%; transition: 0.3s; font-family: 'Montserrat', sans-serif; font-size: 13px; }
     .btn-volver-inicio:hover { box-shadow: 0 8px 20px rgba(255, 102, 0, 0.5); }
 
@@ -201,12 +215,14 @@
     .toast-bubble.show {
       bottom: 30px;
     }
+    .loader-spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(255, 204, 0, 0.3); border-top-color: var(--warning); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; }
   </style>
 </head>
 <body>
 
   <div id="toastBubble" class="toast-bubble"></div>
 
+  <!-- Modal Pago Insuficiente -->
   <div id="modalWhatsApp" class="overlay-pantalla">
     <div class="modal-content whatsapp-theme">
       <h2 class="modal-titulo">⚠️ PAGO INSUFICIENTE</h2>
@@ -229,17 +245,51 @@
     </div>
   </div>
 
+  <!-- Modal Error (Pago No Encontrado o Usado) -->
   <div id="modalPagoNoEncontrado" class="overlay-pantalla">
     <div class="modal-content error-theme">
-      <h2 class="modal-titulo">❌ ATENCIÓN</h2>
-      <p id="textoErrorPago" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;">Tuvimos algunos inconvenientes procesando tu solicitud. Por favor verifica tus datos e intenta nuevamente.</p>
+      <h2 class="modal-titulo" id="tituloErrorGeneral">❌ ATENCIÓN</h2>
+      <p id="textoErrorPago" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;">Tuvimos algunos inconvenientes procesando tu solicitud.</p>
+      
       <div id="notaErrorExtra" class="modal-nota danger">
-        ⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea exacto al valor del paquete.
+        <!-- Contenido dinámico desde JS -->
       </div>
-      <button class="btn-cerrar-dark" style="margin-top: 12px;" onclick="cerrarModalNoEncontrado()">VOLVER A REVISAR</button>
+      
+      <button class="btn-cerrar-dark" style="margin-top: 12px;" onclick="cerrarModalNoEncontrado()">ENTENDIDO</button>
     </div>
   </div>
 
+  <!-- Modal Recarga en Proceso (Demorada / Error de Bot) -->
+  <div id="modalEnProceso" class="overlay-pantalla">
+    <div class="modal-content warning-theme">
+      <div class="loader-spinner"></div>
+      <h2 class="modal-titulo" style="font-size: 18px;">¡RECARGA EN PROCESO!</h2>
+      <p style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;">Tu pago ha sido verificado con éxito, pero la recarga puede tardar un poco más en reflejarse.</p>
+      
+      <div class="tx-caja warning" id="codigoTxnProceso">TXN-XXXXXX</div>
+
+      <div class="modal-nota warning" style="border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+        ⏳ <strong>No te preocupes:</strong> Tu recarga se completará automáticamente en un lapso de <strong>1 a 5 minutos</strong>. Puedes cerrar esta ventana.
+      </div>
+      
+      <a href="index.html" class="btn-volver-inicio" style="background: #2b1f47;">ENTENDIDO, VOLVER AL INICIO</a>
+    </div>
+  </div>
+
+  <!-- Modal Recarga Exitosa -->
+  <div id="modalExitosa" class="overlay-pantalla">
+    <div class="modal-content success-theme">
+      <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
+      <h2 class="modal-titulo" style="font-size: 20px;">¡RECARGA EXITOSA!</h2>
+      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado y los diamantes ya están en tu cuenta.</p>
+      
+      <div class="tx-caja success" id="codigoTxnExito">TXN-XXXXXX</div>
+      
+      <a href="index.html" class="btn-volver-inicio" style="background: var(--success); color: #000;">NUEVA RECARGA</a>
+    </div>
+  </div>
+
+  <!-- Modal Confirmación -->
   <div id="modalConfirmacion" class="overlay-pantalla">
     <div class="modal-content">
       <h2 class="modal-titulo">⚠️ CONFIRMA TU PEDIDO</h2>
@@ -259,23 +309,16 @@
     </div>
   </div>
 
+  <!-- Pantalla de Procesamiento con Anime -->
   <div id="pantallaProcesando" class="overlay-pantalla">
     <div class="modal-anime-card" id="cajaContenedorAnime">
       <div class="anime-avatar-box"><img src="jugando.gif" alt="Procesando recarga"></div>
       <div class="anime-status-text" id="textoContadorAnimado">🔍 Iniciando sistema...</div>
       <div class="progress-bar-container"><div class="progress-bar-fill" id="barraProgresoFill" style="width: 5%;"></div></div>
     </div>
-
-    <div class="modal-content" id="pantallaExito">
-      <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
-      <h2 style="color: var(--cyan-text); margin-top:0; font-family: 'Montserrat', sans-serif; font-size: 20px;">¡RECARGA FINALIZADA!</h2>
-      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado correctamente por Level Up.</p>
-      <div class="tx-caja" id="codigoTxn">TXN-XXXXXX</div>
-      <p style="color: var(--primary-orange); font-size: 11px; font-weight: 700; margin-bottom: 18px; background: rgba(255,102,0,0.1); padding: 8px; border-radius: 8px;">⚠️ IMPORTANTE: No cierres la página hasta ver este mensaje. Tus diamantes ya van en camino.</p>
-      <a href="index.html" class="btn-volver-inicio">VOLVER AL INICIO</a>
-    </div>
   </div>
 
+  <!-- Contenido Principal -->
   <div class="main-card anim-slide-up">
     <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a></div>
     <h1 class="title-banner anim-slide-up delay-1">🔥 FREE FIRE 🔥</h1>
@@ -347,6 +390,7 @@
 
     let paqueteSeleccionado = null; let idVerificado = false; let nombreJugadorVerificado = "";
     let datosBancoGlobal = { banco: "", telefono: "", cedula: "" }; let isProcessing = false;
+    let globalTxnCode = "";
     
     const SCRIPT_VALIDADOR_URL = '/api/verificar'; const SCRIPT_RECARGAS_URL = '/api/recargar';
 
@@ -508,7 +552,6 @@
         return;
       }
 
-      // Validar que el comprobante sea obligatorio
       if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5 || !fileInput.files[0]) { 
         mostrarBurbuja("⚠️ Faltan datos o es obligatorio subir el comprobante de pago.", "var(--danger)"); 
         return; 
@@ -530,9 +573,7 @@
 
     async function subirComprobanteDrive(file) {
       return new Promise((resolve) => {
-        const tiempoLimite = setTimeout(() => {
-          resolve("Sin comprobante (Tiempo agotado)");
-        }, 8000); 
+        const tiempoLimite = setTimeout(() => { resolve("Sin comprobante (Tiempo agotado)"); }, 8000); 
 
         const reader = new FileReader(); 
         reader.readAsDataURL(file);
@@ -551,12 +592,18 @@
             resolve("Sin comprobante (Error de subida)"); 
           }
         };
-
-        reader.onerror = () => {
-          clearTimeout(tiempoLimite);
-          resolve("Sin comprobante (Error de lectura)");
-        };
+        reader.onerror = () => { clearTimeout(tiempoLimite); resolve("Sin comprobante (Error de lectura)"); };
       });
+    }
+
+    function mostrarErrorGeneral(titulo, mensajePrincipal, htmlExtra) {
+        document.getElementById('pantallaProcesando').style.display = 'none';
+        document.getElementById('tituloErrorGeneral').innerHTML = titulo;
+        document.getElementById('textoErrorPago').innerHTML = mensajePrincipal;
+        const notaExtra = document.getElementById('notaErrorExtra');
+        if(htmlExtra) { notaExtra.style.display = 'block'; notaExtra.innerHTML = htmlExtra; } 
+        else { notaExtra.style.display = 'none'; }
+        document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
     }
 
     window.iniciarCargaConTiemposAleatorios = async function() {
@@ -576,9 +623,8 @@
       const playerId = document.getElementById('inputPlayerId').value.trim();
       cerrarModal(); document.getElementById('pantallaProcesando').style.display = 'flex';
 
-      const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; let codigoTxn = 'TXN-';
-      for (let i = 0; i < 6; i++) codigoTxn += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
-      document.getElementById('codigoTxn').textContent = codigoTxn;
+      const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; globalTxnCode = 'TXN-';
+      for (let i = 0; i < 6; i++) globalTxnCode += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
 
       const textoElem = document.getElementById('textoContadorAnimado');
       const barraFill = document.getElementById('barraProgresoFill');
@@ -611,20 +657,30 @@
           const resultado = await respuestaServidor.json();
           
           if (resultado.status !== "success") {
+             // 1. Manejo del fallo del bot (Recarga en proceso)
+             if(resultado.message && resultado.message.toLowerCase().includes("fallo técnico")) {
+                document.getElementById('pantallaProcesando').style.display = 'none';
+                document.getElementById('codigoTxnProceso').textContent = globalTxnCode;
+                document.getElementById('modalEnProceso').style.display = 'flex';
+                isProcessing = false; btnConfirmar.disabled = false;
+                return;
+             }
+
+             // Sistema de intentos fallidos
              let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga') || '0');
              intentosFallidos++;
              localStorage.setItem('intentos_recarga', intentosFallidos);
-             
              if (intentosFallidos >= 3) {
                  localStorage.setItem('tiempo_bloqueo', Date.now() + (5 * 60 * 1000));
                  mostrarBurbuja("⚠️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
              }
 
-             document.getElementById('pantallaProcesando').style.display = 'none';
+             // 2. Manejo de Pago Insuficiente (Botón WhatsApp)
              let msg = resultado.message || "";
-             let isInsuficiente = msg.toLowerCase().includes("insuficiente") || resultado.insuficiente;
-
-             if (isInsuficiente) {
+             let msgLower = msg.toLowerCase();
+             
+             if (msgLower.includes("insuficiente") || resultado.insuficiente) {
+                 document.getElementById('pantallaProcesando').style.display = 'none';
                  let pagado = parseFloat(resultado.montoPagado || 0);
                  let precioReal = parseFloat(resultado.precioRequerido || 0);
                  let faltante = parseFloat(resultado.faltante || 0);
@@ -636,13 +692,20 @@
                  let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Monto que pagué:* ${pagado.toFixed(2)} Bs%0A*Paquete deseado:* ${diamantesClean} Diamantes (${precioReal.toFixed(2)} Bs)%0A*Me faltan:* ${faltante.toFixed(2)} Bs%0A%0A¿Cómo hago para completarlo?`;
                  document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
                  document.getElementById('modalWhatsApp').style.display = 'flex';
-
-             } else {
-                 // SE ENMASCARA EL ERROR REAL DEL SERVIDOR PARA EL CLIENTE
-                 document.getElementById('textoErrorPago').innerHTML = "⚠️ Tuvimos algunos inconvenientes procesando tu recarga. Por favor verifica los datos ingresados o intenta nuevamente.";
-                 document.getElementById('notaErrorExtra').style.display = 'block';
-                 document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
+             } 
+             // 3. Manejo de Pago Ya Usado
+             else if(msgLower.includes("gastado") || msgLower.includes("usado")) {
+                 mostrarErrorGeneral("❌ PAGO YA USADO", "El sistema detectó que esta referencia ya fue utilizada para completar otra recarga anterior.", "⚠️ <strong>Importante:</strong><br><br>No puedes reutilizar pagos antiguos. Si crees que esto es un error, contáctanos a soporte.");
              }
+             // 4. Manejo de Pago No Encontrado
+             else if(msgLower.includes("no encontrado")) {
+                 mostrarErrorGeneral("❌ PAGO NO ENCONTRADO", "No pudimos localizar la referencia que ingresaste en nuestro sistema bancario.", "⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea <strong>exacto</strong> al valor del paquete.<br><br>3. Que el pago fue enviado al banco correcto.");
+             } 
+             // 5. Error Genérico (Falta de pines, etc.)
+             else {
+                 mostrarErrorGeneral("❌ ERROR", msg, "");
+             }
+
              isProcessing = false; btnConfirmar.disabled = false;
              return; 
           }
@@ -664,16 +727,14 @@
           barraFill.style.width = '100%';
 
           setTimeout(() => {
-            document.getElementById('cajaContenedorAnime').style.display = 'none';
-            document.getElementById('pantallaExito').style.display = 'block';
+            document.getElementById('pantallaProcesando').style.display = 'none';
+            document.getElementById('codigoTxnExito').textContent = globalTxnCode;
+            document.getElementById('modalExitosa').style.display = 'flex';
             isProcessing = false;
           }, 600);
 
       } catch (err) {
-          document.getElementById('pantallaProcesando').style.display = 'none';
-          document.getElementById('textoErrorPago').innerHTML = "⚠️ Tuvimos algunos inconvenientes de conexión. Por favor intenta nuevamente.";
-          document.getElementById('notaErrorExtra').style.display = 'none';
-          document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
+          mostrarErrorGeneral("⚠️ ERROR DE CONEXIÓN", "Tuvimos inconvenientes al conectar con el servidor. Por favor intenta nuevamente.", "");
           isProcessing = false; 
           btnConfirmar.disabled = false;
       }
