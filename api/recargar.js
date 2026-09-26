@@ -73,7 +73,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ status: "error", message: dataVerificacion.message || "Pago no encontrado o ya utilizado." });
     }
     
-    // ⚠️ ACTUALIZADO PARA QUE EL BOTÓN DE WHATSAPP RECIBA LOS MONTOS CORRECTOS
     if (dataVerificacion.insuficiente) {
       await fetch(URL_GOOGLE_SCRIPT, { 
         method: 'POST', 
@@ -117,29 +116,43 @@ export default async function handler(req, res) {
     const pinesExtraidos = dataCodigos.pines; 
 
     // ==========================================
-    // PASO 4: ATACAR RAILWAY EN SIMULTÁNEO
+    // PASO 4: ATACAR RAILWAY (Envío en bloque)
     // ==========================================
+    let resultadoBot = {};
     try {
-      const promesasCanje = pinesExtraidos.map(pin => {
-        return fetch(RAILWAY_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-secret-token": RAILWAY_SECRET },
-          body: JSON.stringify({ pin: pin, player_id: id })
-        }).then(res => res.json());
+      const respuestaRailway = await fetch(RAILWAY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-secret-token": RAILWAY_SECRET },
+        body: JSON.stringify({ pins: pinesExtraidos, player_id: id }) 
       });
 
-      const resultados = await Promise.all(promesasCanje);
+      resultadoBot = await respuestaRailway.json();
       
-      const fallo = resultados.find(r => r.status !== "success");
-      if (fallo) {
-        throw new Error(fallo.detail || fallo.message || "Fallo en el servidor de Railway.");
+      // Si Python responde que falló, lanzamos el JSON como error para desglosarlo en el catch
+      if (resultadoBot.status !== "success") {
+        throw new Error(JSON.stringify(resultadoBot));
       }
     } catch (error) {
-      // 🚨 ZONA DE ERROR DEL BOT
-      const errorMsg = error.message;
-      console.error("❌ Error crítico en Railway durante el canje:", errorMsg);
+      let pinesPendientes = pinesExtraidos;
+      let pinesExitosos = [];
+      let errorMsg = error.message;
 
-      // 📝 ANOTAR EL ERROR Y SALVAR LOS PINES EN LA NUEVA PESTAÑA "ERRORES"
+      // 🔍 Intentamos desglosar el JSON que envió tu bot de Python
+      try {
+        const botData = JSON.parse(error.message);
+        pinesPendientes = botData.pines_pendientes || pinesExtraidos;
+        pinesExitosos = botData.pines_exitosos || [];
+        errorMsg = botData.detail || botData.error || "Fallo interno en el bot.";
+      } catch(e) {
+        // Si no es JSON, fue una caída de red o timeout
+      }
+
+      console.error("❌ Error en Railway:", errorMsg);
+
+      const stringPendientes = pinesPendientes.length > 0 ? pinesPendientes.join(" | ") : "Ninguno";
+      const stringExitosos = pinesExitosos.length > 0 ? pinesExitosos.join(" | ") : "Ninguno";
+
+      // 📝 ANOTAR EL INCIDENTE Y SALVAR LOS PINES INTACTOS
       await fetch(URL_GOOGLE_SCRIPT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,12 +161,12 @@ export default async function handler(req, res) {
           idJugador: id, 
           paquete: paquete, 
           referencia: dataVerificacion.referencia, 
-          codigosUsados: pinesExtraidos.join(" | "), 
-          urlImagen: `ERROR BOT: ${errorMsg} | CAPTURE: ${urlImagen || "Sin comprobante"}` 
+          codigosUsados: stringPendientes, // 🔥 Se salvan en la hoja "errores" SÓLO los que no se gastaron
+          urlImagen: `⚠️ MOTIVO: ${errorMsg} | ✅ SE USARON: ${stringExitosos} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}` 
         })
       });
 
-      // 🤫 Se devuelve un error genérico (que el frontend HTML interpretará silenciosamente como "En proceso")
+      // 🤫 Se devuelve un error genérico para que tu página web muestre "En proceso de 1 a 5 minutos"
       return res.status(400).json({ 
         status: "error", 
         message: "Fallo técnico del bot. Pines respaldados correctamente en hoja de errores." 
@@ -170,10 +183,10 @@ export default async function handler(req, res) {
     });
 
     // ==========================================
-    // PASO 6: GUARDAR EN PESTAÑA FINALIZADOS CON LOS CÓDIGOS USADOS
+    // PASO 6: GUARDAR EN PESTAÑA FINALIZADOS
     // ==========================================
     const comprobanteSeguro = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
-    const codigosUnidos = pinesExtraidos.join(" | "); // Unimos los pines usados para que queden en 1 celda
+    const codigosUnidos = pinesExtraidos.join(" | ");
 
     await fetch(URL_GOOGLE_SCRIPT, {
       method: 'POST',
