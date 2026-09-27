@@ -307,9 +307,9 @@
       <div class="step-title">3. REALIZA EL PAGO MÓVIL</div>
       <div class="bank-card">
         <div id="bankInfoContainer">
-          <div class="bank-row">Banco: <span>Venezuela (0102)</span></div>
-          <div class="bank-row">Teléfono: <span>04141916377</span></div>
-          <div class="bank-row">Cédula: <span>28779959</span></div>
+          <div class="bank-row">Banco: <span>Cargando...</span></div>
+          <div class="bank-row">Teléfono: <span>Cargando...</span></div>
+          <div class="bank-row">Cédula: <span>Cargando...</span></div>
         </div>
         <hr style="border-color: rgba(0,255,204,0.2); margin: 12px 0;">
         <div class="bank-row" style="margin-bottom: 0;">Total a pagar: <span id="montoPagar" style="color: var(--cyan-text); font-size: 18px;">0,00 Bs</span></div>
@@ -338,12 +338,45 @@
   </div>
 
   <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBIdEh_HzzB8dnzG8qkPQYOIo2kSb_F6xQ",
+      authDomain: "levelupstore-87d4d.firebaseapp.com",
+      projectId: "levelupstore-87d4d",
+      storageBucket: "levelupstore-87d4d.firebasestorage.app",
+      messagingSenderId: "948536026825",
+      appId: "1:948536026825:web:80520e4be7514a134d8f18",
+      measurementId: "G-3F8E5RCFS6"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
     let paqueteSeleccionado = null; 
     let usuarioVerificado = false;
-    let datosBancoGlobal = { banco: "Bancamiga (0172)", telefono: "04141916377", cedula: "28779959" }; 
+    let datosBancoGlobal = { banco: "", telefono: "", cedula: "" }; 
     let isProcessing = false;
     
     const API_ROBLOX = '/api/roblox';
+
+    async function cargarDatosBancarios() {
+      try {
+        const docSnap = await getDoc(doc(db, "configuracion", "pago_movil"));
+        if (docSnap.exists()) {
+          const data = docSnap.data(); 
+          datosBancoGlobal = { banco: data.banco, telefono: data.telefono, cedula: data.cedula };
+          document.getElementById('bankInfoContainer').innerHTML = `
+            <div class="bank-row">Banco: <span>${datosBancoGlobal.banco}</span></div>
+            <div class="bank-row">Teléfono: <span>${datosBancoGlobal.telefono}</span></div>
+            <div class="bank-row">Cédula: <span>${datosBancoGlobal.cedula}</span></div>
+          `;
+        }
+      } catch (error) {
+        console.error("Error al cargar datos bancarios:", error);
+      }
+    }
 
     function mostrarToast(mensaje, icono = "⚠️") {
       const toast = document.getElementById('toastNotificacion');
@@ -610,6 +643,7 @@
       }
     };
 
+    cargarDatosBancarios();
     cargarCatalogoRoblox();
   </script>
 </body>
