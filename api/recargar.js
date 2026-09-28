@@ -161,9 +161,17 @@ export default async function handler(req, res) {
           idJugador: id, 
           paquete: paquete, 
           referencia: dataVerificacion.referencia, 
-          codigosUsados: stringPendientes, // 🔥 Se salvan en la hoja "errores" SÓLO los que no se gastaron
-          urlImagen: `⚠️ MOTIVO: ${errorMsg} | ✅ SE USARON: ${stringExitosos} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}` 
+          codigosUsados: stringPendientes, 
+          // Agregada la Referencia aquí para que la veas claramente en la hoja de errores
+          urlImagen: `⚠️ MOTIVO: ${errorMsg} | 🧾 REF: ${dataVerificacion.referencia} | ✅ SE USARON: ${stringExitosos} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}` 
         })
+      });
+
+      // 🔥 NUEVO: QUEMAR EL PAGO PARA EVITAR QUE EL CLIENTE LO REUTILICE 🔥
+      await fetch(URL_GOOGLE_SCRIPT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: "marcar_usado", referencia: dataVerificacion.referencia })
       });
 
       // 🤫 Se devuelve un error genérico para que tu página web muestre "En proceso de 1 a 5 minutos"
@@ -174,7 +182,7 @@ export default async function handler(req, res) {
     }
 
     // ==========================================
-    // PASO 5: QUEMAR EL PAGO EN EXCEL
+    // PASO 5: QUEMAR EL PAGO EN EXCEL (Si todo fue exitoso)
     // ==========================================
     await fetch(URL_GOOGLE_SCRIPT, {
       method: 'POST',
