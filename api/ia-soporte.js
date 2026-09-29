@@ -1,5 +1,4 @@
 module.exports = async (req, res) => {
-    // Permitir CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -26,7 +25,8 @@ module.exports = async (req, res) => {
 
         const promptSistema = "Eres el asistente virtual oficial de Level Up, una tienda digital de recargas de Free Fire y juegos en Venezuela. Responde de forma amable, clara y directa. Ayuda a los clientes con sus dudas sobre pagos (Binance, Zinli, Pago Móvil), tiempos de entrega y recargas. Recuérdales que cada recarga válida les da una oportunidad en la ruleta con un 2% de probabilidad de ganar 100 diamantes extra.";
         
-        const respuestaGemini = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        // Actualizado al modelo actual compatible con la API v1beta
+        const respuestaGemini = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
