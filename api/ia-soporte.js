@@ -19,19 +19,17 @@ module.exports = async (req, res) => {
         if (!apiKey) {
             return res.status(200).json({ 
                 status: "success", 
-                respuesta: "Error: Falta configurar la GEMINI_API_KEY en Vercel." 
+                respuesta: "Error: Falta configurar la GEMINI_API_KEY en las variables de entorno de Vercel." 
             });
         }
 
-        // Prompt maestro y ultra preciso para Level Up
-        const promptSistema = `Eres el asistente virtual oficial y experto de Level Up, la tienda líder de recargas de Free Fire en Venezuela. 
-Conoces perfectamente el funcionamiento de la plataforma. Sigue estas reglas estrictas al pie de la letra:
-1. **Tono y extensión:** Sé sumamente corto, directo, humano y preciso. Cero rodeos.
-2. **Método de pago:** El único método admitido es **Pago Móvil**. No menciones otros métodos.
-3. **Proceso de compra en la página:** El cliente ingresa su ID de Free Fire, selecciona su paquete de diamantes (desde los paquetes más pequeños hasta los más grandes), realiza el Pago Móvil con los datos bancarios en pantalla, sube el capture e ingresa los últimos 5 dígitos de la referencia para procesar al instante.
-4. **Sin capture o pago no leído:** Si el cliente no tiene capture, recomiéndale buscar el comprobante en el historial de su aplicación bancaria, movimientos o en los mensajes de texto del banco. Si la página no le lee/valida el pago, recuérdale que debe ingresar obligatoriamente los **últimos 5 dígitos** de la referencia bancaria (ubicados al final del comprobante).
-5. **Derivación obligatoria a WhatsApp:** Si el cliente dice que "no le llegó la recarga", reporta un error grave, un pago con monto incorrecto, o cualquier situación que se salga de tus manos, **ordénale de inmediato** que presione el botón de WhatsApp verde que aparece en la esquina inferior derecha de su pantalla para que hable con soporte humano en vivo.
-6. **Cero spam:** No repitas ofertas ni menciones paquetes específicos (como los 110 diamantes) a menos que el cliente pregunte directamente por ellos. Concéntrate en resolver la duda puntual.`;
+        const promptSistema = `Eres el asistente virtual oficial y experto de Level Up, una tienda digital de recargas de Free Fire y pasarelas en Venezuela. 
+Tus respuestas deben ser sumamente cortas, amables, en español y directas (máximo 2 o 3 frases). 
+Conoces a fondo cómo ubicar el número de referencia según el banco del cliente para pagos móviles:
+1. **Banco de Venezuela (BDV):** Aparece etiquetado como "Operación:" (recuerda que el sistema web pide obligatoriamente los **últimos 5 dígitos**).
+2. **Mercantil (Tpago) / Banesco / Provincial / Tesoro:** Aparece como "Nro. de referencia:", "Referencia:" o en el comprobante digital.
+3. **Regla de oro de los 5 dígitos:** Si te preguntan por la referencia, recuérdales ingresar únicamente los **últimos 5 dígitos** de su comprobante de pago móvil.
+4. Si el cliente tiene un problema grave de recarga, error técnico o pago insuficiente, recuérdale que puede usar el botón de WhatsApp humano para soporte directo.`;
         
         const respuestaGemini = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
@@ -45,7 +43,7 @@ Conoces perfectamente el funcionamiento de la plataforma. Sigue estas reglas est
 
         const data = await respuestaGemini.json();
 
-        let textoRespuesta = "¡Hola! Bienvenido a Level Up. ¿En qué te ayudamos con tu Pago Móvil?";
+        let textoRespuesta = "¡Hola! Bienvenido a Level Up. ¿En qué te ayudamos con tu Pago Móvil o tu recarga de Free Fire?";
         
         if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0].text) {
             textoRespuesta = data.candidates[0].content.parts[0].text;
@@ -55,7 +53,8 @@ Conoces perfectamente el funcionamiento de la plataforma. Sigue estas reglas est
 
         return res.status(200).json({
             status: "success",
-            respuesta: textoRespuesta
+            respuesta: textoRespuesta,
+            respaldoWhatsapp: textoRespuesta.toLowerCase().includes("error") || textoRespuesta.toLowerCase().includes("ayuda") || textoRespuesta.toLowerCase().includes("soporte")
         });
 
     } catch (error) {
