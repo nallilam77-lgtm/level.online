@@ -15,7 +15,7 @@ export default async function handler(req, res) {
         let ganoPremio = false;
         let premioStr = "Vacío ❌";
         
-        if (numeroAleatorio <= 1) {
+        if (numeroAleatorio <= 2) {
             ganoPremio = true;
             premioStr = "100 Diamantes 💎";
         }
