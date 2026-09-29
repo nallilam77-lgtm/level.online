@@ -393,6 +393,29 @@
 
       <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🚀 PROCESAR RECARGA</button>
     </div>
+    <!-- ========================================= -->
+<!-- 🔥 CHAT DE SOPORTE IA DE LEVEL UP 🔥 -->
+<!-- ========================================= -->
+<div style="background: var(--panel-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 14px; margin-top: 20px;">
+    <div class="step-title">💬 SOPORTE VIRTUAL LEVEL UP</div>
+    
+    <div id="chat-messages" style="height: 200px; overflow-y: auto; background: #0d0818; border: 1px solid var(--card-border); border-radius: 12px; padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="text-align: left; background: #1a122c; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 80%;">
+            👋 ¡Hola! ¿Cómo podemos ayudarte con tu recarga hoy?
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 8px;">
+        <input 
+            type="text" 
+            id="input-chat" 
+            class="input-field" 
+            placeholder="Escribe tu duda y presiona Enter..." 
+            onkeypress="detectarEnter(event)"
+            style="font-size: 13px; padding: 10px; width: 100%;"
+        >
+    </div>
+</div>
   </div>
 
   <script type="module">
@@ -845,7 +868,70 @@ window.analizarCapture = async function(input) {
         document.getElementById('modalRuletaAutomatica').style.display = 'none';
         window.location.href = "index.html";
     };
+// ==========================================
+    // 🤖 LÓGICA DEL CHAT DE SOPORTE CON IA
+    // ==========================================
+    window.detectarEnter = function(event) {
+        if (event.key === 'Enter') {
+            const input = document.getElementById('input-chat');
+            const mensaje = input.value.trim();
+            
+            if (mensaje !== "") {
+                input.value = ''; // Limpiar barra
+                enviarMensajeAI(mensaje);
+            }
+        }
+    }
 
+    async function enviarMensajeAI(textoUsuario) {
+        const contenedorChat = document.getElementById('chat-messages');
+        
+        // 1. Mostrar mensaje del usuario
+        const msgUser = document.createElement('div');
+        msgUser.style.cssText = "text-align: right; background: #2b1f47; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 80%; align-self: flex-end;";
+        msgUser.innerText = textoUsuario;
+        contenedorChat.appendChild(msgUser);
+        contenedorChat.scrollTop = contenedorChat.scrollHeight;
+
+        // 2. Mostrar mensaje temporal de "Escribiendo..."
+        const msgCargando = document.createElement('div');
+        msgCargando.id = "tempCargando";
+        msgCargando.style.cssText = "text-align: left; color: var(--cyan-text); font-size: 11px; font-style: italic;";
+        msgCargando.innerText = "🤖 El asistente está escribiendo...";
+        contenedorChat.appendChild(msgCargando);
+        contenedorChat.scrollTop = contenedorChat.scrollHeight;
+
+        try {
+            // 3. Petición a tu API de Vercel (/api/ia-soporte)
+            const response = await fetch('/api/ia-soporte', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mensaje: textoUsuario })
+            });
+            
+            const resultado = await response.json();
+
+            // Quitar mensaje de carga
+            const cargandoEl = document.getElementById('tempCargando');
+            if (cargandoEl) cargandoEl.remove();
+
+            // 4. Mostrar respuesta de la IA
+            const msgBot = document.createElement('div');
+            msgBot.style.cssText = "text-align: left; background: #1a122c; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 80%; border: 1px solid var(--primary-orange); align-self: flex-start;";
+            msgBot.innerText = resultado.respuesta;
+            contenedorChat.appendChild(msgBot);
+            contenedorChat.scrollTop = contenedorChat.scrollHeight;
+
+        } catch (e) {
+            const cargandoEl = document.getElementById('tempCargando');
+            if (cargandoEl) cargandoEl.remove();
+            
+            const msgError = document.createElement('div');
+            msgError.style.cssText = "text-align: left; background: #2a0b10; color: var(--danger); padding: 8px 12px; border-radius: 8px; font-size: 12px;";
+            msgError.innerText = "🤖 Disculpa, ocurrió un error temporal en el chat.";
+            contenedorChat.appendChild(msgError);
+        }
+    }
     cargarDatosBancarios(); cargarCatalogoCliente();
   </script>
   <!--Start of Tawk.to Script-->
