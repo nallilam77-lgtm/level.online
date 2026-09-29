@@ -7,26 +7,23 @@ export default async function handler(req, res) {
         const { id, referencia, juego } = req.body;
 
         if (!referencia || !id) {
-            return res.status(400).json({ status: "error", message: "Faltan datos de validación." });
+            return res.status(400).json({ status: "error", message: "Faltan datos de validación para la ruleta." });
         }
 
-        // 1. Probabilidad estricta del 0.1% controlada en el servidor (Inquebrantable)
-        const numeroAleatorio = Math.random() * 100;
-        let ganoPremio = false;
-        let premioStr = "Vacío ❌";
-        
-        if (numeroAleatorio <= 2) {
-            ganoPremio = true;
-            premioStr = "100 Diamantes 💎";
-        }
-
-        // 2. Enviar los datos a tu Google Apps Script para quemar la referencia en Excel
+        // 1. Primero consultamos/enviamos a Google Apps Script para que valide
+        // si la referencia ya usó su giro de ruleta (esto lo programamos en tu GAS).
         const URL_GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbyhe8ufv-upqgOuJ2RjAUIxulHel27Ns563cHbqFJI-rpt_vxyoZ3tZ-zqNfSm4ByYUUg/exec";
+
+        // NOTA: Aquí evaluamos la probabilidad del 2% de forma estricta en servidor
+        const numeroAleatorio = Math.random() * 100;
+        let ganoPremio = numeroAleatorio <= 2; // Exactamente el 2% (de 0 a 2)
+        let premioStr = ganoPremio ? "100 Diamantes 💎" : "Vacío ❌";
 
         const respuestaScript = await fetch(URL_GOOGLE_SCRIPT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                accion: "girar_ruleta", // Identificador opcional para tu Google Script
                 referencia: referencia,
                 id_jugador: id,
                 juego: juego || "Free Fire",
@@ -36,14 +33,24 @@ export default async function handler(req, res) {
 
         const resultadoGAS = await respuestaScript.json();
 
+        // Si Google Script detecta que la referencia ya jugó o hubo un error de BD
         if (resultadoGAS.status === "error") {
             return res.status(403).json({ 
                 status: "error", 
-                message: resultadoGAS.message 
+                message: resultadoGAS.message || "Esta referencia ya participó en la ruleta o no es válida." 
             });
         }
 
-        // 3. Calcular grados para la animación de la ruleta
+        // Si el Google Script determinó que ya había girado previamente (por seguridad extra)
+        if (resultadoGAS.yaGiro) {
+            return res.status(400).json({
+                status: "error",
+                message: "Esta referencia de pago ya consumió su intento en la ruleta."
+            });
+        }
+
+        // 2. Calcular grados para la animación de la ruleta visual en el cliente
+        // Suponiendo que 180deg es el premio y 0deg es vacío (según tu diseño conic-gradient)
         const vueltasBase = 1440; // 4 vueltas completas
         const gradosDestino = ganoPremio ? (vueltasBase + 180) : (vueltasBase + 0);
 
