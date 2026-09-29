@@ -1,13 +1,12 @@
-export default async function handler(req, res) {
-    // Permitir CORS por seguridad
+module.exports = async (req, res) => {
+    // Permitir CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
     if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
+        return res.status(200).end();
     }
 
     if (req.method !== 'POST') {
@@ -19,9 +18,9 @@ export default async function handler(req, res) {
         const apiKey = process.env.GEMINI_API_KEY; 
 
         if (!apiKey) {
-            return.status(200).json({ 
+            return res.status(200).json({ 
                 status: "success", 
-                respuesta: "Error: Falta configurar la API Key en Vercel." 
+                respuesta: "Error: Falta configurar la GEMINI_API_KEY en Vercel." 
             });
         }
 
@@ -39,7 +38,6 @@ export default async function handler(req, res) {
 
         const data = await respuestaGemini.json();
 
-        // Extraer texto de forma segura
         let textoRespuesta = "¡Hola! Bienvenido a Level Up. ¿En qué te puedo ayudar con tu recarga?";
         
         if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0].text) {
@@ -56,7 +54,7 @@ export default async function handler(req, res) {
     } catch (error) {
         return res.status(200).json({ 
             status: "success", 
-            respuesta: `Excepción en servidor: ${error.message}` 
+            respuesta: `Error en servidor: ${error.message}` 
         });
     }
-}
+};
