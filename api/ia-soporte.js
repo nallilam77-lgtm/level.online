@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
         if (!apiKey) {
             return res.status(200).json({ 
                 status: "success", 
-                respuesta: "Error: Falta configurar la GEMINI_API_KEY en las variables de entorno de Vercel." 
+                respuesta: "¡Hola! Por el momento el asistente está en mantenimiento. Escríbenos al botón de WhatsApp para atenderte de inmediato." 
             });
         }
 
@@ -48,19 +48,21 @@ Conoces a fondo cómo ubicar el número de referencia según el banco del client
         if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0].text) {
             textoRespuesta = data.candidates[0].content.parts[0].text;
         } else if (data && data.error) {
-            textoRespuesta = `Error de API Google: ${data.error.message}`;
+            // Mensaje amigable ocultando el error técnico de cuota de la API
+            textoRespuesta = "¡Hola! En este momento tenemos alta demanda en el asistente virtual. Por favor, haz clic abajo en el botón de WhatsApp para atenderte de inmediato con tu recarga.";
         }
 
         return res.status(200).json({
             status: "success",
             respuesta: textoRespuesta,
-            respaldoWhatsapp: textoRespuesta.toLowerCase().includes("error") || textoRespuesta.toLowerCase().includes("ayuda") || textoRespuesta.toLowerCase().includes("soporte")
+            respaldoWhatsapp: true 
         });
 
     } catch (error) {
         return res.status(200).json({ 
             status: "success", 
-            respuesta: `Error en servidor: ${error.message}` 
+            respuesta: "¡Hola! Hubo un pequeño inconveniente de conexión. Escríbenos al soporte por WhatsApp para procesar tu recarga al instante.",
+            respaldoWhatsapp: true
         });
     }
 };
