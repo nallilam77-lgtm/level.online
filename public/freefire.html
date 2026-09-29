@@ -158,12 +158,10 @@
     .error-theme .modal-titulo { color: var(--danger) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .error-theme .modal-nota { background: rgba(255, 59, 59, 0.08); border-left: 4px solid var(--warning); color: #ffcccc; font-size: 12px; text-align: left; margin-top: 12px; }
 
-    /* Tema amarillo para recargas en proceso / demoradas */
     .warning-theme { border-color: var(--warning) !important; background: var(--warning-dark) !important; box-shadow: 0 0 40px rgba(255, 204, 0, 0.15) !important; }
     .warning-theme .modal-titulo { color: var(--warning) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .warning-theme .modal-nota { background: rgba(255, 204, 0, 0.08); border-left: 4px solid var(--warning); color: #ffe680; font-size: 12px; text-align: left; margin-top: 12px; }
 
-    /* Tema verde para éxito */
     .success-theme { border-color: var(--success) !important; background: rgba(0, 204, 102, 0.05) !important; box-shadow: 0 0 40px rgba(0, 204, 102, 0.15) !important; }
     .success-theme .modal-titulo { color: var(--success) !important; }
 
@@ -212,9 +210,7 @@
       white-space: nowrap;
       pointer-events: none;
     }
-    .toast-bubble.show {
-      bottom: 30px;
-    }
+    .toast-bubble.show { bottom: 30px; }
     .loader-spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(255, 204, 0, 0.3); border-top-color: var(--warning); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; }
   </style>
 </head>
@@ -245,70 +241,54 @@
     </div>
   </div>
 
-  <!-- Modal Error (Pago No Encontrado o Usado) -->
+  <!-- Modal Error -->
   <div id="modalPagoNoEncontrado" class="overlay-pantalla">
     <div class="modal-content error-theme">
       <h2 class="modal-titulo" id="tituloErrorGeneral">❌ ATENCIÓN</h2>
       <p id="textoErrorPago" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;">Tuvimos algunos inconvenientes procesando tu solicitud.</p>
-      
-      <div id="notaErrorExtra" class="modal-nota danger">
-        <!-- Contenido dinámico desde JS -->
-      </div>
-      
+      <div id="notaErrorExtra" class="modal-nota danger"></div>
       <button class="btn-cerrar-dark" style="margin-top: 12px;" onclick="cerrarModalNoEncontrado()">ENTENDIDO</button>
     </div>
   </div>
 
-  <!-- Modal Recarga en Proceso (Demorada / Error de Bot) -->
+  <!-- Modal Recarga en Proceso -->
   <div id="modalEnProceso" class="overlay-pantalla">
     <div class="modal-content warning-theme">
       <div class="loader-spinner"></div>
       <h2 class="modal-titulo" style="font-size: 18px;">¡RECARGA EN PROCESO!</h2>
       <p style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;">Tu pago ha sido verificado con éxito, pero la recarga puede tardar un poco más en reflejarse.</p>
-      
       <div class="tx-caja warning" id="codigoTxnProceso">TXN-XXXXXX</div>
-
       <div class="modal-nota warning" style="border-radius: 8px; padding: 12px; margin-bottom: 15px;">
         ⏳ <strong>No te preocupes:</strong> Tu recarga se completará automáticamente en un lapso de <strong>1 a 5 minutos</strong>. Puedes cerrar esta ventana.
       </div>
-      
       <a href="index.html" class="btn-volver-inicio" style="background: #2b1f47;">ENTENDIDO, VOLVER AL INICIO</a>
     </div>
   </div>
 
-<!-- Modal Recarga Exitosa -->
+  <!-- Modal Recarga Exitosa -->
   <div id="modalExitosa" class="overlay-pantalla">
     <div class="modal-content success-theme">
       <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
       <h2 class="modal-titulo" style="font-size: 20px;">¡RECARGA EXITOSA!</h2>
       <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado y los diamantes ya están en tu cuenta.</p>
-      
       <div class="tx-caja success" id="codigoTxnExito">TXN-XXXXXX</div>
-      
-      <!-- BOTÓN HACIA LA RULETA (Solo sale si es exitoso) -->
       <button type="button" class="btn-confirmar" style="background: linear-gradient(135deg, #ff007f, #7f00ff); margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
-      
       <a href="index.html" class="btn-volver-inicio" style="background: var(--success); color: #000;">NUEVA RECARGA</a>
     </div>
   </div>
 
-  <!-- Modal Ruleta Automática (Sigue tu diseño Level Up) -->
+  <!-- Modal Ruleta Automática -->
   <div id="modalRuletaAutomatica" class="overlay-pantalla">
     <div class="modal-content" style="border-color: #ff007f; background: var(--panel-bg); box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 40px rgba(255, 0, 127, 0.2);">
       <h2 class="modal-titulo" style="color: #ff007f; text-shadow: 0 0 10px rgba(255,0,127,0.4);">🎰 RULETA LEVEL UP 🎰</h2>
       <p id="textoEstadoRuleta" style="font-size: 13px; color: var(--cyan-text); margin-bottom: 20px; font-weight: 800; animation: floating 2s infinite;">Validando tu ticket y girando...</p>
-      
       <div style="position: relative; width: 220px; height: 220px; margin: 0 auto 25px auto;">
-        <!-- Puntero de la Ruleta -->
         <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 22px solid #ff007f; z-index: 10; filter: drop-shadow(0 0 8px rgba(255,0,127,0.8));"></div>
-        
-        <!-- Rueda Visual con tus colores oscuros -->
         <div id="ruletaGiraAuto" style="width: 100%; height: 100%; border-radius: 50%; border: 4px solid #ff007f; transition: transform 4s cubic-bezier(0.15, 0.95, 0.15, 1); background: conic-gradient(#1a122c 0deg 180deg, #2b1f47 180deg 360deg); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
           <span style="position: absolute; top: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: #fff; text-shadow: 0 2px 5px #000;">VACÍO ❌</span>
           <span style="position: absolute; bottom: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--cyan-text); text-shadow: 0 2px 5px #000; transform: rotate(180deg);">100 💎</span>
         </div>
       </div>
-
       <button class="btn-cerrar-dark" id="btnCerrarRuleta" style="display: none; width: 100%; background: #ff007f; color: white; border-color: #ff007f;" onclick="cerrarRuletaAuto()">ENTENDIDO, VOLVER AL INICIO</button>
     </div>
   </div>
@@ -333,7 +313,7 @@
     </div>
   </div>
 
-  <!-- Pantalla de Procesamiento con Anime -->
+  <!-- Pantalla de Procesamiento -->
   <div id="pantallaProcesando" class="overlay-pantalla">
     <div class="modal-anime-card" id="cajaContenedorAnime">
       <div class="anime-avatar-box"><img src="jugando.gif" alt="Procesando recarga"></div>
@@ -361,6 +341,7 @@
       <div style="text-align: center; grid-column: span 2; color: var(--text-muted); padding: 20px 0; font-size: 13px;">Cargando precios...</div>
     </div>
 
+    <!-- SECCIÓN DE PAGO (Checkout) -->
     <div class="checkout-section" id="checkoutSection">
       <div class="step-title">3. REALIZA EL PAGO MÓVIL</div>
       <div class="bank-card">
@@ -391,32 +372,37 @@
         <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputReferencia" class="input-field" placeholder="Solo los últimos 5 dígitos del pago" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
       </div>
 
+      <!-- BOTÓN DE PROCESAR (Fin de la sección de pago) -->
       <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🚀 PROCESAR RECARGA</button>
-    </div>
-    <!-- ========================================= -->
-<!-- 🔥 CHAT DE SOPORTE IA DE LEVEL UP 🔥 -->
-<!-- ========================================= -->
-<div style="background: var(--panel-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 14px; margin-top: 20px;">
-    <div class="step-title">💬 SOPORTE VIRTUAL LEVEL UP</div>
-    
-    <div id="chat-messages" style="height: 200px; overflow-y: auto; background: #0d0818; border: 1px solid var(--card-border); border-radius: 12px; padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
-        <div style="text-align: left; background: #1a122c; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 80%;">
-            👋 ¡Hola! ¿Cómo podemos ayudarte con tu recarga hoy?
+    </div> 
+    <!-- FIN DE CHECKOUT SECTION -->
+
+    <!-- ======================================================= -->
+    <!-- 🔥 CHAT DE SOPORTE IA (UBICADO FUERA Y AL FINAL DE TODO) -->
+    <!-- ======================================================= -->
+    <div style="background: var(--panel-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 14px; margin-top: 24px;">
+        <div class="step-title">💬 SOPORTE VIRTUAL LEVEL UP</div>
+        
+        <div id="chat-messages" style="height: 200px; overflow-y: auto; background: #0d0818; border: 1px solid var(--card-border); border-radius: 12px; padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="text-align: left; background: #1a122c; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 80%;">
+                👋 ¡Hola! ¿Cómo podemos ayudarte con tu recarga hoy?
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+            <input 
+                type="text" 
+                id="input-chat" 
+                class="input-field" 
+                placeholder="Escribe tu duda y presiona Enter..." 
+                onkeypress="detectarEnter(event)"
+                style="font-size: 13px; padding: 10px; width: 100%;"
+            >
         </div>
     </div>
 
-    <div style="display: flex; gap: 8px;">
-        <input 
-            type="text" 
-            id="input-chat" 
-            class="input-field" 
-            placeholder="Escribe tu duda y presiona Enter..." 
-            onkeypress="detectarEnter(event)"
-            style="font-size: 13px; padding: 10px; width: 100%;"
-        >
-    </div>
-</div>
-  </div>
+  </div> 
+  <!-- FIN DE MAIN-CARD -->
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -555,7 +541,7 @@
 
     document.getElementById('inputPlayerId').addEventListener('input', () => { idVerificado = false; nombreJugadorVerificado = ""; document.getElementById('idStatus').style.display = 'none'; verificarEstadoDesbloqueo(); });
 
-window.analizarCapture = async function(input) {
+    window.analizarCapture = async function(input) {
       if (!input.files || !input.files[0]) return; const file = input.files[0];
       const cajaIA = document.getElementById('cajaIA'); const resultadoIA = document.getElementById('resultadoIA'); const refIA = document.getElementById('refIA'); const cargandoIA = document.getElementById('cargandoIA');
       if (!file.type.startsWith("image/")) return; if (typeof Tesseract === 'undefined') return;
@@ -564,29 +550,23 @@ window.analizarCapture = async function(input) {
       
       try {
         const resultadoOCR = await Tesseract.recognize(file, 'eng+spa');
-        
-        // 1. Limpieza estricta: Elimina fechas, tu teléfono (04148653510) y tu cédula (13476015)
         let textoLimpio = resultadoOCR.data.text
-          .replace(/\b(202[0-9]|20[0-2][0-9]|[0-3][0-9][-\/][0-1][0-9][-\/][0-9]{2,4})\b/g, '') // Fechas
-          .replace(/0414[-.\s]?8653510/g, '') // Teléfono Level Up
-          .replace(/13476015/g, '');          // Cédula Level Up
+          .replace(/\b(202[0-9]|20[0-2][0-9]|[0-3][0-9][-\/][0-1][0-9][-\/][0-9]{2,4})\b/g, '')
+          .replace(/0414[-.\s]?8653510/g, '')
+          .replace(/13476015/g, '');
 
         let numerosEncontrados = "";
-
-        // 2. Buscar por etiqueta exigiendo números largos (6 a 20 dígitos) para ignorar montos o datos cortos
         const matchEtiqueta = textoLimpio.match(/(?:referencia|operacion|nro|ref|doc)[:\s]*([0-9]{6,20})/i);
         
         if (matchEtiqueta && matchEtiqueta[1]) { 
           numerosEncontrados = matchEtiqueta[1]; 
         } else {
-          // 3. Si no hay etiqueta, buscar el último número largo en el texto
           let posiblesNumeros = textoLimpio.match(/\b[0-9]{6,20}\b/g);
           if (posiblesNumeros && posiblesNumeros.length > 0) { 
             numerosEncontrados = posiblesNumeros[posiblesNumeros.length - 1]; 
           }
         }
         
-        // 4. Si el número encontrado es válido, recorta y muestra solo los últimos 5 dígitos
         if (numerosEncontrados && numerosEncontrados.length >= 5) {
           refIA.textContent = numerosEncontrados.slice(-5);
           cargandoIA.style.display = 'none'; resultadoIA.style.display = 'flex';
@@ -726,7 +706,6 @@ window.analizarCapture = async function(input) {
           const resultado = await respuestaServidor.json();
           
           if (resultado.status !== "success") {
-             // 1. Manejo del fallo del bot (Recarga en proceso)
              if(resultado.message && resultado.message.toLowerCase().includes("fallo técnico")) {
                 document.getElementById('pantallaProcesando').style.display = 'none';
                 document.getElementById('codigoTxnProceso').textContent = globalTxnCode;
@@ -735,7 +714,6 @@ window.analizarCapture = async function(input) {
                 return;
              }
 
-             // Sistema de intentos fallidos
              let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga') || '0');
              intentosFallidos++;
              localStorage.setItem('intentos_recarga', intentosFallidos);
@@ -744,7 +722,6 @@ window.analizarCapture = async function(input) {
                  mostrarBurbuja("⚠️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
              }
 
-             // 2. Manejo de Pago Insuficiente (Botón WhatsApp)
              let msg = resultado.message || "";
              let msgLower = msg.toLowerCase();
              
@@ -762,15 +739,12 @@ window.analizarCapture = async function(input) {
                  document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
                  document.getElementById('modalWhatsApp').style.display = 'flex';
              } 
-             // 3. Manejo de Pago Ya Usado
              else if(msgLower.includes("gastado") || msgLower.includes("usado")) {
                  mostrarErrorGeneral("❌ PAGO YA USADO", "El sistema detectó que esta referencia ya fue utilizada para completar otra recarga anterior.", "⚠️ <strong>Importante:</strong><br><br>No puedes reutilizar pagos antiguos. Si crees que esto es un error, contáctanos a soporte.");
              }
-             // 4. Manejo de Pago No Encontrado
              else if(msgLower.includes("no encontrado")) {
                  mostrarErrorGeneral("❌ PAGO NO ENCONTRADO", "No pudimos localizar la referencia que ingresaste en nuestro sistema bancario.", "⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea <strong>exacto</strong> al valor del paquete.<br><br>3. Que el pago fue enviado al banco correcto.");
              } 
-             // 5. Error Genérico (Falta de pines, etc.)
              else {
                  mostrarErrorGeneral("❌ ERROR", msg, "");
              }
@@ -807,9 +781,8 @@ window.analizarCapture = async function(input) {
           isProcessing = false; 
           btnConfirmar.disabled = false;
       }
-    };// ==========================================
-    // 🎰 LÓGICA DE LA RULETA AUTOMÁTICA
-    // ==========================================
+    };
+
     window.ruletaYaGiro = false;
 
     window.abrirRuletaAutomatica = async function() {
@@ -854,7 +827,7 @@ window.analizarCapture = async function(input) {
               }, 4000);
           } else {
               textoEstado.style.color = "var(--danger)";
-              textoEstado.innerText = "⚠️ " + data.message;
+              textoEstado.innerText = "⚠️️ " + data.message;
               btnCerrar.style.display = 'block';
           }
       } catch (e) {
@@ -868,16 +841,13 @@ window.analizarCapture = async function(input) {
         document.getElementById('modalRuletaAutomatica').style.display = 'none';
         window.location.href = "index.html";
     };
-// ==========================================
-    // 🤖 LÓGICA DEL CHAT DE SOPORTE CON IA
-    // ==========================================
+
     window.detectarEnter = function(event) {
         if (event.key === 'Enter') {
             const input = document.getElementById('input-chat');
             const mensaje = input.value.trim();
-            
             if (mensaje !== "") {
-                input.value = ''; // Limpiar barra
+                input.value = '';
                 enviarMensajeAI(mensaje);
             }
         }
@@ -886,14 +856,12 @@ window.analizarCapture = async function(input) {
     async function enviarMensajeAI(textoUsuario) {
         const contenedorChat = document.getElementById('chat-messages');
         
-        // 1. Mostrar mensaje del usuario
         const msgUser = document.createElement('div');
         msgUser.style.cssText = "text-align: right; background: #2b1f47; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 80%; align-self: flex-end;";
         msgUser.innerText = textoUsuario;
         contenedorChat.appendChild(msgUser);
         contenedorChat.scrollTop = contenedorChat.scrollHeight;
 
-        // 2. Mostrar mensaje temporal de "Escribiendo..."
         const msgCargando = document.createElement('div');
         msgCargando.id = "tempCargando";
         msgCargando.style.cssText = "text-align: left; color: var(--cyan-text); font-size: 11px; font-style: italic;";
@@ -902,7 +870,6 @@ window.analizarCapture = async function(input) {
         contenedorChat.scrollTop = contenedorChat.scrollHeight;
 
         try {
-            // 3. Petición a tu API de Vercel (/api/ia-soporte)
             const response = await fetch('/api/ia-soporte', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -910,12 +877,9 @@ window.analizarCapture = async function(input) {
             });
             
             const resultado = await response.json();
-
-            // Quitar mensaje de carga
             const cargandoEl = document.getElementById('tempCargando');
             if (cargandoEl) cargandoEl.remove();
 
-            // 4. Mostrar respuesta de la IA
             const msgBot = document.createElement('div');
             msgBot.style.cssText = "text-align: left; background: #1a122c; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 80%; border: 1px solid var(--primary-orange); align-self: flex-start;";
             msgBot.innerText = resultado.respuesta;
@@ -932,20 +896,22 @@ window.analizarCapture = async function(input) {
             contenedorChat.appendChild(msgError);
         }
     }
+
     cargarDatosBancarios(); cargarCatalogoCliente();
   </script>
+
   <!--Start of Tawk.to Script-->
-<script type="text/javascript">
-var Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();
-(function(){
-var s1=document.createElement("script"),s0=document.getElementsByTagName("script")[0];
-s1.async=true;
-s1.src='https://embed.tawk.to/6aba0d5f4dee5c343eb48cab/1k3jc8fgs';
-s1.charset='UTF-8';
-s1.setAttribute('crossorigin','*');
-s0.parentNode.insertBefore(s1,s0);
-})();
-</script>
-<!--End of Tawk.to Script-->
+  <script type="text/javascript">
+  var Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();
+  (function(){
+  var s1=document.createElement("script"),s0=document.getElementsByTagName("script")[0];
+  s1.async=true;
+  s1.src='https://embed.tawk.to/6aba0d5f4dee5c343eb48cab/1k3jc8fgs';
+  s1.charset='UTF-8';
+  s1.setAttribute('crossorigin','*');
+  s0.parentNode.insertBefore(s1,s0);
+  })();
+  </script>
+  <!--End of Tawk.to Script-->
 </body>
 </html>
