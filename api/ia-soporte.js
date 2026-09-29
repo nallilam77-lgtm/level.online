@@ -23,9 +23,9 @@ module.exports = async (req, res) => {
             });
         }
 
-        const promptSistema = "Eres el asistente virtual oficial de Level Up, una tienda digital de recargas de Free Fire y juegos en Venezuela. Responde de forma amable, clara y directa. Ayuda a los clientes con sus dudas sobre pagos (Binance, Zinli, Pago Móvil), tiempos de entrega y recargas. Recuérdales que cada recarga válida les da una oportunidad en la ruleta con un 2% de probabilidad de ganar 100 diamantes extra.";
+        // Prompt ultra corto, preciso y enfocado únicamente en Pago Móvil
+        const promptSistema = "Eres el asistente oficial de Level Up (recargas de Free Fire en Venezuela). Sé muy corto, directo y preciso. El único método de pago es Pago Móvil. Guía al cliente: 1. Ingresa su ID, 2. Selecciona su paquete, 3. Paga por Pago Móvil con los datos en pantalla, 4. Sube el capture e ingresa los últimos 5 dígitos de la referencia para procesar al instante. Recuérdale que al finalizar tiene oportunidad de girar la ruleta y ganar 100 diamantes extra.";
         
-        // Actualizado al modelo actual compatible con la API v1beta
         const respuestaGemini = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -38,7 +38,7 @@ module.exports = async (req, res) => {
 
         const data = await respuestaGemini.json();
 
-        let textoRespuesta = "¡Hola! Bienvenido a Level Up. ¿En qué te puedo ayudar con tu recarga?";
+        let textoRespuesta = "¡Hola! Bienvenido a Level Up. ¿En qué te ayudamos con tu recarga por Pago Móvil?";
         
         if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0].text) {
             textoRespuesta = data.candidates[0].content.parts[0].text;
