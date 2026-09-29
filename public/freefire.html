@@ -60,6 +60,11 @@
       70% { box-shadow: 0 0 0 15px rgba(29, 185, 84, 0); }
       100% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0); }
     }
+    @keyframes pulse-ia {
+      0% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0.6); }
+      70% { box-shadow: 0 0 0 15px rgba(0, 255, 204, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0); }
+    }
     @keyframes spin { 100% { transform: rotate(360deg); } }
 
     .anim-slide-up { opacity: 0; animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -136,6 +141,94 @@
     .btn-submit-order:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 10px 25px rgba(138, 43, 226, 0.7); filter: brightness(1.2); }
     .btn-submit-order:active { transform: scale(0.96); }
 
+    /* ======================================================= */
+    /* 🤖 BOTÓN FLOTANTE Y VENTANA DE CHAT IA PRO */
+    /* ======================================================= */
+    .floating-chat-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 58px;
+      height: 58px;
+      background: linear-gradient(135deg, #00ffcc, #0099ff);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 8px 25px rgba(0, 255, 204, 0.4);
+      z-index: 9999;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      animation: pulse-ia 2.5s infinite;
+    }
+    .floating-chat-btn:hover { transform: scale(1.1); box-shadow: 0 12px 30px rgba(0, 255, 204, 0.7); }
+    .floating-chat-btn svg { width: 28px; height: 28px; fill: #0a0510; }
+
+    .chat-modal-window {
+      display: none;
+      position: fixed;
+      bottom: 90px;
+      right: 20px;
+      width: 360px;
+      max-width: calc(100vw - 40px);
+      background: var(--panel-bg);
+      border: 2px solid var(--cyan-text);
+      border-radius: 20px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(0, 255, 204, 0.2);
+      z-index: 10000;
+      overflow: hidden;
+      animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .chat-modal-window.active { display: flex; flex-direction: column; }
+
+    .chat-header {
+      background: linear-gradient(135deg, #18122a, #2b1f47);
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .chat-title-box { display: flex; align-items: center; gap: 8px; }
+    .chat-avatar-ai { width: 32px; height: 32px; background: rgba(0, 255, 204, 0.1); border: 1px solid var(--cyan-text); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .chat-title-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--cyan-text); text-transform: uppercase; }
+    .chat-subtitle-text { font-size: 10px; color: var(--text-muted); font-weight: 600; }
+    
+    .btn-close-chat { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; transition: 0.2s; }
+    .btn-close-chat:hover { color: var(--danger); }
+
+    .chat-body-messages {
+      height: 280px;
+      overflow-y: auto;
+      padding: 12px;
+      background: #0d0818;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg-bubble {
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.4;
+      max-width: 85%;
+      word-break: break-word;
+    }
+    .msg-bubble.bot { background: #1a122c; color: #fff; border: 1px solid var(--card-border); align-self: flex-start; }
+    .msg-bubble.user { background: #2b1f47; color: #fff; align-self: flex-end; }
+    .msg-bubble.error { background: var(--danger-dark); color: var(--danger); border: 1px solid var(--danger); align-self: center; text-align: center; }
+
+    .chat-footer-box {
+      padding: 12px;
+      background: var(--panel-bg);
+      border-top: 1px solid var(--card-border);
+    }
+    .chat-input-row { display: flex; gap: 8px; }
+    .chat-rate-limit-info { font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 6px; font-weight: 600; }
+
+    .btn-whatsapp-redirect { background: var(--whatsapp); color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; margin-top: 8px; width: 100%; text-decoration: none; text-transform: uppercase; }
+
+    /* Modales generales */
     .overlay-pantalla { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 1000; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; }
     .modal-content { background: var(--panel-bg); border: 2px solid var(--primary-orange); border-radius: 20px; padding: 24px 18px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(255, 102, 0, 0.2); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; }
     .modal-titulo { color: var(--primary-orange); margin-top: 0; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 20px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -372,37 +465,48 @@
         <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputReferencia" class="input-field" placeholder="Solo los últimos 5 dígitos del pago" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
       </div>
 
-      <!-- BOTÓN DE PROCESAR (Fin de la sección de pago) -->
       <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🚀 PROCESAR RECARGA</button>
     </div> 
-    <!-- FIN DE CHECKOUT SECTION -->
-
-    <!-- ======================================================= -->
-    <!-- 🔥 CHAT DE SOPORTE IA (UBICADO FUERA Y AL FINAL DE TODO) -->
-    <!-- ======================================================= -->
-    <div style="background: var(--panel-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 14px; margin-top: 24px;">
-        <div class="step-title">💬 SOPORTE VIRTUAL LEVEL UP</div>
-        
-        <div id="chat-messages" style="height: 200px; overflow-y: auto; background: #0d0818; border: 1px solid var(--card-border); border-radius: 12px; padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="text-align: left; background: #1a122c; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 80%;">
-                👋 ¡Hola! ¿Cómo podemos ayudarte con tu recarga hoy?
-            </div>
-        </div>
-
-        <div style="display: flex; gap: 8px;">
-            <input 
-                type="text" 
-                id="input-chat" 
-                class="input-field" 
-                placeholder="Escribe tu duda y presiona Enter..." 
-                onkeypress="detectarEnter(event)"
-                style="font-size: 13px; padding: 10px; width: 100%;"
-            >
-        </div>
-    </div>
-
   </div> 
   <!-- FIN DE MAIN-CARD -->
+
+  <!-- ======================================================= -->
+  <!-- 🤖 WIDGET FLOTANTE DE SOPORTE IA INTELIGENTE             -->
+  <!-- ======================================================= -->
+  <div class="floating-chat-btn" onclick="toggleChatModal()" title="Abrir Asistente IA">
+    <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A1.5 1.5 0 0 0 6 14.5A1.5 1.5 0 0 0 7.5 16A1.5 1.5 0 0 0 9 14.5A1.5 1.5 0 0 0 7.5 13m9 0a1.5 1.5 0 0 0-1.5 1.5a1.5 1.5 0 0 0 1.5 1.5a1.5 1.5 0 0 0 1.5-1.5a1.5 1.5 0 0 0-1.5-1.5m-5 3c-1.33 0-2.5.5-3.35 1.35a1 1 0 0 0 1.41 1.41C9.64 18.39 10.77 18 12 18s2.36.39 2.94.96a1 1 0 0 0 1.41-1.41C14.5 16.5 13.33 16 12 16z"/></svg>
+  </div>
+
+  <div class="chat-modal-window" id="chatModalWindow">
+    <div class="chat-header">
+      <div class="chat-title-box">
+        <div class="chat-avatar-ai">🤖</div>
+        <div>
+          <div class="chat-title-text">Soporte IA Level Up</div>
+          <div class="chat-subtitle-text">En línea • Respuestas inmediatas</div>
+        </div>
+      </div>
+      <button class="btn-close-chat" onclick="toggleChatModal()">✕</button>
+    </div>
+
+    <div class="chat-body-messages" id="chat-messages">
+      <div class="msg-bubble bot">
+        👋 ¡Hola! Soy tu asistente virtual de Level Up. ¿Tienes dudas sobre tu Pago Móvil o cómo conseguir tu número de referencia? ¡Pregúntame!
+      </div>
+    </div>
+
+    <div class="chat-footer-box">
+      <div class="chat-input-row">
+        <input type="text" id="input-chat" class="input-field" placeholder="Escribe tu consulta..." onkeypress="detectarEnter(event)" style="font-size: 12px; padding: 10px; text-align: left;">
+      </div>
+      <div class="chat-rate-limit-info" id="rateLimitInfo">Mensajes disponibles: 5 / 5</div>
+      <div id="whatsappEscalateContainer" style="display: none;">
+        <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20recarga." target="_blank" class="btn-whatsapp-redirect">
+          💬 Hablar con Soporte Humano (WhatsApp)
+        </a>
+      </div>
+    </div>
+  </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -827,7 +931,7 @@
               }, 4000);
           } else {
               textoEstado.style.color = "var(--danger)";
-              textoEstado.innerText = "⚠️️ " + data.message;
+              textoEstado.innerText = "⚠ " + data.message;
               btnCerrar.style.display = 'block';
           }
       } catch (e) {
@@ -842,6 +946,14 @@
         window.location.href = "index.html";
     };
 
+    // =======================================================
+    // 💬 LÓGICA DE CONTROL DE CHAT IA FLOTANTE Y RATE LIMIT
+    // =======================================================
+    window.toggleChatModal = function() {
+        const modal = document.getElementById('chatModalWindow');
+        modal.classList.toggle('active');
+    };
+
     window.detectarEnter = function(event) {
         if (event.key === 'Enter') {
             const input = document.getElementById('input-chat');
@@ -853,19 +965,62 @@
         }
     }
 
+    // Sistema de Rate Limit en Cliente (5 mensajes por cada 60 segundos)
+    const LIMITE_MENSAJES = 5;
+    const TIEMPO_VENTANA_MS = 60 * 1000;
+
+    function obtenerHistorialRateLimit() {
+        let registro = JSON.parse(localStorage.getItem('ia_chat_limit') || '{"count":0, "resetTime":0}');
+        let ahora = Date.now();
+        if (ahora > registro.resetTime) {
+            registro = { count: 0, resetTime: ahora + TIEMPO_VENTANA_MS };
+            localStorage.setItem('ia_chat_limit', JSON.stringify(registro));
+        }
+        return registro;
+    }
+
+    function actualizarInterfazRateLimit() {
+        let registro = obtenerHistorialRateLimit();
+        let restantes = LIMITE_MENSAJES - registro.count;
+        if (restantes < 0) restantes = 0;
+        
+        const info = document.getElementById('rateLimitInfo');
+        if (restantes === 0) {
+            let segundosRestantes = Math.ceil((registro.resetTime - Date.now()) / 1000);
+            info.innerHTML = `⚠️ Límite alcanzado. Espera ${segundosRestantes > 0 ? segundosRestantes : 0}s para enviar más.`;
+            info.style.color = "var(--danger)";
+        } else {
+            info.innerHTML = `Mensajes disponibles: ${restantes} / ${LIMITE_MENSAJES}`;
+            info.style.color = "var(--text-muted)";
+        }
+    }
+
     async function enviarMensajeAI(textoUsuario) {
+        let registro = obtenerHistorialRateLimit();
+        if (registro.count >= LIMITE_MENSAJES) {
+            mostrarBurbuja("Has alcanzado el límite de mensajes por minuto. Espera un momento.", "var(--danger)");
+            actualizarInterfazRateLimit();
+            return;
+        }
+
+        // Incrementar contador
+        registro.count++;
+        localStorage.setItem('ia_chat_limit', JSON.stringify(registro));
+        actualizarInterfazRateLimit();
+
         const contenedorChat = document.getElementById('chat-messages');
         
         const msgUser = document.createElement('div');
-        msgUser.style.cssText = "text-align: right; background: #2b1f47; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 80%; align-self: flex-end;";
+        msgUser.className = "msg-bubble user";
         msgUser.innerText = textoUsuario;
         contenedorChat.appendChild(msgUser);
         contenedorChat.scrollTop = contenedorChat.scrollHeight;
 
         const msgCargando = document.createElement('div');
         msgCargando.id = "tempCargando";
-        msgCargando.style.cssText = "text-align: left; color: var(--cyan-text); font-size: 11px; font-style: italic;";
-        msgCargando.innerText = "🤖 El asistente está escribiendo...";
+        msgCargando.className = "msg-bubble bot";
+        msgCargando.style.fontStyle = "italic";
+        msgCargando.innerText = "🤖 Pensando respuesta...";
         contenedorChat.appendChild(msgCargando);
         contenedorChat.scrollTop = contenedorChat.scrollHeight;
 
@@ -881,37 +1036,31 @@
             if (cargandoEl) cargandoEl.remove();
 
             const msgBot = document.createElement('div');
-            msgBot.style.cssText = "text-align: left; background: #1a122c; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; max-width: 80%; border: 1px solid var(--primary-orange); align-self: flex-start;";
+            msgBot.className = "msg-bubble bot";
             msgBot.innerText = resultado.respuesta;
             contenedorChat.appendChild(msgBot);
             contenedorChat.scrollTop = contenedorChat.scrollHeight;
+
+            // Si la IA no pudo ayudar o el usuario tiene problemas graves, mostramos el botón de WhatsApp
+            if(resultado.respaldoWhatsapp || textoUsuario.toLowerCase().includes("ayuda") || textoUsuario.toLowerCase().includes("humano")) {
+                document.getElementById('whatsappEscalateContainer').style.display = 'block';
+            }
 
         } catch (e) {
             const cargandoEl = document.getElementById('tempCargando');
             if (cargandoEl) cargandoEl.remove();
             
             const msgError = document.createElement('div');
-            msgError.style.cssText = "text-align: left; background: #2a0b10; color: var(--danger); padding: 8px 12px; border-radius: 8px; font-size: 12px;";
-            msgError.innerText = "🤖 Disculpa, ocurrió un error temporal en el chat.";
+            msgError.className = "msg-bubble error";
+            msgError.innerText = "Disculpa, ocurrió un error de conexión con la IA.";
             contenedorChat.appendChild(msgError);
         }
     }
 
+    // Actualizar cada segundo el contador de rate limit
+    setInterval(actualizarInterfazRateLimit, 1000);
+
     cargarDatosBancarios(); cargarCatalogoCliente();
   </script>
-
-  <!--Start of Tawk.to Script-->
-  <script type="text/javascript">
-  var Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();
-  (function(){
-  var s1=document.createElement("script"),s0=document.getElementsByTagName("script")[0];
-  s1.async=true;
-  s1.src='https://embed.tawk.to/6aba0d5f4dee5c343eb48cab/1k3jc8fgs';
-  s1.charset='UTF-8';
-  s1.setAttribute('crossorigin','*');
-  s0.parentNode.insertBefore(s1,s0);
-  })();
-  </script>
-  <!--End of Tawk.to Script-->
 </body>
 </html>
