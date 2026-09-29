@@ -508,25 +508,47 @@
 
     document.getElementById('inputPlayerId').addEventListener('input', () => { idVerificado = false; nombreJugadorVerificado = ""; document.getElementById('idStatus').style.display = 'none'; verificarEstadoDesbloqueo(); });
 
-    window.analizarCapture = async function(input) {
+window.analizarCapture = async function(input) {
       if (!input.files || !input.files[0]) return; const file = input.files[0];
       const cajaIA = document.getElementById('cajaIA'); const resultadoIA = document.getElementById('resultadoIA'); const refIA = document.getElementById('refIA'); const cargandoIA = document.getElementById('cargandoIA');
       if (!file.type.startsWith("image/")) return; if (typeof Tesseract === 'undefined') return;
+      
       cajaIA.style.display = 'block'; cargandoIA.style.display = 'flex'; resultadoIA.style.display = 'none';
+      
       try {
         const resultadoOCR = await Tesseract.recognize(file, 'eng+spa');
-        const textoSinFechas = resultadoOCR.data.text.replace(/\b(202[0-9]|20[0-2][0-9]|[0-3][0-9][-\/][0-1][0-9][-\/][0-9]{2,4})\b/g, '');
+        
+        // 1. Limpieza estricta: Elimina fechas, tu teléfono (04148653510) y tu cédula (13476015)
+        let textoLimpio = resultadoOCR.data.text
+          .replace(/\b(202[0-9]|20[0-2][0-9]|[0-3][0-9][-\/][0-1][0-9][-\/][0-9]{2,4})\b/g, '') // Fechas
+          .replace(/0414[-.\s]?8653510/g, '') // Teléfono Level Up
+          .replace(/13476015/g, '');          // Cédula Level Up
+
         let numerosEncontrados = "";
-        const matchEtiqueta = textoSinFechas.match(/(?:referencia|operacion|nro|ref|doc)[:\s]*([0-9]{5,20})/i);
-        if (matchEtiqueta && matchEtiqueta[1]) { numerosEncontrados = matchEtiqueta[1]; } else {
-          let posiblesNumeros = textoSinFechas.match(/\b[0-9]{5,20}\b/g);
-          if (posiblesNumeros && posiblesNumeros.length > 0) { numerosEncontrados = posiblesNumeros[posiblesNumeros.length - 1]; }
+
+        // 2. Buscar por etiqueta exigiendo números largos (6 a 20 dígitos) para ignorar montos o datos cortos
+        const matchEtiqueta = textoLimpio.match(/(?:referencia|operacion|nro|ref|doc)[:\s]*([0-9]{6,20})/i);
+        
+        if (matchEtiqueta && matchEtiqueta[1]) { 
+          numerosEncontrados = matchEtiqueta[1]; 
+        } else {
+          // 3. Si no hay etiqueta, buscar el último número largo en el texto
+          let posiblesNumeros = textoLimpio.match(/\b[0-9]{6,20}\b/g);
+          if (posiblesNumeros && posiblesNumeros.length > 0) { 
+            numerosEncontrados = posiblesNumeros[posiblesNumeros.length - 1]; 
+          }
         }
+        
+        // 4. Si el número encontrado es válido, recorta y muestra solo los últimos 5 dígitos
         if (numerosEncontrados && numerosEncontrados.length >= 5) {
           refIA.textContent = numerosEncontrados.slice(-5);
           cargandoIA.style.display = 'none'; resultadoIA.style.display = 'flex';
-        } else { cajaIA.style.display = 'none'; }
-      } catch (e) { cajaIA.style.display = 'none'; }
+        } else { 
+          cajaIA.style.display = 'none'; 
+        }
+      } catch (e) { 
+        cajaIA.style.display = 'none'; 
+      }
     };
 
     window.usarReferenciaIA = function() { document.getElementById('inputReferencia').value = document.getElementById('refIA').textContent; };
