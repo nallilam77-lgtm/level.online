@@ -1,46 +1,61 @@
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, message: 'Método no permitido' });
-  }
+module.exports = async (req, res) => {
+    // Headers de CORS para permitir la conexión desde el frontend
+    res.setHeader('Access-Control-Allow-Credentials', true);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
-  const { playerId } = req.body;
-  if (!playerId) {
-    return res.status(400).json({ success: false, message: 'Falta el ID de jugador' });
-  }
-
-  const apiKeyFazer = process.env.FAZER_API_KEY || "fc_cb682478a17afc111710344a";
-
-  try {
-    const respuestaFazer = await fetch("https://api.fzr.cards/api/v2/orders", {
-      method: "GET",
-      headers: {
-        "X-Api-Key": apiKeyFazer,
-        "Accept": "application/json"
-      }
-    });
-
-    const dataFazer = await respuestaFazer.json();
-    if (!dataFazer.ok || !dataFazer.items) {
-      return res.status(400).json({ success: false, message: "No se pudieron obtener las órdenes del proveedor." });
+    // Preflight request
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
     }
 
-    // Filtramos las órdenes que coincidan con el ID del jugador
-    const ordenesJugador = dataFazer.items.filter(orden => {
-      return orden.fields && String(orden.fields.player_id) === String(playerId);
-    });
+    // Solo aceptamos peticiones POST
+    if (req.method !== 'POST') {
+        return res.status(405).json({ success: false, message: "Método no permitido." });
+    }
 
-    // Ordenamos de más reciente a más antigua y tomamos solo las últimas 2
-    ordenesJugador.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const ultimasDos = ordenesJugador.slice(0, 2).map(orden => ({
-      idOrden: orden.id,
-      paquete: orden.offer_name || orden.title,
-      estado: orden.status,
-      fecha: orden.created_at
-    }));
+    try {
+        const { playerId } = req.body;
 
-    return res.status(200).json({ success: true, recargas: ultimasDos });
+        if (!playerId) {
+            return res.status(400).json({ success: false, message: "ID de jugador no proporcionado." });
+        }
 
-  } catch (error) {
-    return res.status(500).json({ success: false, message: "Error al conectar con la API de FazerCards." });
-  }
-}
+        // Llamamos a tu NUEVA variable de entorno en Vercel
+        const scriptUrl = process.env.SCRIPT_RECARGAS_VERIFICACION;
+        
+        if (!scriptUrl) {
+            console.error("Falta la variable SCRIPT_RECARGAS_VERIFICACION en Vercel");
+            return res.status(500).json({ success: false, message: "Error interno de configuración." });
+        }
+
+        // Hacemos la petición a la nueva hoja de cálculo de Google
+        const respuestaGoogle = await fetch(`${scriptUrl}?id=${playerId}`);
+        const data = await respuestaGoogle.json();
+
+        // Si la hoja no devuelve nada o el ID no tiene recargas exitosas
+        if (!data || data.length === 0) {
+            return res.status(200).json({ success: true, recargas: [] });
+        }
+
+        // Formateamos los datos para que el index.html los lea y muestre correctamente
+        const recargasFormateadas = data.map(fila => {
+            return {
+                paquete: fila.paquete,   // Ejemplo: "572 Diamantes" 
+                fecha: fila.fecha,       // Ejemplo: "29/09/2026 19:20"
+                estado: "Completed"      // Siempre completado porque lee de la pestaña "exitoso"
+            };
+        });
+
+        // Enviamos la respuesta exitosa al cliente
+        return res.status(200).json({
+            success: true,
+            recargas: recargasFormateadas
+        });
+
+    } catch (error) {
+        console.error("Error consultando la hoja de cálculo:", error);
+        return res.status(500).json({ success: false, message: "Error de conexión con la base de datos." });
+    }
+};
