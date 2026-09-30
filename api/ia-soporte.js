@@ -15,12 +15,10 @@ module.exports = async (req, res) => {
     try {
         const { mensaje } = req.body;
 
-        // 1. Extraer todas las llaves de la variable GEMINI_KEYS separadas por comas
         let apisKeys = [];
         if (process.env.GEMINI_KEYS) {
             apisKeys = process.env.GEMINI_KEYS.split(',').map(k => k.trim()).filter(Boolean);
         } else if (process.env.GEMINI_API_KEY) {
-            // Respaldo por si quedó la clásica suelta
             apisKeys.push(process.env.GEMINI_API_KEY);
         }
 
@@ -31,24 +29,30 @@ module.exports = async (req, res) => {
             });
         }
 
-        // --- PROMPT MEJORADO Y ACTUALIZADO ---
-        const promptSistema = `Eres el asistente virtual oficial de Level Up, una tienda digital 100% segura y confiable de recargas de Free Fire, Roblox y Blood Strike en Venezuela. Garantiza siempre que no hay riesgo de estafa.
-Tus respuestas deben ser sumamente cortas, amables, en español y directas (máximo 2 o 3 frases).
+        // --- PROMPT OPTIMIZADO (ANTI-RELLENO) ---
+        const promptSistema = `Eres el asistente de soporte de Level Up (tienda de Free Fire, Roblox y Blood Strike en Venezuela).
+REGLA DE ORO: Responde DIRECTO AL GRANO. Cero saludos largos y CERO relleno publicitario no solicitado. Responde SOLO lo que el usuario pregunte, en máximo 1 o 2 oraciones. Sé natural.
 
-Sigue estas reglas estrictamente:
-1. **Juegos soportados:** Ofrecemos recargas rápidas para Free Fire, Roblox y Blood Strike.
-2. **Tiempos de entrega y Códigos:** Las recargas tardan solo 20 segundos en llegar. Los códigos promocionales se consiguen únicamente en nuestro canal oficial o en videos de TikTok.
-3. **Seguridad y Políticas:** Somos una tienda real y segura (no estafamos). No contratamos personal y no regalamos diamantes ni saldo, a menos que sea mediante nuestros eventos oficiales.
-4. **Beneficios de Lealtad:** Dile a los clientes que al hacer bastantes recargas en la tienda, obtienen un 4% de probabilidad por compra de ganar un premio en nuestra Ruleta (110 diamantes para Free Fire o 50 Robux para Roblox).
-5. **Recomendaciones (Free Fire):** Recuerda a los usuarios que los diamantes sirven para comprar skins, entradas, animaciones o emotes. Si te piden una sugerencia de compra, recomienda el paquete de 572 diamantes.
-6. **Regla de la Referencia Bancaria:** Para el pago móvil, diles que solo ingresen los últimos 5 dígitos. (En BDV dice "Operación", en Mercantil/Banesco dice "Referencia").
-7. **Soporte Técnico:** Si el cliente tiene un problema grave, error técnico o pago insuficiente, indícale que presione el botón de WhatsApp para hablar directamente con soporte humano.`;
+PASOS PARA RECARGAR (Usa esto si preguntan cómo comprar, qué hacer o cómo recargar):
+1. Colocar tu usuario (Roblox) o ID (Free Fire/Blood Strike).
+2. Elegir el paquete deseado.
+3. Hacer el Pago Móvil a los datos en pantalla.
+4. Subir el capture (comprobante).
+5. Colocar los últimos 5 dígitos de la referencia bancaria.
+
+BASE DE CONOCIMIENTO PASIVO (Menciona esto SOLO si el cliente pregunta específicamente por ello. NUNCA lo digas de la nada):
+- Tiempos: La recarga dura en llegar 20 segundos.
+- Seguridad: Somos 100% seguros y no hay riesgo de estafa.
+- Códigos/Trabajo: No regalamos diamantes ni contratamos gente. Los códigos promocionales se consiguen en nuestro canal oficial o en videos de TikTok.
+- Ruleta (Lealtad): Al hacer bastantes recargas, ganas un 4% de probabilidad por compra de ganar 110 diamantes o 50 Robux gratis.
+- Uso en FF: Los diamantes se usan para skins, entradas, animaciones o emotes. Recomendamos comprar el paquete de 572 diamantes.
+- Referencia Bancaria: Solo deben ingresarse los últimos 5 dígitos. En el Banco de Venezuela (BDV) aparece etiquetado como "Operación".
+- Problemas técnicos/pagos: Si tienen problemas o pagos insuficientes, diles que presionen el botón de WhatsApp para hablar con un humano.`;
         
         let textoRespuesta = "";
         let exito = false;
         let data = null;
 
-        // 2. Bucle inteligente de rotación: Prueba cada llave de la lista en orden
         for (let i = 0; i < apisKeys.length; i++) {
             const currentKey = apisKeys[i];
             try {
@@ -64,19 +68,16 @@ Sigue estas reglas estrictamente:
 
                 data = await respuestaGemini.json();
 
-                // Verificar si la respuesta fue exitosa y trajo contenido válido
                 if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0].text) {
                     textoRespuesta = data.candidates[0].content.parts[0].text;
                     exito = true;
-                    break; // ¡Encontró una llave funcional! Rompemos el ciclo de inmediato.
+                    break;
                 }
             } catch (err) {
-                // Si hay fallo de red o error con esta llave específica, el ciclo continúa con la siguiente
                 console.log(`Llave índice ${i} falló, intentando con la siguiente...`);
             }
         }
 
-        // 3. Si ninguna de las llaves pudo responder
         if (!exito) {
             textoRespuesta = "¡Hola! En este momento tenemos alta demanda en el asistente virtual. Por favor, haz clic abajo en el botón de WhatsApp para atenderte de inmediato con tu recarga.";
         }
@@ -90,7 +91,7 @@ Sigue estas reglas estrictamente:
     } catch (error) {
         return res.status(200).json({ 
             status: "success", 
-            respuesta: "¡Hola! Hubo un pequeño inconveniente de conexión. Escríbenos al soporte por WhatsApp para procesar tu recarga al instante.",
+            respuesta: "Hubo un problema de conexión. Escríbenos al soporte por WhatsApp para procesar tu recarga al instante.",
             respaldoWhatsapp: true
         });
     }
