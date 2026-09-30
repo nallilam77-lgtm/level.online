@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Level Up - Recargas Roblox</title>
+  <title>Level Up - Recargas Roblox Pro</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
@@ -22,6 +22,7 @@
       --danger: #ff3b3b;
       --danger-dark: #2a0b10;
       --warning: #ffcc00;
+      --warning-dark: #2a2000;
       --whatsapp: #1db954;
       --whatsapp-dark: #0e1e14;
       --success: #00cc66;
@@ -60,33 +61,12 @@
       70% { box-shadow: 0 0 0 15px rgba(29, 185, 84, 0); }
       100% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0); }
     }
-    @keyframes toastSlide {
-      0% { opacity: 0; transform: translateY(-20px) scale(0.95); }
-      100% { opacity: 1; transform: translateY(0) scale(1); }
+    @keyframes pulse-ia {
+      0% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0.6); }
+      70% { box-shadow: 0 0 0 15px rgba(0, 255, 204, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0); }
     }
-
-    /* ESTILO DE NOTIFICACIÓN FLOTANTE (TOAST) */
-    #toastNotificacion {
-      display: none;
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(12, 21, 39, 0.95);
-      border: 2px solid var(--danger);
-      color: #fff;
-      padding: 12px 20px;
-      border-radius: 14px;
-      z-index: 2000;
-      box-shadow: 0 10px 30px rgba(255, 59, 59, 0.3);
-      font-size: 13px;
-      font-weight: 700;
-      text-align: center;
-      max-width: 90%;
-      animation: toastSlide 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-      align-items: center;
-      gap: 8px;
-    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
 
     .anim-slide-up { opacity: 0; animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     .delay-1 { animation-delay: 0.1s; }
@@ -162,6 +142,94 @@
     .btn-submit-order:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 10px 25px rgba(0, 255, 204, 0.7); filter: brightness(1.2); }
     .btn-submit-order:active { transform: scale(0.96); }
 
+    /* ======================================================= */
+    /* 🤖 BOTÓN FLOTANTE Y VENTANA DE CHAT IA PRO */
+    /* ======================================================= */
+    .floating-chat-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 58px;
+      height: 58px;
+      background: linear-gradient(135deg, #00ffcc, #0099ff);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 8px 25px rgba(0, 255, 204, 0.4);
+      z-index: 9999;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      animation: pulse-ia 2.5s infinite;
+    }
+    .floating-chat-btn:hover { transform: scale(1.1); box-shadow: 0 12px 30px rgba(0, 255, 204, 0.7); }
+    .floating-chat-btn svg { width: 28px; height: 28px; fill: #050b14; }
+
+    .chat-modal-window {
+      display: none;
+      position: fixed;
+      bottom: 90px;
+      right: 20px;
+      width: 360px;
+      max-width: calc(100vw - 40px);
+      background: var(--panel-bg);
+      border: 2px solid var(--cyan-text);
+      border-radius: 20px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(0, 255, 204, 0.2);
+      z-index: 10000;
+      overflow: hidden;
+      animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .chat-modal-window.active { display: flex; flex-direction: column; }
+
+    .chat-header {
+      background: linear-gradient(135deg, #101d36, #1e3a63);
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .chat-title-box { display: flex; align-items: center; gap: 8px; }
+    .chat-avatar-ai { width: 32px; height: 32px; background: rgba(0, 255, 204, 0.1); border: 1px solid var(--cyan-text); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .chat-title-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--cyan-text); text-transform: uppercase; }
+    .chat-subtitle-text { font-size: 10px; color: var(--text-muted); font-weight: 600; }
+    
+    .btn-close-chat { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; transition: 0.2s; }
+    .btn-close-chat:hover { color: var(--danger); }
+
+    .chat-body-messages {
+      height: 280px;
+      overflow-y: auto;
+      padding: 12px;
+      background: #070e1c;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg-bubble {
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.4;
+      max-width: 85%;
+      word-break: break-word;
+    }
+    .msg-bubble.bot { background: #101d36; color: #fff; border: 1px solid var(--card-border); align-self: flex-start; }
+    .msg-bubble.user { background: #1e3a63; color: #fff; align-self: flex-end; }
+    .msg-bubble.error { background: var(--danger-dark); color: var(--danger); border: 1px solid var(--danger); align-self: center; text-align: center; }
+
+    .chat-footer-box {
+      padding: 12px;
+      background: var(--panel-bg);
+      border-top: 1px solid var(--card-border);
+    }
+    .chat-input-row { display: flex; gap: 8px; }
+    .chat-rate-limit-info { font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 6px; font-weight: 600; }
+
+    .btn-whatsapp-redirect { background: var(--whatsapp); color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; margin-top: 8px; width: 100%; text-decoration: none; text-transform: uppercase; }
+
+    /* Modales Generales */
     .overlay-pantalla { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 1000; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; }
     .modal-content { background: var(--panel-bg); border: 2px solid var(--primary-cyan); border-radius: 20px; padding: 24px 18px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(0, 255, 204, 0.2); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; }
     .modal-titulo { color: var(--primary-cyan); margin-top: 0; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 20px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -184,6 +252,13 @@
     .error-theme .modal-titulo { color: var(--danger) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .error-theme .modal-nota { background: rgba(255, 59, 59, 0.08); border-left: 4px solid var(--warning); color: #ffcccc; font-size: 12px; text-align: left; margin-top: 12px; }
 
+    .warning-theme { border-color: var(--warning) !important; background: var(--warning-dark) !important; box-shadow: 0 0 40px rgba(255, 204, 0, 0.15) !important; }
+    .warning-theme .modal-titulo { color: var(--warning) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .warning-theme .modal-nota { background: rgba(255, 204, 0, 0.08); border-left: 4px solid var(--warning); color: #ffe680; font-size: 12px; text-align: left; margin-top: 12px; }
+
+    .success-theme { border-color: var(--success) !important; background: rgba(0, 204, 102, 0.05) !important; box-shadow: 0 0 40px rgba(0, 204, 102, 0.15) !important; }
+    .success-theme .modal-titulo { color: var(--success) !important; }
+
     .modal-botones { display: flex; gap: 8px; margin-top: 12px; }
     .btn-revisar, .btn-confirmar { flex: 1; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer; border: none; font-size: 12px; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); text-transform: uppercase; font-family: 'Montserrat', sans-serif; }
     .btn-revisar { background: #1e3a63; color: white; }
@@ -197,23 +272,47 @@
     .modal-anime-card { background: var(--panel-bg); border: 2px solid var(--cyan-text); border-radius: 20px; padding: 24px 18px; max-width: 360px; width: 100%; text-align: center; box-shadow: 0 0 40px rgba(0, 255, 204, 0.3); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
     .anime-avatar-box { width: 120px; height: 120px; margin: 0 auto 15px auto; border-radius: 20px; overflow: hidden; border: 2px solid var(--cyan-text); box-shadow: 0 0 20px rgba(0, 255, 204, 0.4); }
     .anime-avatar-box img { width: 100%; height: 100%; object-fit: cover; }
-    .anime-status-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--cyan-text); margin-bottom: 15px; }
+    .anime-status-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--cyan-text); margin-bottom: 15px; transition: all 0.3s; }
     .progress-bar-container { width: 100%; height: 8px; background: #070e1c; border-radius: 8px; overflow: hidden; border: 1px solid var(--card-border); }
-    .progress-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00c6ff, #00ffcc); box-shadow: 0 0 10px #00ffcc; transition: width 0.3s linear; }
+    .progress-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00c6ff, #00ffcc); box-shadow: 0 0 10px #00ffcc; transition: width 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 
-    #pantallaExito { display: none; text-align: center; border-color: var(--cyan-text); box-shadow: 0 0 40px rgba(0, 255, 204, 0.2); }
     .tx-caja { background: #070e1c; border: 2px dashed var(--cyan-text); padding: 12px; border-radius: 12px; margin: 15px 0; font-size: 16px; font-weight: 900; color: var(--cyan-text); letter-spacing: 1px; user-select: all; word-break: break-all; }
+    .tx-caja.warning { border-color: var(--warning); color: var(--warning); }
+    .tx-caja.success { border-color: var(--success); color: var(--success); }
+    
     .btn-volver-inicio { background: var(--primary-gradient); color: #000; padding: 12px 20px; border-radius: 10px; font-weight: 900; text-decoration: none; display: inline-block; width: 100%; transition: 0.3s; font-family: 'Montserrat', sans-serif; font-size: 13px; }
     .btn-volver-inicio:hover { box-shadow: 0 8px 20px rgba(0, 255, 204, 0.5); }
+
+    /* Burbuja de Notificación (Bottom Toast) */
+    .toast-bubble {
+      position: fixed;
+      bottom: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(12, 21, 39, 0.95);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--primary-cyan);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(0, 255, 204, 0.3);
+      z-index: 9999;
+      transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      text-align: center;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .toast-bubble.show { bottom: 30px; }
+    .loader-spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(0, 255, 204, 0.3); border-top-color: var(--cyan-text); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; }
   </style>
 </head>
 <body>
 
-  <!-- NOTIFICACIÓN FLOTANTE ESTILO TOAST -->
-  <div id="toastNotificacion">
-    <span id="toastIcono">⚠️</span>
-    <span id="toastTexto">Mensaje de notificación</span>
-  </div>
+  <!-- BURBUJA DE NOTIFICACIÓN INFERIOR (TOAST BUBBLE) -->
+  <div id="toastBubble" class="toast-bubble"></div>
 
   <!-- MODAL DE PAGO INSUFICIENTE (WHATSAPP) -->
   <div id="modalWhatsApp" class="overlay-pantalla">
@@ -231,21 +330,34 @@
       </div>
       
       <a id="btnWhatsAppLink" href="#" target="_blank" class="btn-whatsapp">
+        <svg width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/></svg>
         SOPORTE WHATSAPP
       </a>
       <button class="btn-cerrar-dark" onclick="cerrarModalWhatsApp()">CERRAR VENTANA</button>
     </div>
   </div>
 
-  <!-- MODAL DE PAGO RECHAZADO / ERROR -->
+  <!-- MODAL ERROR GENERAL / PAGO RECHAZADO -->
   <div id="modalPagoNoEncontrado" class="overlay-pantalla">
     <div class="modal-content error-theme">
-      <h2 class="modal-titulo">❌ PAGO RECHAZADO</h2>
-      <p id="textoErrorPago" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;"></p>
-      <div id="notaErrorExtra" class="modal-nota danger">
-        ⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea exacto al valor del paquete.
+      <h2 class="modal-titulo" id="tituloErrorGeneral">❌ ATENCIÓN</h2>
+      <p id="textoErrorPago" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;">Tuvimos algunos inconvenientes procesando tu solicitud.</p>
+      <div id="notaErrorExtra" class="modal-nota danger"></div>
+      <button class="btn-cerrar-dark" style="margin-top: 12px;" onclick="cerrarModalNoEncontrado()">ENTENDIDO</button>
+    </div>
+  </div>
+
+  <!-- MODAL RECARGA EN PROCESO (FALLO TÉCNICO PERO GUARDADO) -->
+  <div id="modalEnProceso" class="overlay-pantalla">
+    <div class="modal-content warning-theme">
+      <div class="loader-spinner"></div>
+      <h2 class="modal-titulo" style="font-size: 18px;">¡RECARGA EN PROCESO!</h2>
+      <p style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;">Tu pago ha sido verificado con éxito, pero la extracción del PIN puede tardar un poco más en reflejarse.</p>
+      <div class="tx-caja warning" id="codigoTxnProceso">TXN-XXXXXX</div>
+      <div class="modal-nota warning" style="border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+        ⏳ <strong>No te preocupes:</strong> Tu código de Roblox será generado y enviado automáticamente en un lapso de <strong>1 a 5 minutos</strong>. Puedes cerrar esta ventana.
       </div>
-      <button class="btn-cerrar-dark" style="margin-top: 12px;" onclick="cerrarModalNoEncontrado()">VOLVER A REVISAR</button>
+      <a href="index.html" class="btn-volver-inicio" style="background: #101d36; color: #fff;">ENTENDIDO, VOLVER AL INICIO</a>
     </div>
   </div>
 
@@ -268,6 +380,30 @@
     </div>
   </div>
 
+  <!-- PANTALLA DE PROCESAMIENTO CON BARRA -->
+  <div id="pantallaProcesando" class="overlay-pantalla">
+    <div class="modal-anime-card" id="cajaContenedorAnime">
+      <div class="anime-avatar-box"><img src="jugando.gif" alt="Procesando recarga"></div>
+      <div class="anime-status-text" id="textoContadorAnimado">🔍 Iniciando sistema...</div>
+      <div class="progress-bar-container"><div class="progress-bar-fill" id="barraProgresoFill" style="width: 5%;"></div></div>
+    </div>
+  </div>
+
+  <!-- MODAL DE ÉXITO Y PIN GENERADO -->
+  <div id="modalExitosa" class="overlay-pantalla">
+    <div class="modal-content success-theme" id="pantallaExito">
+      <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
+      <h2 class="modal-titulo" style="font-size: 20px;">¡CÓDIGO DE ROBLOX LISTO!</h2>
+      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu PIN se ha obtenido exitosamente de la bóveda:</p>
+      <div class="tx-caja success" id="codigoPinRoblox">XXXX-XXXX-XXXX</div>
+      <p style="color: var(--primary-cyan); font-size: 11px; font-weight: 700; margin-bottom: 18px; background: rgba(0,255,204,0.1); padding: 8px; border-radius: 8px;">⚠️ Cópialo y canjéalo directamente en roblox.com/redeem.</p>
+      
+      <button type="button" class="btn-confirmar" style="background: linear-gradient(135deg, #ff007f, #7f00ff); color: white; margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
+      
+      <a href="index.html" class="btn-volver-inicio" style="background: var(--success); color: #000;">NUEVA RECARGA</a>
+    </div>
+  </div>
+
   <!-- Modal Ruleta Automática -->
   <div id="modalRuletaAutomatica" class="overlay-pantalla">
     <div class="modal-content" style="border-color: #ff007f; background: var(--panel-bg); box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 40px rgba(255, 0, 127, 0.2);">
@@ -277,33 +413,10 @@
         <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 22px solid #ff007f; z-index: 10; filter: drop-shadow(0 0 8px rgba(255,0,127,0.8));"></div>
         <div id="ruletaGiraAuto" style="width: 100%; height: 100%; border-radius: 50%; border: 4px solid #ff007f; transition: transform 4s cubic-bezier(0.15, 0.95, 0.15, 1); background: conic-gradient(#070e1c 0deg 180deg, #101d36 180deg 360deg); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
           <span style="position: absolute; top: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: #fff; text-shadow: 0 2px 5px #000;">VACÍO ❌</span>
-          <span style="position: absolute; bottom: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--cyan-text); text-shadow: 0 2px 5px #000; transform: rotate(180deg);">50 R$</span>
+          <span style="position: absolute; bottom: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--cyan-text); text-shadow: 0 2px 5px #000; transform: rotate(180deg);">50 Robux</span>
         </div>
       </div>
       <button class="btn-cerrar-dark" id="btnCerrarRuleta" style="display: none; width: 100%; background: #ff007f; color: white; border-color: #ff007f;" onclick="cerrarRuletaAuto()">ENTENDIDO, VOLVER AL INICIO</button>
-    </div>
-  </div>
-
-  <!-- PANTALLA DE PROCESAMIENTO Y ÉXITO -->
-  <div id="pantallaProcesando" class="overlay-pantalla">
-    <div class="modal-anime-card" id="cajaContenedorAnime">
-      <div class="anime-avatar-box"><img src="jugando.gif" alt="Procesando recarga"></div>
-      <div class="anime-status-text" id="textoContadorAnimado">📡 Asignando PIN... (3s)</div>
-      <div class="progress-bar-container"><div class="progress-bar-fill" id="barraProgresoFill"></div></div>
-    </div>
-
-    <!-- EL BOTÓN DE LA RULETA ESTÁ AQUÍ ADENTRO -->
-    <div class="modal-content" id="pantallaExito">
-      <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
-      <h2 style="color: var(--cyan-text); margin-top:0; font-family: 'Montserrat', sans-serif; font-size: 20px;">¡CÓDIGO DE ROBLOX LISTO!</h2>
-      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu PIN se ha obtenido exitosamente de la bóveda:</p>
-      <div class="tx-caja" id="codigoPinRoblox">XXXX-XXXX-XXXX</div>
-      <p style="color: var(--primary-cyan); font-size: 11px; font-weight: 700; margin-bottom: 18px; background: rgba(0,255,204,0.1); padding: 8px; border-radius: 8px;">⚠️ Cópialo y canjéalo directamente en roblox.com/redeem.</p>
-      
-      <!-- BOTÓN PARA ABRIR LA RULETA -->
-      <button type="button" class="btn-confirmar" style="background: linear-gradient(135deg, #ff007f, #7f00ff); color: white; margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
-      
-      <a href="index.html" class="btn-volver-inicio">NUEVA RECARGA</a>
     </div>
   </div>
 
@@ -339,8 +452,8 @@
       <button type="button" id="btnCopiarDatos" class="btn-copy" onclick="copiarDatosBanco()">📋 Copiar datos bancarios</button>
 
       <div class="file-upload-box">
-        <div class="step-title">4. SUBE TU COMPROBANTE (CAPTURE)</div>
-        <input type="file" id="inputComprobante" accept="image/*" onchange="analizarCapture(this)">
+        <div class="step-title">4. SUBE TU COMPROBANTE (CAPTURE) <span style="color: var(--danger);">*</span></div>
+        <input type="file" id="inputComprobante" accept="image/*" onchange="analizarCapture(this)" required>
         <div id="cajaIA" style="display: none; margin-top: 12px; padding: 12px; background: rgba(0, 255, 204, 0.05); border: 1px dashed var(--cyan-text); border-radius: 12px;">
           <div id="cargandoIA" style="color: var(--cyan-text); font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 8px;">Leyendo comprobante...</div>
           <div id="resultadoIA" style="display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
@@ -356,6 +469,44 @@
       </div>
 
       <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🚀 OBTENER CÓDIGO DE ROBLOX</button>
+    </div>
+  </div>
+
+  <!-- ======================================================= -->
+  <!-- 🤖 WIDGET FLOTANTE DE SOPORTE IA INTELIGENTE            -->
+  <!-- ======================================================= -->
+  <div class="floating-chat-btn" onclick="toggleChatModal()" title="Abrir Asistente IA">
+    <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A1.5 1.5 0 0 0 6 14.5A1.5 1.5 0 0 0 7.5 16A1.5 1.5 0 0 0 9 14.5A1.5 1.5 0 0 0 7.5 13m9 0a1.5 1.5 0 0 0-1.5 1.5a1.5 1.5 0 0 0 1.5 1.5a1.5 1.5 0 0 0 1.5-1.5a1.5 1.5 0 0 0-1.5-1.5m-5 3c-1.33 0-2.5.5-3.35 1.35a1 1 0 0 0 1.41 1.41C9.64 18.39 10.77 18 12 18s2.36.39 2.94.96a1 1 0 0 0 1.41-1.41C14.5 16.5 13.33 16 12 16z"/></svg>
+  </div>
+
+  <div class="chat-modal-window" id="chatModalWindow">
+    <div class="chat-header">
+      <div class="chat-title-box">
+        <div class="chat-avatar-ai">🤖</div>
+        <div>
+          <div class="chat-title-text">Soporte IA Level Up</div>
+          <div class="chat-subtitle-text">En línea • Respuestas inmediatas</div>
+        </div>
+      </div>
+      <button class="btn-close-chat" onclick="toggleChatModal()">✕</button>
+    </div>
+
+    <div class="chat-body-messages" id="chat-messages">
+      <div class="msg-bubble bot">
+        👋 ¡Hola! Soy tu asistente virtual de Level Up. ¿Tienes dudas sobre tu Pago Móvil o cómo conseguir tu número de referencia? ¡Pregúntame!
+      </div>
+    </div>
+
+    <div class="chat-footer-box">
+      <div class="chat-input-row">
+        <input type="text" id="input-chat" class="input-field" placeholder="Escribe tu consulta..." onkeypress="detectarEnter(event)" style="font-size: 12px; padding: 10px; text-align: left;">
+      </div>
+      <div class="chat-rate-limit-info" id="rateLimitInfo">Mensajes disponibles: 5 / 5</div>
+      <div id="whatsappEscalateContainer" style="display: none;">
+        <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20recarga%20de%20Roblox." target="_blank" class="btn-whatsapp-redirect">
+          💬 Hablar con Soporte Humano (WhatsApp)
+        </a>
+      </div>
     </div>
   </div>
 
@@ -380,8 +531,19 @@
     let usuarioVerificado = false;
     let datosBancoGlobal = { banco: "", telefono: "", cedula: "" }; 
     let isProcessing = false;
+    let globalTxnCode = "";
     
     const API_ROBLOX = '/api/roblox';
+
+    // FUNCIÓN DE NOTIFICACIÓN TIPO BURBUJA DE ABAJO (De Free Fire)
+    window.mostrarBurbuja = function(mensaje, color = 'var(--primary-cyan)') {
+      const burbuja = document.getElementById('toastBubble');
+      burbuja.innerText = mensaje;
+      burbuja.style.borderColor = color;
+      burbuja.style.boxShadow = `0 10px 30px ${color}60`; 
+      burbuja.classList.add('show');
+      setTimeout(() => { burbuja.classList.remove('show'); }, 3500);
+    };
 
     async function cargarDatosBancarios() {
       try {
@@ -398,17 +560,6 @@
       } catch (error) {
         console.error("Error al cargar datos bancarios:", error);
       }
-    }
-
-    function mostrarToast(mensaje, icono = "⚠️") {
-      const toast = document.getElementById('toastNotificacion');
-      document.getElementById('toastTexto').textContent = mensaje;
-      document.getElementById('toastIcono').textContent = icono;
-      toast.style.display = 'flex';
-      
-      setTimeout(() => {
-        toast.style.display = 'none';
-      }, 3500);
     }
 
     async function cargarCatalogoRoblox() {
@@ -441,7 +592,6 @@
             container.innerHTML = '<div style="text-align:center; grid-column:span 2;">Error al cargar el catálogo de Roblox.</div>';
         }
       } catch (error) {
-        console.error("Error al obtener los precios:", error);
         container.innerHTML = '<div style="text-align:center; grid-column:span 2;">Fallo de conexión al cargar el catálogo.</div>';
       }
     }
@@ -464,7 +614,7 @@
       const statusDiv = document.getElementById('idStatus');
 
       if (usuarioInput.length < 2) {
-        mostrarToast('Ingresa un usuario de Roblox válido', '❌');
+        mostrarBurbuja('❌ Ingresa un usuario de Roblox válido', 'var(--danger)');
         usuarioVerificado = false; verificarEstadoDesbloqueo(); return;
       }
       
@@ -485,7 +635,9 @@
       if (!input.files || !input.files[0]) return; const file = input.files[0];
       const cajaIA = document.getElementById('cajaIA'); const resultadoIA = document.getElementById('resultadoIA'); const refIA = document.getElementById('refIA'); const cargandoIA = document.getElementById('cargandoIA');
       if (!file.type.startsWith("image/")) return; if (typeof Tesseract === 'undefined') return;
+      
       cajaIA.style.display = 'block'; cargandoIA.style.display = 'flex'; resultadoIA.style.display = 'none';
+      
       try {
         const resultadoOCR = await Tesseract.recognize(file, 'eng+spa');
         const textoSinFechas = resultadoOCR.data.text.replace(/\b(202[0-9]|20[0-2][0-9]|[0-3][0-9][-\/][0-1][0-9][-\/][0-9]{2,4})\b/g, '');
@@ -506,7 +658,9 @@
 
     window.copiarDatosBanco = function() {
       navigator.clipboard.writeText(`Banco: ${datosBancoGlobal.banco}\nTeléfono: ${datosBancoGlobal.telefono}\nCédula: ${datosBancoGlobal.cedula}`).then(() => {
-        const btn = document.getElementById('btnCopiarDatos'); btn.innerHTML = "✅ ¡Copiado con éxito!"; btn.classList.add('copied');
+        mostrarBurbuja("✅ ¡Datos copiados al portapapeles!", "var(--cyan-text)");
+        const btn = document.getElementById('btnCopiarDatos'); 
+        btn.innerHTML = "✅ ¡Copiado con éxito!"; btn.classList.add('copied');
         setTimeout(() => { btn.innerHTML = "📋 Copiar datos bancarios"; btn.classList.remove('copied'); }, 3000);
       });
     };
@@ -516,28 +670,15 @@
       const ref = document.getElementById('inputReferencia').value.trim();
       const fileInput = document.getElementById('inputComprobante');
       
-      // BLOQUEO ANTI-SPAM (VERIFICACIÓN PREVIA)
       let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo_roblox') || '0');
       if (Date.now() < tiempoBloqueo) {
         let faltan = Math.ceil((tiempoBloqueo - Date.now()) / 1000 / 60);
-        mostrarToast(`Has sido bloqueado temporalmente. Espera ${faltan} minutos.`, '⚠️');
+        mostrarBurbuja(`Has sido bloqueado temporalmente. Espera ${faltan} minutos.`, 'var(--danger)');
         return;
       }
 
-      if (!usuario || !usuarioVerificado) {
-        mostrarToast('Confirma tu usuario de Roblox primero', '👤');
-        return;
-      }
-      if (!paqueteSeleccionado) {
-        mostrarToast('Selecciona un paquete de Robux', '🛒');
-        return;
-      }
-      if (!fileInput.files[0]) {
-        mostrarToast('Debes subir el capture del pago', '📸');
-        return;
-      }
-      if (ref.length !== 5) {
-        mostrarToast('Faltan los 5 dígitos de la referencia', '🔢');
+      if (!usuario || !usuarioVerificado || !paqueteSeleccionado || ref.length !== 5 || !fileInput.files[0]) {
+        mostrarBurbuja('⚠️ Faltan datos o es obligatorio subir el comprobante de pago.', 'var(--danger)');
         return;
       }
 
@@ -551,30 +692,51 @@
     window.cerrarModalNoEncontrado = function() { document.getElementById('modalPagoNoEncontrado').style.display = 'none'; };
     window.cerrarModalWhatsApp = function() { document.getElementById('modalWhatsApp').style.display = 'none'; };
 
-    function esperarTiempoAleatorio(mensajeBase) {
+    // FUNCIÓN DE SUBIDA DE COMPROBANTE AL SERVIDOR (De Free Fire)
+    async function subirComprobanteDrive(file) {
       return new Promise((resolve) => {
-        let segs = Math.floor(Math.random() * 3) + 1;
-        const textoElem = document.getElementById('textoContadorAnimado'); 
-        const barraFill = document.getElementById('barraProgresoFill');
-        barraFill.style.width = '0%';
-        const intv = setInterval(() => {
-          barraFill.style.width = '100%';
-          textoElem.innerHTML = `📡 ${mensajeBase}...`;
-          clearInterval(intv);
-          setTimeout(() => { resolve(); }, 800);
-        }, 500);
+        const tiempoLimite = setTimeout(() => { resolve("Sin comprobante (Tiempo agotado)"); }, 8000); 
+
+        const reader = new FileReader(); 
+        reader.readAsDataURL(file);
+        
+        reader.onload = async () => {
+          try {
+            const res = await fetch('/api/subir-imagen', { 
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+              body: JSON.stringify({ base64: reader.result, nombre: file.name, mimeType: file.type }) 
+            });
+            const data = await res.json();
+            clearTimeout(tiempoLimite);
+            resolve(data && data.url ? data.url : file.name);
+          } catch (e) { 
+            clearTimeout(tiempoLimite);
+            resolve(file.name); // Fallback to filename if API fails
+          }
+        };
+        reader.onerror = () => { clearTimeout(tiempoLimite); resolve(file.name); };
       });
+    }
+
+    // MANEJO AVANZADO DE ERRORES (De Free Fire)
+    function mostrarErrorGeneral(titulo, mensajePrincipal, htmlExtra) {
+        document.getElementById('pantallaProcesando').style.display = 'none';
+        document.getElementById('tituloErrorGeneral').innerHTML = titulo;
+        document.getElementById('textoErrorPago').innerHTML = mensajePrincipal;
+        const notaExtra = document.getElementById('notaErrorExtra');
+        if(htmlExtra) { notaExtra.style.display = 'block'; notaExtra.innerHTML = htmlExtra; } 
+        else { notaExtra.style.display = 'none'; }
+        document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
     }
 
     window.iniciarCargaConTiemposAleatorios = async function() {
       const btnConfirmar = document.getElementById('btnConfirmar');
       if (isProcessing) return; 
 
-      // DOBLE VERIFICACIÓN DE BLOQUEO ANTI-SPAM
       let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo_roblox') || '0');
       if (Date.now() < tiempoBloqueo) {
         let faltan = Math.ceil((tiempoBloqueo - Date.now()) / 1000 / 60);
-        mostrarToast(`Bloqueado por múltiples intentos. Espera ${faltan} minutos.`, '⚠️');
+        mostrarBurbuja(`Bloqueado por múltiples intentos. Espera ${faltan} minutos.`, "var(--danger)");
         return;
       }
 
@@ -584,13 +746,27 @@
       const usuarioRoblox = document.getElementById('inputPlayerId').value.trim();
       const fileInput = document.getElementById('inputComprobante');
       
-      cerrarModal(); 
-      document.getElementById('pantallaProcesando').style.display = 'flex';
+      cerrarModal(); document.getElementById('pantallaProcesando').style.display = 'flex';
 
+      const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; globalTxnCode = 'TXN-';
+      for (let i = 0; i < 6; i++) globalTxnCode += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
+
+      const textoElem = document.getElementById('textoContadorAnimado');
+      const barraFill = document.getElementById('barraProgresoFill');
+      
       try {
-          await esperarTiempoAleatorio("Validando pago en el sistema");
+          let captureUrl = "Sin comprobante";
+          
+          if (fileInput.files[0]) {
+              textoElem.innerHTML = "📄 Adjuntando comprobante en servidor...";
+              barraFill.style.width = '20%';
+              captureUrl = await subirComprobanteDrive(fileInput.files[0]);
+          }
 
-          let respuesta = await fetch(API_ROBLOX, {
+          textoElem.innerHTML = "🔍 Verificando pago y conectando a bóveda...";
+          barraFill.style.width = '45%';
+
+          let respuestaServidor = await fetch(API_ROBLOX, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -598,70 +774,82 @@
                 referencia: referenciaUsuario,
                 user: usuarioRoblox,
                 producto: paqueteSeleccionado.producto,
-                url_capture: fileInput.files[0] ? fileInput.files[0].name : "Comprobante subido"
+                url_capture: captureUrl
             })
           });
           
-          let resultado = await respuesta.json();
-
+          let resultado = await respuestaServidor.json();
+          
           if (resultado.status !== "success") {
-             
-             // GESTIÓN DEL SISTEMA ANTI-SPAM (SUMAR STRIKE)
+             if(resultado.message && resultado.message.toLowerCase().includes("fallo técnico")) {
+                document.getElementById('pantallaProcesando').style.display = 'none';
+                document.getElementById('codigoTxnProceso').textContent = globalTxnCode;
+                document.getElementById('modalEnProceso').style.display = 'flex';
+                isProcessing = false; btnConfirmar.disabled = false;
+                return;
+             }
+
              let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga_roblox') || '0');
              intentosFallidos++;
              localStorage.setItem('intentos_recarga_roblox', intentosFallidos);
-             
              if (intentosFallidos >= 3) {
                  localStorage.setItem('tiempo_bloqueo_roblox', Date.now() + (5 * 60 * 1000));
-                 mostrarToast("⚠️️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "❌");
+                 mostrarBurbuja("⚠️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
              }
 
-             document.getElementById('pantallaProcesando').style.display = 'none';
-
-             if (resultado.insuficiente) {
+             let msg = resultado.message || "";
+             let msgLower = msg.toLowerCase();
+             
+             if (msgLower.includes("insuficiente") || resultado.insuficiente) {
+                 document.getElementById('pantallaProcesando').style.display = 'none';
                  let pagado = parseFloat(resultado.montoPagado || 0);
                  let precioReal = parseFloat(resultado.precioOficial || paqueteSeleccionado.precio) || 0;
                  let faltante = (precioReal > pagado) ? (precioReal - pagado).toFixed(2) : 0;
                  
-                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (Ref: <strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${paqueteSeleccionado.producto}</strong>.`;
+                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (<strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${paqueteSeleccionado.producto}</strong>.`;
                  document.getElementById('waMontoEncontrado').innerText = pagado > 0 ? pagado.toFixed(2) + " Bs" : "Monto menor";
                  document.getElementById('waMontoFaltante').innerText = faltante + " Bs";
 
                  let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* para Roblox ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Paquete:* ${paqueteSeleccionado.producto} (${paqueteSeleccionado.precio} Bs)%0A*Monto Encontrado:* ${pagado} Bs%0A*Falta:* ${faltante} Bs%0A*Usuario Roblox:* ${usuarioRoblox}`;
                  document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
                  document.getElementById('modalWhatsApp').style.display = 'flex';
-             } else {
-                 document.getElementById('textoErrorPago').innerHTML = resultado.message || "La referencia no pudo ser procesada.";
-                 document.getElementById('notaErrorExtra').style.display = 'block';
-                 document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
+             } 
+             else if(msgLower.includes("gastado") || msgLower.includes("usado")) {
+                 mostrarErrorGeneral("❌ PAGO YA USADO", "El sistema detectó que esta referencia ya fue utilizada para completar otra recarga anterior.", "⚠️ <strong>Importante:</strong><br><br>No puedes reutilizar pagos antiguos. Si crees que esto es un error, contáctanos a soporte.");
+             }
+             else if(msgLower.includes("no encontrado")) {
+                 mostrarErrorGeneral("❌ PAGO NO ENCONTRADO", "No pudimos localizar la referencia que ingresaste en nuestro sistema bancario.", "⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea <strong>exacto</strong> al valor del paquete.<br><br>3. Que el pago fue enviado al banco correcto.");
+             } 
+             else {
+                 mostrarErrorGeneral("❌ ERROR", msg, "");
              }
 
-             isProcessing = false; 
-             btnConfirmar.disabled = false;
+             isProcessing = false; btnConfirmar.disabled = false;
              return; 
           }
 
-          // ÉXITO: RESETEO DE STRIKES A CERO
           localStorage.setItem('intentos_recarga_roblox', '0');
           localStorage.setItem('tiempo_bloqueo_roblox', '0');
 
-          // Muestra el PIN de Roblox obtenido con animación
+          textoElem.innerHTML = "💎 ¡Bot ejecutándose y asignando PIN...";
+          barraFill.style.width = '75%';
+          
+          await new Promise(r => setTimeout(r, 1500)); 
+
+          textoElem.innerHTML = "🚀 ¡Código de Roblox listo!";
+          barraFill.style.width = '100%';
+
           document.getElementById('codigoPinRoblox').textContent = resultado.code;
 
           setTimeout(() => {
-            document.getElementById('cajaContenedorAnime').style.display = 'none';
-            document.getElementById('pantallaExito').style.display = 'block';
+            document.getElementById('pantallaProcesando').style.display = 'none';
+            document.getElementById('modalExitosa').style.display = 'flex';
             isProcessing = false;
-          }, 500);
+          }, 600);
 
       } catch (err) {
-          document.getElementById('pantallaProcesando').style.display = 'none';
-          document.getElementById('textoErrorPago').innerHTML = "⚠️ Error de conexión con el servidor. Inténtalo nuevamente.";
-          document.getElementById('notaErrorExtra').style.display = 'none';
-          document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
-          console.error("Error:", err);
-          isProcessing = false; 
-          btnConfirmar.disabled = false;
+          mostrarErrorGeneral("⚠️ ERROR DE CONEXIÓN", "Tuvimos inconvenientes al conectar con el servidor. Por favor intenta nuevamente.", "");
+          isProcessing = false; btnConfirmar.disabled = false;
       }
     };
 
@@ -671,9 +859,7 @@
     window.ruletaYaGiro = false;
 
     window.abrirRuletaAutomatica = async function() {
-      // Ocultar las pantallas de éxito/procesando y mostrar la ruleta
-      document.getElementById('pantallaProcesando').style.display = 'none';
-      document.getElementById('pantallaExito').style.display = 'none';
+      document.getElementById('modalExitosa').style.display = 'none';
       document.getElementById('modalRuletaAutomatica').style.display = 'flex';
       
       if (window.ruletaYaGiro) return;
@@ -728,6 +914,116 @@
         document.getElementById('modalRuletaAutomatica').style.display = 'none';
         window.location.href = "index.html";
     };
+
+    // =======================================================
+    // 💬 LÓGICA DE CONTROL DE CHAT IA FLOTANTE Y RATE LIMIT
+    // =======================================================
+    window.toggleChatModal = function() {
+        const modal = document.getElementById('chatModalWindow');
+        modal.classList.toggle('active');
+    };
+
+    window.detectarEnter = function(event) {
+        if (event.key === 'Enter') {
+            const input = document.getElementById('input-chat');
+            const mensaje = input.value.trim();
+            if (mensaje !== "") {
+                input.value = '';
+                enviarMensajeAI(mensaje);
+            }
+        }
+    }
+
+    const LIMITE_MENSAJES = 5;
+    const TIEMPO_VENTANA_MS = 60 * 1000;
+
+    function obtenerHistorialRateLimit() {
+        let registro = JSON.parse(localStorage.getItem('ia_chat_limit_roblox') || '{"count":0, "resetTime":0}');
+        let ahora = Date.now();
+        if (ahora > registro.resetTime) {
+            registro = { count: 0, resetTime: ahora + TIEMPO_VENTANA_MS };
+            localStorage.setItem('ia_chat_limit_roblox', JSON.stringify(registro));
+        }
+        return registro;
+    }
+
+    function actualizarInterfazRateLimit() {
+        let registro = obtenerHistorialRateLimit();
+        let restantes = LIMITE_MENSAJES - registro.count;
+        if (restantes < 0) restantes = 0;
+        
+        const info = document.getElementById('rateLimitInfo');
+        if (restantes === 0) {
+            let segundosRestantes = Math.ceil((registro.resetTime - Date.now()) / 1000);
+            info.innerHTML = `⚠️ Límite alcanzado. Espera ${segundosRestantes > 0 ? segundosRestantes : 0}s para enviar más.`;
+            info.style.color = "var(--danger)";
+        } else {
+            info.innerHTML = `Mensajes disponibles: ${restantes} / ${LIMITE_MENSAJES}`;
+            info.style.color = "var(--text-muted)";
+        }
+    }
+
+    async function enviarMensajeAI(textoUsuario) {
+        let registro = obtenerHistorialRateLimit();
+        if (registro.count >= LIMITE_MENSAJES) {
+            mostrarBurbuja("Has alcanzado el límite de mensajes. Espera un momento.", "var(--danger)");
+            actualizarInterfazRateLimit();
+            return;
+        }
+
+        registro.count++;
+        localStorage.setItem('ia_chat_limit_roblox', JSON.stringify(registro));
+        actualizarInterfazRateLimit();
+
+        const contenedorChat = document.getElementById('chat-messages');
+        
+        const msgUser = document.createElement('div');
+        msgUser.className = "msg-bubble user";
+        msgUser.innerText = textoUsuario;
+        contenedorChat.appendChild(msgUser);
+        contenedorChat.scrollTop = contenedorChat.scrollHeight;
+
+        const msgCargando = document.createElement('div');
+        msgCargando.id = "tempCargando";
+        msgCargando.className = "msg-bubble bot";
+        msgCargando.style.fontStyle = "italic";
+        msgCargando.innerText = "🤖 Pensando respuesta...";
+        contenedorChat.appendChild(msgCargando);
+        contenedorChat.scrollTop = contenedorChat.scrollHeight;
+
+        try {
+            const response = await fetch('/api/ia-soporte', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mensaje: textoUsuario })
+            });
+            
+            const resultado = await response.json();
+            const cargandoEl = document.getElementById('tempCargando');
+            if (cargandoEl) cargandoEl.remove();
+
+            const msgBot = document.createElement('div');
+            msgBot.className = "msg-bubble bot";
+            msgBot.innerText = resultado.respuesta;
+            contenedorChat.appendChild(msgBot);
+            contenedorChat.scrollTop = contenedorChat.scrollHeight;
+
+            if(resultado.respaldoWhatsapp || textoUsuario.toLowerCase().includes("ayuda") || textoUsuario.toLowerCase().includes("humano")) {
+                document.getElementById('whatsappEscalateContainer').style.display = 'block';
+            }
+
+        } catch (e) {
+            const cargandoEl = document.getElementById('tempCargando');
+            if (cargandoEl) cargandoEl.remove();
+            
+            const msgError = document.createElement('div');
+            msgError.className = "msg-bubble error";
+            msgError.innerText = "Disculpa, ocurrió un error de conexión con la IA.";
+            contenedorChat.appendChild(msgError);
+        }
+    }
+
+    setInterval(actualizarInterfazRateLimit, 1000);
 
     cargarDatosBancarios();
     cargarCatalogoRoblox();
