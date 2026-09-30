@@ -24,6 +24,7 @@
       --warning: #ffcc00;
       --whatsapp: #1db954;
       --whatsapp-dark: #0e1e14;
+      --success: #00cc66;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -267,6 +268,22 @@
     </div>
   </div>
 
+  <!-- Modal Ruleta Automática -->
+  <div id="modalRuletaAutomatica" class="overlay-pantalla">
+    <div class="modal-content" style="border-color: #ff007f; background: var(--panel-bg); box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 40px rgba(255, 0, 127, 0.2);">
+      <h2 class="modal-titulo" style="color: #ff007f; text-shadow: 0 0 10px rgba(255,0,127,0.4);">🎰 RULETA LEVEL UP 🎰</h2>
+      <p id="textoEstadoRuleta" style="font-size: 13px; color: var(--cyan-text); margin-bottom: 20px; font-weight: 800; animation: floating 2s infinite;">Validando tu ticket y girando...</p>
+      <div style="position: relative; width: 220px; height: 220px; margin: 0 auto 25px auto;">
+        <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 22px solid #ff007f; z-index: 10; filter: drop-shadow(0 0 8px rgba(255,0,127,0.8));"></div>
+        <div id="ruletaGiraAuto" style="width: 100%; height: 100%; border-radius: 50%; border: 4px solid #ff007f; transition: transform 4s cubic-bezier(0.15, 0.95, 0.15, 1); background: conic-gradient(#070e1c 0deg 180deg, #101d36 180deg 360deg); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
+          <span style="position: absolute; top: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: #fff; text-shadow: 0 2px 5px #000;">VACÍO ❌</span>
+          <span style="position: absolute; bottom: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--cyan-text); text-shadow: 0 2px 5px #000; transform: rotate(180deg);">50 R$</span>
+        </div>
+      </div>
+      <button class="btn-cerrar-dark" id="btnCerrarRuleta" style="display: none; width: 100%; background: #ff007f; color: white; border-color: #ff007f;" onclick="cerrarRuletaAuto()">ENTENDIDO, VOLVER AL INICIO</button>
+    </div>
+  </div>
+
   <!-- PANTALLA DE PROCESAMIENTO Y ÉXITO -->
   <div id="pantallaProcesando" class="overlay-pantalla">
     <div class="modal-anime-card" id="cajaContenedorAnime">
@@ -275,13 +292,18 @@
       <div class="progress-bar-container"><div class="progress-bar-fill" id="barraProgresoFill"></div></div>
     </div>
 
+    <!-- EL BOTÓN DE LA RULETA ESTÁ AQUÍ ADENTRO -->
     <div class="modal-content" id="pantallaExito">
       <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
       <h2 style="color: var(--cyan-text); margin-top:0; font-family: 'Montserrat', sans-serif; font-size: 20px;">¡CÓDIGO DE ROBLOX LISTO!</h2>
       <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu PIN se ha obtenido exitosamente de la bóveda:</p>
       <div class="tx-caja" id="codigoPinRoblox">XXXX-XXXX-XXXX</div>
       <p style="color: var(--primary-cyan); font-size: 11px; font-weight: 700; margin-bottom: 18px; background: rgba(0,255,204,0.1); padding: 8px; border-radius: 8px;">⚠️ Cópialo y canjéalo directamente en roblox.com/redeem.</p>
-      <a href="index.html" class="btn-volver-inicio">VOLVER AL INICIO</a>
+      
+      <!-- BOTÓN PARA ABRIR LA RULETA -->
+      <button type="button" class="btn-confirmar" style="background: linear-gradient(135deg, #ff007f, #7f00ff); color: white; margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
+      
+      <a href="index.html" class="btn-volver-inicio">NUEVA RECARGA</a>
     </div>
   </div>
 
@@ -520,7 +542,7 @@
       }
 
       document.getElementById('resumenId').textContent = usuario;
-      document.getElementById('resumenPaquete').textContent = `${paqueteSeleccionado.producto} Robux`; 
+      document.getElementById('resumenPaquete').textContent = `${paqueteSeleccionado.producto}`; 
       document.getElementById('resumenMonto').textContent = `${paqueteSeleccionado.precio} Bs`;
       document.getElementById('modalConfirmacion').style.display = 'flex';
     };
@@ -591,7 +613,7 @@
              
              if (intentosFallidos >= 3) {
                  localStorage.setItem('tiempo_bloqueo_roblox', Date.now() + (5 * 60 * 1000));
-                 mostrarToast("⚠️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "❌");
+                 mostrarToast("⚠️️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "❌");
              }
 
              document.getElementById('pantallaProcesando').style.display = 'none';
@@ -601,11 +623,11 @@
                  let precioReal = parseFloat(resultado.precioOficial || paqueteSeleccionado.precio) || 0;
                  let faltante = (precioReal > pagado) ? (precioReal - pagado).toFixed(2) : 0;
                  
-                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (Ref: <strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${paqueteSeleccionado.producto} Robux</strong>.`;
+                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (Ref: <strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${paqueteSeleccionado.producto}</strong>.`;
                  document.getElementById('waMontoEncontrado').innerText = pagado > 0 ? pagado.toFixed(2) + " Bs" : "Monto menor";
                  document.getElementById('waMontoFaltante').innerText = faltante + " Bs";
 
-                 let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* para Roblox ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Paquete:* ${paqueteSeleccionado.producto} Robux (${paqueteSeleccionado.precio} Bs)%0A*Monto Encontrado:* ${pagado} Bs%0A*Falta:* ${faltante} Bs%0A*Usuario Roblox:* ${usuarioRoblox}`;
+                 let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* para Roblox ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Paquete:* ${paqueteSeleccionado.producto} (${paqueteSeleccionado.precio} Bs)%0A*Monto Encontrado:* ${pagado} Bs%0A*Falta:* ${faltante} Bs%0A*Usuario Roblox:* ${usuarioRoblox}`;
                  document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
                  document.getElementById('modalWhatsApp').style.display = 'flex';
              } else {
@@ -641,6 +663,70 @@
           isProcessing = false; 
           btnConfirmar.disabled = false;
       }
+    };
+
+    // =======================================================
+    // 🎁 LÓGICA DE LA RULETA DE LA SUERTE
+    // =======================================================
+    window.ruletaYaGiro = false;
+
+    window.abrirRuletaAutomatica = async function() {
+      // Ocultar las pantallas de éxito/procesando y mostrar la ruleta
+      document.getElementById('pantallaProcesando').style.display = 'none';
+      document.getElementById('pantallaExito').style.display = 'none';
+      document.getElementById('modalRuletaAutomatica').style.display = 'flex';
+      
+      if (window.ruletaYaGiro) return;
+      window.ruletaYaGiro = true;
+
+      const rueda = document.getElementById('ruletaGiraAuto');
+      const textoEstado = document.getElementById('textoEstadoRuleta');
+      const btnCerrar = document.getElementById('btnCerrarRuleta');
+
+      try {
+          const response = await fetch('/api/ruleta', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  id: document.getElementById('inputPlayerId').value.trim(),
+                  referencia: document.getElementById('inputReferencia').value.trim(),
+                  juego: "Roblox"
+              })
+          });
+
+          const data = await response.json();
+
+          if (data.status === "success") {
+              textoEstado.innerText = "¡La suerte está echada! 🎲";
+              textoEstado.style.color = "var(--primary-cyan)";
+              
+              rueda.style.transform = `rotate(${data.gradosDestino}deg)`;
+
+              setTimeout(() => {
+                  if (data.ganador) {
+                      textoEstado.style.color = "var(--success)";
+                      textoEstado.innerText = "🎉 ¡BRUTAL! Ganaste 50 Robux. Pronto los enviaremos.";
+                  } else {
+                      textoEstado.style.color = "var(--danger)";
+                      textoEstado.innerText = "❌ No hubo suerte esta vez. ¡Gracias por participar!";
+                  }
+                  btnCerrar.style.display = 'block';
+              }, 4000);
+          } else {
+              textoEstado.style.color = "var(--danger)";
+              textoEstado.innerText = "⚠ " + data.message;
+              btnCerrar.style.display = 'block';
+          }
+      } catch (e) {
+          textoEstado.style.color = "var(--danger)";
+          textoEstado.innerText = "❌ Error de conexión con el servidor.";
+          btnCerrar.style.display = 'block';
+      }
+    };
+
+    window.cerrarRuletaAuto = function() {
+        document.getElementById('modalRuletaAutomatica').style.display = 'none';
+        window.location.href = "index.html";
     };
 
     cargarDatosBancarios();
