@@ -539,9 +539,9 @@
     let datosBancoGlobal = { banco: "", telefono: "", cedula: "" }; let isProcessing = false;
     let globalTxnCode = "";
     
-    // RUTAS ACTUALIZADAS PARA BLOOD STRIKE (Asegúrate de que Vercel apunte aquí)
+    // RUTAS CONFIGURADAS PARA EVITAR LÍMITE DE FUNCIONES EN VERCEL
     const SCRIPT_RECARGAS_URL = '/api/recargar-bloodstrike';
-    const SCRIPT_PRECIOS_URL = '/api/precios-bloodstrike'; 
+    const SCRIPT_PRECIOS_URL = '/api/precios'; 
 
     window.mostrarBurbuja = function(mensaje, color = 'var(--primary-red)') {
       const burbuja = document.getElementById('toastBubble');
@@ -586,7 +586,11 @@
       container.innerHTML = '<div style="text-align:center; grid-column:span 2; color: var(--text-muted); padding: 20px 0; font-size: 13px;">Cargando precios...</div>';
       
       try {
-        const res = await fetch(SCRIPT_PRECIOS_URL);
+        const res = await fetch(SCRIPT_PRECIOS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ juego: "blood_strike" })
+        });
         const data = await res.json();
 
         if (!data || data.status !== "success" || !data.catalogo || data.catalogo.length === 0) {
