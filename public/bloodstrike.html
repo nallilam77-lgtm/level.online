@@ -1,1164 +1,201 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Level Up - Recargas Blood Strike</title>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <style>
-    :root {
-      /* Paleta Blood Strike Envejecido / Post-apocalíptico */
-      --bg-dark: #0a0303;
-      --panel-bg: rgba(22, 5, 5, 0.85); /* Semitransparente para ver textura */
-      --card-bg: rgba(35, 10, 10, 0.9);
-      --card-border: #3a1010;
-      --primary-red: #a81c1c; /* Rojo sangre vieja */
-      --primary-gradient: linear-gradient(135deg, #a81c1c, #4a0808);
-      --price-bg: rgba(10, 2, 2, 0.8);
-      --gold-text: #d4af37; /* Oro viejo / cobrizo */
-      --text-main: #e0d0d0; /* Blanco roto / ceniza */
-      --text-muted: #8a7373;
-      --danger: #c42b2b;
-      --danger-dark: #2a0b10;
-      --warning: #b8981e;
-      --warning-dark: #2a2000;
-      --whatsapp: #189643;
-      --whatsapp-dark: #0e1e14;
-      --success: #1a9651;
-    }
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
 
-    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  const formatearVES = (monto) => Number(monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    /* Fondo principal con textura de grietas y desgaste */
-    body {
-      font-family: 'Poppins', sans-serif;
-      background-color: var(--bg-dark);
-      background-image: 
-        radial-gradient(circle at top, rgba(58, 10, 10, 0.6) 0%, rgba(10, 3, 3, 0.9) 70%),
-        url('data:image/svg+xml;utf8,<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noise)" opacity="0.08"/></svg>');
-      background-blend-mode: overlay;
-      color: var(--text-main);
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      padding: 12px 8px;
-      overflow-x: hidden;
-    }
+  const limpiarMontoVES = (valor) => {
+    if (!valor) return 0;
+    if (typeof valor === 'number') return valor;
+    let m = String(valor).trim().replace(/[^0-9.,-]/g, '');
+    if (!m) return 0;
 
-    /* Animaciones */
-    @keyframes slideInUp {
-      0% { opacity: 0; transform: translateY(40px) scale(0.98); }
-      100% { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    @keyframes popIn {
-      0% { opacity: 0; transform: scale(0.85); }
-      70% { transform: scale(1.05); }
-      100% { opacity: 1; transform: scale(1); }
-    }
-    @keyframes floating {
-      0%, 100% { transform: translateY(0); text-shadow: 0 0 10px rgba(168, 28, 28, 0.6); }
-      50% { transform: translateY(-3px); text-shadow: 0 0 20px rgba(168, 28, 28, 0.9); }
-    }
-    @keyframes floating-gold {
-      0%, 100% { transform: translateY(0); text-shadow: 0 0 10px rgba(212, 175, 55, 0.5); }
-      50% { transform: translateY(-2px); text-shadow: 0 0 15px rgba(212, 175, 55, 0.8); }
-    }
-    @keyframes pulse-whatsapp {
-      0% { box-shadow: 0 0 0 0 rgba(24, 150, 67, 0.5); }
-      70% { box-shadow: 0 0 0 10px rgba(24, 150, 67, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(24, 150, 67, 0); }
-    }
-    @keyframes pulse-ia {
-      0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.5); }
-      70% { box-shadow: 0 0 0 12px rgba(212, 175, 55, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
-    }
-    @keyframes spin { 100% { transform: rotate(360deg); } }
+    let lastComma = m.lastIndexOf(',');
+    let lastDot = m.lastIndexOf('.');
 
-    .anim-slide-up { opacity: 0; animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-    .delay-1 { animation-delay: 0.1s; }
-    .delay-2 { animation-delay: 0.2s; }
-    .delay-3 { animation-delay: 0.3s; }
-
-    /* Tarjeta principal con efecto de panel metálico/cuero desgastado */
-    .main-card {
-      background-color: var(--panel-bg);
-      background-image: 
-        linear-gradient(to right, rgba(0,0,0,0.4) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(0,0,0,0.4) 1px, transparent 1px);
-      background-size: 20px 20px;
-      backdrop-filter: blur(8px);
-      border: 2px solid var(--card-border);
-      border-radius: 8px; /* Bordes menos redondeados, más rígidos */
-      padding: 16px 12px;
-      width: 100%;
-      max-width: 440px;
-      box-shadow: 0 15px 30px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(0, 0, 0, 0.8), inset 0 0 5px var(--primary-red);
-      margin-bottom: 20px;
-      position: relative;
-    }
-    
-    /* Detalle de "tornillos" en las esquinas de la main-card */
-    .main-card::before, .main-card::after {
-      content: ''; position: absolute; width: 6px; height: 6px; background: #111; border-radius: 50%; box-shadow: inset 1px 1px 2px rgba(255,255,255,0.2);
-    }
-    .main-card::before { top: 8px; left: 8px; }
-    .main-card::after { bottom: 8px; right: 8px; }
-
-    .top-nav { margin-bottom: 12px; }
-    .btn-back { color: var(--gold-text); text-decoration: none; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; transition: 0.3s; text-shadow: 1px 1px 2px #000; }
-    .btn-back:hover { transform: translateX(-5px); filter: brightness(1.2); }
-
-    /* Título desgastado */
-    .title-banner { 
-      text-align: center; font-family: 'Montserrat', sans-serif; font-size: 28px; font-weight: 900; 
-      color: #fff; letter-spacing: 2px; margin-bottom: 16px; 
-      text-transform: uppercase; animation: floating 4s ease-in-out infinite;
-      text-shadow: 3px 3px 0px #4a0808, -1px -1px 0px #222, 0 0 10px rgba(168, 28, 28, 0.8);
-      border-bottom: 2px dashed var(--card-border);
-      padding-bottom: 10px;
-    }
-
-    .step-title { font-size: 12px; font-weight: 800; color: var(--text-main); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; text-shadow: 1px 1px 2px #000;}
-    .step-title::before { content: ''; display: block; width: 4px; height: 14px; background: var(--primary-red); border-radius: 0; } /* Marcador cuadrado */
-
-    .id-section { margin-bottom: 20px; }
-    .id-input-group { display: flex; flex-direction: column; gap: 10px; }
-    
-    /* Input con textura de terminal oxidada */
-    .input-field { 
-      width: 100%; background: rgba(5, 1, 1, 0.8); border: 2px solid #2a0b0b; border-radius: 4px; 
-      padding: 12px 14px; color: var(--gold-text); font-family: 'Courier New', Courier, monospace; 
-      font-size: 16px; font-weight: 700; outline: none; transition: all 0.3s ease; text-align: center; 
-      box-shadow: inset 0 0 10px rgba(0,0,0,0.8); text-shadow: 0 0 5px rgba(212, 175, 55, 0.5);
-    }
-    .input-field:focus { border-color: var(--primary-red); box-shadow: inset 0 0 10px rgba(168, 28, 28, 0.3); }
-    .input-field::placeholder { color: #5a4545; text-shadow: none; }
-
-    /* Botones estilo bloque industrial */
-    .btn-verify { width: 100%; background: var(--primary-gradient); color: #fff; border: 1px solid #701010; border-radius: 4px; padding: 12px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; text-transform: uppercase; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6), inset 0 2px 5px rgba(255,255,255,0.1); letter-spacing: 1px;}
-    .btn-verify:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(168, 28, 28, 0.5); filter: brightness(1.1); }
-    .btn-verify:active { transform: translateY(1px); box-shadow: 0 2px 5px rgba(0,0,0,0.8); }
-    .btn-verify:disabled { opacity: 0.5; filter: grayscale(50%); cursor: not-allowed; transform: none; }
-    
-    .id-status { font-size: 12px; margin-top: 8px; display: none; font-weight: 700; text-align: center; padding: 8px; border-radius: 4px; background: rgba(10, 2, 2, 0.8); border: 1px dashed var(--card-border); animation: popIn 0.3s ease; }
-
-    .catalog-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
-    
-    /* Tarjetas de productos desgastadas */
-    .product-card { 
-      background: var(--card-bg); 
-      background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.2) 10px, rgba(0,0,0,0.2) 20px);
-      border: 2px solid var(--card-border); border-radius: 6px; padding: 14px 8px; text-align: center; cursor: pointer; transition: all 0.3s ease; position: relative; overflow: hidden; 
-      box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
-    }
-    .product-card::after {
-       content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-       background: radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 60%);
-       opacity: 0; transition: opacity 0.3s;
-    }
-    .product-card:hover { border-color: #5a1515; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.8); }
-    .product-card:hover::after { opacity: 1; }
-    .product-card:active { transform: translateY(1px); }
-    .product-card.selected { border-color: var(--gold-text); background-color: rgba(60, 20, 10, 0.9); box-shadow: 0 0 15px rgba(212, 175, 55, 0.15), inset 0 0 15px rgba(0,0,0,0.9); transform: translateY(-2px) scale(1.02); }
-    .product-card.full-width { grid-column: span 2; }
-    
-    .diamonds-count { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 16px; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 5px; text-shadow: 2px 2px 4px #000; letter-spacing: 1px;}
-    .price-box { background: var(--price-bg); border-radius: 4px; padding: 6px 8px; border: 1px solid #222; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5); }
-    .price-text { font-family: 'Courier New', Courier, monospace; font-weight: 900; font-size: 15px; color: var(--gold-text); letter-spacing: 0px; text-shadow: 0 0 2px rgba(212, 175, 55, 0.4);}
-
-    /* Sección de pago con borde punteado/roto */
-    .checkout-section { display: none; background: rgba(10, 2, 2, 0.6); border: 2px dashed #4a1010; border-radius: 8px; padding: 16px 12px; margin-top: 16px; animation: slideInUp 0.5s ease; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);}
-    .checkout-section.active { display: block; }
-    
-    /* Tarjeta bancaria estilo recibo viejo */
-    .bank-card { background: rgba(5, 1, 1, 0.8); border: 1px solid #3a0a0a; border-left: 4px solid var(--primary-red); border-radius: 4px; padding: 14px; margin-bottom: 12px; box-shadow: inset 0 0 10px rgba(0,0,0,0.9); position: relative; }
-    .bank-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 12px; color: var(--text-muted); font-family: 'Courier New', Courier, monospace; font-weight: 700; border-bottom: 1px solid #1a0505; padding-bottom: 4px;}
-    .bank-row span { color: var(--text-main); font-weight: 900; font-size: 13px; font-family: 'Poppins', sans-serif;}
-    
-    .btn-copy { background: #1a0505; color: var(--text-main); border: 1px solid #3a1010; padding: 12px; border-radius: 4px; width: 100%; cursor: pointer; font-weight: 700; margin-bottom: 16px; transition: all 0.2s ease; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: 'Courier New', Courier, monospace; letter-spacing: 1px;}
-    .btn-copy:hover { border-color: var(--primary-red); color: var(--gold-text); background: #2b0808; }
-    .btn-copy:active { transform: translateY(2px); }
-    .btn-copy.copied { background: var(--primary-red); border-color: var(--primary-red); color: #fff; font-weight: 900; }
-
-    .file-upload-box { margin-bottom: 16px; }
-    input[type="file"] { background: rgba(5,1,1,0.8); padding: 10px; border-radius: 4px; border: 1px dashed var(--card-border); color: var(--text-muted); font-size: 11px; cursor: pointer; width: 100%; box-sizing: border-box; transition: 0.3s; font-family: 'Courier New', Courier, monospace;}
-    input[type="file"]:hover { border-color: var(--primary-red); background: rgba(168,28,28,0.05); }
-    input[type="file"]::file-selector-button { background: #2b0808; color: var(--text-main); border: 1px solid #4a1010; padding: 6px 12px; border-radius: 4px; font-weight: 800; cursor: pointer; margin-right: 10px; transition: 0.3s; font-family: 'Poppins', sans-serif;}
-    input[type="file"]::file-selector-button:hover { background: var(--primary-red); border-color: var(--primary-red);}
-    
-    /* Botón final imponente */
-    .btn-submit-order { width: 100%; background: linear-gradient(to bottom, #701010, #3a0a0a); color: #ffffff; border: 2px solid #111; border-bottom-width: 4px; padding: 16px; border-radius: 6px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 16px; text-transform: uppercase; cursor: pointer; transition: all 0.1s ease; box-shadow: 0 4px 8px rgba(0,0,0,0.8); margin-top: 8px; letter-spacing: 2px; text-shadow: 1px 1px 2px #000;}
-    .btn-submit-order:hover { filter: brightness(1.2); }
-    .btn-submit-order:active { transform: translateY(2px); border-bottom-width: 2px; margin-top: 10px; }
-
-    /* ======================================================= */
-    /* 🤖 BOTÓN FLOTANTE Y VENTANA DE CHAT IA PRO */
-    /* ======================================================= */
-    .floating-chat-btn {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      width: 54px;
-      height: 54px;
-      background: linear-gradient(135deg, #a81c1c, #4a0808);
-      border: 2px solid #111;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.8), inset 0 0 5px rgba(255,255,255,0.2);
-      z-index: 9999;
-      transition: all 0.3s ease;
-      animation: pulse-ia 3s infinite;
-    }
-    .floating-chat-btn:hover { transform: scale(1.05); filter: brightness(1.2); }
-    .floating-chat-btn svg { width: 24px; height: 24px; fill: var(--gold-text); filter: drop-shadow(1px 1px 1px #000);}
-
-    .chat-modal-window {
-      display: none;
-      position: fixed;
-      bottom: 85px;
-      right: 20px;
-      width: 340px;
-      max-width: calc(100vw - 40px);
-      background: rgba(20, 5, 5, 0.95);
-      border: 2px solid #4a1010;
-      border-radius: 8px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 20px rgba(168, 28, 28, 0.2);
-      z-index: 10000;
-      overflow: hidden;
-      animation: popIn 0.3s ease;
-      backdrop-filter: blur(10px);
-    }
-    .chat-modal-window.active { display: flex; flex-direction: column; }
-
-    .chat-header {
-      background: #111;
-      border-bottom: 2px solid var(--primary-red);
-      padding: 12px 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .chat-title-box { display: flex; align-items: center; gap: 10px; }
-    .chat-avatar-ai { width: 30px; height: 30px; background: #2b0808; border: 1px solid var(--primary-red); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: inset 0 0 5px #000;}
-    .chat-title-text { font-family: 'Courier New', Courier, monospace; font-size: 14px; font-weight: 900; color: var(--text-main); letter-spacing: 1px;}
-    .chat-subtitle-text { font-size: 10px; color: var(--primary-red); font-weight: 800; text-transform: uppercase;}
-    
-    .btn-close-chat { background: none; border: none; color: var(--text-muted); font-size: 16px; cursor: pointer; transition: 0.2s; font-family: monospace; font-weight: bold;}
-    .btn-close-chat:hover { color: var(--danger); transform: scale(1.1);}
-
-    .chat-body-messages {
-      height: 260px;
-      overflow-y: auto;
-      padding: 12px;
-      background: rgba(5,1,1,0.9);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      /* Patrón sutil de scanlines */
-      background-image: linear-gradient(to bottom, rgba(255,255,255,0.02) 50%, transparent 50%);
-      background-size: 100% 4px;
-    }
-    .msg-bubble {
-      padding: 8px 12px;
-      border-radius: 4px;
-      font-size: 12px;
-      line-height: 1.5;
-      max-width: 85%;
-      word-break: break-word;
-      font-family: 'Courier New', Courier, monospace;
-      font-weight: 600;
-      box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
-    }
-    .msg-bubble.bot { background: #1a0505; color: var(--text-main); border-left: 3px solid var(--primary-red); align-self: flex-start; }
-    .msg-bubble.user { background: #2b0808; color: var(--gold-text); border-right: 3px solid var(--gold-text); align-self: flex-end; text-align: right;}
-    .msg-bubble.error { background: rgba(42, 11, 16, 0.9); color: var(--danger); border: 1px dashed var(--danger); align-self: center; text-align: center; }
-
-    .chat-footer-box {
-      padding: 10px;
-      background: #111;
-      border-top: 1px solid #3a1010;
-    }
-    .chat-input-row { display: flex; gap: 8px; }
-    .chat-rate-limit-info { font-size: 10px; color: #555; text-align: right; margin-top: 4px; font-family: monospace; font-weight: bold;}
-
-    .btn-whatsapp-redirect { background: var(--whatsapp); color: #000; border: 1px solid #000; padding: 8px 12px; border-radius: 4px; font-weight: 900; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; margin-top: 8px; width: 100%; text-decoration: none; text-transform: uppercase; font-family: 'Montserrat', sans-serif;}
-
-    /* Modales generales (estilo alerta sistema dañado) */
-    .overlay-pantalla { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 1, 1, 0.95); backdrop-filter: blur(4px); z-index: 1000; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; }
-    
-    .modal-content { background: #111; border: 2px solid var(--card-border); border-radius: 0px; padding: 20px 16px; max-width: 360px; width: 100%; text-align: center; box-shadow: 10px 10px 0px rgba(0,0,0,0.8), inset 0 0 20px rgba(0,0,0,0.9); animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; }
-    
-    .modal-titulo { color: var(--text-main); margin-top: 0; font-family: 'Courier New', Courier, monospace; font-weight: 900; font-size: 18px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; padding-bottom: 8px;}
-    
-    .whatsapp-theme { border-color: var(--whatsapp) !important; background: rgba(14, 30, 20, 0.95) !important; box-shadow: 8px 8px 0px rgba(0,0,0,0.8), inset 0 0 20px rgba(24, 150, 67, 0.1) !important; }
-    .whatsapp-theme .modal-titulo { color: var(--whatsapp) !important; border-bottom-color: rgba(24, 150, 67, 0.3);}
-    .whatsapp-theme .modal-nota { background: rgba(0,0,0,0.5); border-left: 4px solid var(--whatsapp); color: #ccc; }
-    
-    .monto-detalle { background: #0a0202; border: 1px dashed #333; padding: 12px; margin: 12px 0; text-align: left; font-family: monospace;}
-    .monto-item { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #888; }
-    .monto-item span { color: #aaa; }
-    .monto-item strong { color: var(--whatsapp); font-size: 13px; }
-    .monto-item:last-child { margin-bottom: 0; }
-    .monto-item.red strong { color: var(--danger); }
-
-    .btn-whatsapp { background: var(--whatsapp); color: #000; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 4px; font-weight: 900; font-family: 'Courier New', Courier, monospace; text-transform: uppercase; font-size: 14px; transition: 0.2s; width: 100%; margin-bottom: 10px; border: 1px solid #000; cursor: pointer; box-shadow: 2px 2px 0 #000;}
-    .btn-whatsapp:active { transform: translate(2px, 2px); box-shadow: 0 0 0 #000; }
-
-    .error-theme { border-color: var(--danger) !important; background: rgba(20, 5, 5, 0.95) !important; box-shadow: 8px 8px 0px rgba(0,0,0,0.8), inset 0 0 20px rgba(196, 43, 43, 0.1) !important; }
-    .error-theme .modal-titulo { color: var(--danger) !important; border-bottom-color: rgba(196, 43, 43, 0.3);}
-    .error-theme .modal-nota { background: rgba(0,0,0,0.5); border-left: 4px solid var(--danger); color: #ccc; font-size: 11px; text-align: left; margin-top: 12px; font-family: monospace;}
-
-    .warning-theme { border-color: var(--warning) !important; background: rgba(30, 25, 5, 0.95) !important; box-shadow: 8px 8px 0px rgba(0,0,0,0.8), inset 0 0 20px rgba(184, 152, 30, 0.1) !important; }
-    .warning-theme .modal-titulo { color: var(--warning) !important; border-bottom-color: rgba(184, 152, 30, 0.3);}
-    .warning-theme .modal-nota { background: rgba(0,0,0,0.5); border-left: 4px solid var(--warning); color: #ccc; font-size: 11px; text-align: left; margin-top: 12px; font-family: monospace;}
-
-    .success-theme { border-color: var(--success) !important; background: rgba(10, 30, 15, 0.95) !important; box-shadow: 8px 8px 0px rgba(0,0,0,0.8), inset 0 0 20px rgba(26, 150, 81, 0.1) !important; }
-    .success-theme .modal-titulo { color: var(--success) !important; border-bottom-color: rgba(26, 150, 81, 0.3);}
-
-    .modal-botones { display: flex; gap: 8px; margin-top: 15px; }
-    .btn-revisar, .btn-confirmar { flex: 1; padding: 12px; font-weight: 800; cursor: pointer; border: 1px solid #000; font-size: 13px; font-family: 'Courier New', Courier, monospace; text-transform: uppercase; transition: 0.1s;}
-    .btn-revisar { background: #222; color: #aaa; }
-    .btn-revisar:active { background: #111; }
-    .btn-confirmar { background: var(--primary-red); color: #fff; box-shadow: 3px 3px 0 #000;}
-    .btn-confirmar:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 #000; }
-    
-    .btn-cerrar-dark { background: #222; color: #aaa; border: 1px solid #000; padding: 12px; font-weight: 800; width: 100%; cursor: pointer; font-family: 'Courier New', Courier, monospace; font-size: 13px; text-transform: uppercase; margin-top: 10px; transition: 0.1s;}
-    .btn-cerrar-dark:active { background: #111; }
-
-    /* Modal de carga con estilo "Hacking/Terminal" */
-    .modal-anime-card { background: rgba(5,1,1,0.95); border: 1px solid #333; padding: 24px; max-width: 320px; width: 100%; text-align: center; box-shadow: 0 0 30px rgba(168, 28, 28, 0.2); }
-    .anime-avatar-box { width: 80px; height: 80px; margin: 0 auto 15px auto; border: 2px dashed #555; background: #000; display: flex; align-items: center; justify-content: center;}
-    .anime-avatar-box img { max-width: 60%; filter: grayscale(100%) contrast(150%); opacity: 0.7;}
-    .anime-status-text { font-family: 'Courier New', Courier, monospace; font-size: 12px; font-weight: bold; color: var(--text-muted); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
-    .progress-bar-container { width: 100%; height: 12px; background: #000; border: 1px solid #333; padding: 1px;}
-    .progress-bar-fill { width: 0%; height: 100%; background: var(--primary-red); transition: width 0.3s ease; box-shadow: 0 0 5px var(--primary-red);}
-
-    .tx-caja { background: #000; border: 1px solid #333; padding: 10px; margin: 15px 0; font-size: 16px; font-family: 'Courier New', Courier, monospace; font-weight: bold; color: #fff; letter-spacing: 2px; user-select: all; box-shadow: inset 0 0 10px rgba(255,255,255,0.05);}
-    .tx-caja.warning { color: var(--warning); border-color: rgba(184, 152, 30, 0.3); }
-    .tx-caja.success { color: var(--success); border-color: rgba(26, 150, 81, 0.3); }
-    
-    .btn-volver-inicio { background: #222; color: #ccc; border: 1px solid #444; padding: 12px 20px; font-weight: bold; font-family: 'Courier New', Courier, monospace; text-transform: uppercase; text-decoration: none; display: block; width: 100%; text-align: center; margin-top: 15px; font-size: 13px;}
-    .btn-volver-inicio:active { background: #111; }
-
-    .toast-bubble {
-      position: fixed;
-      bottom: -100px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(10, 2, 2, 0.95);
-      border: 1px solid var(--primary-red);
-      border-left: 4px solid var(--primary-red);
-      color: #ddd;
-      padding: 10px 20px;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 12px;
-      font-weight: bold;
-      box-shadow: 0 5px 15px rgba(0,0,0,0.8);
-      z-index: 9999;
-      transition: all 0.3s ease;
-      text-align: center;
-      white-space: nowrap;
-      pointer-events: none;
-    }
-    .toast-bubble.show { bottom: 30px; }
-    .loader-spinner { display: inline-block; width: 30px; height: 30px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--warning); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px; }
-  </style>
-</head>
-<body>
-
-  <div id="toastBubble" class="toast-bubble"></div>
-
-  <!-- Modal Pago Insuficiente -->
-  <div id="modalWhatsApp" class="overlay-pantalla">
-    <div class="modal-content whatsapp-theme">
-      <h2 class="modal-titulo">/ ERROR_PAGO_INCOMPLETO /</h2>
-      <p id="textoMotivoWhatsApp" style="color: #ccc; font-size: 12px; font-family: monospace; line-height: 1.5; margin-bottom: 10px;"></p>
-      
-      <div class="monto-detalle">
-        <div class="monto-item"><span>DETECTADO:</span> <strong id="waMontoEncontrado"></strong></div>
-        <div class="monto-item red"><span>DÉFICIT:</span> <strong id="waMontoFaltante"></strong></div>
-      </div>
-      
-      <div class="modal-nota" style="padding: 10px; margin-bottom: 15px;">
-        > ACCIÓN REQUERIDA: Contacte al administrador del sistema (0414-1916377) para resolver el déficit.
-      </div>
-      
-      <a id="btnWhatsAppLink" href="#" target="_blank" class="btn-whatsapp">
-        CONECTAR_SOPORTE [WSP]
-      </a>
-      <button class="btn-cerrar-dark" onclick="cerrarModalWhatsApp()">CERRAR_TERMINAL</button>
-    </div>
-  </div>
-
-  <!-- Modal Error -->
-  <div id="modalPagoNoEncontrado" class="overlay-pantalla">
-    <div class="modal-content error-theme">
-      <h2 class="modal-titulo" id="tituloErrorGeneral">/ FALLA_CRITICA /</h2>
-      <p id="textoErrorPago" style="color: #ccc; font-size: 12px; font-family: monospace; line-height: 1.5; margin-bottom: 10px;">La transacción ha sido rechazada por el sistema central.</p>
-      <div id="notaErrorExtra" class="modal-nota danger"></div>
-      <button class="btn-cerrar-dark" onclick="cerrarModalNoEncontrado()">ACEPTAR_ERROR</button>
-    </div>
-  </div>
-
-  <!-- Modal Recarga en Proceso -->
-  <div id="modalEnProceso" class="overlay-pantalla">
-    <div class="modal-content warning-theme">
-      <div class="loader-spinner"></div>
-      <h2 class="modal-titulo">/ PROCESANDO_PETICION /</h2>
-      <p style="color: #ccc; font-size: 12px; font-family: monospace; line-height: 1.5; margin-bottom: 10px;">Fondos verificados. La inyección de recursos a su cuenta tomará más tiempo del habitual debido a latencia en el servidor.</p>
-      <div class="tx-caja warning" id="codigoTxnProceso">TXN-XXXXXX</div>
-      <div class="modal-nota warning" style="padding: 10px; margin-bottom: 15px;">
-        > TIEMPO ESTIMADO: 1 a 5 minutos. Puede abandonar esta terminal de forma segura.
-      </div>
-      <a href="index.html" class="btn-volver-inicio">SALIR_AL_MENU</a>
-    </div>
-  </div>
-
-  <!-- Modal Recarga Exitosa -->
-  <div id="modalExitosa" class="overlay-pantalla">
-    <div class="modal-content success-theme">
-      <div style="font-size: 40px; margin-bottom: 10px; color: var(--success);">[OK]</div>
-      <h2 class="modal-titulo">/ TRANSFERENCIA_EXITOSA /</h2>
-      <p style="color: #ccc; font-size: 12px; font-family: monospace; margin-top: 10px;">Los recursos han sido añadidos satisfactoriamente a la cuenta objetivo.</p>
-      <div class="tx-caja success" id="codigoTxnExito">TXN-XXXXXX</div>
-      
-      <!-- Ocultamos la ruleta para mantener el estilo serio, o se puede habilitar si prefieres -->
-      <button type="button" class="btn-confirmar" style="width: 100%; margin-top: 10px; margin-bottom: 10px;" onclick="abrirRuletaAutomatica()">ACCEDER_A_SUMINISTROS_EXTRA</button>
-      
-      <a href="index.html" class="btn-volver-inicio">CERRAR_CONEXION</a>
-    </div>
-  </div>
-
-  <!-- Modal Ruleta Automática (Estilo "Caja de Suministros") -->
-  <div id="modalRuletaAutomatica" class="overlay-pantalla">
-    <div class="modal-content" style="border-color: #555; background: #111; box-shadow: inset 0 0 30px rgba(0,0,0,0.9);">
-      <h2 class="modal-titulo" style="color: var(--gold-text); border-bottom-color: #333;">/ DECODIFICANDO_CACHE /</h2>
-      <p id="textoEstadoRuleta" style="font-size: 12px; font-family: monospace; color: #888; margin-bottom: 20px;">Analizando probabilidades de extracción...</p>
-      
-      <div style="position: relative; width: 200px; height: 200px; margin: 0 auto 25px auto;">
-        <!-- Indicador -->
-        <div style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 16px solid var(--primary-red); z-index: 10;"></div>
-        
-        <!-- Rueda estilo radar viejo -->
-        <div id="ruletaGiraAuto" style="width: 100%; height: 100%; border-radius: 50%; border: 2px solid #333; transition: transform 4s cubic-bezier(0.15, 0.95, 0.15, 1); background: conic-gradient(#1a0505 0deg 180deg, #0a0202 180deg 360deg); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
-          <!-- Líneas de radar -->
-          <div style="position: absolute; width: 100%; height: 1px; background: rgba(255,255,255,0.05);"></div>
-          <div style="position: absolute; width: 1px; height: 100%; background: rgba(255,255,255,0.05);"></div>
-          <div style="position: absolute; width: 70%; height: 70%; border: 1px dashed rgba(255,255,255,0.1); border-radius: 50%;"></div>
-          
-          <span style="position: absolute; top: 30px; font-family: 'Courier New', monospace; font-weight: bold; font-size: 14px; color: #555;">[0]</span>
-          <span style="position: absolute; bottom: 30px; font-family: 'Courier New', monospace; font-weight: bold; font-size: 14px; color: var(--gold-text); transform: rotate(180deg);">[100_G]</span>
-        </div>
-      </div>
-      <button class="btn-cerrar-dark" id="btnCerrarRuleta" style="display: none; background: #222;" onclick="cerrarRuletaAuto()">ABANDONAR_INTERFAZ</button>
-    </div>
-  </div>
-
-  <!-- Modal Confirmación -->
-  <div id="modalConfirmacion" class="overlay-pantalla">
-    <div class="modal-content">
-      <h2 class="modal-titulo">/ VERIFICAR_DATOS /</h2>
-      <div style="background: #000; padding: 12px; border: 1px solid #333; text-align: left; margin-bottom: 15px; font-family: monospace;">
-        <p style="margin: 4px 0; font-size: 11px; color: #666;">> ID_JUGADOR.......<span id="resumenId" style="float: right; color: #ccc;"></span></p>
-        <p style="margin: 4px 0; font-size: 11px; color: #666;">> ESTADO...........<span id="resumenNombreJugador" style="float: right; color: var(--success);"></span></p>
-        <p style="margin: 4px 0; font-size: 11px; color: #666;">> RECURSOS.........<span id="resumenPaquete" style="float: right; color: var(--gold-text);"></span></p>
-        <p style="margin: 4px 0; font-size: 11px; color: #666;">> FONDOS_REQ.......<span id="resumenMonto" style="float: right; color: #ccc;"></span></p>
-      </div>
-      <div style="font-size: 10px; color: var(--warning); border-left: 2px solid var(--warning); padding-left: 8px; text-align: left; font-family: monospace; margin-bottom: 15px;">
-        ADVERTENCIA: Las operaciones enviadas a IDs incorrectos no pueden ser revertidas por la red. Proceda con precaución.
-      </div>
-      <div class="modal-botones">
-        <button class="btn-revisar" onclick="cerrarModal()">CANCELAR</button>
-        <button class="btn-confirmar" id="btnConfirmar" onclick="iniciarCargaConTiemposAleatorios()">EJECUTAR</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Pantalla de Procesamiento -->
-  <div id="pantallaProcesando" class="overlay-pantalla">
-    <div class="modal-anime-card" id="cajaContenedorAnime">
-      <div class="anime-avatar-box">
-        <!-- Puedes poner un icono de carga estilo radar o terminal aquí -->
-        <span style="font-size: 30px;">⚙️</span>
-      </div>
-      <div class="anime-status-text" id="textoContadorAnimado">Estableciendo enlace seguro...</div>
-      <div class="progress-bar-container"><div class="progress-bar-fill" id="barraProgresoFill"></div></div>
-    </div>
-  </div>
-
-  <!-- Contenido Principal -->
-  <div class="main-card anim-slide-up">
-    <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ SALIR_SISTEMA</a></div>
-    <h1 class="title-banner anim-slide-up delay-1">BLOOD STRIKE</h1>
-
-    <div class="id-section anim-slide-up delay-2">
-      <div class="step-title">Fase 1: IDENTIFICACIÓN</div>
-      <div class="id-input-group">
-        <input type="number" id="inputPlayerId" class="input-field" placeholder="INGRESAR_ID_UNICO" required>
-        <!-- BOTÓN DE CONFIRMACIÓN MANUAL -->
-        <button type="button" id="btnVerifyId" class="btn-verify">VINCULAR ID</button>
-      </div>
-      <div id="idStatus" class="id-status"></div>
-    </div>
-
-    <div class="step-title anim-slide-up delay-3">Fase 2: SUMINISTROS (ORO)</div>
-    <div class="catalog-grid anim-slide-up delay-3" id="catalogContainer">
-      <div style="text-align: center; grid-column: span 2; color: #555; padding: 20px 0; font-size: 12px; font-family: monospace;">[ ESTABLECIENDO_CONEXION_CATALOGO... ]</div>
-    </div>
-
-    <!-- SECCIÓN DE PAGO (Checkout) -->
-    <div class="checkout-section" id="checkoutSection">
-      <div class="step-title">Fase 3: TRANSFERENCIA BANCARIA</div>
-      <div class="bank-card">
-        <div id="bankInfoContainer">
-          <div class="bank-row">BANCO: <span>...</span></div>
-          <div class="bank-row">TLF: <span>...</span></div>
-          <div class="bank-row">CI: <span>...</span></div>
-        </div>
-        <div style="width: 100%; height: 1px; background: #3a1010; margin: 10px 0;"></div>
-        <div class="bank-row" style="margin-bottom: 0;">FONDOS_REQUERIDOS: <span id="montoPagar" style="color: var(--gold-text); font-size: 16px;">0,00 Bs</span></div>
-      </div>
-      <button type="button" id="btnCopiarDatos" class="btn-copy" onclick="copiarDatosBanco()">[ COPIAR_DATOS_RECEPTORES ]</button>
-
-      <div class="file-upload-box">
-        <div class="step-title">Fase 4: VERIFICACIÓN VISUAL <span style="color: var(--danger);">*</span></div>
-        <input type="file" id="inputComprobante" accept="image/*" onchange="analizarCapture(this)" required>
-        <div id="cajaIA" style="display: none; margin-top: 10px; padding: 10px; background: #0a0202; border: 1px solid #333;">
-          <div id="cargandoIA" style="color: #666; font-size: 11px; font-family: monospace;">[ ESCANEANDO_DOCUMENTO... ]</div>
-          <div id="resultadoIA" style="display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-            <span style="color: #888; font-size: 11px; font-family: monospace;">REF_DETECTADA: <span id="refIA" style="color: var(--text-main); font-size: 13px; font-weight: bold;"></span></span>
-            <button type="button" onclick="usarReferenciaIA()" style="background: #222; color: #ccc; border: 1px solid #444; padding: 4px 8px; font-size: 10px; font-family: monospace; cursor: pointer;">EXTRAER_DATOS</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="step-title">Fase 5: CLAVE REFERENCIAL (5 DIGITOS)</div>
-      <div style="margin-bottom: 16px;">
-        <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputReferencia" class="input-field" placeholder="XXXXX" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
-      </div>
-
-      <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">INICIAR INYECCIÓN</button>
-    </div> 
-  </div> 
-  <!-- FIN DE MAIN-CARD -->
-
-  <!-- ======================================================= -->
-  <!-- 🤖 WIDGET FLOTANTE DE SOPORTE IA INTELIGENTE            -->
-  <!-- ======================================================= -->
-  <div class="floating-chat-btn" onclick="toggleChatModal()" title="Abrir Terminal de Soporte">
-    <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A1.5 1.5 0 0 0 6 14.5A1.5 1.5 0 0 0 7.5 16A1.5 1.5 0 0 0 9 14.5A1.5 1.5 0 0 0 7.5 13m9 0a1.5 1.5 0 0 0-1.5 1.5a1.5 1.5 0 0 0 1.5 1.5a1.5 1.5 0 0 0 1.5-1.5a1.5 1.5 0 0 0-1.5-1.5m-5 3c-1.33 0-2.5.5-3.35 1.35a1 1 0 0 0 1.41 1.41C9.64 18.39 10.77 18 12 18s2.36.39 2.94.96a1 1 0 0 0 1.41-1.41C14.5 16.5 13.33 16 12 16z"/></svg>
-  </div>
-
-  <div class="chat-modal-window" id="chatModalWindow">
-    <div class="chat-header">
-      <div class="chat-title-box">
-        <div class="chat-avatar-ai">O_o</div>
-        <div>
-          <div class="chat-title-text">SISTEMA_SOPORTE_V1</div>
-          <div class="chat-subtitle-text">CONEXION_ESTABLECIDA</div>
-        </div>
-      </div>
-      <button class="btn-close-chat" onclick="toggleChatModal()">[X]</button>
-    </div>
-
-    <div class="chat-body-messages" id="chat-messages">
-      <div class="msg-bubble bot">
-        > Iniciando protocolo de asistencia...<br>
-        > Agente IA preparado. Indique su problema con la operación.
-      </div>
-    </div>
-
-    <div class="chat-footer-box">
-      <div class="chat-input-row">
-        <input type="text" id="input-chat" class="input-field" placeholder="> Ingrese comando o texto..." onkeypress="detectarEnter(event)" style="font-size: 12px; padding: 10px; text-align: left; background: #000; border-color: #333;">
-      </div>
-      <div class="chat-rate-limit-info" id="rateLimitInfo">CONSULTAS_RESTANTES: 5/5</div>
-      <div id="whatsappEscalateContainer" style="display: none;">
-        <a href="https://wa.me/584141916377?text=Solicito%20asistencia%20manual%20para%20operaci%C3%B3n%20en%20Blood%20Strike." target="_blank" class="btn-whatsapp-redirect" style="font-family: monospace;">
-          > REDIRIGIR_A_HUMANO [WSP]
-        </a>
-      </div>
-    </div>
-  </div>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyBIdEh_HzzB8dnzG8qkPQYOIo2kSb_F6xQ",
-      authDomain: "levelupstore-87d4d.firebaseapp.com",
-      projectId: "levelupstore-87d4d",
-      storageBucket: "levelupstore-87d4d.firebasestorage.app",
-      messagingSenderId: "948536026825",
-      appId: "1:948536026825:web:80520e4be7514a134d8f18",
-      measurementId: "G-3F8E5RCFS6"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
-    let paqueteSeleccionado = null; let idVerificado = false; let nombreJugadorVerificado = "";
-    let datosBancoGlobal = { banco: "", telefono: "", cedula: "" }; let isProcessing = false;
-    let globalTxnCode = "";
-    
-    // RUTA UNIFICADA PARA BLOOD STRIKE EN VERCEL
-    const SCRIPT_RECARGAS_URL = '/api/recargar-bloodstrike';
-
-    window.mostrarBurbuja = function(mensaje, color = 'var(--primary-red)') {
-      const burbuja = document.getElementById('toastBubble');
-      burbuja.innerText = mensaje;
-      burbuja.style.borderColor = color;
-      burbuja.style.borderLeftColor = color;
-      burbuja.classList.add('show');
-      setTimeout(() => { burbuja.classList.remove('show'); }, 3500);
-    };
-
-    window.formatearMontoVES = function(montoStr) {
-      if (!montoStr) return 0;
-      if (typeof montoStr === 'number') return montoStr;
-      let m = String(montoStr).trim().replace(/[^0-9.,-]/g, '');
-      if (!m) return 0;
-      let lastDot = m.lastIndexOf('.'); let lastComma = m.lastIndexOf(',');
-      let lastSeparatorIndex = Math.max(lastDot, lastComma);
-      if (lastSeparatorIndex === -1) { return parseFloat(m) || 0; }
-      let parteEntera = m.substring(0, lastSeparatorIndex).replace(/[^0-9-]/g, '');
-      let parteDecimal = m.substring(lastSeparatorIndex + 1).replace(/[^0-9]/g, '');
-      if (parteDecimal.length >= 3) { parteEntera = parteEntera + parteDecimal; parteDecimal = "00"; }
-      return parseFloat(parteEntera + "." + parteDecimal) || 0;
-    };
-
-    async function cargarDatosBancarios() {
-      try {
-        const docSnap = await getDoc(doc(db, "configuracion", "pago_movil"));
-        if (docSnap.exists()) {
-          const data = docSnap.data(); 
-          datosBancoGlobal = { banco: data.banco, telefono: data.cedula, cedula: data.telefono };
-          document.getElementById('bankInfoContainer').innerHTML = `
-            <div class="bank-row">BANCO: <span>${datosBancoGlobal.banco}</span></div>
-            <div class="bank-row">TLF: <span>${datosBancoGlobal.telefono}</span></div>
-            <div class="bank-row">CI: <span>${datosBancoGlobal.cedula}</span></div>
-          `;
-        }
-      } catch (error) {}
-    }
-
-    async function cargarCatalogoCliente() {
-      const container = document.getElementById('catalogContainer');
-      container.innerHTML = '<div style="text-align:center; grid-column:span 2; color: #666; padding: 20px 0; font-size: 12px; font-family: monospace;">[ SOLICITANDO_DATOS... ]</div>';
-      
-      try {
-        const res = await fetch(SCRIPT_RECARGAS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accion: "obtener_precios" })
-        });
-        const data = await res.json();
-
-        if (!data || data.status !== "success" || !data.catalogo || data.catalogo.length === 0) {
-          container.innerHTML = '<div style="text-align:center; grid-column:span 2; font-family: monospace; color: #888;">[ INVENTARIO_VACIO ]</div>';
-          return;
-        }
-
-        let paquetes = data.catalogo;
-        paquetes.sort((a, b) => window.formatearMontoVES(a.paquete || a.diamantes) - window.formatearMontoVES(b.paquete || b.diamantes));
-
-        container.innerHTML = '';
-        paquetes.forEach((item, index) => {
-          const card = document.createElement('div');
-          const esUltimoImpar = (paquetes.length % 2 !== 0) && (index === paquetes.length - 1);
-          let delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
-          card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar || item.spanFull ? 'full-width' : ''}`;
-          
-          let nombrePaquete = item.paquete || item.diamantes;
-          if(!nombrePaquete.toLowerCase().includes("oro")) nombrePaquete += " Oro";
-
-          card.innerHTML = `<div class="diamonds-count">${nombrePaquete} 🪙</div><div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
-          card.addEventListener('click', () => seleccionarProducto(card, item));
-          container.appendChild(card);
-        });
-
-      } catch (e) {
-        container.innerHTML = '<div style="text-align:center; grid-column:span 2; color: var(--danger); font-family: monospace;">[ ERROR_CONEXION_CATALOGO ]</div>';
+    if (lastComma > lastDot) {
+      m = m.replace(/\./g, '').replace(',', '.'); 
+    } else if (lastComma !== -1 && lastDot === -1) {
+      m = m.replace(',', '.'); 
+    } else if (lastDot !== -1 && lastComma === -1) {
+      let parts = m.split('.');
+      if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
+        m = m.replace(/\./g, ''); 
       }
     }
+    return parseFloat(m) || 0;
+  };
 
-    function seleccionarProducto(cardElement, paquete) {
-      document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
-      cardElement.classList.add('selected'); paqueteSeleccionado = paquete;
-      document.getElementById('montoPagar').innerText = `${paquete.precio} Bs`;
-      verificarEstadoDesbloqueo();
+  try {
+    const { id, paquete, referencia, urlImagen } = req.body;
+
+    if (!id || !paquete || !referencia) {
+      return res.status(400).json({ status: "error", message: "Faltan datos obligatorios para procesar la recarga." });
     }
 
-    function verificarEstadoDesbloqueo() {
-      const checkoutSection = document.getElementById('checkoutSection');
-      if (idVerificado && paqueteSeleccionado) { checkoutSection.classList.add('active'); } else { checkoutSection.classList.remove('active'); }
+    // Usando tu variable exacta de Vercel para el Apps Script de Blood Strike
+    const URL_GOOGLE_SCRIPT = process.env.SCRIPT_BLOOD; 
+    const FAZER_API_KEY = process.env.FAZER_API_KEY;
+
+    if (!URL_GOOGLE_SCRIPT || !FAZER_API_KEY) {
+      return res.status(500).json({ status: "error", message: "Error interno: Variables de entorno no configuradas." });
     }
 
-    // CONFIRMACIÓN MANUAL (Estilo viejo)
-    document.getElementById('btnVerifyId').addEventListener('click', () => {
-      const idInput = document.getElementById('inputPlayerId').value.trim();
-      const statusDiv = document.getElementById('idStatus'); 
-      const btnVerify = document.getElementById('btnVerifyId');
-
-      if (idInput.length < 5) {
-        mostrarBurbuja("> ERROR: ID demasiado corto.", "var(--danger)");
-        statusDiv.style.display = 'none';
-        idVerificado = false; verificarEstadoDesbloqueo(); return;
-      }
-      
-      idVerificado = true; 
-      nombreJugadorVerificado = "CONFIRMADO_MANUALMENTE";
-      
-      statusDiv.style.display = 'block'; 
-      statusDiv.style.color = '#ccc'; 
-      statusDiv.style.borderColor = '#333';
-      statusDiv.innerHTML = `> ESTADO_ID: <span style="color: var(--success);">[VINCULADO]</span>`;
-      
-      btnVerify.innerText = "[ VINCULADO ]";
-      btnVerify.style.background = "#111";
-      btnVerify.style.color = "var(--success)";
-      btnVerify.style.border = "1px solid var(--success)";
-      btnVerify.style.boxShadow = "none";
-      
-      verificarEstadoDesbloqueo();
+    // ==========================================
+    // PASO 1: OBTENER EL PRECIO REAL
+    // ==========================================
+    const resPrecios = await fetch(URL_GOOGLE_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: "obtener_precios" })
     });
+    const dataPrecios = await resPrecios.json();
 
-    document.getElementById('inputPlayerId').addEventListener('input', () => { 
-      idVerificado = false; 
-      nombreJugadorVerificado = ""; 
-      document.getElementById('idStatus').style.display = 'none'; 
-      
-      const btnVerify = document.getElementById('btnVerifyId');
-      btnVerify.innerText = "VINCULAR ID";
-      btnVerify.style.background = "var(--primary-gradient)";
-      btnVerify.style.color = "#fff";
-      btnVerify.style.border = "1px solid #701010";
-      
-      verificarEstadoDesbloqueo(); 
+    if (!dataPrecios || dataPrecios.status !== "success" || !dataPrecios.catalogo) {
+      return res.status(500).json({ status: "error", message: "Error al leer la base de datos de precios." });
+    }
+
+    const numeroOro = String(paquete).replace(/[^0-9]/g, '');
+    
+    // Busca el paquete en Google Sheets ignorando letras (ej. "51 oro" coincide con "51")
+    const paqueteGsheet = dataPrecios.catalogo.find(p => String(p.diamantes || p.paquete).replace(/[^0-9]/g, '') === numeroOro);
+    if (!paqueteGsheet) {
+      return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado." });
+    }
+
+    const precioReal = limpiarMontoVES(paqueteGsheet.precio);
+
+    // ==========================================
+    // PASO 2: BUSCAR PAGO Y VERIFICAR
+    // ==========================================
+    const resVerificacion = await fetch(URL_GOOGLE_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: "verificar_pago", referencia: referencia, monto: precioReal })
     });
+    const dataVerificacion = await resVerificacion.json();
 
-    window.analizarCapture = async function(input) {
-      if (!input.files || !input.files[0]) return; const file = input.files[0];
-      const cajaIA = document.getElementById('cajaIA'); const resultadoIA = document.getElementById('resultadoIA'); const refIA = document.getElementById('refIA'); const cargandoIA = document.getElementById('cargandoIA');
-      if (!file.type.startsWith("image/")) return; if (typeof Tesseract === 'undefined') return;
-      
-      cajaIA.style.display = 'block'; cargandoIA.style.display = 'flex'; resultadoIA.style.display = 'none';
-      
-      try {
-        const resultadoOCR = await Tesseract.recognize(file, 'eng+spa');
-        let textoLimpio = resultadoOCR.data.text
-          .replace(/\b(202[0-9]|20[0-2][0-9]|[0-3][0-9][-\/][0-1][0-9][-\/][0-9]{2,4})\b/g, '')
-          .replace(/0414[-.\s]?8653510/g, '')
-          .replace(/13476015/g, '');
-
-        let numerosEncontrados = "";
-        const matchEtiqueta = textoLimpio.match(/(?:referencia|operacion|nro|ref|doc)[:\s]*([0-9]{6,20})/i);
-        
-        if (matchEtiqueta && matchEtiqueta[1]) { 
-          numerosEncontrados = matchEtiqueta[1]; 
-        } else {
-          let posiblesNumeros = textoLimpio.match(/\b[0-9]{6,20}\b/g);
-          if (posiblesNumeros && posiblesNumeros.length > 0) { 
-            numerosEncontrados = posiblesNumeros[posiblesNumeros.length - 1]; 
-          }
-        }
-        
-        if (numerosEncontrados && numerosEncontrados.length >= 5) {
-          refIA.textContent = numerosEncontrados.slice(-5);
-          cargandoIA.style.display = 'none'; resultadoIA.style.display = 'flex';
-        } else { 
-          cajaIA.style.display = 'none'; 
-        }
-      } catch (e) { 
-        cajaIA.style.display = 'none'; 
-      }
-    };
-
-    window.usarReferenciaIA = function() { document.getElementById('inputReferencia').value = document.getElementById('refIA').textContent; };
-
-    window.copiarDatosBanco = function() {
-      navigator.clipboard.writeText(`Banco: ${datosBancoGlobal.banco}\nTeléfono: ${datosBancoGlobal.telefono}\nCédula: ${datosBancoGlobal.cedula}`).then(() => {
-        mostrarBurbuja("> Datos copiados al portapapeles.", "var(--text-main)");
-        const btn = document.getElementById('btnCopiarDatos'); 
-        btn.innerHTML = "[ COPIADO_CON_EXITO ]"; btn.style.color = "var(--success)";
-        setTimeout(() => { btn.innerHTML = "[ COPIAR_DATOS_RECEPTORES ]"; btn.style.color = "var(--text-main)"; }, 3000);
+    if (!dataVerificacion || !dataVerificacion.encontrado) {
+      return res.status(400).json({ status: "error", message: dataVerificacion.message || "Pago no encontrado o ya utilizado." });
+    }
+    
+    if (dataVerificacion.insuficiente) {
+      await fetch(URL_GOOGLE_SCRIPT, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ accion: "marcar_verificado", referencia: dataVerificacion.referencia }) 
       });
-    };
-
-    window.abrirModal = function() {
-      const id = document.getElementById('inputPlayerId').value.trim();
-      const ref = document.getElementById('inputReferencia').value.trim();
-      const fileInput = document.getElementById('inputComprobante');
       
-      let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo') || '0');
-      if (Date.now() < tiempoBloqueo) {
-        let faltan = Math.ceil((tiempoBloqueo - Date.now()) / 1000 / 60);
-        mostrarBurbuja(`> SISTEMA_BLOQUEADO. Intente en ${faltan} mins.`, "var(--danger)");
-        return;
-      }
+      const pagado = Number(dataVerificacion.montoPagado) || 0;
+      const faltante = precioReal - pagado;
 
-      if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5 || !fileInput.files[0]) { 
-        mostrarBurbuja("> ERROR: Faltan parámetros o evidencia de pago.", "var(--danger)"); 
-        return; 
-      }
-      
-      let nombrePaquete = String(paqueteSeleccionado.paquete || paqueteSeleccionado.diamantes).trim();
-      if(!nombrePaquete.toLowerCase().includes("oro")) nombrePaquete += " Oro";
-      
-      document.getElementById('resumenId').textContent = id; 
-      document.getElementById('resumenNombreJugador').textContent = nombreJugadorVerificado;
-      document.getElementById('resumenPaquete').textContent = `${nombrePaquete} 🪙`; 
-      document.getElementById('resumenMonto').textContent = `${paqueteSeleccionado.precio} Bs`;
-      
-      document.getElementById('modalConfirmacion').style.display = 'flex';
-    };
-
-    window.cerrarModal = function() { document.getElementById('modalConfirmacion').style.display = 'none'; };
-    window.cerrarModalNoEncontrado = function() { document.getElementById('modalPagoNoEncontrado').style.display = 'none'; };
-    window.cerrarModalWhatsApp = function() { document.getElementById('modalWhatsApp').style.display = 'none'; };
-
-    async function subirComprobanteDrive(file) {
-      return new Promise((resolve) => {
-        const tiempoLimite = setTimeout(() => { resolve("Sin comprobante (Tiempo agotado)"); }, 8000); 
-
-        const reader = new FileReader(); 
-        reader.readAsDataURL(file);
-        
-        reader.onload = async () => {
-          try {
-            const res = await fetch('/api/subir-imagen', { 
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-              body: JSON.stringify({ base64: reader.result, nombre: file.name, mimeType: file.type }) 
-            });
-            const data = await res.json();
-            clearTimeout(tiempoLimite);
-            resolve(data && data.url ? data.url : "Sin comprobante");
-          } catch (e) { 
-            clearTimeout(tiempoLimite);
-            resolve("Sin comprobante (Error de subida)"); 
-          }
-        };
-        reader.onerror = () => { clearTimeout(tiempoLimite); resolve("Sin comprobante (Error de lectura)"); };
+      return res.status(400).json({ 
+        status: "error", 
+        insuficiente: true,
+        montoPagado: pagado,
+        precioRequerido: precioReal,
+        faltante: faltante,
+        message: `Pago insuficiente: Encontramos ${formatearVES(pagado)} Bs, pero el paquete cuesta ${formatearVES(precioReal)} Bs. Faltan ${formatearVES(faltante)} Bs.` 
       });
     }
 
-    function mostrarErrorGeneral(titulo, mensajePrincipal, htmlExtra) {
-        document.getElementById('pantallaProcesando').style.display = 'none';
-        document.getElementById('tituloErrorGeneral').innerHTML = `/ ${titulo} /`;
-        document.getElementById('textoErrorPago').innerHTML = mensajePrincipal;
-        const notaExtra = document.getElementById('notaErrorExtra');
-        if(htmlExtra) { notaExtra.style.display = 'block'; notaExtra.innerHTML = htmlExtra; } 
-        else { notaExtra.style.display = 'none'; }
-        document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
+    // ==========================================
+    // PASO 3: ATACAR API DE FAZERCARDS
+    // ==========================================
+    const codigosFazer = {
+      "51": "51_bc",
+      "105": "105_bc",
+      "320": "320_bc",
+      "540": "540_bc",
+      "1100": "1100_bc",
+      "2260": "2260_bc",
+      "5800": "5800_bc"
+    };
+
+    const offerIdFinal = codigosFazer[numeroOro];
+    if (!offerIdFinal) {
+      await fetch(URL_GOOGLE_SCRIPT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: "marcar_verificado", referencia: dataVerificacion.referencia }) });
+      return res.status(400).json({ status: "error", message: "El paquete solicitado no existe en el catálogo del proveedor." });
     }
 
-    window.iniciarCargaConTiemposAleatorios = async function() {
-      const btnConfirmar = document.getElementById('btnConfirmar');
-      if (isProcessing) return; 
+    let resultadoCompra = {};
+    try {
+      const respuestaFazer = await fetch("https://api.fzr.cards/api/v2/topups/order", {
+        method: "POST",
+        headers: { "X-API-Key": FAZER_API_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          "category_id": "blood_strike", 
+          "offer_id": offerIdFinal, 
+          "fields": { "player_id": id } 
+        })
+      });
 
-      let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo') || '0');
-      if (Date.now() < tiempoBloqueo) {
-        mostrarBurbuja(`> SISTEMA_BLOQUEADO.`, "var(--danger)");
-        return;
+      resultadoCompra = await respuestaFazer.json();
+
+      if (resultadoCompra.ok !== true) {
+        throw new Error(resultadoCompra.error || "ID de jugador incorrecto o mantenimiento.");
       }
+    } catch (error) {
+      const errorMsg = error.message || "Falla de red con el proveedor.";
+      console.error("❌ Error en FazerCards:", errorMsg);
 
-      isProcessing = true; btnConfirmar.disabled = true;
+      // 📝 ANOTAR EL ERROR EN LA HOJA
+      await fetch(URL_GOOGLE_SCRIPT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          accion: "registrar_error", 
+          idJugador: id, 
+          paquete: paquete, 
+          referencia: dataVerificacion.referencia, 
+          codigosUsados: "API FAZERCARDS", 
+          urlImagen: `⚠️ FALLO PROVEEDOR: ${errorMsg} | 🧾 REF: ${dataVerificacion.referencia}` 
+        })
+      });
 
-      const referenciaUsuario = document.getElementById('inputReferencia').value.trim();
-      const playerId = document.getElementById('inputPlayerId').value.trim();
-      cerrarModal(); document.getElementById('pantallaProcesando').style.display = 'flex';
+      // 🔓 DEVOLVER A VERIFICADO: Como la recarga por ID falló, no perdimos dinero. El cliente conserva su saldo.
+      await fetch(URL_GOOGLE_SCRIPT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: "marcar_verificado", referencia: dataVerificacion.referencia })
+      });
 
-      const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; globalTxnCode = 'TXN-';
-      for (let i = 0; i < 6; i++) globalTxnCode += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
-
-      const textoElem = document.getElementById('textoContadorAnimado');
-      const barraFill = document.getElementById('barraProgresoFill');
-      
-      try {
-          let captureUrl = "Sin comprobante";
-          let fileInput = document.getElementById('inputComprobante');
-          
-          if (fileInput.files[0]) {
-              textoElem.innerHTML = "> COMPRIMIENDO_EVIDENCIA...";
-              barraFill.style.width = '20%';
-              captureUrl = await subirComprobanteDrive(fileInput.files[0]);
-          }
-
-          textoElem.innerHTML = "> VALIDANDO_REGISTROS_BANCARIOS...";
-          barraFill.style.width = '45%';
-          
-          let nombrePaquete = String(paqueteSeleccionado.paquete || paqueteSeleccionado.diamantes).trim();
-          if(!nombrePaquete.toLowerCase().includes("oro")) nombrePaquete += " Oro";
-
-          const respuestaServidor = await fetch(SCRIPT_RECARGAS_URL, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                id: playerId, 
-                paquete: nombrePaquete, 
-                referencia: referenciaUsuario, 
-                urlImagen: captureUrl 
-            })
-          });
-          
-          const resultado = await respuestaServidor.json();
-          
-          if (resultado.status !== "success") {
-             if(resultado.message && resultado.message.toLowerCase().includes("fallo técnico")) {
-                document.getElementById('pantallaProcesando').style.display = 'none';
-                document.getElementById('codigoTxnProceso').textContent = globalTxnCode;
-                document.getElementById('modalEnProceso').style.display = 'flex';
-                isProcessing = false; btnConfirmar.disabled = false;
-                return;
-             }
-
-             let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga') || '0');
-             intentosFallidos++;
-             localStorage.setItem('intentos_recarga', intentosFallidos);
-             if (intentosFallidos >= 3) {
-                 localStorage.setItem('tiempo_bloqueo', Date.now() + (5 * 60 * 1000));
-                 mostrarBurbuja("> ALERTA_SEGURIDAD: Acceso suspendido temporalmente.", "var(--danger)");
-             }
-
-             let msg = resultado.message || "";
-             let msgLower = msg.toLowerCase();
-             
-             if (msgLower.includes("insuficiente") || resultado.insuficiente) {
-                 document.getElementById('pantallaProcesando').style.display = 'none';
-                 let pagado = parseFloat(resultado.montoPagado || 0);
-                 let precioReal = parseFloat(resultado.precioRequerido || 0);
-                 let faltante = parseFloat(resultado.faltante || 0);
-                 
-                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El registro asociado [<strong>${referenciaUsuario}</strong>] posee un déficit para la adquisición de <strong>${nombrePaquete}</strong>.`;
-                 document.getElementById('waMontoEncontrado').innerText = pagado > 0 ? pagado.toFixed(2) + " Bs" : "N/D";
-                 document.getElementById('waMontoFaltante').innerText = pagado > 0 ? faltante.toFixed(2) + " Bs" : "N/D";
-
-                 let msgWa = `*SOPORTE REQUERIDO (BLOOD STRIKE)*%0A%0A*REF:* ${referenciaUsuario}%0A*DETECTADO:* ${pagado.toFixed(2)} Bs%0A*OBJETIVO:* ${nombrePaquete} (${precioReal.toFixed(2)} Bs)%0A*DÉFICIT:* ${faltante.toFixed(2)} Bs`;
-                 document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
-                 document.getElementById('modalWhatsApp').style.display = 'flex';
-             } 
-             else if(msgLower.includes("gastado") || msgLower.includes("usado")) {
-                 mostrarErrorGeneral("COLISION_DE_DATOS", "Esta clave referencial ya se encuentra registrada como utilizada en el servidor.", "> Si esto es un error, contacte a soporte inmediatamente.");
-             }
-             else if(msgLower.includes("no encontrado")) {
-                 mostrarErrorGeneral("REFERENCIA_NO_HALLADA", "La red bancaria no reporta registros con esta terminación.", "> Asegúrese de que los 5 dígitos son correctos y el pago fue realizado.");
-             } 
-             else if(msgLower.includes("rechazó") || msgLower.includes("id")) {
-                 mostrarErrorGeneral("RECHAZO_POR_PROVEEDOR", "El servidor de destino rechazó el ID proveído.", "> Operación abortada. Sus fondos no fueron descontados. Verifique su ID de Blood Strike.");
-             }
-             else {
-                 mostrarErrorGeneral("ERROR_DESCONOCIDO", msg, "");
-             }
-
-             isProcessing = false; btnConfirmar.disabled = false;
-             return; 
-          }
-
-          localStorage.setItem('intentos_recarga', '0');
-          localStorage.setItem('tiempo_bloqueo', '0');
-
-          textoElem.innerHTML = "> SOLICITANDO_EXTRACCION_EXTERNA...";
-          barraFill.style.width = '75%';
-          
-          await new Promise(r => setTimeout(r, 1500)); 
-
-          textoElem.innerHTML = "> INYECTANDO_ORO_EN_NUCLEO...";
-          barraFill.style.width = '90%';
-
-          await new Promise(r => setTimeout(r, 1200)); 
-
-          textoElem.innerHTML = "> OPERACION_COMPLETA";
-          barraFill.style.width = '100%';
-
-          setTimeout(() => {
-            document.getElementById('pantallaProcesando').style.display = 'none';
-            document.getElementById('codigoTxnExito').textContent = globalTxnCode;
-            document.getElementById('modalExitosa').style.display = 'flex';
-            isProcessing = false;
-          }, 600);
-
-      } catch (err) {
-          mostrarErrorGeneral("DESCONEXION", "Se perdió el enlace con el servidor central durante la operación.", "");
-          isProcessing = false; 
-          btnConfirmar.disabled = false;
-      }
-    };
-
-    window.ruletaYaGiro = false;
-
-    window.abrirRuletaAutomatica = async function() {
-      document.getElementById('modalExitosa').style.display = 'none';
-      document.getElementById('modalRuletaAutomatica').style.display = 'flex';
-      
-      if (window.ruletaYaGiro) return;
-      window.ruletaYaGiro = true;
-
-      const rueda = document.getElementById('ruletaGiraAuto');
-      const textoEstado = document.getElementById('textoEstadoRuleta');
-      const btnCerrar = document.getElementById('btnCerrarRuleta');
-
-      try {
-          const response = await fetch('/api/ruleta', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  id: document.getElementById('inputPlayerId').value.trim(),
-                  referencia: document.getElementById('inputReferencia').value.trim(),
-                  juego: "Blood Strike"
-              })
-          });
-
-          const data = await response.json();
-
-          if (data.status === "success") {
-              textoEstado.innerText = "> INICIANDO_SORTEO...";
-              
-              rueda.style.transform = `rotate(${data.gradosDestino}deg)`;
-
-              setTimeout(() => {
-                  if (data.ganador) {
-                      textoEstado.style.color = "var(--success)";
-                      textoEstado.innerText = "> RESULTADO: EXTRACCION EXITOSA. (+100 Oro)";
-                  } else {
-                      textoEstado.style.color = "#888";
-                      textoEstado.innerText = "> RESULTADO: CAJA VACIA.";
-                  }
-                  btnCerrar.style.display = 'block';
-              }, 4000);
-          } else {
-              textoEstado.style.color = "var(--danger)";
-              textoEstado.innerText = "> ERROR: " + data.message;
-              btnCerrar.style.display = 'block';
-          }
-      } catch (e) {
-          textoEstado.style.color = "var(--danger)";
-          textoEstado.innerText = "> ERROR_ENLACE_PERDIDO";
-          btnCerrar.style.display = 'block';
-      }
-    };
-
-    window.cerrarRuletaAuto = function() {
-        document.getElementById('modalRuletaAutomatica').style.display = 'none';
-        window.location.href = "index.html";
-    };
-
-    // =======================================================
-    // 💬 LÓGICA DE CONTROL DE CHAT IA FLOTANTE Y RATE LIMIT
-    // =======================================================
-    window.toggleChatModal = function() {
-        const modal = document.getElementById('chatModalWindow');
-        modal.classList.toggle('active');
-    };
-
-    window.detectarEnter = function(event) {
-        if (event.key === 'Enter') {
-            const input = document.getElementById('input-chat');
-            const mensaje = input.value.trim();
-            if (mensaje !== "") {
-                input.value = '';
-                enviarMensajeAI(mensaje);
-            }
-        }
+      return res.status(400).json({ 
+        status: "error", 
+        message: "El proveedor rechazó la recarga: " + errorMsg + ". Tu pago no se descontó, verifica tu ID." 
+      });
     }
 
-    const LIMITE_MENSAJES = 5;
-    const TIEMPO_VENTANA_MS = 60 * 1000;
+    // ==========================================
+    // PASO 4: QUEMAR EL PAGO EN EXCEL (Todo fue exitoso)
+    // ==========================================
+    await fetch(URL_GOOGLE_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: "marcar_usado", referencia: dataVerificacion.referencia })
+    });
 
-    function obtenerHistorialRateLimit() {
-        let registro = JSON.parse(localStorage.getItem('ia_chat_limit') || '{"count":0, "resetTime":0}');
-        let ahora = Date.now();
-        if (ahora > registro.resetTime) {
-            registro = { count: 0, resetTime: ahora + TIEMPO_VENTANA_MS };
-            localStorage.setItem('ia_chat_limit', JSON.stringify(registro));
-        }
-        return registro;
-    }
+    // ==========================================
+    // PASO 5: GUARDAR EN PESTAÑA FINALIZADOS
+    // ==========================================
+    const comprobanteSeguro = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
 
-    function actualizarInterfazRateLimit() {
-        let registro = obtenerHistorialRateLimit();
-        let restantes = LIMITE_MENSAJES - registro.count;
-        if (restantes < 0) restantes = 0;
-        
-        const info = document.getElementById('rateLimitInfo');
-        if (restantes === 0) {
-            let segundosRestantes = Math.ceil((registro.resetTime - Date.now()) / 1000);
-            info.innerHTML = `> BLOQUEO_TEMPORAL (${segundosRestantes > 0 ? segundosRestantes : 0}s)`;
-            info.style.color = "var(--danger)";
-        } else {
-            info.innerHTML = `CONSULTAS_RESTANTES: ${restantes}/${LIMITE_MENSAJES}`;
-            info.style.color = "#555";
-        }
-    }
+    await fetch(URL_GOOGLE_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        accion: "registrar_finalizado", 
+        idJugador: id, 
+        paquete: paquete, 
+        referencia: dataVerificacion.referencia, 
+        codigosUsados: "API Directa (FazerCards)", 
+        urlImagen: comprobanteSeguro 
+      })
+    });
 
-    async function enviarMensajeAI(textoUsuario) {
-        let registro = obtenerHistorialRateLimit();
-        if (registro.count >= LIMITE_MENSAJES) {
-            mostrarBurbuja("> COMANDOS_AGOTADOS. Espere.", "var(--danger)");
-            actualizarInterfazRateLimit();
-            return;
-        }
+    return res.status(200).json({ status: "success", message: "Recarga de Blood Strike procesada exitosamente." });
 
-        registro.count++;
-        localStorage.setItem('ia_chat_limit', JSON.stringify(registro));
-        actualizarInterfazRateLimit();
-
-        const contenedorChat = document.getElementById('chat-messages');
-        
-        const msgUser = document.createElement('div');
-        msgUser.className = "msg-bubble user";
-        msgUser.innerText = textoUsuario;
-        contenedorChat.appendChild(msgUser);
-        contenedorChat.scrollTop = contenedorChat.scrollHeight;
-
-        const msgCargando = document.createElement('div');
-        msgCargando.id = "tempCargando";
-        msgCargando.className = "msg-bubble bot";
-        msgCargando.style.fontStyle = "italic";
-        msgCargando.style.color = "#555";
-        msgCargando.innerText = "> Procesando consulta...";
-        contenedorChat.appendChild(msgCargando);
-        contenedorChat.scrollTop = contenedorChat.scrollHeight;
-
-        try {
-            const response = await fetch('/api/ia-soporte', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mensaje: textoUsuario })
-            });
-            
-            const resultado = await response.json();
-            const cargandoEl = document.getElementById('tempCargando');
-            if (cargandoEl) cargandoEl.remove();
-
-            const msgBot = document.createElement('div');
-            msgBot.className = "msg-bubble bot";
-            msgBot.innerHTML = `> ${resultado.respuesta}`;
-            contenedorChat.appendChild(msgBot);
-            contenedorChat.scrollTop = contenedorChat.scrollHeight;
-
-            if(resultado.respaldoWhatsapp || textoUsuario.toLowerCase().includes("ayuda") || textoUsuario.toLowerCase().includes("humano")) {
-                document.getElementById('whatsappEscalateContainer').style.display = 'block';
-            }
-
-        } catch (e) {
-            const cargandoEl = document.getElementById('tempCargando');
-            if (cargandoEl) cargandoEl.remove();
-            
-            const msgError = document.createElement('div');
-            msgError.className = "msg-bubble error";
-            msgError.innerText = "> FALLA_DE_SISTEMA_IA";
-            contenedorChat.appendChild(msgError);
-        }
-    }
-
-    setInterval(actualizarInterfazRateLimit, 1000);
-    cargarDatosBancarios(); cargarCatalogoCliente();
-  </script>
-</body>
-</html>
+  } catch (error) {
+    console.error("Error crítico en recargar-bloodstrike.js:", error);
+    return res.status(500).json({ status: "error", message: "Falla interna del servidor." });
+  }
+}
