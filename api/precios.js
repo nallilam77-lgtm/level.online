@@ -3,16 +3,21 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método no permitido' });
   }
 
-  // Detectamos si la petición viene de Blood Strike o de Free Fire
+  // Capturamos el juego tanto si viene por body (POST) como por query (GET)
   const juego = req.body?.juego || req.query?.juego;
   
-  // Usamos SCRIPT_BLOOD si es Blood Strike, o la variable original para Free Fire
-  const URL_GOOGLE_SCRIPT = juego === 'blood_strike' 
-    ? process.env.SCRIPT_BLOOD 
-    : process.env.SCRIPT_RECARGAS_URL;
+  // Asignamos la URL según el juego solicitado
+  let URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
+
+  if (juego === 'blood_strike') {
+    URL_GOOGLE_SCRIPT = process.env.SCRIPT_BLOOD;
+  }
 
   if (!URL_GOOGLE_SCRIPT) {
-    return res.status(500).json({ status: "error", message: "Falta configurar la variable de entorno en Vercel." });
+    return res.status(500).json({ 
+      status: "error", 
+      message: `Falta configurar la variable de entorno para ${juego || 'general'} en Vercel.` 
+    });
   }
 
   try {
@@ -26,6 +31,7 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
     
   } catch (error) {
+    console.error("Error al conectar con Google Sheets:", error);
     return res.status(500).json({ status: "error", message: "Error al conectar con la hoja de precios." });
   }
 }
