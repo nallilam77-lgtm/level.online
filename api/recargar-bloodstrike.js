@@ -1,47 +1,66 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
 
-  const formatearVES = (monto) => Number(monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  const limpiarMontoVES = (valor) => {
-    if (!valor) return 0;
-    if (typeof valor === 'number') return valor;
-    let m = String(valor).trim().replace(/[^0-9.,-]/g, '');
-    if (!m) return 0;
-
-    let lastComma = m.lastIndexOf(',');
-    let lastDot = m.lastIndexOf('.');
-
-    if (lastComma > lastDot) {
-      m = m.replace(/\./g, '').replace(',', '.'); 
-    } else if (lastComma !== -1 && lastDot === -1) {
-      m = m.replace(',', '.'); 
-    } else if (lastDot !== -1 && lastComma === -1) {
-      let parts = m.split('.');
-      if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
-        m = m.replace(/\./g, ''); 
-      }
-    }
-    return parseFloat(m) || 0;
-  };
-
   try {
+    const URL_GOOGLE_SCRIPT = process.env.SCRIPT_BLOOD; 
+    const FAZER_API_KEY = process.env.FAZER_API_KEY;
+
+    if (!URL_GOOGLE_SCRIPT) {
+      return res.status(500).json({ status: "error", message: "Error interno: Variable SCRIPT_BLOOD no configurada." });
+    }
+
+    // ==========================================
+    // 🔍 ACCIÓN ESPECIAL: OBTENER PRECIOS PARA EL CATÁLOGO
+    // ==========================================
+    if (req.body && req.body.accion === "obtener_precios") {
+      const resPrecios = await fetch(URL_GOOGLE_SCRIPT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: "obtener_precios" })
+      });
+      const dataPrecios = await resPrecios.json();
+      return res.status(200).json(dataPrecios);
+    }
+
+    // ==========================================
+    // 🚀 FLUJO NORMAL DE RECARGA
+    // ==========================================
+    const formatearVES = (monto) => Number(monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const limpiarMontoVES = (valor) => {
+      if (!valor) return 0;
+      if (typeof valor === 'number') return valor;
+      let m = String(valor).trim().replace(/[^0-9.,-]/g, '');
+      if (!m) return 0;
+
+      let lastComma = m.lastIndexOf(',');
+      let lastDot = m.lastIndexOf('.');
+
+      if (lastComma > lastDot) {
+        m = m.replace(/\./g, '').replace(',', '.'); 
+      } else if (lastComma !== -1 && lastDot === -1) {
+        m = m.replace(',', '.'); 
+      } else if (lastDot !== -1 && lastComma === -1) {
+        let parts = m.split('.');
+        if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
+          m = m.replace(/\./g, ''); 
+        }
+      }
+      return parseFloat(m) || 0;
+    };
+
     const { id, paquete, referencia, urlImagen } = req.body;
 
     if (!id || !paquete || !referencia) {
       return res.status(400).json({ status: "error", message: "Faltan datos obligatorios para procesar la recarga." });
     }
 
-    // Usando tu variable exacta de Vercel para el Apps Script de Blood Strike
-    const URL_GOOGLE_SCRIPT = process.env.SCRIPT_BLOOD; 
-    const FAZER_API_KEY = process.env.FAZER_API_KEY;
-
-    if (!URL_GOOGLE_SCRIPT || !FAZER_API_KEY) {
-      return res.status(500).json({ status: "error", message: "Error interno: Variables de entorno no configuradas." });
+    if (!FAZER_API_KEY) {
+      return res.status(500).json({ status: "error", message: "Error interno: Falta la API Key de FazerCards." });
     }
 
     // ==========================================
-    // PASO 1: OBTENER EL PRECIO REAL
+    // PASO 1: OBTENER EL PRECIO REAL DEL PAQUETE A RECARGAR
     // ==========================================
     const resPrecios = await fetch(URL_GOOGLE_SCRIPT, {
       method: 'POST',
