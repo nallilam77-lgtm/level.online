@@ -3,10 +3,22 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método no permitido' });
   }
 
-  // Capturamos el juego tanto si viene por body (POST) como por query (GET)
-  const juego = req.body?.juego || req.query?.juego;
-  
-  // Asignamos la URL según el juego solicitado
+  // Obtenemos de forma segura el parámetro de juego sin importar si viene por body o query
+  let juego = '';
+  if (req.body) {
+    if (typeof req.body === 'string') {
+      try {
+        juego = JSON.parse(req.body).juego;
+      } catch (e) {}
+    } else {
+      juego = req.body.juego;
+    }
+  }
+  if (!juego && req.query) {
+    juego = req.query.juego;
+  }
+
+  // Seleccionamos la URL de Google Script correspondiente de forma estricta
   let URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
 
   if (juego === 'blood_strike') {
@@ -27,11 +39,19 @@ export default async function handler(req, res) {
       body: JSON.stringify({ accion: "obtener_precios" })
     });
     
-    const data = await response.json();
+    const textData = await response.text();
+    
+    // Verificamos que la respuesta comience con formato JSON válido para evitar el error de HTML (<DOCTYPE)
+    if (!textData.trim().startsWith('{') && !textData.trim().startsWith('[')) {
+      console.error("Respuesta inválida de Google Sheets (No es JSON):", textData);
+      return res.status(500).json({ status: "error", message: "La hoja de cálculo respondió con un formato no válido." });
+    }
+
+    const data = JSON.parse(textData);
     return res.status(200).json(data);
     
   } catch (error) {
-    console.error("Error al conectar con Google Sheets:", error);
+    console.error("Error al procesar la solicitud de precios:", error);
     return res.status(500).json({ status: "error", message: "Error al conectar con la hoja de precios." });
   }
 }
