@@ -10,10 +10,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const respuesta = await fetch(URL_GOOGLE_SCRIPT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: "obtener_precios" })
+    // Cambiamos a método GET enviando la acción por la URL para evitar redirecciones de POST
+    const respuesta = await fetch(`${URL_GOOGLE_SCRIPT}?accion=obtener_precios`, {
+      method: 'GET'
     });
 
     const data = await respuesta.json();
