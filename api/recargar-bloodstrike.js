@@ -25,6 +25,22 @@ export default async function handler(req, res) {
     return parseFloat(m) || 0;
   };
 
+  // 🛡️ Función auxiliar para evitar que un HTML de Google rompa el servidor
+  async function callGoogleScript(url, payload) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      console.error("Google Apps Script devolvió HTML en lugar de JSON:", text);
+      throw new Error("Error interno en Google Sheets o Apps Script (Respuesta HTML no válida).");
+    }
+  }
+
   try {
     const { id, paquete, referencia, urlImagen } = req.body;
 
@@ -32,7 +48,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ status: "error", message: "Faltan datos obligatorios para procesar la recarga." });
     }
 
-    // Usando tu variable exacta de Vercel para el Apps Script de Blood Strike
     const URL_GOOGLE_SCRIPT = process.env.SCRIPT_BLOOD; 
     const FAZER_API_KEY = process.env.FAZER_API_KEY;
 
@@ -41,22 +56,16 @@ export default async function handler(req, res) {
     }
 
     // ==========================================
-    // PASO 1: OBTENER EL PRECIO REAL
+    // PASO 1: OBTENER EL PRECIO REAL (Seguro)
     // ==========================================
-    const resPrecios = await fetch(URL_GOOGLE_SCRIPT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: "obtener_precios" })
-    });
-    const dataPrecios = await resPrecios.json();
+    const dataPrecios = await callGoogleScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" });
 
     if (!dataPrecios || dataPrecios.status !== "success" || !dataPrecios.catalogo) {
-      return res.status(500).json({ status: "error", message: "Error al leer la base de datos de precios." });
+      return res.status(500).json({ status: "error", message: dataPrecios.message || "Error al leer la base de datos de precios." });
     }
 
     const numeroOro = String(paquete).replace(/[^0-9]/g, '');
     
-    // Busca el paquete en Google Sheets ignorando letras (ej. "51 oro" coincide con "51")
     const paqueteGsheet = dataPrecios.catalogo.find(p => String(p.diamantes || p.paquete).replace(/[^0-9]/g, '') === numeroOro);
     if (!paqueteGsheet) {
       return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado." });
@@ -65,25 +74,23 @@ export default async function handler(req, res) {
     const precioReal = limpiarMontoVES(paqueteGsheet.precio);
 
     // ==========================================
-    // PASO 2: BUSCAR PAGO Y VERIFICAR
+    // PASO 2: BUSCAR PAGO Y VERIFICAR (Seguro)
     // ==========================================
-    const resVerificacion = await fetch(URL_GOOGLE_SCRIPT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: "verificar_pago", referencia: referencia, monto: precioReal })
+    const dataVerificacion = await callGoogleScript(URL_GOOGLE_SCRIPT, { 
+      accion: "verificar_pago", 
+      referencia: referencia, 
+      monto: precioReal 
     });
-    const dataVerificacion = await resVerificacion.json();
 
     if (!dataVerificacion || !dataVerificacion.encontrado) {
       return res.status(400).json({ status: "error", message: dataVerificacion.message || "Pago no encontrado o ya utilizado." });
     }
     
     if (dataVerificacion.insuficiente) {
-      await fetch(URL_GOOGLE_SCRIPT, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ accion: "marcar_verificado", referencia: dataVerificacion.referencia }) 
-      });
+      await callGoogleScript(URL_GOOGLE_SCRIPT, { 
+        accion: "marcar_verificado", 
+        referencia: dataVerificacion.referencia 
+      }).catch(() => {});
       
       const pagado = Number(dataVerificacion.montoPagado) || 0;
       const faltante = precioReal - pagado;
@@ -113,7 +120,7 @@ export default async function handler(req, res) {
 
     const offerIdFinal = codigosFazer[numeroOro];
     if (!offerIdFinal) {
-      await fetch(URL_GOOGLE_SCRIPT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: "marcar_verificado", referencia: dataVerificacion.referencia }) });
+      await callGoogleScript(URL_GOOGLE_SCRIPT, { accion: "marcar_verificado", referencia: dataVerificacion.referencia }).catch(() => {});
       return res.status(400).json({ status: "error", message: "El paquete solicitado no existe en el catálogo del proveedor." });
     }
 
@@ -139,25 +146,20 @@ export default async function handler(req, res) {
       console.error("❌ Error en FazerCards:", errorMsg);
 
       // 📝 ANOTAR EL ERROR EN LA HOJA
-      await fetch(URL_GOOGLE_SCRIPT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          accion: "registrar_error", 
-          idJugador: id, 
-          paquete: paquete, 
-          referencia: dataVerificacion.referencia, 
-          codigosUsados: "API FAZERCARDS", 
-          urlImagen: `⚠️ FALLO PROVEEDOR: ${errorMsg} | 🧾 REF: ${dataVerificacion.referencia}` 
-        })
-      });
+      await callGoogleScript(URL_GOOGLE_SCRIPT, { 
+        accion: "registrar_error", 
+        idJugador: id, 
+        paquete: paquete, 
+        referencia: dataVerificacion.referencia, 
+        codigosUsados: "API FAZERCARDS", 
+        urlImagen: `⚠️ FALLO PROVEEDOR: ${errorMsg} | 🧾 REF: ${dataVerificacion.referencia}` 
+      }).catch(() => {});
 
-      // 🔓 DEVOLVER A VERIFICADO: Como la recarga por ID falló, no perdimos dinero. El cliente conserva su saldo.
-      await fetch(URL_GOOGLE_SCRIPT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: "marcar_verificado", referencia: dataVerificacion.referencia })
-      });
+      // 🔓 DEVOLVER A VERIFICADO
+      await callGoogleScript(URL_GOOGLE_SCRIPT, { 
+        accion: "marcar_verificado", 
+        referencia: dataVerificacion.referencia 
+      }).catch(() => {});
 
       return res.status(400).json({ 
         status: "error", 
@@ -166,36 +168,31 @@ export default async function handler(req, res) {
     }
 
     // ==========================================
-    // PASO 4: QUEMAR EL PAGO EN EXCEL (Todo fue exitoso)
+    // PASO 4: QUEMAR EL PAGO EN EXCEL
     // ==========================================
-    await fetch(URL_GOOGLE_SCRIPT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: "marcar_usado", referencia: dataVerificacion.referencia })
-    });
+    await callGoogleScript(URL_GOOGLE_SCRIPT, { 
+      accion: "marcar_usado", 
+      referencia: dataVerificacion.referencia 
+    }).catch(() => {});
 
     // ==========================================
     // PASO 5: GUARDAR EN PESTAÑA FINALIZADOS
     // ==========================================
     const comprobanteSeguro = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
 
-    await fetch(URL_GOOGLE_SCRIPT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        accion: "registrar_finalizado", 
-        idJugador: id, 
-        paquete: paquete, 
-        referencia: dataVerificacion.referencia, 
-        codigosUsados: "API Directa (FazerCards)", 
-        urlImagen: comprobanteSeguro 
-      })
-    });
+    await callGoogleScript(URL_GOOGLE_SCRIPT, { 
+      accion: "registrar_finalizado", 
+      idJugador: id, 
+      paquete: paquete, 
+      referencia: dataVerificacion.referencia, 
+      codigosUsados: "API Directa (FazerCards)", 
+      urlImagen: comprobanteSeguro 
+    }).catch(() => {});
 
     return res.status(200).json({ status: "success", message: "Recarga de Blood Strike procesada exitosamente." });
 
   } catch (error) {
-    console.error("Error crítico en recargar-bloodstrike.js:", error);
-    return res.status(500).json({ status: "error", message: "Falla interna del servidor." });
+    console.error("Error crítico en recargar-bloodstrike.js:", error.message);
+    return res.status(500).json({ status: "error", message: error.message || "Falla interna del servidor." });
   }
 }
