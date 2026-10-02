@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     return parseFloat(m) || 0;
   };
 
-  // 🛡️ Función auxiliar para evitar que un HTML de Google rompa el servidor
+  // 🛡️ Función auxiliar con depuración avanzada de HTML
   async function callGoogleScript(url, payload) {
     const response = await fetch(url, {
       method: 'POST',
@@ -36,8 +36,9 @@ export default async function handler(req, res) {
     try {
       return JSON.parse(text);
     } catch (err) {
-      console.error("Google Apps Script devolvió HTML en lugar de JSON:", text);
-      throw new Error("Error interno en Google Sheets o Apps Script (Respuesta HTML no válida).");
+      // 🚨 AQUÍ VERÁS EL ERROR EXACTO EN LOS LOGS DE VERCEL
+      console.error("🚨 HTML COMPLETO RECIBIDO DE GOOGLE APPS SCRIPT:", text);
+      throw new Error("Google Apps Script falló y devolvió HTML. Revisa los logs de Vercel para ver el motivo.");
     }
   }
 
@@ -56,7 +57,7 @@ export default async function handler(req, res) {
     }
 
     // ==========================================
-    // PASO 1: OBTENER EL PRECIO REAL (Seguro)
+    // PASO 1: OBTENER EL PRECIO REAL
     // ==========================================
     const dataPrecios = await callGoogleScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" });
 
@@ -74,7 +75,7 @@ export default async function handler(req, res) {
     const precioReal = limpiarMontoVES(paqueteGsheet.precio);
 
     // ==========================================
-    // PASO 2: BUSCAR PAGO Y VERIFICAR (Seguro)
+    // PASO 2: BUSCAR PAGO Y VERIFICAR
     // ==========================================
     const dataVerificacion = await callGoogleScript(URL_GOOGLE_SCRIPT, { 
       accion: "verificar_pago", 
@@ -145,7 +146,6 @@ export default async function handler(req, res) {
       const errorMsg = error.message || "Falla de red con el proveedor.";
       console.error("❌ Error en FazerCards:", errorMsg);
 
-      // 📝 ANOTAR EL ERROR EN LA HOJA
       await callGoogleScript(URL_GOOGLE_SCRIPT, { 
         accion: "registrar_error", 
         idJugador: id, 
@@ -155,7 +155,6 @@ export default async function handler(req, res) {
         urlImagen: `⚠️ FALLO PROVEEDOR: ${errorMsg} | 🧾 REF: ${dataVerificacion.referencia}` 
       }).catch(() => {});
 
-      // 🔓 DEVOLVER A VERIFICADO
       await callGoogleScript(URL_GOOGLE_SCRIPT, { 
         accion: "marcar_verificado", 
         referencia: dataVerificacion.referencia 
