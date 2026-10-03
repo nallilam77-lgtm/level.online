@@ -326,7 +326,7 @@
   <!-- Modal Pago Insuficiente -->
   <div id="modalWhatsApp" class="overlay-pantalla">
     <div class="modal-content whatsapp-theme">
-      <h2 class="modal-titulo">⚠️ PAGO INSUFICIENTE</h2>
+      <h2 class="modal-titulo">⚠️️ PAGO INSUFICIENTE</h2>
       <p id="textoMotivoWhatsApp" style="color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;"></p>
       
       <div class="monto-detalle">
@@ -826,10 +826,25 @@
       document.getElementById('resumenPaquete').textContent = `${diamantesClean} Diamantes`; 
       document.getElementById('resumenMonto').textContent = `${paqueteSeleccionado.precio} Bs`;
       
+      // ==========================================
+      // MODIFICACIÓN: OCULTAR IA AL ABRIR EL MODAL
+      // ==========================================
+      document.getElementById('chatModalWindow').classList.remove('active');
+      document.querySelector('.floating-chat-btn').style.display = 'none';
+
       document.getElementById('modalConfirmacion').style.display = 'flex';
     };
 
-    window.cerrarModal = function() { document.getElementById('modalConfirmacion').style.display = 'none'; };
+    window.cerrarModal = function() { 
+      document.getElementById('modalConfirmacion').style.display = 'none'; 
+      // ==========================================
+      // MODIFICACIÓN: MOSTRAR IA AL CERRAR (si no está cargando)
+      // ==========================================
+      if (!isProcessing) {
+        document.querySelector('.floating-chat-btn').style.display = 'flex';
+      }
+    };
+    
     window.cerrarModalNoEncontrado = function() { document.getElementById('modalPagoNoEncontrado').style.display = 'none'; };
     window.cerrarModalWhatsApp = function() { document.getElementById('modalWhatsApp').style.display = 'none'; };
 
@@ -883,7 +898,10 @@
 
       const referenciaUsuario = document.getElementById('inputReferencia').value.trim();
       const playerId = document.getElementById('inputPlayerId').value.trim();
-      cerrarModal(); document.getElementById('pantallaProcesando').style.display = 'flex';
+      cerrarModal(); 
+      // Nos aseguramos de mantener el botón oculto durante la pantalla de procesamiento
+      document.querySelector('.floating-chat-btn').style.display = 'none';
+      document.getElementById('pantallaProcesando').style.display = 'flex';
 
       const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; globalTxnCode = 'TXN-';
       for (let i = 0; i < 6; i++) globalTxnCode += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
@@ -1145,7 +1163,6 @@
         document.getElementById('inputReferencia').value = refInputChat;
         window.chatFileOverride = fileInputChat.files[0];
 
-        toggleChatModal(); 
         abrirModal();      
     };
 
