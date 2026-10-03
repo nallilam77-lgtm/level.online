@@ -228,6 +228,10 @@
 
     .btn-whatsapp-redirect { background: var(--whatsapp); color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; margin-top: 8px; width: 100%; text-decoration: none; text-transform: uppercase; }
 
+    /* Estilos para las tarjetas dentro del chat */
+    .chat-action-card { background: rgba(0, 0, 0, 0.4); border: 1px solid var(--cyan-text); padding: 12px; border-radius: 12px; margin-top: 8px; text-align: center; }
+    .chat-action-card input[type="file"] { margin-bottom: 8px; background: #0d0818; }
+
     /* Modales generales */
     .overlay-pantalla { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 1000; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; }
     .modal-content { background: var(--panel-bg); border: 2px solid var(--primary-orange); border-radius: 20px; padding: 24px 18px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(255, 102, 0, 0.2); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; }
@@ -584,6 +588,8 @@
 
         let paquetes = data.catalogo;
         paquetes.sort((a, b) => window.formatearMontoVES(a.diamantes) - window.formatearMontoVES(b.diamantes));
+        
+        window.catalogoGlobal = paquetes;
 
         container.innerHTML = '';
         paquetes.forEach((item, index) => {
@@ -634,7 +640,7 @@
           statusDiv.style.color = 'var(--cyan-text)'; statusDiv.innerHTML = `✔️ Jugador: <strong style="color: #fff;">${nombreJugadorVerificado}</strong>`;
         } else {
           idVerificado = true; nombreJugadorVerificado = "ID Validado";
-          statusDiv.style.color = 'var(--cyan-text)'; statusDiv.innerHTML = `✔️ <strong style="color: #fff;">ID Validado</strong>`;
+          statusDiv.style.color = 'var(--cyan-text)'; statusDiv.innerHTML = `✔️️ <strong style="color: #fff;">ID Validado</strong>`;
         }
       } catch (error) { 
         idVerificado = true; nombreJugadorVerificado = "ID Validado";
@@ -696,7 +702,8 @@
     window.abrirModal = function() {
       const id = document.getElementById('inputPlayerId').value.trim();
       const ref = document.getElementById('inputReferencia').value.trim();
-      const fileInput = document.getElementById('inputComprobante');
+      
+      const archivo = window.chatFileOverride ? window.chatFileOverride : document.getElementById('inputComprobante').files[0];
       
       let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo') || '0');
       if (Date.now() < tiempoBloqueo) {
@@ -705,7 +712,7 @@
         return;
       }
 
-      if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5 || !fileInput.files[0]) { 
+      if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5 || !archivo) { 
         mostrarBurbuja("⚠️ Faltan datos o es obligatorio subir el comprobante de pago.", "var(--danger)"); 
         return; 
       }
@@ -784,12 +791,12 @@
       
       try {
           let captureUrl = "Sin comprobante";
-          let fileInput = document.getElementById('inputComprobante');
+          let archivoCargar = window.chatFileOverride ? window.chatFileOverride : document.getElementById('inputComprobante').files[0];
           
-          if (fileInput.files[0]) {
+          if (archivoCargar) {
               textoElem.innerHTML = "📄 Adjuntando comprobante en servidor...";
               barraFill.style.width = '20%';
-              captureUrl = await subirComprobanteDrive(fileInput.files[0]);
+              captureUrl = await subirComprobanteDrive(archivoCargar);
           }
 
           textoElem.innerHTML = "🔍 Verificando pago y bloqueando referencia...";
@@ -995,6 +1002,50 @@
         }
     }
 
+    // Funciones Auxiliares para procesar desde el chat (NUEVAS)
+    window.verificarIdDesdeChat = async function(id, paqueteTexto) {
+        document.getElementById('inputPlayerId').value = id;
+        mostrarBurbuja("⏳ Verificando ID...", "var(--cyan-text)");
+
+        try {
+            const response = await fetch(SCRIPT_VALIDADOR_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) });
+            const data = await response.json();
+
+            idVerificado = true;
+            nombreJugadorVerificado = data.valid && data.player_name ? data.player_name : "ID Validado";
+
+            if (window.catalogoGlobal) {
+                let numeroPaquete = paqueteTexto.replace(/[^0-9]/g, '');
+                paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
+            }
+            if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteTexto, precio: "Validando..." }; }
+
+            const chatContainer = document.getElementById('chat-messages');
+            chatContainer.innerHTML += `<div class="msg-bubble user" style="background: var(--success); text-align:left;">✅ <b>Jugador:</b> ${nombreJugadorVerificado}<br>💎 <b>Paquete:</b> ${paqueteSeleccionado.diamantes}<br>💰 <b>Total:</b> ${paqueteSeleccionado.precio} Bs<br><br>Todo correcto, dame los datos de pago.</div>`;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            enviarMensajeAI("El jugador " + nombreJugadorVerificado + " ha sido confirmado para " + paqueteSeleccionado.diamantes + ". Dame los datos de pago.");
+        } catch (e) {
+            mostrarBurbuja("❌ Error al verificar. Intenta nuevamente.", "var(--danger)");
+        }
+    };
+
+    window.procesarRecargaDesdeChat = function() {
+        const fileInputChat = document.getElementById('inputComprobanteChat');
+        const refInputChat = document.getElementById('inputRefChat').value.trim();
+
+        if (refInputChat.length !== 5 || !fileInputChat.files[0]) {
+            mostrarBurbuja("⚠️ Debes subir el comprobante y escribir los 5 dígitos.", "var(--danger)");
+            return;
+        }
+
+        document.getElementById('inputReferencia').value = refInputChat;
+        window.chatFileOverride = fileInputChat.files[0];
+
+        toggleChatModal(); 
+        abrirModal();      
+    };
+
     async function enviarMensajeAI(textoUsuario) {
         let registro = obtenerHistorialRateLimit();
         if (registro.count >= LIMITE_MENSAJES) {
@@ -1003,7 +1054,6 @@
             return;
         }
 
-        // Incrementar contador
         registro.count++;
         localStorage.setItem('ia_chat_limit', JSON.stringify(registro));
         actualizarInterfazRateLimit();
@@ -1024,11 +1074,26 @@
         contenedorChat.appendChild(msgCargando);
         contenedorChat.scrollTop = contenedorChat.scrollHeight;
 
+        let nombreJuegoDetectado = "Juego Desconocido";
+        const tituloBanner = document.querySelector('.title-banner');
+        if (tituloBanner) {
+            nombreJuegoDetectado = tituloBanner.innerText.replace(/[^a-zA-Z\s]/g, '').trim();
+        }
+        
+        let catalogoTexto = "Aún cargando precios...";
+        if (window.catalogoGlobal && window.catalogoGlobal.length > 0) {
+            catalogoTexto = window.catalogoGlobal.map(p => `- ${p.diamantes}: ${p.precio} Bs`).join("\n");
+        }
+
         try {
             const response = await fetch('/api/ia-soporte', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mensaje: textoUsuario })
+                body: JSON.stringify({ 
+                    mensaje: textoUsuario,
+                    juego: nombreJuegoDetectado,
+                    catalogo: catalogoTexto
+                })
             });
             
             const resultado = await response.json();
@@ -1037,11 +1102,61 @@
 
             const msgBot = document.createElement('div');
             msgBot.className = "msg-bubble bot";
-            msgBot.innerText = resultado.respuesta;
+            let htmlRespuesta = resultado.respuesta;
+
+            // 1. Detectar si la IA pide verificar ID (Usado para Free Fire)
+            const matchVerificar = htmlRespuesta.match(/\[ACCION_VERIFICAR:([\w-]+):(.*?)\]/);
+            if (matchVerificar) {
+                let idChat = matchVerificar[1];
+                let paqueteChat = matchVerificar[2];
+                htmlRespuesta = htmlRespuesta.replace(matchVerificar[0], `
+                    <div class="chat-action-card">
+                        <p style="font-size:12px; margin-bottom:8px;">Validaremos el ID: <b>${idChat}</b></p>
+                        <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">🔍 VERIFICAR JUGADOR</button>
+                    </div>
+                `);
+            }
+
+            // 2. Detectar si la IA manda la caja de pago directa con datos (Usado para Blood Strike/Roblox)
+            const matchPagoDirecto = htmlRespuesta.match(/\[ACCION_PAGO:([\w-]+):(.*?)\]/);
+            if (matchPagoDirecto) {
+                let idChat = matchPagoDirecto[1];
+                let paqueteChat = matchPagoDirecto[2];
+
+                document.getElementById('inputPlayerId').value = idChat;
+                idVerificado = true;
+                nombreJugadorVerificado = "Jugador de " + nombreJuegoDetectado;
+
+                if (window.catalogoGlobal) {
+                    let numeroPaquete = paqueteChat.replace(/[^0-9]/g, '');
+                    paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
+                }
+                if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteChat, precio: "Calculando..." }; }
+
+                htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], "[ACCION_PAGO]");
+            }
+
+            // 3. Renderizar la Caja de Pago
+            if (htmlRespuesta.includes("[ACCION_PAGO]")) {
+                htmlRespuesta = htmlRespuesta.replace("[ACCION_PAGO]", `
+                    <div class="chat-action-card">
+                        <p style="color:var(--primary-orange); font-weight:900; font-size:13px;">🏦 DATOS DE PAGO</p>
+                        <p style="font-size:12px; margin: 8px 0; line-height:1.5;">Banco: ${datosBancoGlobal.banco}<br>Tel: ${datosBancoGlobal.telefono}<br>Cédula: ${datosBancoGlobal.cedula}</p>
+                        <button class="btn-copy" style="padding: 10px; font-size: 11px; margin-bottom: 12px;" onclick="copiarDatosBanco()">📋 COPIAR DATOS</button>
+                        <hr style="border-color: rgba(255,102,0,0.2); margin: 12px 0;">
+                        <p style="color:var(--cyan-text); font-weight:bold; font-size: 12px; margin-bottom:8px;">Sube tu comprobante:</p>
+                        <input type="file" id="inputComprobanteChat" accept="image/*">
+                        <input type="text" id="inputRefChat" class="input-field" style="padding: 10px; font-size: 12px; margin-bottom: 4px;" placeholder="Últimos 5 dígitos" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                        <a href="https://drive.google.com/file/d/1b0V-JMYmBqEwyMxLOKySIESIU2XLtYUW/view?usp=sharing" target="_blank" style="font-size: 10px; color: var(--warning); display: block; margin-bottom: 12px; text-decoration: underline;">¿Dónde está la referencia? (Ver pista)</a>
+                        <button class="btn-submit-order" style="padding: 12px; font-size: 12px;" onclick="procesarRecargaDesdeChat()">🚀 PROCESAR RECARGA</button>
+                    </div>
+                `);
+            }
+
+            msgBot.innerHTML = htmlRespuesta;
             contenedorChat.appendChild(msgBot);
             contenedorChat.scrollTop = contenedorChat.scrollHeight;
 
-            // Si la IA no pudo ayudar o el usuario tiene problemas graves, mostramos el botón de WhatsApp
             if(resultado.respaldoWhatsapp || textoUsuario.toLowerCase().includes("ayuda") || textoUsuario.toLowerCase().includes("humano")) {
                 document.getElementById('whatsappEscalateContainer').style.display = 'block';
             }
