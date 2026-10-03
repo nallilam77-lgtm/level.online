@@ -71,6 +71,7 @@
       100% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0); }
     }
     @keyframes spin { 100% { transform: rotate(360deg); } }
+    @keyframes typingBounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); box-shadow: 0 0 8px var(--cyan-text); } }
 
     .anim-slide-up { opacity: 0; animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     .delay-1 { animation-delay: 0.1s; }
@@ -223,6 +224,12 @@
     .msg-bubble.user { background: #222; border: 1px solid var(--cyan-text); color: #fff; align-self: flex-end; }
     .msg-bubble.error { background: var(--danger-dark); color: var(--danger); border: 1px solid var(--danger); align-self: center; text-align: center; }
 
+    /* Animación de los puntitos de la IA */
+    .typing-indicator { display: flex; gap: 4px; padding: 2px 4px; align-items: center; }
+    .typing-dot { width: 6px; height: 6px; background: var(--cyan-text); border-radius: 50%; animation: typingBounce 1.4s infinite ease-in-out both; }
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
     .chat-footer-box {
       padding: 12px;
       background: var(--panel-bg);
@@ -232,6 +239,11 @@
     .chat-rate-limit-info { font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 6px; font-weight: 600; }
 
     .btn-whatsapp-redirect { background: var(--whatsapp); color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; margin-top: 8px; width: 100%; text-decoration: none; text-transform: uppercase; }
+
+    /* Estilos para las tarjetas dentro del chat */
+    .chat-action-card { background: rgba(0, 0, 0, 0.6); border: 1px solid var(--cyan-text); padding: 12px; border-radius: 12px; margin-top: 8px; text-align: center; }
+    .chat-action-card input[type="file"] { margin-bottom: 8px; background: #111; }
+    .chat-action-card .resultado-ia-chat { display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; background: rgba(0,229,255,0.1); padding: 8px; border-radius: 8px; border: 1px dashed var(--cyan-text); }
 
     /* Modales generales */
     .overlay-pantalla { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(8px); z-index: 1000; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; }
@@ -458,10 +470,10 @@
         <div class="step-title">4. SUBE TU COMPROBANTE (CAPTURE) <span style="color: var(--danger);">*</span></div>
         <input type="file" id="inputComprobante" accept="image/*" onchange="analizarCapture(this)" required>
         <div id="cajaIA" style="display: none; margin-top: 12px; padding: 12px; background: rgba(0, 229, 255, 0.05); border: 1px dashed var(--cyan-text); border-radius: 12px;">
-          <div id="cargandoIA" style="color: var(--cyan-text); font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 8px;">Leyendo comprobante...</div>
+          <div id="cargandoIA" style="color: var(--cyan-text); font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 8px;">Leyendo comprobante con IA...</div>
           <div id="resultadoIA" style="display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
             <span style="color: var(--text-main); font-size: 12px; font-weight: bold;">Referencia detectada: <span id="refIA" style="font-size: 16px; color: var(--cyan-text); letter-spacing: 1px; display: block; margin-top: 4px;"></span></span>
-            <button type="button" onclick="usarReferenciaIA()" style="background: var(--primary-gradient); color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-size: 11px;">Usar Número</button>
+            <button type="button" onclick="usarReferenciaIA('inputReferencia', 'refIA')" style="background: var(--primary-gradient); color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-size: 11px;">Usar Número</button>
           </div>
         </div>
       </div>
@@ -497,7 +509,7 @@
 
     <div class="chat-body-messages" id="chat-messages">
       <div class="msg-bubble bot">
-        👋 ¡Hola! Soy tu asistente virtual de Level Up. ¿Tienes dudas sobre tu Pago Móvil o cómo conseguir tu número de referencia? ¡Pregúntame!
+        👋 ¡Hola! Te ayudaré a realizar tu recarga paso a paso. Si es tu primera vez o tienes problemas, ¡escríbeme!
       </div>
     </div>
 
@@ -592,6 +604,8 @@
 
         let paquetes = data.catalogo;
         paquetes.sort((a, b) => window.formatearMontoVES(a.diamantes) - window.formatearMontoVES(b.diamantes));
+        
+        window.catalogoGlobal = paquetes;
 
         container.innerHTML = '';
         paquetes.forEach((item, index) => {
@@ -622,7 +636,7 @@
       if (idVerificado && paqueteSeleccionado) { checkoutSection.classList.add('active'); } else { checkoutSection.classList.remove('active'); }
     }
 
-    // LÓGICA DE CONFIRMACIÓN DIRECTA DE ID (Sin API externa)
+    // LÓGICA DE CONFIRMACIÓN DIRECTA DE ID (Sin API externa en Blood Strike)
     document.getElementById('btnVerifyId').addEventListener('click', () => {
       const idInput = document.getElementById('inputPlayerId').value.trim();
       const statusDiv = document.getElementById('idStatus'); 
@@ -645,19 +659,48 @@
 
     document.getElementById('inputPlayerId').addEventListener('input', () => { idVerificado = false; nombreJugadorVerificado = ""; document.getElementById('idStatus').style.display = 'none'; verificarEstadoDesbloqueo(); });
 
-    window.analizarCapture = async function(input) {
-      if (!input.files || !input.files[0]) return; const file = input.files[0];
-      const cajaIA = document.getElementById('cajaIA'); const resultadoIA = document.getElementById('resultadoIA'); const refIA = document.getElementById('refIA'); const cargandoIA = document.getElementById('cargandoIA');
-      if (!file.type.startsWith("image/")) return; if (typeof Tesseract === 'undefined') return;
-      
-      cajaIA.style.display = 'block'; cargandoIA.style.display = 'flex'; resultadoIA.style.display = 'none';
-      
+    // =========================================================================
+    // LÓGICA DE EXTRACCIÓN DE REFERENCIA (IA PRINCIPAL -> TESSERACT RESPALDO)
+    // =========================================================================
+    async function procesarImagenLector(file, onStart, onSuccess, onFallbackTesseract, onError) {
+      if (!file.type.startsWith("image/")) return;
+      onStart();
+
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64Data = reader.result;
+        try {
+          const response = await fetch('/api/ia-soporte', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base64: base64Data, mimeType: file.type })
+          });
+          const data = await response.json();
+
+          if (data && data.status === "success" && data.referencia) {
+            onSuccess(data.referencia);
+          } else if (data && data.fallbackTesseract) {
+            onFallbackTesseract(file);
+          } else {
+            onError();
+          }
+        } catch (e) {
+          onFallbackTesseract(file);
+        }
+      };
+      reader.onerror = onError;
+    }
+
+    async function ejecutarTesseract(file) {
+      if (typeof Tesseract === 'undefined') return null;
       try {
         const resultadoOCR = await Tesseract.recognize(file, 'eng+spa');
         let textoLimpio = resultadoOCR.data.text
           .replace(/\b(202[0-9]|20[0-2][0-9]|[0-3][0-9][-\/][0-1][0-9][-\/][0-9]{2,4})\b/g, '')
           .replace(/0414[-.\s]?8653510/g, '')
-          .replace(/13476015/g, '');
+          .replace(/13476015/g, '')
+          .replace(/V-13476015/g, '');
 
         let numerosEncontrados = "";
         const matchEtiqueta = textoLimpio.match(/(?:referencia|operacion|nro|ref|doc)[:\s]*([0-9]{6,20})/i);
@@ -672,17 +715,84 @@
         }
         
         if (numerosEncontrados && numerosEncontrados.length >= 5) {
-          refIA.textContent = numerosEncontrados.slice(-5);
-          cargandoIA.style.display = 'none'; resultadoIA.style.display = 'flex';
-        } else { 
-          cajaIA.style.display = 'none'; 
+          return numerosEncontrados.slice(-5);
         }
-      } catch (e) { 
-        cajaIA.style.display = 'none'; 
+        return null;
+      } catch (e) {
+        return null;
       }
+    }
+
+    // Analizador para el Input Principal (Formulario de la página)
+    window.analizarCapture = async function(input) {
+      if (!input.files || !input.files[0]) return; const file = input.files[0];
+      const cajaIA = document.getElementById('cajaIA'); const resultadoIA = document.getElementById('resultadoIA'); const refIA = document.getElementById('refIA'); const cargandoIA = document.getElementById('cargandoIA');
+      
+      procesarImagenLector(
+        file,
+        () => {
+          cajaIA.style.display = 'block'; cargandoIA.style.display = 'flex'; resultadoIA.style.display = 'none';
+          cargandoIA.innerText = "Leyendo comprobante con IA...";
+        },
+        (referencia) => {
+          refIA.textContent = referencia;
+          cargandoIA.style.display = 'none'; resultadoIA.style.display = 'flex';
+        },
+        async (archivo) => {
+          cargandoIA.innerText = "IA ocupada. Leyendo texto localmente...";
+          const refTesseract = await ejecutarTesseract(archivo);
+          if (refTesseract) {
+            refIA.textContent = refTesseract;
+            cargandoIA.style.display = 'none'; resultadoIA.style.display = 'flex';
+          } else {
+            cajaIA.style.display = 'none';
+          }
+        },
+        () => { cajaIA.style.display = 'none'; }
+      );
     };
 
-    window.usarReferenciaIA = function() { document.getElementById('inputReferencia').value = document.getElementById('refIA').textContent; };
+    // Analizador para el Input secundario (El del CHAT DE IA)
+    window.analizarCaptureChat = async function(input) {
+      if (!input.files || !input.files[0]) return; const file = input.files[0];
+      const resultBox = document.getElementById('resultadoIAChat');
+      
+      if(!resultBox) return;
+
+      procesarImagenLector(
+        file,
+        () => {
+          resultBox.style.display = 'flex';
+          resultBox.innerHTML = `<span style="font-size:11px; color:var(--cyan-text);">🤖 IA extrayendo referencia...</span>`;
+        },
+        (referencia) => {
+          resultBox.innerHTML = `
+            <span style="color: var(--text-main); font-size: 11px; font-weight: bold;">Encontré: <span style="font-size: 14px; color: var(--cyan-text); letter-spacing: 1px;">${referencia}</span></span>
+            <button type="button" onclick="usarReferenciaIA('inputRefChat', null, '${referencia}')" style="background: var(--primary-gradient); color: white; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-size: 10px;">Usar Número</button>
+          `;
+        },
+        async (archivo) => {
+          resultBox.innerHTML = `<span style="font-size:11px; color:var(--warning);">IA ocupada. Escaneando localmente...</span>`;
+          const refTesseract = await ejecutarTesseract(archivo);
+          if (refTesseract) {
+            resultBox.innerHTML = `
+              <span style="color: var(--text-main); font-size: 11px; font-weight: bold;">Encontré: <span style="font-size: 14px; color: var(--cyan-text); letter-spacing: 1px;">${refTesseract}</span></span>
+              <button type="button" onclick="usarReferenciaIA('inputRefChat', null, '${refTesseract}')" style="background: var(--primary-gradient); color: white; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-size: 10px;">Usar Número</button>
+            `;
+          } else {
+            resultBox.style.display = 'none';
+          }
+        },
+        () => { resultBox.style.display = 'none'; }
+      );
+    };
+
+    window.usarReferenciaIA = function(targetInputId, sourceTextId, valorDirecto) { 
+      // Por defecto funciona para el main si no se envían los parametros
+      let target = targetInputId || 'inputReferencia';
+      let valor = valorDirecto ? valorDirecto : document.getElementById(sourceTextId || 'refIA').textContent;
+      document.getElementById(target).value = valor; 
+    };
 
     window.copiarDatosBanco = function() {
       navigator.clipboard.writeText(`Banco: ${datosBancoGlobal.banco}\nTeléfono: ${datosBancoGlobal.telefono}\nCédula: ${datosBancoGlobal.cedula}`).then(() => {
@@ -696,7 +806,7 @@
     window.abrirModal = function() {
       const id = document.getElementById('inputPlayerId').value.trim();
       const ref = document.getElementById('inputReferencia').value.trim();
-      const fileInput = document.getElementById('inputComprobante');
+      const archivo = window.chatFileOverride ? window.chatFileOverride : document.getElementById('inputComprobante').files[0];
       
       let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo') || '0');
       if (Date.now() < tiempoBloqueo) {
@@ -705,7 +815,7 @@
         return;
       }
 
-      if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5 || !fileInput.files[0]) { 
+      if (id.length < 5 || !idVerificado || !paqueteSeleccionado || ref.length !== 5 || !archivo) { 
         mostrarBurbuja("⚠️ Faltan datos o es obligatorio subir el comprobante de pago.", "var(--danger)"); 
         return; 
       }
@@ -784,12 +894,12 @@
       
       try {
           let captureUrl = "Sin comprobante";
-          let fileInput = document.getElementById('inputComprobante');
+          let archivoCargar = window.chatFileOverride ? window.chatFileOverride : document.getElementById('inputComprobante').files[0];
           
-          if (fileInput.files[0]) {
+          if (archivoCargar) {
               textoElem.innerHTML = "📄 Adjuntando comprobante en servidor...";
               barraFill.style.width = '20%';
-              captureUrl = await subirComprobanteDrive(fileInput.files[0]);
+              captureUrl = await subirComprobanteDrive(archivoCargar);
           }
 
           textoElem.innerHTML = "🔍 Verificando pago y bloqueando referencia...";
@@ -995,7 +1105,47 @@
         }
     }
 
-    async function enviarMensajeAI(textoUsuario) {
+    // Funciones Auxiliares para procesar desde el chat
+    window.verificarIdDesdeChat = function(id, paqueteTexto) {
+        document.getElementById('inputPlayerId').value = id;
+        mostrarBurbuja("⏳ Confirmando ID...", "var(--cyan-text)");
+
+        // Blood Strike no tiene API de comprobación, lo auto-confirmamos en la UI.
+        setTimeout(() => {
+            idVerificado = true;
+            nombreJugadorVerificado = "Jugador Confirmado";
+
+            if (window.catalogoGlobal) {
+                let numeroPaquete = paqueteTexto.replace(/[^0-9]/g, '');
+                paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
+            }
+            if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteTexto, precio: "Validando..." }; }
+
+            const chatContainer = document.getElementById('chat-messages');
+            chatContainer.innerHTML += `<div class="msg-bubble user" style="background: var(--success); text-align:left; border: none; color: #000;">✅ <b>Jugador:</b> ${nombreJugadorVerificado}<br>🪙 <b>Paquete:</b> ${paqueteSeleccionado.diamantes}<br>💰 <b>Total:</b> ${paqueteSeleccionado.precio} Bs<br><br>Todo correcto, dame los datos de pago.</div>`;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            enviarMensajeAI("SISTEMA: El jugador ha sido confirmado para " + paqueteSeleccionado.diamantes + ". Dame los datos de pago con [ACCION_PAGO].", true);
+        }, 500);
+    };
+
+    window.procesarRecargaDesdeChat = function() {
+        const fileInputChat = document.getElementById('inputComprobanteChat');
+        const refInputChat = document.getElementById('inputRefChat').value.trim();
+
+        if (refInputChat.length !== 5 || !fileInputChat.files[0]) {
+            mostrarBurbuja("⚠️ Debes subir el comprobante y escribir los 5 dígitos.", "var(--danger)");
+            return;
+        }
+
+        document.getElementById('inputReferencia').value = refInputChat;
+        window.chatFileOverride = fileInputChat.files[0];
+
+        toggleChatModal(); 
+        abrirModal();      
+    };
+
+    async function enviarMensajeAI(textoUsuario, ocultarBurbujaUsuario = false) {
         let registro = obtenerHistorialRateLimit();
         if (registro.count >= LIMITE_MENSAJES) {
             mostrarBurbuja("Has alcanzado el límite de mensajes por minuto. Espera un momento.", "var(--danger)");
@@ -1003,32 +1153,47 @@
             return;
         }
 
-        // Incrementar contador
         registro.count++;
         localStorage.setItem('ia_chat_limit', JSON.stringify(registro));
         actualizarInterfazRateLimit();
 
         const contenedorChat = document.getElementById('chat-messages');
         
-        const msgUser = document.createElement('div');
-        msgUser.className = "msg-bubble user";
-        msgUser.innerText = textoUsuario;
-        contenedorChat.appendChild(msgUser);
-        contenedorChat.scrollTop = contenedorChat.scrollHeight;
+        if (!ocultarBurbujaUsuario) {
+            const msgUser = document.createElement('div');
+            msgUser.className = "msg-bubble user";
+            msgUser.innerText = textoUsuario;
+            contenedorChat.appendChild(msgUser);
+            contenedorChat.scrollTop = contenedorChat.scrollHeight;
+        }
 
         const msgCargando = document.createElement('div');
         msgCargando.id = "tempCargando";
         msgCargando.className = "msg-bubble bot";
-        msgCargando.style.fontStyle = "italic";
-        msgCargando.innerText = "🤖 Pensando respuesta...";
+        msgCargando.innerHTML = `<div class="typing-indicator"><span style="font-size: 14px; margin-right: 6px;">🤖</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
         contenedorChat.appendChild(msgCargando);
         contenedorChat.scrollTop = contenedorChat.scrollHeight;
+
+        let nombreJuegoDetectado = "Blood Strike";
+        const tituloBanner = document.querySelector('.title-banner');
+        if (tituloBanner) {
+            nombreJuegoDetectado = tituloBanner.innerText.replace(/[^a-zA-Z\s]/g, '').trim();
+        }
+        
+        let catalogoTexto = "Aún cargando precios...";
+        if (window.catalogoGlobal && window.catalogoGlobal.length > 0) {
+            catalogoTexto = window.catalogoGlobal.map(p => `- ${p.diamantes} de Oro: ${p.precio} Bs`).join("\n");
+        }
 
         try {
             const response = await fetch('/api/ia-soporte', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mensaje: textoUsuario })
+                body: JSON.stringify({ 
+                    mensaje: textoUsuario,
+                    juego: nombreJuegoDetectado,
+                    catalogo: catalogoTexto
+                })
             });
             
             const resultado = await response.json();
@@ -1037,11 +1202,64 @@
 
             const msgBot = document.createElement('div');
             msgBot.className = "msg-bubble bot";
-            msgBot.innerText = resultado.respuesta;
+            let htmlRespuesta = resultado.respuesta;
+
+            // 1. Detectar si la IA pide verificar ID
+            const matchVerificar = htmlRespuesta.match(/\[ACCION_VERIFICAR:([\w-]+):(.*?)\]/);
+            if (matchVerificar) {
+                let idChat = matchVerificar[1];
+                let paqueteChat = matchVerificar[2];
+                htmlRespuesta = htmlRespuesta.replace(matchVerificar[0], `
+                    <div class="chat-action-card">
+                        <p style="font-size:12px; margin-bottom:8px;">Validaremos el ID: <b>${idChat}</b></p>
+                        <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">🔍 CONFIRMAR JUGADOR</button>
+                    </div>
+                `);
+            }
+
+            // 2. Detectar si la IA manda la caja de pago directa
+            const matchPagoDirecto = htmlRespuesta.match(/\[ACCION_PAGO:([\w-]+):(.*?)\]/);
+            if (matchPagoDirecto) {
+                let idChat = matchPagoDirecto[1];
+                let paqueteChat = matchPagoDirecto[2];
+
+                document.getElementById('inputPlayerId').value = idChat;
+                idVerificado = true;
+                nombreJugadorVerificado = "Jugador de " + nombreJuegoDetectado;
+
+                if (window.catalogoGlobal) {
+                    let numeroPaquete = paqueteChat.replace(/[^0-9]/g, '');
+                    paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
+                }
+                if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteChat, precio: "Calculando..." }; }
+
+                htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], "[ACCION_PAGO]");
+            }
+
+            // 3. Renderizar la Caja de Pago (Con la funcionalidad de IA añadida)
+            if (htmlRespuesta.includes("[ACCION_PAGO]")) {
+                htmlRespuesta = htmlRespuesta.replace("[ACCION_PAGO]", `
+                    <div class="chat-action-card">
+                        <p style="color:var(--cyan-text); font-weight:900; font-size:13px;">🏦 DATOS DE PAGO</p>
+                        <p style="font-size:12px; margin: 8px 0; line-height:1.5;">Banco: ${datosBancoGlobal.banco}<br>Tel: ${datosBancoGlobal.telefono}<br>Cédula: ${datosBancoGlobal.cedula}</p>
+                        <button class="btn-copy" style="padding: 10px; font-size: 11px; margin-bottom: 12px;" onclick="copiarDatosBanco()">📋 COPIAR DATOS</button>
+                        <hr style="border-color: rgba(0,229,255,0.2); margin: 12px 0;">
+                        <p style="color:var(--text-main); font-weight:bold; font-size: 12px; margin-bottom:8px;">Sube tu comprobante:</p>
+                        <input type="file" id="inputComprobanteChat" accept="image/*" onchange="analizarCaptureChat(this)">
+                        
+                        <div id="resultadoIAChat" class="resultado-ia-chat"></div>
+
+                        <input type="text" id="inputRefChat" class="input-field" style="padding: 10px; font-size: 12px; margin-bottom: 4px;" placeholder="Últimos 5 dígitos" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                        <a href="https://drive.google.com/file/d/1b0V-JMYmBqEwyMxLOKySIESIU2XLtYUW/view?usp=sharing" target="_blank" style="font-size: 10px; color: var(--warning); display: block; margin-bottom: 12px; text-decoration: underline;">¿Dónde está la referencia? (Ver pista)</a>
+                        <button class="btn-submit-order" style="padding: 12px; font-size: 12px;" onclick="procesarRecargaDesdeChat()">🚀 PROCESAR RECARGA</button>
+                    </div>
+                `);
+            }
+
+            msgBot.innerHTML = htmlRespuesta;
             contenedorChat.appendChild(msgBot);
             contenedorChat.scrollTop = contenedorChat.scrollHeight;
 
-            // Si la IA no pudo ayudar o el usuario tiene problemas graves, mostramos el botón de WhatsApp
             if(resultado.respaldoWhatsapp || textoUsuario.toLowerCase().includes("ayuda") || textoUsuario.toLowerCase().includes("humano")) {
                 document.getElementById('whatsappEscalateContainer').style.display = 'block';
             }
@@ -1057,7 +1275,6 @@
         }
     }
 
-    // Actualizar cada segundo el contador de rate limit
     setInterval(actualizarInterfazRateLimit, 1000);
 
     cargarDatosBancarios(); cargarCatalogoCliente();
