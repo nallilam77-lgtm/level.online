@@ -497,7 +497,7 @@
   <!-- FIN DE MAIN-CARD -->
 
   <!-- ======================================================= -->
-  <!-- 🤖 WIDGET FLOTANTE DE SOPORTE IA INTELIGENTE             -->
+  <!-- 💬 WIDGET FLOTANTE DE SOPORTE IA INTELIGENTE             -->
   <!-- ======================================================= -->
   <div id="floatingChatBtn" class="floating-chat-btn" onclick="toggleChatModal()" title="Abrir Asistente IA">
     <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A1.5 1.5 0 0 0 6 14.5A1.5 1.5 0 0 0 7.5 16A1.5 1.5 0 0 0 9 14.5A1.5 1.5 0 0 0 7.5 13m9 0a1.5 1.5 0 0 0-1.5 1.5a1.5 1.5 0 0 0 1.5 1.5a1.5 1.5 0 0 0 1.5-1.5a1.5 1.5 0 0 0-1.5-1.5m-5 3c-1.33 0-2.5.5-3.35 1.35a1 1 0 0 0 1.41 1.41C9.64 18.39 10.77 18 12 18s2.36.39 2.94.96a1 1 0 0 0 1.41-1.41C14.5 16.5 13.33 16 12 16z"/></svg>
@@ -660,7 +660,7 @@
       nombreJugadorVerificado = "Jugador Confirmado";
       statusDiv.style.display = 'block'; 
       statusDiv.style.color = 'var(--cyan-text)'; 
-      statusDiv.innerHTML = `✔️ <strong style="color: #fff;">ID Aceptado y Confirmado</strong>`;
+      statusDiv.innerHTML = `✔️️ <strong style="color: #fff;">ID Aceptado y Confirmado</strong>`;
       
       verificarEstadoDesbloqueo();
     });
@@ -796,7 +796,6 @@
     };
 
     window.usarReferenciaIA = function(targetInputId, sourceTextId, valorDirecto) { 
-      // Por defecto funciona para el main si no se envían los parametros
       let target = targetInputId || 'inputReferencia';
       let valor = valorDirecto ? valorDirecto : document.getElementById(sourceTextId || 'refIA').textContent;
       document.getElementById(target).value = valor; 
@@ -835,10 +834,25 @@
       document.getElementById('resumenPaquete').textContent = `${diamantesClean} Oro (Blood Strike)`; 
       document.getElementById('resumenMonto').textContent = `${paqueteSeleccionado.precio} Bs`;
       
+      // =======================================================
+      // 🛡️ BLOQUEAR Y CERRAR LA IA CUANDO SE ABRE EL MODAL DE CONFIRMACIÓN
+      // =======================================================
+      const chatBtnFlotante = document.getElementById('floatingChatBtn');
+      if (chatBtnFlotante) chatBtnFlotante.classList.add('disabled');
+
+      const chatModalWindow = document.getElementById('chatModalWindow');
+      if (chatModalWindow) chatModalWindow.classList.remove('active');
+
       document.getElementById('modalConfirmacion').style.display = 'flex';
     };
 
-    window.cerrarModal = function() { document.getElementById('modalConfirmacion').style.display = 'none'; };
+    window.cerrarModal = function() {
+      document.getElementById('modalConfirmacion').style.display = 'none';
+      // REACTIVAR EL BOTÓN FLOTANTE DE IA AL CERRAR EL MODAL
+      const chatBtnFlotante = document.getElementById('floatingChatBtn');
+      if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
+    };
+
     window.cerrarModalNoEncontrado = function() { document.getElementById('modalPagoNoEncontrado').style.display = 'none'; };
     window.cerrarModalWhatsApp = function() { document.getElementById('modalWhatsApp').style.display = 'none'; };
 
@@ -890,12 +904,7 @@
 
       isProcessing = true; btnConfirmar.disabled = true;
       
-      // =======================================================
-      // 🛡️ DESHABILITAR Y CERRAR EL CHAT IA AUTOMÁTICAMENTE
-      // =======================================================
       const chatBtnFlotante = document.getElementById('floatingChatBtn');
-      if (chatBtnFlotante) chatBtnFlotante.classList.add('disabled');
-
       const chatModalWindow = document.getElementById('chatModalWindow');
       if (chatModalWindow) chatModalWindow.classList.remove('active');
 
@@ -912,7 +921,7 @@
       try {
           let captureUrl = "Sin comprobante";
           let archivoCargar = window.chatFileOverride ? window.chatFileOverride : document.getElementById('inputComprobante').files[0];
-          
+           
           if (archivoCargar) {
               textoElem.innerHTML = "📄 Adjuntando comprobante en servidor...";
               barraFill.style.width = '20%';
@@ -921,7 +930,7 @@
 
           textoElem.innerHTML = "🔍 Verificando pago y bloqueando referencia...";
           barraFill.style.width = '45%';
-          
+           
           let diamantesClean = String(paqueteSeleccionado.diamantes).replace(/diamantes|oro|monedas/gi, '').trim();
 
           const respuestaServidor = await fetch(SCRIPT_RECARGAS_URL, {
@@ -933,16 +942,15 @@
                 urlImagen: captureUrl 
             })
           });
-          
+           
           const resultado = await respuestaServidor.json();
-          
+           
           if (resultado.status !== "success") {
              if(resultado.message && resultado.message.toLowerCase().includes("fallo técnico")) {
                 document.getElementById('pantallaProcesando').style.display = 'none';
                 document.getElementById('codigoTxnProceso').textContent = globalTxnCode;
                 document.getElementById('modalEnProceso').style.display = 'flex';
                 isProcessing = false; btnConfirmar.disabled = false;
-                // REACTIVAR BOTÓN FLOTANTE DE IA
                 if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
                 return;
              }
@@ -983,7 +991,6 @@
              }
 
              isProcessing = false; btnConfirmar.disabled = false;
-             // REACTIVAR BOTÓN FLOTANTE DE IA
              if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
              return; 
           }
@@ -993,7 +1000,7 @@
 
           textoElem.innerHTML = "💎 ¡Sistema remoto conectado a Blood Strike!";
           barraFill.style.width = '75%';
-          
+           
           await new Promise(r => setTimeout(r, 1500)); 
 
           textoElem.innerHTML = "🚀 Inyectando el oro a tu cuenta...";
@@ -1009,25 +1016,23 @@
             document.getElementById('codigoTxnExito').textContent = globalTxnCode;
             document.getElementById('modalExitosa').style.display = 'flex';
             isProcessing = false;
-            // REACTIVAR BOTÓN FLOTANTE DE IA
             if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
           }, 600);
 
-      } catch (err) {
-          mostrarErrorGeneral("⚠️ ERROR DE CONEXIÓN", "Tuvimos inconvenientes al conectar con el servidor. Por favor intenta nuevamente.", "");
-          isProcessing = false; 
-          btnConfirmar.disabled = false;
-          // REACTIVAR BOTÓN FLOTANTE DE IA
-          if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
-      }
-    };
+    } catch (err) {
+        mostrarErrorGeneral("⚠️ ERROR DE CONEXIÓN", "Tuvimos inconvenientes al conectar con el servidor. Por favor intenta nuevamente.", "");
+        isProcessing = false; 
+        btnConfirmar.disabled = false;
+        if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
+    }
+  };
 
     window.ruletaYaGiro = false;
 
     window.abrirRuletaAutomatica = async function() {
       document.getElementById('modalExitosa').style.display = 'none';
       document.getElementById('modalRuletaAutomatica').style.display = 'flex';
-      
+       
       if (window.ruletaYaGiro) return;
       window.ruletaYaGiro = true;
 
@@ -1051,7 +1056,7 @@
           if (data.status === "success") {
               textoEstado.innerText = "¡La suerte está echada! 🎲";
               textoEstado.style.color = "var(--cyan-text)";
-              
+               
               rueda.style.transform = `rotate(${data.gradosDestino}deg)`;
 
               setTimeout(() => {
@@ -1100,7 +1105,6 @@
         }
     }
 
-    // Sistema de Rate Limit en Cliente (5 mensajes por cada 60 segundos)
     const LIMITE_MENSAJES = 5;
     const TIEMPO_VENTANA_MS = 60 * 1000;
 
@@ -1118,7 +1122,7 @@
         let registro = obtenerHistorialRateLimit();
         let restantes = LIMITE_MENSAJES - registro.count;
         if (restantes < 0) restantes = 0;
-        
+         
         const info = document.getElementById('rateLimitInfo');
         if (restantes === 0) {
             let segundosRestantes = Math.ceil((registro.resetTime - Date.now()) / 1000);
@@ -1130,12 +1134,10 @@
         }
     }
 
-    // Funciones Auxiliares para procesar desde el chat
     window.verificarIdDesdeChat = function(id, paqueteTexto) {
         document.getElementById('inputPlayerId').value = id;
         mostrarBurbuja("⏳ Confirmando ID...", "var(--cyan-text)");
 
-        // Blood Strike no tiene API de comprobación, lo auto-confirmamos en la UI.
         setTimeout(() => {
             idVerificado = true;
             nombreJugadorVerificado = "Jugador Confirmado";
@@ -1159,7 +1161,7 @@
         const refInputChat = document.getElementById('inputRefChat').value.trim();
 
         if (refInputChat.length !== 5 || !fileInputChat.files[0]) {
-            mostrarBurbuja("⚠️️ Debes subir el comprobante y escribir los 5 dígitos.", "var(--danger)");
+            mostrarBurbuja("⚠ Debes subir el comprobante y escribir los 5 dígitos.", "var(--danger)");
             return;
         }
 
@@ -1183,7 +1185,7 @@
         actualizarInterfazRateLimit();
 
         const contenedorChat = document.getElementById('chat-messages');
-        
+         
         if (!ocultarBurbujaUsuario) {
             const msgUser = document.createElement('div');
             msgUser.className = "msg-bubble user";
@@ -1204,7 +1206,7 @@
         if (tituloBanner) {
             nombreJuegoDetectado = tituloBanner.innerText.replace(/[^a-zA-Z\s]/g, '').trim();
         }
-        
+         
         let catalogoTexto = "Aún cargando precios...";
         if (window.catalogoGlobal && window.catalogoGlobal.length > 0) {
             catalogoTexto = window.catalogoGlobal.map(p => `- ${p.diamantes} de Oro: ${p.precio} Bs`).join("\n");
@@ -1220,7 +1222,7 @@
                     catalogo: catalogoTexto
                 })
             });
-            
+             
             const resultado = await response.json();
             const cargandoEl = document.getElementById('tempCargando');
             if (cargandoEl) cargandoEl.remove();
@@ -1229,7 +1231,6 @@
             msgBot.className = "msg-bubble bot";
             let htmlRespuesta = resultado.respuesta;
 
-            // 1. Detectar si la IA pide verificar ID (flujo normal y educado)
             const matchVerificar = htmlRespuesta.match(/\[ACCION_VERIFICAR:([\w-]+):(.*?)\]/);
             if (matchVerificar) {
                 let idChat = matchVerificar[1];
@@ -1243,13 +1244,11 @@
                 `);
             }
 
-            // 2. Detectar si la IA manda la caja de pago directa
             const matchPagoDirecto = htmlRespuesta.match(/\[ACCION_PAGO:([\w-]+):(.*?)\]/);
             if (matchPagoDirecto) {
                 let idChat = matchPagoDirecto[1];
                 let paqueteChat = matchPagoDirecto[2];
 
-                // 🔥 ESCUDO INTERCEPTOR: Si la IA se saltó el paso, bloqueamos el pago y forzamos confirmar
                 if (!idVerificado) {
                     htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], `
                         <div class="chat-action-card">
@@ -1259,7 +1258,6 @@
                         </div>
                     `);
                 } else {
-                    // Flujo normal: El ID ya fue confirmado por el usuario en el paso anterior
                     document.getElementById('inputPlayerId').value = idChat;
                     nombreJugadorVerificado = "Jugador de " + nombreJuegoDetectado;
 
@@ -1273,7 +1271,6 @@
                 }
             }
 
-            // 3. Renderizar la Caja de Pago
             if (htmlRespuesta.includes("[ACCION_PAGO]")) {
                 htmlRespuesta = htmlRespuesta.replace("[ACCION_PAGO]", `
                     <div class="chat-action-card">
@@ -1283,7 +1280,7 @@
                         <hr style="border-color: rgba(0,229,255,0.2); margin: 12px 0;">
                         <p style="color:var(--text-main); font-weight:bold; font-size: 12px; margin-bottom:8px;">Sube tu comprobante:</p>
                         <input type="file" id="inputComprobanteChat" accept="image/*" onchange="analizarCaptureChat(this)">
-                        
+                         
                         <div id="resultadoIAChat" class="resultado-ia-chat"></div>
 
                         <input type="text" id="inputRefChat" class="input-field" style="padding: 10px; font-size: 12px; margin-bottom: 4px;" placeholder="Últimos 5 dígitos" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
@@ -1304,7 +1301,7 @@
         } catch (e) {
             const cargandoEl = document.getElementById('tempCargando');
             if (cargandoEl) cargandoEl.remove();
-            
+             
             const msgError = document.createElement('div');
             msgError.className = "msg-bubble error";
             msgError.innerText = "Disculpa, ocurrió un error de conexión con la IA.";
