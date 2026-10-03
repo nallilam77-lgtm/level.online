@@ -66,6 +66,7 @@
       100% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0); }
     }
     @keyframes spin { 100% { transform: rotate(360deg); } }
+    @keyframes typingBounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); box-shadow: 0 0 8px var(--cyan-text); } }
 
     .anim-slide-up { opacity: 0; animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     .delay-1 { animation-delay: 0.1s; }
@@ -217,6 +218,12 @@
     .msg-bubble.bot { background: #1a122c; color: #fff; border: 1px solid var(--card-border); align-self: flex-start; }
     .msg-bubble.user { background: #2b1f47; color: #fff; align-self: flex-end; }
     .msg-bubble.error { background: var(--danger-dark); color: var(--danger); border: 1px solid var(--danger); align-self: center; text-align: center; }
+
+    /* Animación de los puntitos de la IA */
+    .typing-indicator { display: flex; gap: 4px; padding: 2px 4px; align-items: center; }
+    .typing-dot { width: 6px; height: 6px; background: var(--cyan-text); border-radius: 50%; animation: typingBounce 1.4s infinite ease-in-out both; }
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
 
     .chat-footer-box {
       padding: 12px;
@@ -495,7 +502,7 @@
 
     <div class="chat-body-messages" id="chat-messages">
       <div class="msg-bubble bot">
-        👋 ¡Hola! Soy tu asistente virtual de Level Up. ¿Tienes dudas sobre tu Pago Móvil o cómo conseguir tu número de referencia? ¡Pregúntame!
+        👋 ¡Hola! Te ayudaré a realizar tu recarga paso a paso. Si es tu primera vez o tienes problemas, ¡escríbeme!
       </div>
     </div>
 
@@ -640,7 +647,7 @@
           statusDiv.style.color = 'var(--cyan-text)'; statusDiv.innerHTML = `✔️ Jugador: <strong style="color: #fff;">${nombreJugadorVerificado}</strong>`;
         } else {
           idVerificado = true; nombreJugadorVerificado = "ID Validado";
-          statusDiv.style.color = 'var(--cyan-text)'; statusDiv.innerHTML = `✔️️ <strong style="color: #fff;">ID Validado</strong>`;
+          statusDiv.style.color = 'var(--cyan-text)'; statusDiv.innerHTML = `✔ <strong style="color: #fff;">ID Validado</strong>`;
         }
       } catch (error) { 
         idVerificado = true; nombreJugadorVerificado = "ID Validado";
@@ -1002,7 +1009,7 @@
         }
     }
 
-    // Funciones Auxiliares para procesar desde el chat (NUEVAS)
+    // Funciones Auxiliares para procesar desde el chat
     window.verificarIdDesdeChat = async function(id, paqueteTexto) {
         document.getElementById('inputPlayerId').value = id;
         mostrarBurbuja("⏳ Verificando ID...", "var(--cyan-text)");
@@ -1024,7 +1031,8 @@
             chatContainer.innerHTML += `<div class="msg-bubble user" style="background: var(--success); text-align:left;">✅ <b>Jugador:</b> ${nombreJugadorVerificado}<br>💎 <b>Paquete:</b> ${paqueteSeleccionado.diamantes}<br>💰 <b>Total:</b> ${paqueteSeleccionado.precio} Bs<br><br>Todo correcto, dame los datos de pago.</div>`;
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
-            enviarMensajeAI("El jugador " + nombreJugadorVerificado + " ha sido confirmado para " + paqueteSeleccionado.diamantes + ". Dame los datos de pago.");
+            // Se envía a la IA pero OCULTANDO el mensaje para que no se duplique
+            enviarMensajeAI("SISTEMA: El jugador " + nombreJugadorVerificado + " ha sido confirmado para " + paqueteSeleccionado.diamantes + ". Dame los datos de pago con [ACCION_PAGO].", true);
         } catch (e) {
             mostrarBurbuja("❌ Error al verificar. Intenta nuevamente.", "var(--danger)");
         }
@@ -1046,7 +1054,8 @@
         abrirModal();      
     };
 
-    async function enviarMensajeAI(textoUsuario) {
+    // Parámetro "ocultarBurbujaUsuario" añadido para evitar duplicación
+    async function enviarMensajeAI(textoUsuario, ocultarBurbujaUsuario = false) {
         let registro = obtenerHistorialRateLimit();
         if (registro.count >= LIMITE_MENSAJES) {
             mostrarBurbuja("Has alcanzado el límite de mensajes por minuto. Espera un momento.", "var(--danger)");
@@ -1060,17 +1069,19 @@
 
         const contenedorChat = document.getElementById('chat-messages');
         
-        const msgUser = document.createElement('div');
-        msgUser.className = "msg-bubble user";
-        msgUser.innerText = textoUsuario;
-        contenedorChat.appendChild(msgUser);
-        contenedorChat.scrollTop = contenedorChat.scrollHeight;
+        // Dibuja la burbuja solo si NO la hemos ocultado explícitamente
+        if (!ocultarBurbujaUsuario) {
+            const msgUser = document.createElement('div');
+            msgUser.className = "msg-bubble user";
+            msgUser.innerText = textoUsuario;
+            contenedorChat.appendChild(msgUser);
+            contenedorChat.scrollTop = contenedorChat.scrollHeight;
+        }
 
         const msgCargando = document.createElement('div');
         msgCargando.id = "tempCargando";
         msgCargando.className = "msg-bubble bot";
-        msgCargando.style.fontStyle = "italic";
-        msgCargando.innerText = "🤖 Pensando respuesta...";
+        msgCargando.innerHTML = `<div class="typing-indicator"><span style="font-size: 14px; margin-right: 6px;">🤖</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
         contenedorChat.appendChild(msgCargando);
         contenedorChat.scrollTop = contenedorChat.scrollHeight;
 
@@ -1104,7 +1115,7 @@
             msgBot.className = "msg-bubble bot";
             let htmlRespuesta = resultado.respuesta;
 
-            // 1. Detectar si la IA pide verificar ID (Usado para Free Fire)
+            // 1. Detectar si la IA pide verificar ID
             const matchVerificar = htmlRespuesta.match(/\[ACCION_VERIFICAR:([\w-]+):(.*?)\]/);
             if (matchVerificar) {
                 let idChat = matchVerificar[1];
@@ -1117,7 +1128,7 @@
                 `);
             }
 
-            // 2. Detectar si la IA manda la caja de pago directa con datos (Usado para Blood Strike/Roblox)
+            // 2. Detectar si la IA manda la caja de pago directa
             const matchPagoDirecto = htmlRespuesta.match(/\[ACCION_PAGO:([\w-]+):(.*?)\]/);
             if (matchPagoDirecto) {
                 let idChat = matchPagoDirecto[1];
