@@ -890,9 +890,14 @@
 
       isProcessing = true; btnConfirmar.disabled = true;
       
-      // DESHABILITAR BOTÓN FLOTANTE DE IA
+      // =======================================================
+      // 🛡️ DESHABILITAR Y CERRAR EL CHAT IA AUTOMÁTICAMENTE
+      // =======================================================
       const chatBtnFlotante = document.getElementById('floatingChatBtn');
       if (chatBtnFlotante) chatBtnFlotante.classList.add('disabled');
+
+      const chatModalWindow = document.getElementById('chatModalWindow');
+      if (chatModalWindow) chatModalWindow.classList.remove('active');
 
       const referenciaUsuario = document.getElementById('inputReferencia').value.trim();
       const playerId = document.getElementById('inputPlayerId').value.trim();
@@ -947,7 +952,7 @@
              localStorage.setItem('intentos_recarga', intentosFallidos);
              if (intentosFallidos >= 3) {
                  localStorage.setItem('tiempo_bloqueo', Date.now() + (5 * 60 * 1000));
-                 mostrarBurbuja("⚠️️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
+                 mostrarBurbuja("⚠ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
              }
 
              let msg = resultado.message || "";
@@ -1154,7 +1159,7 @@
         const refInputChat = document.getElementById('inputRefChat').value.trim();
 
         if (refInputChat.length !== 5 || !fileInputChat.files[0]) {
-            mostrarBurbuja("⚠️ Debes subir el comprobante y escribir los 5 dígitos.", "var(--danger)");
+            mostrarBurbuja("⚠️️ Debes subir el comprobante y escribir los 5 dígitos.", "var(--danger)");
             return;
         }
 
