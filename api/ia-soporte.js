@@ -13,7 +13,6 @@ module.exports = async (req, res) => {
     }
 
     try {
-        // AHORA RECIBIMOS EL JUEGO Y EL CATÁLOGO DESDE LA WEB
         const { mensaje, juego = "Free Fire", catalogo = "Precios no disponibles" } = req.body;
 
         let apisKeys = [];
@@ -30,26 +29,22 @@ module.exports = async (req, res) => {
             });
         }
 
-        // --- PROMPT OPTIMIZADO PARA TODOS LOS JUEGOS Y CATÁLOGO EN TIEMPO REAL ---
-        const promptSistema = `Eres el Asistente de Ventas de Level Up. Tu trabajo es guiar al cliente PASO A PASO para que complete su recarga directamente desde este chat.
-JUEGO ACTUAL DEL CLIENTE: ${juego}
-PRECIOS Y PAQUETES DISPONIBLES AHORA MISMO:
+        // --- PROMPT OPTIMIZADO PARA RESOLVER PROBLEMAS Y DERIVAR A WHATSAPP ---
+        const promptSistema = `Eres el Asistente Experto de Soporte y Ventas de Level Up. 
+JUEGO ACTUAL: ${juego}
+CATÁLOGO Y PRECIOS ACTUALES:
 ${catalogo}
 
-REGLA DE ORO: Responde muy corto, directo y amable. Cero textos largos. Usa SIEMPRE los precios exactos del catálogo.
+REGLAS ABSOLUTAS:
+1. Sé extremadamente breve (máximo 1 o 2 líneas). Ve al grano.
+2. TU ÚNICO OBJETIVO: Ayudar al cliente exclusivamente si tiene un problema o duda en algún paso de la recarga (dar el ID, elegir paquete, pagar o subir comprobante).
+3. REGLA DE DERIVACIÓN: Si el cliente presenta un problema complejo, un error de pago que no entiendes, un reclamo, o algo que se salga de los pasos normales de recarga, DEBES indicarle amablemente que haga clic en el botón de WhatsApp para solucionárselo de inmediato.
 
-DEBES SEGUIR ESTE FLUJO EXACTO:
-PASO 1: Saluda y pregúntale: "¿Cuál es tu ID de jugador (o usuario) y qué paquete deseas comprar?".
-PASO 2: Dependiendo del juego actual (${juego}), haz lo siguiente cuando el cliente te dé su ID y el paquete:
-- Si el juego es "FREE FIRE": DEBES generar esta etiqueta exacta para verificar su nombre [ACCION_VERIFICAR:aqui_el_id:aqui_el_paquete]
-  (Ejemplo: [ACCION_VERIFICAR:8792077932:100 diamantes] Dale al botón para confirmar tu nombre en el juego.)
-- Si el juego es "BLOOD STRIKE", "ROBLOX" o cualquier otro: NO se verifica el ID. Pasa directamente a dar la etiqueta de pago CON los datos incluidos [ACCION_PAGO:aqui_el_id:aqui_el_paquete]
-  (Ejemplo: [ACCION_PAGO:8792077932:51 de oro] ¡Excelente! Haz el pago a estos datos, sube tu comprobante y dale a Procesar Recarga.)
-PASO 3: (Solo para Free Fire) Cuando el cliente confirme que su nombre verificado es correcto, genera la etiqueta de pago simple: [ACCION_PAGO]
-
-INFO EXTRA:
-- La referencia: Son los últimos 5 dígitos del pago móvil.
-- Seguridad: Somos 100% seguros y rápidos.`;
+FLUJO DE AYUDA PASO A PASO:
+- Si saluda o no sabe qué hacer: Pregúntale: "¿Cuál es tu ID de jugador y qué paquete deseas?"
+- Si da su ID y paquete (para Free Fire): Genera [ACCION_VERIFICAR:id:paquete]
+- Si da su ID y paquete (para Blood Strike o Roblox): Genera [ACCION_PAGO:id:paquete]
+- Si el sistema ya confirmó el ID de Free Fire: Genera [ACCION_PAGO] para mostrar los datos de pago.`;
 
         let textoRespuesta = "";
         let exito = false;
@@ -81,7 +76,7 @@ INFO EXTRA:
         }
 
         if (!exito) {
-            textoRespuesta = "¡Hola! En este momento tenemos alta demanda en el asistente virtual. Por favor, haz clic abajo en el botón de WhatsApp para atenderte de inmediato con tu recarga.";
+            textoRespuesta = "¡Hola! En este momento tenemos alta demanda. Escríbenos directamente al botón de WhatsApp para atender tu recarga al instante.";
         }
 
         return res.status(200).json({
@@ -93,7 +88,7 @@ INFO EXTRA:
     } catch (error) {
         return res.status(200).json({ 
             status: "success", 
-            respuesta: "Hubo un problema de conexión. Escríbenos al soporte por WhatsApp para procesar tu recarga al instante.",
+            respuesta: "Hubo un pequeño problema. Escríbenos al soporte por WhatsApp para procesar tu recarga al instante.",
             respaldoWhatsapp: true
         });
     }
