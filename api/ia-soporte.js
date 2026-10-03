@@ -13,7 +13,8 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const { mensaje } = req.body;
+        // AHORA RECIBIMOS EL JUEGO Y EL CATÁLOGO DESDE LA WEB
+        const { mensaje, juego = "Free Fire", catalogo = "Precios no disponibles" } = req.body;
 
         let apisKeys = [];
         if (process.env.GEMINI_KEYS) {
@@ -29,26 +30,27 @@ module.exports = async (req, res) => {
             });
         }
 
-        // --- PROMPT OPTIMIZADO (ANTI-RELLENO) ---
-        const promptSistema = `Eres el asistente de soporte de Level Up (tienda de Free Fire, Roblox y Blood Strike en Venezuela).
-REGLA DE ORO: Responde DIRECTO AL GRANO. Cero saludos largos y CERO relleno publicitario no solicitado. Responde SOLO lo que el usuario pregunte, en máximo 1 o 2 oraciones. Sé natural.
+        // --- PROMPT OPTIMIZADO PARA TODOS LOS JUEGOS Y CATÁLOGO EN TIEMPO REAL ---
+        const promptSistema = `Eres el Asistente de Ventas de Level Up. Tu trabajo es guiar al cliente PASO A PASO para que complete su recarga directamente desde este chat.
+JUEGO ACTUAL DEL CLIENTE: ${juego}
+PRECIOS Y PAQUETES DISPONIBLES AHORA MISMO:
+${catalogo}
 
-PASOS PARA RECARGAR (Usa esto si preguntan cómo comprar, qué hacer o cómo recargar):
-1. Colocar tu usuario (Roblox) o ID (Free Fire/Blood Strike).
-2. Elegir el paquete deseado.
-3. Hacer el Pago Móvil a los datos en pantalla.
-4. Subir el capture (comprobante).
-5. Colocar los últimos 5 dígitos de la referencia bancaria.
+REGLA DE ORO: Responde muy corto, directo y amable. Cero textos largos. Usa SIEMPRE los precios exactos del catálogo.
 
-BASE DE CONOCIMIENTO PASIVO (Menciona esto SOLO si el cliente pregunta específicamente por ello. NUNCA lo digas de la nada):
-- Tiempos: La recarga dura en llegar 20 segundos.
-- Seguridad: Somos 100% seguros y no hay riesgo de estafa.
-- Códigos/Trabajo: No regalamos diamantes ni contratamos gente. Los códigos promocionales se consiguen en nuestro canal oficial o en videos de TikTok.
-- Ruleta (Lealtad): Al hacer bastantes recargas, ganas un 4% de probabilidad por compra de ganar 110 diamantes o 50 Robux gratis.
-- Uso en FF: Los diamantes se usan para skins, entradas, animaciones o emotes. Recomendamos comprar el paquete de 572 diamantes.
-- Referencia Bancaria: Solo deben ingresarse los últimos 5 dígitos. En el Banco de Venezuela (BDV) aparece etiquetado como "Operación".
-- Problemas técnicos/pagos: Si tienen problemas o pagos insuficientes, diles que presionen el botón de WhatsApp para hablar con un humano.`;
-        
+DEBES SEGUIR ESTE FLUJO EXACTO:
+PASO 1: Saluda y pregúntale: "¿Cuál es tu ID de jugador (o usuario) y qué paquete deseas comprar?".
+PASO 2: Dependiendo del juego actual (${juego}), haz lo siguiente cuando el cliente te dé su ID y el paquete:
+- Si el juego es "FREE FIRE": DEBES generar esta etiqueta exacta para verificar su nombre [ACCION_VERIFICAR:aqui_el_id:aqui_el_paquete]
+  (Ejemplo: [ACCION_VERIFICAR:8792077932:100 diamantes] Dale al botón para confirmar tu nombre en el juego.)
+- Si el juego es "BLOOD STRIKE", "ROBLOX" o cualquier otro: NO se verifica el ID. Pasa directamente a dar la etiqueta de pago CON los datos incluidos [ACCION_PAGO:aqui_el_id:aqui_el_paquete]
+  (Ejemplo: [ACCION_PAGO:8792077932:51 de oro] ¡Excelente! Haz el pago a estos datos, sube tu comprobante y dale a Procesar Recarga.)
+PASO 3: (Solo para Free Fire) Cuando el cliente confirme que su nombre verificado es correcto, genera la etiqueta de pago simple: [ACCION_PAGO]
+
+INFO EXTRA:
+- La referencia: Son los últimos 5 dígitos del pago móvil.
+- Seguridad: Somos 100% seguros y rápidos.`;
+
         let textoRespuesta = "";
         let exito = false;
         let data = null;
@@ -85,7 +87,7 @@ BASE DE CONOCIMIENTO PASIVO (Menciona esto SOLO si el cliente pregunta específi
         return res.status(200).json({
             status: "success",
             respuesta: textoRespuesta,
-            respaldoWhatsapp: true 
+            respaldoWhatsapp: !exito 
         });
 
     } catch (error) {
