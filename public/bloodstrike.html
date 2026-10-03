@@ -1204,15 +1204,16 @@
             msgBot.className = "msg-bubble bot";
             let htmlRespuesta = resultado.respuesta;
 
-            // 1. Detectar si la IA pide verificar ID
+            // 1. Detectar si la IA pide verificar ID (flujo normal y educado)
             const matchVerificar = htmlRespuesta.match(/\[ACCION_VERIFICAR:([\w-]+):(.*?)\]/);
             if (matchVerificar) {
                 let idChat = matchVerificar[1];
                 let paqueteChat = matchVerificar[2];
                 htmlRespuesta = htmlRespuesta.replace(matchVerificar[0], `
                     <div class="chat-action-card">
-                        <p style="font-size:12px; margin-bottom:8px;">Validaremos el ID: <b>${idChat}</b></p>
-                        <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">🔍 CONFIRMAR JUGADOR</button>
+                        <p style="color:var(--cyan-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
+                        <p style="font-size:12px; margin-bottom:8px;">Verifica que este ID sea correcto:<br><b style="font-size:16px; color:#fff;">${idChat}</b></p>
+                        <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">✅ SÍ, ES MI ID</button>
                     </div>
                 `);
             }
@@ -1223,20 +1224,31 @@
                 let idChat = matchPagoDirecto[1];
                 let paqueteChat = matchPagoDirecto[2];
 
-                document.getElementById('inputPlayerId').value = idChat;
-                idVerificado = true;
-                nombreJugadorVerificado = "Jugador de " + nombreJuegoDetectado;
+                // 🔥 ESCUDO INTERCEPTOR: Si la IA se saltó el paso, bloqueamos el pago y forzamos confirmar
+                if (!idVerificado) {
+                    htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], `
+                        <div class="chat-action-card">
+                            <p style="color:var(--cyan-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
+                            <p style="font-size:12px; margin-bottom:8px;">Antes de pagar, confirma que tu ID es exacto:<br><b style="font-size:16px; color:#fff;">${idChat}</b></p>
+                            <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">✅ SÍ, ESTÁ CORRECTO</button>
+                        </div>
+                    `);
+                } else {
+                    // Flujo normal: El ID ya fue confirmado por el usuario en el paso anterior
+                    document.getElementById('inputPlayerId').value = idChat;
+                    nombreJugadorVerificado = "Jugador de " + nombreJuegoDetectado;
 
-                if (window.catalogoGlobal) {
-                    let numeroPaquete = paqueteChat.replace(/[^0-9]/g, '');
-                    paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
+                    if (window.catalogoGlobal) {
+                        let numeroPaquete = paqueteChat.replace(/[^0-9]/g, '');
+                        paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
+                    }
+                    if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteChat, precio: "Calculando..." }; }
+
+                    htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], "[ACCION_PAGO]");
                 }
-                if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteChat, precio: "Calculando..." }; }
-
-                htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], "[ACCION_PAGO]");
             }
 
-            // 3. Renderizar la Caja de Pago (Con la funcionalidad de IA añadida)
+            // 3. Renderizar la Caja de Pago
             if (htmlRespuesta.includes("[ACCION_PAGO]")) {
                 htmlRespuesta = htmlRespuesta.replace("[ACCION_PAGO]", `
                     <div class="chat-action-card">
