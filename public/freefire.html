@@ -7,7 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <!-- Tesseract.js se carga bajo demanda en ejecutarTesseract() (solo como respaldo de la IA) -->
+  <!-- Lector de referencias con Tesseract (compartido entre juegos; Tesseract se descarga bajo demanda) -->
+  <script src="/js/lector-referencia.js" defer></script>
   <style>
     :root {
       --bg-dark: #0a0510;
@@ -621,7 +622,7 @@
           <label for="inputComprobante" class="btn-change-file">Cambiar</label>
         </div>
         <div id="cajaIA" class="ia-box" aria-live="polite">
-          <div id="cargandoIA" class="ia-loading">Leyendo comprobante con IA...</div>
+          <div id="cargandoIA" class="ia-loading">Leyendo comprobante...</div>
           <div id="resultadoIA" class="ia-result">
             ✓ Detectamos la referencia <strong id="refIA"></strong>
             <small>La colocamos abajo. Revisa que coincida con tu capture; puedes editarla.</small>
@@ -942,153 +943,48 @@
     document.getElementById('inputPlayerId').addEventListener('input', () => { idVerificado = false; nombreJugadorVerificado = ""; document.getElementById('idStatus').style.display = 'none'; verificarEstadoDesbloqueo(); });
 
     // =========================================================================
-    // LÓGICA DE EXTRACCIÓN DE REFERENCIA (IA PRINCIPAL -> TESSERACT RESPALDO)
+    // LECTURA DE REFERENCIA CON TESSERACT (en el teléfono del cliente, sin IA)
+    // Se excluyen siempre la cédula y el teléfono de la tienda.
     // =========================================================================
-    async function procesarImagenLector(file, onStart, onSuccess, onFallbackTesseract, onError) {
-      if (!file.type.startsWith("image/")) return;
-      onStart();
-
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const base64Data = reader.result;
-        try {
-          const response = await fetch('/api/ia-soporte', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ base64: base64Data, mimeType: file.type })
-          });
-          const data = await response.json();
-
-          if (data && data.status === "success" && data.referencia) {
-            onSuccess(data.referencia);
-          } else if (data && data.fallbackTesseract) {
-            onFallbackTesseract(file);
-          } else {
-            onError();
-          }
-        } catch (e) {
-          onFallbackTesseract(file);
-        }
-      };
-      reader.onerror = onError;
-    }
-
-    // Tesseract pesa varios MB: solo se descarga cuando la IA no pudo leer el capture
-    let promesaTesseract = null;
-    function cargarTesseract() {
-      if (typeof Tesseract !== 'undefined') return Promise.resolve();
-      if (!promesaTesseract) {
-        promesaTesseract = new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-          script.onload = resolve;
-          script.onerror = () => { promesaTesseract = null; reject(); };
-          document.head.appendChild(script);
-        });
-      }
-      return promesaTesseract;
-    }
-
-    async function ejecutarTesseract(file) {
-      try { await cargarTesseract(); } catch (e) { return null; }
-      if (typeof Tesseract === 'undefined') return null;
-      try {
-        const resultadoOCR = await Tesseract.recognize(file, 'eng+spa');
-        let textoLimpio = resultadoOCR.data.text
-          .replace(/\b(202[0-9]|20[0-2][0-9]|[0-3][0-9][-\/][0-1][0-9][-\/][0-9]{2,4})\b/g, '')
-          .replace(/0414[-.\s]?8653510/g, '')
-          .replace(/13476015/g, '')
-          .replace(/V-13476015/g, '');
-
-        let numerosEncontrados = "";
-        const matchEtiqueta = textoLimpio.match(/(?:referencia|operacion|nro|ref|doc)[:\s]*([0-9]{6,20})/i);
-        
-        if (matchEtiqueta && matchEtiqueta[1]) { 
-          numerosEncontrados = matchEtiqueta[1]; 
-        } else {
-          let posiblesNumeros = textoLimpio.match(/\b[0-9]{6,20}\b/g);
-          if (posiblesNumeros && posiblesNumeros.length > 0) { 
-            numerosEncontrados = posiblesNumeros[posiblesNumeros.length - 1]; 
-          }
-        }
-        
-        if (numerosEncontrados && numerosEncontrados.length >= 5) {
-          return numerosEncontrados.slice(-5);
-        }
-        return null;
-      } catch (e) {
-        return null;
-      }
+    function leerReferenciaCapture(file) {
+      return window.LectorReferencia.leer(file, [datosBancoGlobal.telefono, datosBancoGlobal.cedula]);
     }
 
     // Analizador para el Input Principal (Formulario de la página)
     window.analizarCapture = async function(input) {
       if (!input.files || !input.files[0]) return; const file = input.files[0];
+      if (!file.type.startsWith("image/")) return;
       const cajaIA = document.getElementById('cajaIA'); const resultadoIA = document.getElementById('resultadoIA'); const refIA = document.getElementById('refIA'); const cargandoIA = document.getElementById('cargandoIA');
 
-      // Coloca la referencia detectada directamente en el paso 5 (el usuario puede editarla)
-      const mostrarReferenciaDetectada = (referencia) => {
-        const ultimos5 = String(referencia).replace(/[^0-9]/g, '').slice(-5);
-        refIA.textContent = ultimos5;
-        if (ultimos5.length === 5) document.getElementById('inputReferencia').value = ultimos5;
-        cargandoIA.style.display = 'none'; resultadoIA.style.display = 'block';
-        actualizarProgreso();
-      };
+      cajaIA.style.display = 'block'; cargandoIA.style.display = 'flex'; resultadoIA.style.display = 'none';
+      cargandoIA.innerText = "Leyendo comprobante...";
 
-      procesarImagenLector(
-        file,
-        () => {
-          cajaIA.style.display = 'block'; cargandoIA.style.display = 'flex'; resultadoIA.style.display = 'none';
-          cargandoIA.innerText = "Leyendo comprobante con IA...";
-        },
-        mostrarReferenciaDetectada,
-        async (archivo) => {
-          cargandoIA.innerText = "IA ocupada. Leyendo texto localmente...";
-          const refTesseract = await ejecutarTesseract(archivo);
-          if (refTesseract) {
-            mostrarReferenciaDetectada(refTesseract);
-          } else {
-            cajaIA.style.display = 'none';
-          }
-        },
-        () => { cajaIA.style.display = 'none'; }
-      );
+      const referencia = await leerReferenciaCapture(file);
+      if (!referencia) { cajaIA.style.display = 'none'; return; }
+
+      // Coloca la referencia detectada directamente en el paso 5 (el usuario puede editarla)
+      refIA.textContent = referencia;
+      document.getElementById('inputReferencia').value = referencia;
+      cargandoIA.style.display = 'none'; resultadoIA.style.display = 'block';
+      actualizarProgreso();
     };
 
     // Analizador para el Input secundario (El del CHAT DE IA)
     window.analizarCaptureChat = async function(input) {
       if (!input.files || !input.files[0]) return; const file = input.files[0];
       const resultBox = document.getElementById('resultadoIAChat');
-      const textRef = document.getElementById('textoRefChat');
-      if(!resultBox) return;
+      if (!resultBox || !file.type.startsWith("image/")) return;
 
-      procesarImagenLector(
-        file,
-        () => {
-          resultBox.style.display = 'flex';
-          resultBox.innerHTML = `<span style="font-size:11px; color:var(--cyan-text);">🤖 IA extrayendo referencia...</span>`;
-        },
-        (referencia) => {
-          resultBox.innerHTML = `
-            <span style="color: var(--text-main); font-size: 11px; font-weight: bold;">Encontré: <span style="font-size: 14px; color: var(--primary-orange); letter-spacing: 1px;">${referencia}</span></span>
-            <button type="button" onclick="usarReferenciaIA('inputRefChat', null, '${referencia}')" style="background: var(--primary-gradient); color: white; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-size: 10px;">Usar Número</button>
-          `;
-        },
-        async (archivo) => {
-          resultBox.innerHTML = `<span style="font-size:11px; color:var(--warning);">IA ocupada. Escaneando localmente...</span>`;
-          const refTesseract = await ejecutarTesseract(archivo);
-          if (refTesseract) {
-            resultBox.innerHTML = `
-              <span style="color: var(--text-main); font-size: 11px; font-weight: bold;">Encontré: <span style="font-size: 14px; color: var(--primary-orange); letter-spacing: 1px;">${refTesseract}</span></span>
-              <button type="button" onclick="usarReferenciaIA('inputRefChat', null, '${refTesseract}')" style="background: var(--primary-gradient); color: white; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-size: 10px;">Usar Número</button>
-            `;
-          } else {
-            resultBox.style.display = 'none';
-          }
-        },
-        () => { resultBox.style.display = 'none'; }
-      );
+      resultBox.style.display = 'flex';
+      resultBox.innerHTML = `<span style="font-size:11px; color:var(--cyan-text);">🔍 Leyendo comprobante...</span>`;
+
+      const referencia = await leerReferenciaCapture(file);
+      if (!referencia) { resultBox.style.display = 'none'; return; }
+
+      resultBox.innerHTML = `
+        <span style="color: var(--text-main); font-size: 11px; font-weight: bold;">Encontré: <span style="font-size: 14px; color: var(--primary-orange); letter-spacing: 1px;">${referencia}</span></span>
+        <button type="button" onclick="usarReferenciaIA('inputRefChat', null, '${referencia}')" style="background: var(--primary-gradient); color: white; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-size: 10px;">Usar Número</button>
+      `;
     };
 
     window.usarReferenciaIA = function(targetInputId, sourceTextId, valorDirecto) { 
