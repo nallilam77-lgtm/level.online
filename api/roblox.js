@@ -1,6 +1,7 @@
 // Este archivo vive en /api/roblox.js dentro de tu proyecto en Vercel
 import { obtenerIp, minutosBloqueado, registrarFallo } from './_lib/limitador.js';
 import { llamarScript, conCache } from './_lib/externo.js';
+import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from './_lib/validacion.js';
 
 // Debe ser menor que maxDuration de esta función en vercel.json (30 s)
 const TIEMPO_COMPRA_MS = 20000;
@@ -26,8 +27,7 @@ export default async function handler(req, res) {
     const scriptUrl = process.env.GAS_URL;
 
     if (!scriptUrl) {
-      console.error("Falta la variable de entorno GAS_URL");
-      return res.status(500).json({ status: 'error', message: 'Error de configuración del servidor.' });
+      return faltaConfiguracion(res, ['GAS_URL'], { status: 'error', message: 'La tienda de Roblox no está disponible en este momento. Intenta más tarde.' });
     }
 
     // 5. Solo se reenvían las dos operaciones que usa la página y sus campos conocidos
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
       payload = { tipo };
     } else if (tipo === 'compra') {
       const usuario = String(user || '').trim();
-      if (!/^\d{5}$/.test(String(referencia)) || !/^[A-Za-z0-9_]{2,30}$/.test(usuario) || !producto || String(producto).length > 60) {
+      if (!/^\d{5}$/.test(String(referencia)) || !/^[A-Za-z0-9_]{2,30}$/.test(usuario) || !PAQUETE_VALIDO.test(String(producto || ''))) {
         return res.status(400).json({ status: 'error', message: 'Datos con formato inválido. Revisa tu usuario y los 5 dígitos de la referencia.' });
       }
 
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
         return res.status(429).json({ status: 'error', message: `Demasiados intentos fallidos. Espera ${minutosEspera} minutos para volver a intentar.` });
       }
 
-      payload = { tipo, referencia: String(referencia), user: usuario, producto: String(producto), url_capture: String(url_capture || 'Sin comprobante').slice(0, 500) };
+      payload = { tipo, referencia: String(referencia), user: usuario, producto: String(producto), url_capture: textoParaHoja(url_capture || 'Sin comprobante') };
     } else {
       return res.status(400).json({ status: 'error', message: 'Operación no permitida.' });
     }

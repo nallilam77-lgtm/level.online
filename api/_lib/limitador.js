@@ -5,41 +5,65 @@
 // Sin ella cae a memoria local: protección débil, porque cada instancia cuenta por separado.
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 import { createHash } from 'node:crypto';
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
 
 const COLECCION = 'limites_recarga';
 const VENTANA_MS = 30 * 60 * 1000;  // los fallos se cuentan dentro de 30 minutos
 const BLOQUEO_MS = 60 * 60 * 1000;  // al llegar al máximo se bloquea 1 hora
+// Firestore nunca debe frenar una recarga: si tarda más que esto se usa la memoria local
+const TIEMPO_FIRESTORE_MS = 2500;
+const MAX_CLAVES_EN_MEMORIA = 10000;
 
 // Fallos permitidos por tipo de clave. La IP tiene más margen porque en Venezuela
 // muchos clientes móviles comparten IP (CGNAT de las operadoras).
 const MAX_FALLOS = { ip: 15, jugador: 5 };
 
-let db = null;
+let promesaDb = null;
 let avisoSinFirestore = false;
 
+// firebase-admin pesa: se importa solo si hay credenciales y solo la primera vez que se usa,
+// para no alargar el arranque en frío de las funciones.
 function obtenerDb() {
-  if (db) return db;
   const cuenta = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!cuenta) {
     if (!avisoSinFirestore) {
       console.error("⚠️ limitador: falta FIREBASE_SERVICE_ACCOUNT. Usando memoria local (protección débil).");
       avisoSinFirestore = true;
     }
-    return null;
+    return Promise.resolve(null);
   }
-  try {
-    const app = getApps().length ? getApps()[0] : initializeApp({ credential: cert(JSON.parse(cuenta)) });
-    db = getFirestore(app);
-    return db;
-  } catch (error) {
-    console.error("❌ limitador: FIREBASE_SERVICE_ACCOUNT inválida:", error.message);
-    return null;
+  if (!promesaDb) {
+    promesaDb = (async () => {
+      try {
+        const [{ initializeApp, cert, getApps }, { getFirestore }] = await Promise.all([
+          import('firebase-admin/app'),
+          import('firebase-admin/firestore'),
+        ]);
+        const app = getApps().length ? getApps()[0] : initializeApp({ credential: cert(JSON.parse(cuenta)) });
+        return getFirestore(app);
+      } catch (error) {
+        console.error("❌ limitador: FIREBASE_SERVICE_ACCOUNT inválida o firebase-admin no disponible:", error.message);
+        return null;
+      }
+    })();
   }
+  return promesaDb;
+}
+
+function conTiempoLimite(promesa) {
+  let temporizador;
+  const limite = new Promise((_, rechazar) => {
+    temporizador = setTimeout(() => rechazar(new Error(`Firestore tardó más de ${TIEMPO_FIRESTORE_MS} ms`)), TIEMPO_FIRESTORE_MS);
+  });
+  return Promise.race([promesa, limite]).finally(() => clearTimeout(temporizador));
 }
 
 const memoria = new Map();
+function guardarEnMemoria(clave, registro) {
+  memoria.delete(clave);
+  memoria.set(clave, registro);
+  // Map conserva el orden de inserción: se descartan las claves más antiguas
+  while (memoria.size > MAX_CLAVES_EN_MEMORIA) memoria.delete(memoria.keys().next().value);
+}
 
 // Las IPs y usuarios no se guardan en claro
 const idDocumento = (clave) => createHash('sha256').update(clave).digest('hex');
@@ -54,10 +78,10 @@ export function obtenerIp(req) {
 }
 
 async function leerRegistro(clave) {
-  const firestore = obtenerDb();
+  const firestore = await obtenerDb();
   if (firestore) {
     try {
-      const snap = await firestore.collection(COLECCION).doc(idDocumento(clave)).get();
+      const snap = await conTiempoLimite(firestore.collection(COLECCION).doc(idDocumento(clave)).get());
       return snap.exists ? snap.data() : null;
     } catch (error) {
       console.error("❌ limitador: no se pudo leer Firestore:", error.message);
@@ -87,25 +111,25 @@ export async function minutosBloqueado(claves) {
 
 export async function registrarFallo(claves) {
   const ahora = Date.now();
-  const firestore = obtenerDb();
+  const firestore = await obtenerDb();
 
   await Promise.all(claves.map(async (clave) => {
     if (firestore) {
       try {
         const ref = firestore.collection(COLECCION).doc(idDocumento(clave));
-        await firestore.runTransaction(async (tx) => {
+        await conTiempoLimite(firestore.runTransaction(async (tx) => {
           const snap = await tx.get(ref);
           tx.set(ref, {
             ...siguienteEstado(snap.exists ? snap.data() : null, clave, ahora),
             // Campo para una política TTL de Firestore que borre registros viejos
             expira: new Date(ahora + VENTANA_MS + BLOQUEO_MS),
           });
-        });
+        }));
         return;
       } catch (error) {
         console.error("❌ limitador: no se pudo escribir en Firestore:", error.message);
       }
     }
-    memoria.set(clave, siguienteEstado(memoria.get(clave), clave, ahora));
+    guardarEnMemoria(clave, siguienteEstado(memoria.get(clave), clave, ahora));
   }));
 }

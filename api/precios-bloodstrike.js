@@ -1,4 +1,5 @@
 import { pedirJSON, conCache, catalogoValido, cabecerasCachePrecios } from './_lib/externo.js';
+import { faltaConfiguracion } from './_lib/validacion.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -7,8 +8,7 @@ export default async function handler(req, res) {
 
   const URL_GOOGLE_SCRIPT = process.env.SCRIPT_BLOOD;
   if (!URL_GOOGLE_SCRIPT) {
-    console.error("❌ Falta la variable de entorno SCRIPT_BLOOD");
-    return res.status(500).json({ status: "error", message: "Error interno al conectar con Google Sheets" });
+    return faltaConfiguracion(res, ["SCRIPT_BLOOD"], { status: "error", message: "Error interno al conectar con Google Sheets" });
   }
 
   try {

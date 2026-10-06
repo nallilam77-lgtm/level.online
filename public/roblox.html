@@ -904,7 +904,7 @@
       usuarioVerificado = true;
       statusDiv.style.display = 'block';
       statusDiv.style.color = 'var(--cyan-text)'; 
-      statusDiv.innerHTML = `✔️ Usuario verificado: <strong style="color: #fff;">${usuarioInput}</strong>`;
+      statusDiv.innerHTML = `✔️ Usuario verificado: <strong style="color: #fff;">${escaparHtml(usuarioInput)}</strong>`;
       verificarEstadoDesbloqueo();
     });
 
@@ -1012,6 +1012,9 @@
     }
 
     // MANEJO AVANZADO DE ERRORES (De Free Fire)
+    // Escapa texto externo (Apps Script, proveedores, IA, nombres de jugador) antes de insertarlo como HTML
+    const escaparHtml = (texto) => String(texto ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
     function mostrarErrorGeneral(titulo, mensajePrincipal, htmlExtra) {
         document.getElementById('pantallaProcesando').style.display = 'none';
         document.getElementById('tituloErrorGeneral').innerHTML = titulo;
@@ -1114,7 +1117,7 @@
                  mostrarErrorGeneral("❌ PAGO NO ENCONTRADO", "No pudimos localizar la referencia que ingresaste en nuestro sistema bancario.", "⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea <strong>exacto</strong> al valor del paquete.<br><br>3. Que el pago fue enviado al banco correcto.");
              } 
              else {
-                 mostrarErrorGeneral("❌ ERROR", msg, "");
+                 mostrarErrorGeneral("❌ ERROR", escaparHtml(msg), "");
              }
 
              isProcessing = false; btnConfirmar.disabled = false;
@@ -1297,7 +1300,7 @@
 
             const msgBot = document.createElement('div');
             msgBot.className = "msg-bubble bot";
-            msgBot.innerText = resultado.respuesta;
+            msgBot.innerText = resultado.respuesta || "Disculpa, no pude responder. Escríbenos por WhatsApp.";
             contenedorChat.appendChild(msgBot);
             contenedorChat.scrollTop = contenedorChat.scrollHeight;
 

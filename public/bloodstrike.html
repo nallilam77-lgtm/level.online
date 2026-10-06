@@ -1091,6 +1091,9 @@
       });
     }
 
+    // Escapa texto externo (Apps Script, proveedores, IA, nombres de jugador) antes de insertarlo como HTML
+    const escaparHtml = (texto) => String(texto ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
     function mostrarErrorGeneral(titulo, mensajePrincipal, htmlExtra) {
         document.getElementById('pantallaProcesando').style.display = 'none';
         document.getElementById('tituloErrorGeneral').innerHTML = titulo;
@@ -1197,7 +1200,7 @@
                  mostrarErrorGeneral("❌ PAGO NO ENCONTRADO", "No pudimos localizar la referencia que ingresaste en nuestro sistema bancario.", "⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el pago transferido sea <strong>exacto</strong> al valor del paquete.<br><br>3. Que el pago fue enviado al banco correcto.");
              } 
              else {
-                 mostrarErrorGeneral("❌ ERROR", msg, "");
+                 mostrarErrorGeneral("❌ ERROR", escaparHtml(msg), "");
              }
 
              isProcessing = false; btnConfirmar.disabled = false;
@@ -1439,12 +1442,13 @@
 
             const msgBot = document.createElement('div');
             msgBot.className = "msg-bubble bot";
-            let htmlRespuesta = resultado.respuesta;
+            // Se escapa la respuesta de la IA antes de insertar las tarjetas propias (evita inyectar HTML vía prompt)
+            let htmlRespuesta = escaparHtml(resultado.respuesta || "Disculpa, no pude responder. Escríbenos por WhatsApp.");
 
             const matchVerificar = htmlRespuesta.match(/\[ACCION_VERIFICAR:([\w-]+):(.*?)\]/);
             if (matchVerificar) {
                 let idChat = matchVerificar[1];
-                let paqueteChat = matchVerificar[2];
+                let paqueteChat = matchVerificar[2].replace(/[^\w\s.-]/g, '');
                 htmlRespuesta = htmlRespuesta.replace(matchVerificar[0], `
                     <div class="chat-action-card">
                         <p style="color:var(--cyan-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
@@ -1457,7 +1461,7 @@
             const matchPagoDirecto = htmlRespuesta.match(/\[ACCION_PAGO:([\w-]+):(.*?)\]/);
             if (matchPagoDirecto) {
                 let idChat = matchPagoDirecto[1];
-                let paqueteChat = matchPagoDirecto[2];
+                let paqueteChat = matchPagoDirecto[2].replace(/[^\w\s.-]/g, '');
 
                 if (!idVerificado) {
                     htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], `

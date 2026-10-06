@@ -282,6 +282,8 @@
     };
 
     const app = initializeApp(firebaseConfig);
+    // Los datos de Firestore se escapan antes de insertarlos en las tablas
+    const escaparHtml = (texto) => String(texto ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const auth = getAuth(app);
     const db = getFirestore(app);
 
@@ -413,14 +415,14 @@
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
-              <td><strong style="color:var(--info); font-size:13px;">${data.orderId || 'N/A'}</strong></td>
-              <td>${data.categoria || 'N/A'} <br><small style="color:var(--primary)">${data.oferta || ''}</small></td>
-              <td><strong>${data.jugadorId || 'N/A'}</strong></td>
+              <td><strong style="color:var(--info); font-size:13px;">${escaparHtml(data.orderId || 'N/A')}</strong></td>
+              <td>${escaparHtml(data.categoria || 'N/A')} <br><small style="color:var(--primary)">${escaparHtml(data.oferta || '')}</small></td>
+              <td><strong>${escaparHtml(data.jugadorId || 'N/A')}</strong></td>
               <td>$${parseFloat(data.montoUsd || 0).toFixed(2)}</td>
               <td><span class="badge-estado ${claseBadge}">${textoEstado}</span></td>
               <td style="font-size: 11px; color: var(--text-muted);">${fechaFormat}</td>
               <td>
-                <button class="btn-icon btn-danger btn-eliminar-pedido" data-id="${data.docIdFirebase}">🗑️ Borrar</button>
+                <button class="btn-icon btn-danger btn-eliminar-pedido" data-id="${escaparHtml(data.docIdFirebase)}">🗑️ Borrar</button>
               </td>
             `;
             tbody.appendChild(tr);
@@ -477,15 +479,15 @@
 
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td><strong style="color:var(--primary); font-size:16px;">${data.codigo}</strong></td>
-            <td><strong style="color:var(--success);">${data.descuento}%</strong></td>
+            <td><strong style="color:var(--primary); font-size:16px;">${escaparHtml(data.codigo)}</strong></td>
+            <td><strong style="color:var(--success);">${escaparHtml(data.descuento)}%</strong></td>
             <td>${usos}</td>
             <td>${limiteTxt}</td>
             <td><span class="badge-estado ${claseBadge}">${estado}</span></td>
             <td>
               <div class="acciones-grid">
-                <button class="btn-icon btn-edit btn-editar-cupon" data-id="${data.id}" data-codigo="${data.codigo}" data-descuento="${data.descuento}" data-limite="${data.limite || 0}">✏️</button>
-                <button class="btn-icon btn-danger btn-eliminar-cupon" data-id="${data.id}">🗑️</button>
+                <button class="btn-icon btn-edit btn-editar-cupon" data-id="${escaparHtml(data.id)}" data-codigo="${escaparHtml(data.codigo)}" data-descuento="${escaparHtml(data.descuento)}" data-limite="${escaparHtml(data.limite || 0)}">✏️</button>
+                <button class="btn-icon btn-danger btn-eliminar-cupon" data-id="${escaparHtml(data.id)}">🗑️</button>
               </div>
             </td>`;
           tbody.appendChild(tr);

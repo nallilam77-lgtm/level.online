@@ -1,4 +1,5 @@
 import { llamarScript } from './_lib/externo.js';
+import { faltaConfiguracion } from './_lib/validacion.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -14,8 +15,7 @@ export default async function handler(req, res) {
 
   const URL_VALIDADOR = process.env.SCRIPT_VALIDADOR_URL;
   if (!URL_VALIDADOR) {
-    console.error("❌ Falta la variable de entorno SCRIPT_VALIDADOR_URL");
-    return res.status(500).json({ valid: false, message: "Error en el servidor" });
+    return faltaConfiguracion(res, ["SCRIPT_VALIDADOR_URL"], { valid: false, message: "El validador de IDs no está disponible. Intenta de nuevo en unos minutos." });
   }
 
   try {

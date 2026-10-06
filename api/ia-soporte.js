@@ -1,10 +1,11 @@
 import { pedirJSON, TIEMPO_LIMITE_MS } from './_lib/externo.js';
 
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+    // CORS: solo el dominio de la tienda (igual que vercel.json). Con "*" cualquier web
+    // podía gastar la cuota de Gemini desde el navegador de sus visitantes.
+    res.setHeader('Access-Control-Allow-Origin', 'https://levelupstore.online');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();

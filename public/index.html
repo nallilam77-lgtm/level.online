@@ -642,10 +642,11 @@
           return;
         }
 
+        const escaparHtml = (texto) => String(texto ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         let html = "";
         data.recargas.forEach(recarga => {
           let estadoClase = "estado-processing";
-          let estadoTexto = recarga.estado.toLowerCase();
+          let estadoTexto = String(recarga.estado || "").toLowerCase();
 
           if (estadoTexto === "completed") estadoClase = "estado-completed";
           if (estadoTexto === "refunded") estadoClase = "estado-pending";
@@ -669,9 +670,9 @@
 
           html += `
             <div class="orden-card">
-              <p><b>📦 Paquete:</b> ${recarga.paquete}</p>
-              <p><b>Estado:</b> <span class="estado-badge ${estadoClase}">${recarga.estado}</span></p>
-              <p><b>📅 Fecha:</b> ${fechaFormateada}</p>
+              <p><b>📦 Paquete:</b> ${escaparHtml(recarga.paquete)}</p>
+              <p><b>Estado:</b> <span class="estado-badge ${estadoClase}">${escaparHtml(recarga.estado)}</span></p>
+              <p><b>📅 Fecha:</b> ${escaparHtml(fechaFormateada)}</p>
               <button class="btn-actualizar" onclick="actualizarEstado('${playerId}')">🔄 Actualizar Estado</button>
             </div>
           `;

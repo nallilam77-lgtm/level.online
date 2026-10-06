@@ -1,5 +1,6 @@
 import { obtenerIp, minutosBloqueado, registrarFallo } from './_lib/limitador.js';
 import { llamarScript, conCache, catalogoValido, ErrorExterno } from './_lib/externo.js';
+import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from './_lib/validacion.js';
 
 // Tiempos (maxDuration de Vercel = 60 s): precios 8 + verificar 10 + códigos 10 + bot 20 + registros 8 = 56 s
 const TIEMPO_ESCRITURA_CRITICA_MS = 10000;
@@ -32,14 +33,16 @@ export default async function handler(req, res) {
   };
 
   try {
-    const { id, paquete, referencia, urlImagen } = req.body || {};
+    const { id, paquete, referencia } = req.body || {};
+    // El comprobante viaja a la hoja de cálculo: se limpia para que no pueda inyectar fórmulas
+    const urlImagen = textoParaHoja(req.body?.urlImagen || "");
 
     if (!id || !paquete || !referencia) {
       return res.status(400).json({ status: "error", message: "Faltan datos obligatorios para procesar la recarga." });
     }
 
     // Formato estricto: ID numérico y exactamente 5 dígitos de referencia
-    if (!/^\d{5,15}$/.test(String(id)) || !/^\d{5}$/.test(String(referencia)) || String(paquete).length > 40) {
+    if (!/^\d{5,15}$/.test(String(id)) || !/^\d{5}$/.test(String(referencia)) || !PAQUETE_VALIDO.test(String(paquete))) {
       return res.status(400).json({ status: "error", message: "Datos con formato inválido. Revisa tu ID y los 5 dígitos de la referencia." });
     }
 
@@ -51,8 +54,8 @@ export default async function handler(req, res) {
 
     // Sin secreto no se puede autenticar con el bot: se aborta antes de tocar pagos o códigos
     if (!URL_GOOGLE_SCRIPT || !RAILWAY_SECRET) {
-      console.error("❌ Faltan variables de entorno: SCRIPT_RECARGAS_URL y/o RAILWAY_SECRET");
-      return res.status(500).json({ status: "error", message: "Falla interna del servidor." });
+      return faltaConfiguracion(res, ["SCRIPT_RECARGAS_URL", "RAILWAY_SECRET"].filter((v) => !(process.env[v] || "").trim()),
+        { status: "error", message: "Las recargas automáticas no están disponibles en este momento. No realices el pago todavía; escríbenos por WhatsApp." });
     }
 
     // Marcar una referencia se puede repetir sin efectos secundarios: 1 reintento rápido.

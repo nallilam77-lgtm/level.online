@@ -1,12 +1,12 @@
 import { llamarScript, conCache, catalogoValido, cabecerasCachePrecios } from './_lib/externo.js';
+import { faltaConfiguracion } from './_lib/validacion.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
 
   const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
   if (!URL_GOOGLE_SCRIPT) {
-    console.error("❌ Falta la variable de entorno SCRIPT_RECARGAS_URL");
-    return res.status(500).json({ status: "error", message: "Error al conectar con la hoja de precios." });
+    return faltaConfiguracion(res, ["SCRIPT_RECARGAS_URL"], { status: "error", message: "Error al conectar con la hoja de precios." });
   }
 
   try {

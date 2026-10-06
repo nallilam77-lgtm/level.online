@@ -1,11 +1,11 @@
 import { pedirJSON } from './_lib/externo.js';
+import { faltaConfiguracion } from './_lib/validacion.js';
 
 export default async function handler(req, res) {
-    // Headers de CORS para permitir la conexión desde el frontend
-    res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+    // Headers de CORS: solo el dominio de la tienda (igual que vercel.json)
+    res.setHeader('Access-Control-Allow-Origin', 'https://levelupstore.online');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     // Preflight request
     if (req.method === 'OPTIONS') {
@@ -32,8 +32,7 @@ export default async function handler(req, res) {
         const scriptUrl = process.env.SCRIPT_RECARGAS_VERIFICACION;
         
         if (!scriptUrl) {
-            console.error("Falta la variable SCRIPT_RECARGAS_VERIFICACION en Vercel");
-            return res.status(500).json({ success: false, message: "Error interno de configuración." });
+            return faltaConfiguracion(res, ["SCRIPT_RECARGAS_VERIFICACION"], { success: false, message: "La consulta de recargas no está disponible en este momento." });
         }
 
         // Hacemos la petición a la nueva hoja de cálculo de Google
