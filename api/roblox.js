@@ -1,5 +1,9 @@
 // Este archivo vive en /api/roblox.js dentro de tu proyecto en Vercel
 import { obtenerIp, minutosBloqueado, registrarFallo } from './_lib/limitador.js';
+import { llamarScript, conCache } from './_lib/externo.js';
+
+// Debe ser menor que maxDuration de esta función en vercel.json (30 s)
+const TIEMPO_COMPRA_MS = 20000;
 
 export default async function handler(req, res) {
   // 1. Configurar los encabezados CORS: solo tu dominio (igual que vercel.json)
@@ -51,16 +55,24 @@ export default async function handler(req, res) {
       return res.status(400).json({ status: 'error', message: 'Operación no permitida.' });
     }
 
-    const googleResponse = await fetch(scriptUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload)
-    });
+    // 6. Precios: lectura con caché en memoria (instantánea y con respaldo si Apps Script falla)
+    if (tipo === 'obtener_precios') {
+      const { datos } = await conCache('precios:roblox',
+        () => llamarScript(scriptUrl, payload, { reintentos: 1 }),
+        { esValido: (d) => d?.status === 'success' && d.precios && typeof d.precios === 'object' });
+      return res.status(200).json(datos);
+    }
 
-    // 6. Leer la respuesta devuelta por Google Apps Script
-    const data = await googleResponse.json();
+    // 7. Compra: Apps Script verifica el pago y la entrega, puede tardar más. Sin reintento
+    //    (podría duplicar la compra). Si se agota el tiempo, la compra sigue en Apps Script.
+    let data;
+    try {
+      data = await llamarScript(scriptUrl, payload, { tiempoMs: TIEMPO_COMPRA_MS });
+    } catch (error) {
+      if (!error.tiempoAgotado) throw error;
+      console.error('⚠️ Compra Roblox sin respuesta a tiempo | REF:', payload.referencia);
+      return res.status(202).json({ status: 'error', message: 'Fallo técnico momentáneo: tu compra quedó en proceso. Si en 5 minutos no la recibes, escríbenos por WhatsApp.' });
+    }
 
     // Una compra rechazada (pago no encontrado, ya usado, insuficiente...) cuenta como intento fallido.
     // "Fallo técnico" no cuenta: el pago sí existía y quedó en proceso.
@@ -68,11 +80,11 @@ export default async function handler(req, res) {
       await registrarFallo(clavesLimite);
     }
 
-    // 7. Entregar la respuesta limpia a tu página web de Roblox
+    // 8. Entregar la respuesta limpia a tu página web de Roblox
     return res.status(200).json(data);
 
   } catch (error) {
-    console.error('Error en el proxy de Vercel para Roblox:', error);
-    return res.status(500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
+    console.error('Error en el proxy de Vercel para Roblox:', error.message);
+    return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
   }
 }

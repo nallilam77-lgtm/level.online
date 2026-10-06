@@ -1,3 +1,5 @@
+import { llamarScript } from './_lib/externo.js';
+
 // 1. EL TRUCO PARA EVITAR QUE SE CONGELE POR EL PESO DE LA IMAGEN
 // Aumentamos el límite de recepción a 4MB (Vercel permite un máximo de 4.5MB en plan gratuito)
 export const config = {
@@ -20,25 +22,13 @@ export default async function handler(req, res) {
   try {
     // 2. EL TRUCO PARA EVITAR QUE VERCEL MATE LA FUNCIÓN (TIMEOUT)
     // Le damos a Google Drive un máximo de 8 segundos para responder.
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    const response = await fetch(process.env.SCRIPT_RECARGAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accion: "subir_imagen",
-        base64: req.body.base64,
-        nombre: req.body.nombre,
-        mimeType: req.body.mimeType
-      }),
-      signal: controller.signal // Atamos el cronómetro a la petición
+    // Sin reintento: cada llamada crea un archivo nuevo en Drive.
+    const data = await llamarScript(process.env.SCRIPT_RECARGAS_URL, {
+      accion: "subir_imagen",
+      base64: req.body.base64,
+      nombre: req.body.nombre,
+      mimeType: req.body.mimeType
     });
-    
-    // Si Drive respondió a tiempo, apagamos el cronómetro
-    clearTimeout(timeoutId);
-
-    const data = await response.json();
 
     // Si Google Apps Script responde, pero dice que hubo un error al guardar
     if (data.status === "error") {
@@ -52,10 +42,10 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
 
   } catch (error) {
-    console.error("Error al subir imagen a Google Drive:", error);
-    
+    console.error("Error al subir imagen a Google Drive:", error.message);
+
     // Si el error fue provocado porque pasaron los 8 segundos (nuestro cronómetro)
-    if (error.name === 'AbortError') {
+    if (error.tiempoAgotado) {
       return res.status(200).json({ 
         status: "success", 
         url: "Drive tardó demasiado en responder - Continuó sin comprobante" 

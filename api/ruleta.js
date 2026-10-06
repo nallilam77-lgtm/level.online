@@ -1,3 +1,5 @@
+import { llamarScript } from './_lib/externo.js';
+
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
         return res.status(405).json({ status: "error", message: "Método no permitido." });
@@ -24,19 +26,14 @@ export default async function handler(req, res) {
         let ganoPremio = numeroAleatorio <= 2; // Exactamente el 2% (de 0 a 2)
         let premioStr = ganoPremio ? "100 Diamantes 💎" : "Vacío ❌";
 
-        const respuestaScript = await fetch(URL_GOOGLE_SCRIPT, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                accion: "girar_ruleta", // Identificador opcional para tu Google Script
-                referencia: referencia,
-                id_jugador: id,
-                juego: juego || "Free Fire",
-                premio: premioStr
-            })
+        // Máximo 8 s y sin reintento: cada llamada consume el giro de la referencia
+        const resultadoGAS = await llamarScript(URL_GOOGLE_SCRIPT, {
+            accion: "girar_ruleta", // Identificador opcional para tu Google Script
+            referencia: referencia,
+            id_jugador: id,
+            juego: juego || "Free Fire",
+            premio: premioStr
         });
-
-        const resultadoGAS = await respuestaScript.json();
 
         // Si Google Script detecta que la referencia ya jugó o hubo un error de BD
         if (resultadoGAS.status === "error") {
@@ -67,7 +64,8 @@ export default async function handler(req, res) {
         });
 
     } catch (error) {
-        return res.status(500).json({ 
+        console.error("Error en ruleta.js:", error.message);
+        return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({
             status: "error", 
             message: "Fallo temporal en los servidores de la ruleta." 
         });

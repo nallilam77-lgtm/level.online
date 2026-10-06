@@ -1,4 +1,8 @@
 import { obtenerIp, minutosBloqueado, registrarFallo } from './_lib/limitador.js';
+import { llamarScript, conCache, catalogoValido, ErrorExterno } from './_lib/externo.js';
+
+// Tiempos (maxDuration de Vercel = 60 s): precios 8 + verificar 10 + FazerCards 20 + registros 8 = 46 s
+const TIEMPO_ESCRITURA_CRITICA_MS = 10000;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
@@ -27,22 +31,12 @@ export default async function handler(req, res) {
     return parseFloat(m) || 0;
   };
 
-  // 🛡️ Función auxiliar con depuración avanzada de HTML
-  async function callGoogleScript(url, payload) {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const text = await response.text();
-    try {
-      return JSON.parse(text);
-    } catch (err) {
-      // 🚨 AQUÍ VERÁS EL ERROR EXACTO EN LOS LOGS DE VERCEL
-      console.error("🚨 HTML COMPLETO RECIBIDO DE GOOGLE APPS SCRIPT:", text);
-      throw new Error("Google Apps Script falló y devolvió HTML. Revisa los logs de Vercel para ver el motivo.");
-    }
-  }
+  // 🛡️ Apps Script con tiempo límite (8 s por defecto); si devuelve HTML queda en los logs de Vercel.
+  // Solo marcar una referencia se reintenta: repetirlo no tiene efectos secundarios.
+  const callGoogleScript = (url, payload, opciones = {}) => llamarScript(url, payload, opciones);
+  const marcarReferencia = (url, accion, ref) =>
+    llamarScript(url, { accion, referencia: ref }, { reintentos: 1 })
+      .catch((e) => console.error(`❌ ${accion} falló para REF ${ref}:`, e.message));
 
   try {
     const { id, paquete, referencia, urlImagen } = req.body || {};
@@ -74,10 +68,16 @@ export default async function handler(req, res) {
     // ==========================================
     // PASO 1: OBTENER EL PRECIO REAL
     // ==========================================
-    const dataPrecios = await callGoogleScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" });
-
-    if (!dataPrecios || dataPrecios.status !== "success" || !dataPrecios.catalogo) {
-      return res.status(500).json({ status: "error", message: dataPrecios.message || "Error al leer la base de datos de precios." });
+    // Copia de hasta 60 s para no repetir la consulta en cada compra; sin respaldo viejo,
+    // porque este precio es el que se cobra.
+    let dataPrecios;
+    try {
+      ({ datos: dataPrecios } = await conCache('precios:bs',
+        () => callGoogleScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 1 }),
+        { esValido: catalogoValido, respaldoMs: 0 }));
+    } catch (error) {
+      console.error("❌ No se pudieron leer los precios:", error.message);
+      return res.status(503).json({ status: "error", message: "Error al leer la base de datos de precios. Intenta de nuevo en un momento." });
     }
 
     const numeroOro = String(paquete).replace(/[^0-9]/g, '');
@@ -93,11 +93,12 @@ export default async function handler(req, res) {
     // ==========================================
     // PASO 2: BUSCAR PAGO Y VERIFICAR
     // ==========================================
-    const dataVerificacion = await callGoogleScript(URL_GOOGLE_SCRIPT, { 
-      accion: "verificar_pago", 
-      referencia: referencia, 
-      monto: precioReal 
-    });
+    // Sin reintento: si Apps Script ya registró la verificación, repetirla daría "ya utilizado"
+    const dataVerificacion = await callGoogleScript(URL_GOOGLE_SCRIPT, {
+      accion: "verificar_pago",
+      referencia: referencia,
+      monto: precioReal
+    }, { tiempoMs: TIEMPO_ESCRITURA_CRITICA_MS });
 
     if (!dataVerificacion || !dataVerificacion.encontrado) {
       await registrarFallo(clavesLimite);
@@ -106,11 +107,8 @@ export default async function handler(req, res) {
 
     if (dataVerificacion.insuficiente) {
       await registrarFallo(clavesLimite);
-      await callGoogleScript(URL_GOOGLE_SCRIPT, { 
-        accion: "marcar_verificado", 
-        referencia: dataVerificacion.referencia 
-      }).catch(() => {});
-      
+      await marcarReferencia(URL_GOOGLE_SCRIPT, "marcar_verificado", dataVerificacion.referencia);
+
       const pagado = Number(dataVerificacion.montoPagado) || 0;
       const faltante = precioReal - pagado;
 
@@ -139,7 +137,7 @@ export default async function handler(req, res) {
 
     const offerIdFinal = codigosFazer[numeroOro];
     if (!offerIdFinal) {
-      await callGoogleScript(URL_GOOGLE_SCRIPT, { accion: "marcar_verificado", referencia: dataVerificacion.referencia }).catch(() => {});
+      await marcarReferencia(URL_GOOGLE_SCRIPT, "marcar_verificado", dataVerificacion.referencia);
       return res.status(400).json({ status: "error", message: "El paquete solicitado no existe en el catálogo del proveedor." });
     }
 
@@ -187,20 +185,18 @@ export default async function handler(req, res) {
     if (respuestaIncierta) {
       console.error("⚠️ Respuesta incierta de FazerCards:", detalleIncierto, "| REF:", dataVerificacion.referencia);
 
-      await callGoogleScript(URL_GOOGLE_SCRIPT, {
-        accion: "registrar_error",
-        idJugador: id,
-        paquete: paquete,
-        referencia: dataVerificacion.referencia,
-        codigosUsados: "API FAZERCARDS (INCIERTO)",
-        urlImagen: `⚠️ REVISAR EN FAZERCARDS SI LA ORDEN EXISTE ANTES DE REPETIR | Motivo: ${detalleIncierto} | 🧾 REF: ${dataVerificacion.referencia} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}`
-      }).catch(() => {});
-
-      // Bloquear el pago: nadie puede reutilizarlo mientras se revisa
-      await callGoogleScript(URL_GOOGLE_SCRIPT, {
-        accion: "marcar_usado",
-        referencia: dataVerificacion.referencia
-      }).catch(() => {});
+      // Registrar el incidente y bloquear el pago (nadie puede reutilizarlo mientras se revisa), en paralelo
+      await Promise.allSettled([
+        callGoogleScript(URL_GOOGLE_SCRIPT, {
+          accion: "registrar_error",
+          idJugador: id,
+          paquete: paquete,
+          referencia: dataVerificacion.referencia,
+          codigosUsados: "API FAZERCARDS (INCIERTO)",
+          urlImagen: `⚠️ REVISAR EN FAZERCARDS SI LA ORDEN EXISTE ANTES DE REPETIR | Motivo: ${detalleIncierto} | 🧾 REF: ${dataVerificacion.referencia} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}`
+        }).catch((e) => console.error("❌ registrar_error falló:", e.message)),
+        marcarReferencia(URL_GOOGLE_SCRIPT, "marcar_usado", dataVerificacion.referencia)
+      ]);
 
       // El frontend reconoce "fallo técnico" y muestra el modal de "recarga en proceso"
       return res.status(202).json({
@@ -213,19 +209,17 @@ export default async function handler(req, res) {
       const errorMsg = String(resultadoCompra?.error || "ID de jugador incorrecto o mantenimiento.");
       console.error("❌ FazerCards rechazó la recarga:", errorMsg);
 
-      await callGoogleScript(URL_GOOGLE_SCRIPT, { 
-        accion: "registrar_error", 
-        idJugador: id, 
-        paquete: paquete, 
-        referencia: dataVerificacion.referencia, 
-        codigosUsados: "API FAZERCARDS", 
-        urlImagen: `⚠️ FALLO PROVEEDOR: ${errorMsg} | 🧾 REF: ${dataVerificacion.referencia}` 
-      }).catch(() => {});
-
-      await callGoogleScript(URL_GOOGLE_SCRIPT, { 
-        accion: "marcar_verificado", 
-        referencia: dataVerificacion.referencia 
-      }).catch(() => {});
+      await Promise.allSettled([
+        callGoogleScript(URL_GOOGLE_SCRIPT, {
+          accion: "registrar_error",
+          idJugador: id,
+          paquete: paquete,
+          referencia: dataVerificacion.referencia,
+          codigosUsados: "API FAZERCARDS",
+          urlImagen: `⚠️ FALLO PROVEEDOR: ${errorMsg} | 🧾 REF: ${dataVerificacion.referencia}`
+        }).catch((e) => console.error("❌ registrar_error falló:", e.message)),
+        marcarReferencia(URL_GOOGLE_SCRIPT, "marcar_verificado", dataVerificacion.referencia)
+      ]);
 
       return res.status(400).json({ 
         status: "error", 
@@ -234,31 +228,29 @@ export default async function handler(req, res) {
     }
 
     // ==========================================
-    // PASO 4: QUEMAR EL PAGO EN EXCEL
-    // ==========================================
-    await callGoogleScript(URL_GOOGLE_SCRIPT, { 
-      accion: "marcar_usado", 
-      referencia: dataVerificacion.referencia 
-    }).catch(() => {});
-
-    // ==========================================
-    // PASO 5: GUARDAR EN PESTAÑA FINALIZADOS
+    // PASO 4 Y 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS (en paralelo)
     // ==========================================
     const comprobanteSeguro = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
 
-    await callGoogleScript(URL_GOOGLE_SCRIPT, { 
-      accion: "registrar_finalizado", 
-      idJugador: id, 
-      paquete: paquete, 
-      referencia: dataVerificacion.referencia, 
-      codigosUsados: "API Directa (FazerCards)", 
-      urlImagen: comprobanteSeguro 
-    }).catch(() => {});
+    await Promise.allSettled([
+      marcarReferencia(URL_GOOGLE_SCRIPT, "marcar_usado", dataVerificacion.referencia),
+      callGoogleScript(URL_GOOGLE_SCRIPT, {
+        accion: "registrar_finalizado",
+        idJugador: id,
+        paquete: paquete,
+        referencia: dataVerificacion.referencia,
+        codigosUsados: "API Directa (FazerCards)",
+        urlImagen: comprobanteSeguro
+      }).catch((e) => console.error("❌ registrar_finalizado falló:", e.message))
+    ]);
 
     return res.status(200).json({ status: "success", message: "Recarga de Blood Strike procesada exitosamente." });
 
   } catch (error) {
     console.error("Error crítico en recargar-bloodstrike.js:", error.message);
+    if (error instanceof ErrorExterno) {
+      return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si te dice que ya fue utilizado, escríbenos por WhatsApp." });
+    }
     return res.status(500).json({ status: "error", message: "Falla interna del servidor." });
   }
 }

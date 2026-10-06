@@ -1,4 +1,6 @@
-module.exports = async (req, res) => {
+import { pedirJSON, TIEMPO_LIMITE_MS } from './_lib/externo.js';
+
+export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -60,34 +62,37 @@ FLUJO DE AYUDA:
         let textoRespuesta = "";
         let exito = false;
 
+        // Todas las llaves comparten un presupuesto de 8 s: el chat nunca se queda colgado.
+        // Si una llave falla rápido (cuota, 404...) se prueba la siguiente; si Gemini se agota, se corta.
+        const limite = Date.now() + TIEMPO_LIMITE_MS;
+
         for (let i = 0; i < apisKeys.length; i++) {
             let currentIndex = (startIndex + i) % apisKeys.length;
             let currentKey = apisKeys[currentIndex];
+            const restante = limite - Date.now();
+            if (restante < 1000) break;
 
             try {
-                const respuestaGemini = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modeloAsignado}:generateContent`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': currentKey },
-                    body: JSON.stringify({
-                        contents: [{ role: "user", parts: [{ text: `${promptSistema}\n\nMensaje del cliente: "${mensaje}"` }] }]
-                    })
+                const data = await pedirJSON(`https://generativelanguage.googleapis.com/v1beta/models/${modeloAsignado}:generateContent`, {
+                    cabeceras: { 'x-goog-api-key': currentKey },
+                    cuerpo: { contents: [{ role: "user", parts: [{ text: `${promptSistema}\n\nMensaje del cliente: "${mensaje}"` }] }] },
+                    tiempoMs: restante
                 });
 
-                if (!respuestaGemini.ok) {
-                    const errorMsg = await respuestaGemini.text();
-                    console.error(`[CHAT] Falló la llave #${currentIndex + 1}. Error ${respuestaGemini.status}: ${errorMsg}`);
-                    continue; 
+                if (data?.error) {
+                    console.error(`[CHAT] Falló la llave #${currentIndex + 1}. Error ${data.error.code}: ${data.error.message}`);
+                    continue;
                 }
 
-                const data = await respuestaGemini.json();
-                if (data && data.candidates && data.candidates[0].content) {
-                    textoRespuesta = data.candidates[0].content.parts[0].text;
+                const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (texto) {
+                    textoRespuesta = texto;
                     exito = true;
-                    break; 
+                    break;
                 }
             } catch (err) {
                 console.error(`[CHAT] Error con la llave #${currentIndex + 1}`, err.message);
-                continue;
+                if (err.tiempoAgotado) break;
             }
         }
 
@@ -100,4 +105,4 @@ FLUJO DE AYUDA:
         console.error("Error global en el servidor:", error);
         return res.status(200).json({ status: "success", respuesta: "Hubo un pequeño problema. Escríbenos por WhatsApp.", respaldoWhatsapp: true });
     }
-};
+}

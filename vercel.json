@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/recargar.js": { "maxDuration": 60 },
-    "api/recargar-bloodstrike.js": { "maxDuration": 30 }
+    "api/recargar-bloodstrike.js": { "maxDuration": 60 },
+    "api/roblox.js": { "maxDuration": 30 }
   },
   "headers": [
     {

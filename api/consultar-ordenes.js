@@ -1,4 +1,6 @@
-module.exports = async (req, res) => {
+import { pedirJSON } from './_lib/externo.js';
+
+export default async function handler(req, res) {
     // Headers de CORS para permitir la conexión desde el frontend
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,10 +18,14 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const { playerId } = req.body;
+        const { playerId } = req.body || {};
 
         if (!playerId) {
             return res.status(400).json({ success: false, message: "ID de jugador no proporcionado." });
+        }
+        // IDs de Free Fire / Blood Strike (números) o usuarios de Roblox (letras, números y _)
+        if (!/^[A-Za-z0-9_]{2,30}$/.test(String(playerId))) {
+            return res.status(400).json({ success: false, message: "ID de jugador con formato inválido." });
         }
 
         // Llamamos a tu NUEVA variable de entorno en Vercel
@@ -31,11 +37,11 @@ module.exports = async (req, res) => {
         }
 
         // Hacemos la petición a la nueva hoja de cálculo de Google
-        const respuestaGoogle = await fetch(`${scriptUrl}?id=${playerId}`);
-        const data = await respuestaGoogle.json();
+        // Consulta sin efectos secundarios: máximo 8 s con 1 reintento rápido
+        const data = await pedirJSON(`${scriptUrl}?id=${encodeURIComponent(playerId)}`, { metodo: 'GET', reintentos: 1 });
 
         // Si la hoja no devuelve nada o el ID no tiene recargas exitosas
-        if (!data || data.length === 0) {
+        if (!Array.isArray(data) || data.length === 0) {
             return res.status(200).json({ success: true, recargas: [] });
         }
 
@@ -55,7 +61,7 @@ module.exports = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error consultando la hoja de cálculo:", error);
-        return res.status(500).json({ success: false, message: "Error de conexión con la base de datos." });
+        console.error("Error consultando la hoja de cálculo:", error.message);
+        return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ success: false, message: "Error de conexión con la base de datos." });
     }
-};
+}

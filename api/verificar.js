@@ -1,3 +1,5 @@
+import { llamarScript } from './_lib/externo.js';
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método no permitido' });
@@ -17,12 +19,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(URL_VALIDADOR, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: String(id) })
-    });
-    const data = await response.json();
+    // Consulta sin efectos secundarios: 1 reintento rápido dentro de los 8 s
+    const data = await llamarScript(URL_VALIDADOR, { id: String(id) }, { reintentos: 1 });
 
     // Solo se devuelven los campos que usa la página, nunca la respuesta cruda de Apps Script
     return res.status(200).json({
@@ -31,6 +29,9 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error("Error en verificar.js:", error.message);
+    if (error.name === 'ErrorExterno') {
+      return res.status(503).json({ valid: false, message: "El validador de IDs está lento. Intenta de nuevo en unos segundos." });
+    }
     return res.status(500).json({ valid: false, message: "Error en el servidor" });
   }
 }
