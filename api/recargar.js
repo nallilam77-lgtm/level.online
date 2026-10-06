@@ -45,7 +45,9 @@ export default async function handler(req, res) {
 
     const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
     const RAILWAY_URL = "https://bot-levelup-production.up.railway.app/canjear";
-    const RAILWAY_SECRET = process.env.RAILWAY_SECRET;
+    // trim(): al pegar el valor en Vercel es fácil que se cuele un espacio o salto de línea,
+    // y el bot lo rechaza con 401 aunque la clave "se vea" igual
+    const RAILWAY_SECRET = (process.env.RAILWAY_SECRET || "").trim();
 
     // Sin secreto no se puede autenticar con el bot: se aborta antes de tocar pagos o códigos
     if (!URL_GOOGLE_SCRIPT || !RAILWAY_SECRET) {
@@ -166,10 +168,24 @@ export default async function handler(req, res) {
     try {
       const respuestaRailway = await fetch(RAILWAY_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-secret-token": RAILWAY_SECRET },
+        // El bot lee "x-secret-token"; se envía también como Bearer y x-railway-secret
+        // por si el servidor de Railway se configura con otro formato de autenticación
+        headers: {
+          "Content-Type": "application/json",
+          "x-secret-token": RAILWAY_SECRET,
+          "x-railway-secret": RAILWAY_SECRET,
+          "Authorization": `Bearer ${RAILWAY_SECRET}`
+        },
         body: JSON.stringify({ pins: pinesExtraidos, player_id: id }),
         signal: controlador.signal
       });
+
+      // 401/403: el bot no aceptó la clave y no canjeó nada. Los pines quedan intactos en la hoja de errores.
+      if (respuestaRailway.status === 401 || respuestaRailway.status === 403) {
+        throw new Error(JSON.stringify({
+          detail: `BOT RECHAZÓ LA AUTENTICACIÓN (HTTP ${respuestaRailway.status}). RAILWAY_SECRET en Vercel no coincide con la clave del bot en Railway. NINGÚN PIN FUE CANJEADO`
+        }));
+      }
 
       resultadoBot = await respuestaRailway.json();
 
