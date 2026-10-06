@@ -2,12 +2,14 @@
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 //
 // REGLA DE REINTENTOS: solo se reintenta lo que se puede repetir sin efectos secundarios
-// (leer precios, validar un ID, marcar una referencia como usada). Nunca se reintenta lo que
-// crea algo (verificar_pago, obtener_codigo, compras, registros, ruleta), porque un reintento
-// tras un timeout podría duplicar la operación aunque la primera sí se haya completado.
+// (leer precios, validar un ID, marcar una referencia como usada) o lo que el Apps Script hace
+// idempotente con un idPedido (verificar_pago y obtener_codigo en recargas.gs v2: repetir la
+// petición devuelve el mismo resultado). Nunca se reintenta lo que crea algo sin esa protección
+// (compras, registros, ruleta), porque un reintento tras un timeout podría duplicar la operación.
 
 export const TIEMPO_LIMITE_MS = 8000;
-const ESPERA_ENTRE_REINTENTOS_MS = 300;
+// Espera antes de cada reintento: 400 ms, 1,2 s, 2,4 s... (le da tiempo a Apps Script de "despertar")
+const ESPERAS_REINTENTO_MS = [400, 1200, 2400];
 
 export class ErrorExterno extends Error {
   constructor(mensaje, { tiempoAgotado = false, estadoHttp = null } = {}) {
@@ -51,25 +53,35 @@ async function intentoUnico(url, opciones, tiempoMs) {
 
 // Hace la petición y devuelve el JSON. Todo el proceso (incluidos reintentos) respeta
 // un presupuesto total de `tiempoMs`: la función nunca tarda más que eso.
-// Tras un timeout no se reintenta (no queda tiempo y el servidor ya está lento).
-export async function pedirJSON(url, { metodo = 'POST', cuerpo, reintentos = 0, tiempoMs = TIEMPO_LIMITE_MS, cabeceras = {} } = {}) {
+// - intentoMs: tiempo máximo de cada intento (por defecto, todo el presupuesto).
+// - reintentarTrasTimeout: solo para operaciones idempotentes; si es false, tras un timeout
+//   no se reintenta porque la primera petición pudo haberse completado en el servidor.
+// El error final indica cuántos intentos se hicieron (e.intentos) para el informe de errores.
+export async function pedirJSON(url, { metodo = 'POST', cuerpo, reintentos = 0, tiempoMs = TIEMPO_LIMITE_MS, intentoMs, reintentarTrasTimeout = false, cabeceras = {} } = {}) {
   const opciones = { method: metodo, headers: { 'Content-Type': 'application/json', ...cabeceras } };
   if (cuerpo !== undefined) opciones.body = JSON.stringify(cuerpo);
 
   const limite = Date.now() + tiempoMs;
   let ultimoError;
+  let intentos = 0;
   for (let intento = 0; intento <= reintentos; intento++) {
     const restante = limite - Date.now();
     if (restante < 500) break;
+    intentos++;
     try {
-      return await intentoUnico(url, opciones, restante);
+      return await intentoUnico(url, opciones, Math.min(restante, intentoMs || restante));
     } catch (error) {
       ultimoError = error;
-      if (error.tiempoAgotado || intento === reintentos) break;
-      await esperar(ESPERA_ENTRE_REINTENTOS_MS);
+      if ((error.tiempoAgotado && !reintentarTrasTimeout) || intento === reintentos) break;
+      const espera = ESPERAS_REINTENTO_MS[Math.min(intento, ESPERAS_REINTENTO_MS.length - 1)];
+      if (limite - Date.now() < espera + 1000) break; // no queda tiempo para otro intento útil
+      await esperar(espera);
     }
   }
-  throw ultimoError || new ErrorExterno('Tiempo agotado');
+  const final = ultimoError || new ErrorExterno('Tiempo agotado');
+  final.intentos = intentos;
+  if (intentos > 1) final.message = `${final.message} (tras ${intentos} intentos)`;
+  throw final;
 }
 
 // Atajo para Apps Script: POST con { accion, ... }

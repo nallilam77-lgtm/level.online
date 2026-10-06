@@ -3,8 +3,9 @@ import { obtenerIp, minutosBloqueado, registrarFallo } from './_lib/limitador.js
 import { llamarScript, conCache } from './_lib/externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from './_lib/validacion.js';
 
-// Debe ser menor que maxDuration de esta función en vercel.json (30 s)
-const TIEMPO_COMPRA_MS = 20000;
+// Debe ser menor que maxDuration de esta función en vercel.json (60 s).
+// La compra no se reintenta: el Apps Script de Roblox no tiene idPedido y repetirla podría duplicarla.
+const TIEMPO_COMPRA_MS = 45000;
 
 export default async function handler(req, res) {
   // 1. Configurar los encabezados CORS: solo tu dominio (igual que vercel.json)

@@ -11,16 +11,32 @@
 //   MACRODROID_CLAVE = clave que MacroDroid envía en el campo "clave" del JSON.
 // Mientras una propiedad no exista, esa comprobación se omite (compatible con lo anterior).
 // ORDEN: primero configura Vercel/MacroDroid, después crea la propiedad.
+//
+// Versión 2: cada pedido de la tienda trae un idPedido. Con él, repetir verificar_pago u
+// obtener_codigo devuelve el mismo resultado (la tienda puede reintentar sin sacar pines de más),
+// cada asignación queda en la pestaña "asignaciones_pines" y los pines que el bot nunca recibió
+// se devuelven al inventario (devolver_codigos). La pestaña "errores" gana las columnas F-L.
 // =====================================================================
 
 const PROJECT_ID = "levelupstore-87d4d";
 const COLLECTION_NAME = "Pagos";
 const FOLDER_ID = "12-YApHdXIFtbIk9qzNCiUY0SVsimCecO";
 
-// Vercel corta sus llamadas a los 6-9 s: si el candado tarda más que esto en liberarse,
-// es mejor responder "ocupado" que trabajar para una petición que ya nadie espera
-// (eso dejaba pagos "En proceso" o pines borrados sin usar).
-const ESPERA_CANDADO_MS = 5000;
+// Versión que la tienda lee en obtener_precios: con 2 o más, Vercel sabe que verificar_pago y
+// obtener_codigo son idempotentes (idPedido) y que puede reintentarlos tras un timeout.
+const VERSION_SCRIPT = 2;
+
+// Vercel espera hasta 15 s por intento: si el candado tarda más que esto en liberarse,
+// es mejor responder "ocupado" (Vercel reintenta) que trabajar para una petición que ya nadie espera.
+const ESPERA_CANDADO_MS = 8000;
+
+// Pestaña de auditoría: qué pines se entregaron a cada pedido y qué pasó con ellos
+const HOJA_ASIGNACIONES = "asignaciones_pines";
+const COLUMNAS_ASIGNACIONES = ["fecha", "id pedido", "referencia", "columna", "n.º columna", "pines", "estado"];
+
+// Columnas de la pestaña "errores" (A-E son las de siempre; F-L agregan el detalle)
+const COLUMNAS_ERRORES = ["fecha-hora", "id", "estado de los pines", "producto", "informe completo",
+  "fase del fallo", "referencia", "estado del pago", "motivo técnico", "comprobante", "id pedido", "pines asignados al pedido"];
 
 // Los comprobantes muestran nombre/cédula del cliente: por defecto solo los ve el dueño de la carpeta.
 const COMPARTIR_COMPROBANTES_CON_ENLACE = false;
@@ -60,6 +76,8 @@ function doPost(e) {
     switch (accion) {
       case "verificar_pago":       return conCandado(function () { return verificarPago(datos); });
       case "obtener_codigo":       return conCandado(function () { return obtenerCodigo(datos); });
+      case "devolver_codigos":     return conCandado(function () { return devolverCodigos(datos); });
+      case "liberar_pedido":       return conCandado(function () { return liberarPedido(datos); });
       case "marcar_usado":         return conCandado(function () { return marcarUsado(datos); });
       case "marcar_verificado":    return conCandado(function () { return marcarVerificado(datos); });
       case "registrar_finalizado": return conCandado(function () { return registrarFinalizado(datos); });
@@ -129,6 +147,17 @@ function verificarPago(datos) {
   // multiplicaba las posibilidades de acertar el pago de otro cliente probando números).
   // De abajo hacia arriba, se elige el pago disponible más reciente y se saltan los ya usados,
   // así un pago viejo "Usado" con los mismos 5 dígitos no bloquea uno nuevo.
+  var idPedido = String(datos.idPedido || "");
+  var props = PropertiesService.getScriptProperties();
+  var respuestaEncontrado = function (i, repetido) {
+    var montoPago = limpiarMontoVES(rows[i][3]);
+    return responder({
+      status: "success", encontrado: true, fila: i + 1, telefono: String(rows[i][1]).trim(),
+      referencia: String(rows[i][2]).replace(/\s+/g, ""), montoPagado: montoPago,
+      insuficiente: montoPago < (precioRequerido - 0.50), repetido: repetido
+    });
+  };
+
   var hayUsado = false, hayEnProceso = false;
   for (var i = rows.length - 1; i >= 1; i--) {
     var referenciaCompleta = String(rows[i][2]).replace(/\s+/g, "");
@@ -136,22 +165,22 @@ function verificarPago(datos) {
 
     var estadoActual = String(rows[i][4]).trim().toLowerCase();
     if (estadoActual === "usado") { hayUsado = true; continue; }
-    if (estadoActual === "en proceso") { hayEnProceso = true; continue; }
+    if (estadoActual === "en proceso") {
+      // Reintento de la MISMA petición (Vercel no recibió la primera respuesta): mismo resultado
+      if (idPedido && props.getProperty("proc_" + referenciaCompleta) === idPedido) return respuestaEncontrado(i, true);
+      hayEnProceso = true; continue;
+    }
     if (estadoActual !== "verificado" && estadoActual !== "") continue;
 
-    var filaNum = i + 1;
-    var montoPago = limpiarMontoVES(rows[i][3]);
-
-    // Bloquear al instante
-    hoja.getRange(filaNum, 5).setValue("En proceso");
+    // Bloquear al instante y recordar qué pedido lo bloqueó
+    hoja.getRange(i + 1, 5).setValue("En proceso");
     SpreadsheetApp.flush();
+    if (idPedido) {
+      props.setProperty("proc_" + referenciaCompleta, idPedido);
+      props.setProperty("pedido_" + idPedido, referenciaCompleta);
+    }
     actualizarEstadoFirebase(referenciaCompleta, "En proceso");
-
-    return responder({
-      status: "success", encontrado: true, fila: filaNum, telefono: String(rows[i][1]).trim(),
-      referencia: referenciaCompleta, montoPagado: montoPago,
-      insuficiente: montoPago < (precioRequerido - 0.50)
-    });
+    return respuestaEncontrado(i, false);
   }
 
   if (hayEnProceso) {
@@ -167,6 +196,18 @@ function verificarPago(datos) {
 // 2: OBTENER Y QUEMAR CÓDIGOS DE INVENTARIO
 // ==========================================
 function obtenerCodigo(datos) {
+  var idPedido = String(datos.idPedido || "");
+  // Reintento de la MISMA petición: se devuelven los mismos pines, sin sacar otros del inventario
+  if (idPedido) {
+    var previa = buscarAsignacion(idPedido);
+    if (previa) {
+      if (previa.estado.indexOf("ASIGNADOS") !== 0) {
+        return responder({ status: "error", message: "Los pines de este pedido ya no están asignados (" + previa.estado + ")." });
+      }
+      return responder({ status: "success", pines: previa.pines, repetido: true });
+    }
+  }
+
   var hojaCodigos = obtenerHoja("codigos");
   var diamantesBuscados = String(datos.diamantes || "").replace(/[^0-9]/g, "");
   var cantidadNecesaria = (diamantesBuscados === "220") ? 2 : 1;
@@ -199,26 +240,94 @@ function obtenerCodigo(datos) {
   for (var k = 0; k < codigosAsignados.length; k++) {
     hojaCodigos.getRange(codigosAsignados[k].fila, colIndex).clearContent();
   }
+  var pines = codigosAsignados.map(function (c) { return c.codigo; });
+
+  // Auditoría: qué pines salieron del inventario, para qué pedido y de qué columna
+  if (idPedido) {
+    var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
+    hojaAsignaciones().appendRow([fechaHora, idPedido, textoSeguro(datos.referencia || ""),
+      textoSeguro(String(headers[colIndex - 1])), colIndex, pines.join(" | "), "ASIGNADOS"]);
+  }
   SpreadsheetApp.flush();
 
-  return responder({ status: "success", pines: codigosAsignados.map(function (c) { return c.codigo; }) });
+  return responder({ status: "success", pines: pines });
+}
+
+// ==========================================
+// 2b: DEVOLVER AL INVENTARIO LOS PINES DE UN PEDIDO (el bot nunca los recibió o no los procesó)
+// ==========================================
+function devolverCodigos(datos) {
+  var idPedido = String(datos.idPedido || "");
+  if (!idPedido) return responder({ status: "error", message: "Falta idPedido" });
+
+  var asignacion = buscarAsignacion(idPedido);
+  if (!asignacion) {
+    // obtener_codigo nunca llegó a sacar pines para este pedido
+    return responder({ status: "success", pines: [], sinAsignacion: true });
+  }
+  if (asignacion.estado.indexOf("DEVUELTOS") === 0) {
+    return responder({ status: "success", pines: asignacion.pines, yaDevueltos: true }); // idempotente
+  }
+  if (asignacion.estado.indexOf("ASIGNADOS") !== 0) {
+    return responder({ status: "error", message: "No se devuelven: el pedido está en estado " + asignacion.estado });
+  }
+
+  // Cada pin vuelve a la primera celda vacía de su columna
+  var hojaCodigos = obtenerHoja("codigos");
+  var col = asignacion.columna;
+  var ultima = Math.max(hojaCodigos.getLastRow(), 1);
+  var valores = ultima > 1 ? hojaCodigos.getRange(2, col, ultima - 1, 1).getValues() : [];
+  var libres = [];
+  for (var i = 0; i < valores.length; i++) if (!String(valores[i][0] || "").trim()) libres.push(i + 2);
+  for (var k = 0; k < asignacion.pines.length; k++) {
+    var fila = k < libres.length ? libres[k] : ultima + 1 + (k - libres.length);
+    hojaCodigos.getRange(fila, col).setValue(asignacion.pines[k]);
+  }
+
+  var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
+  hojaAsignaciones().getRange(asignacion.fila, 7).setValue(
+    textoSeguro("DEVUELTOS AL INVENTARIO " + fechaHora + " - " + String(datos.motivo || "sin motivo")));
+  SpreadsheetApp.flush();
+  return responder({ status: "success", pines: asignacion.pines });
+}
+
+// ==========================================
+// 2c: LIBERAR EL PAGO DE UN PEDIDO QUE NO PUDO CONTINUAR (solo si este pedido lo bloqueó)
+// ==========================================
+function liberarPedido(datos) {
+  var idPedido = String(datos.idPedido || "");
+  if (!idPedido) return responder({ status: "error", message: "Falta idPedido" });
+  var props = PropertiesService.getScriptProperties();
+  var referencia = props.getProperty("pedido_" + idPedido);
+  if (!referencia) return responder({ status: "success", liberado: false }); // nunca llegó a bloquear un pago
+  var liberado = false;
+  if (props.getProperty("proc_" + referencia) === idPedido) {
+    liberado = cambiarEstadoPago(referencia, "Verificado", "en proceso");
+  }
+  return responder({ status: "success", liberado: liberado, referencia: referencia });
 }
 
 // ==========================================
 // 3: MARCAR COMO USADO (Éxito definitivo o pago bloqueado para revisión)
 // ==========================================
 function marcarUsado(datos) {
-  cambiarEstadoPago(datos.referencia, "Usado", null);
-  return responder({ status: "success" });
+  var cambiado = cambiarEstadoPago(datos.referencia, "Usado", null);
+  return responder({ status: "success", cambiado: cambiado });
 }
 
 // ==========================================
 // 4: DEVOLVER A VERIFICADO (error sin códigos, pago insuficiente...)
 // ==========================================
 function marcarVerificado(datos) {
-  // Solo libera pagos que estaban "En proceso": nunca revive un pago "Usado"
-  cambiarEstadoPago(datos.referencia, "Verificado", "en proceso");
-  return responder({ status: "success" });
+  // Solo libera pagos que estaban "En proceso": nunca revive un pago "Usado".
+  // Si otro pedido es quien lo tiene bloqueado, tampoco lo libera.
+  var referencia = String(datos.referencia || "").replace(/\s+/g, "");
+  var duenio = PropertiesService.getScriptProperties().getProperty("proc_" + referencia);
+  if (datos.idPedido && duenio && duenio !== String(datos.idPedido)) {
+    return responder({ status: "success", cambiado: false, message: "El pago lo procesa otro pedido" });
+  }
+  var cambiado = cambiarEstadoPago(referencia, "Verificado", "en proceso");
+  return responder({ status: "success", cambiado: cambiado });
 }
 
 // ==========================================
@@ -254,6 +363,11 @@ function registrarFinalizado(datos) {
     textoSeguro(datos.codigosUsados || "No especificado"), // E
     textoSeguro(datos.urlImagen || "Sin comprobante")    // F
   ]);
+  // Auditoría: los pines de este pedido quedan como usados
+  var asignacion = buscarAsignacion(String(datos.idPedido || ""));
+  if (asignacion && asignacion.estado.indexOf("ASIGNADOS") === 0) {
+    hojaAsignaciones().getRange(asignacion.fila, 7).setValue("USADOS (recarga finalizada " + fechaHora + ")");
+  }
   SpreadsheetApp.flush();
   // (Se quitó la llamada a /api/sincronizar-pedidos: ese endpoint no existe en la tienda
   //  y la petición alargaba el candado en cada recarga.)
@@ -275,7 +389,7 @@ function obtenerPrecios() {
       if (titulo) paquetes.push({ diamantes: titulo, precio: rows[1][i] });
     }
   }
-  return responder({ status: "success", catalogo: paquetes });
+  return responder({ status: "success", catalogo: paquetes, version: VERSION_SCRIPT });
 }
 
 // ==========================================
@@ -286,15 +400,32 @@ function registrarError(datos) {
   if (!hojaErrores) {
     // Antes, sin esta pestaña los pines del error se perdían en silencio
     hojaErrores = SpreadsheetApp.getActiveSpreadsheet().insertSheet("errores");
-    hojaErrores.appendRow(["fecha-hora", "id", "codigos", "producto", "url / motivo"]);
+    hojaErrores.appendRow(COLUMNAS_ERRORES);
+  } else if (!String(hojaErrores.getRange(1, 6).getValue() || "").trim()) {
+    // Pestaña antigua de 5 columnas: se agregan los títulos de las columnas nuevas (F-L)
+    hojaErrores.getRange(1, 6, 1, COLUMNAS_ERRORES.length - 5).setValues([COLUMNAS_ERRORES.slice(5)]);
   }
+
+  // Pines que el sistema asignó a este pedido, según la pestaña de auditoría
+  var asignacion = buscarAsignacion(String(datos.idPedido || ""));
+  var pinesAsignados = asignacion
+    ? asignacion.pines.join(" | ") + " (estado: " + asignacion.estado + ")"
+    : (datos.idPedido ? "ninguno: no salieron pines del inventario para este pedido" : "");
+
   var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
   hojaErrores.appendRow([
-    fechaHora,                                                       // A: fecha-hora
-    textoSeguro(datos.idJugador || "Desconocido"),                   // B: id
-    textoSeguro(datos.codigosUsados || "Ninguno"),                   // C: codigos (¡AQUÍ SE SALVAN!)
-    textoSeguro(datos.paquete || "Desconocido"),                     // D: producto
-    textoSeguro(datos.urlImagen || datos.error || "Fallo en el Bot") // E: url o motivo
+    fechaHora,                                                          // A: fecha-hora
+    textoSeguro(datos.idJugador || "Desconocido"),                      // B: id
+    textoSeguro(datos.estadoPines || datos.codigosUsados || "Ninguno"), // C: estado exacto de cada pin
+    textoSeguro(datos.paquete || "Desconocido"),                        // D: producto
+    textoSeguro(datos.urlImagen || datos.error || "Fallo en el Bot"),   // E: informe completo
+    textoSeguro(datos.fase || ""),                                      // F: fase del fallo
+    textoSeguro(datos.referenciaDetalle || datos.referencia || ""),     // G: referencia
+    textoSeguro(datos.estadoPago || ""),                                // H: estado del pago
+    textoSeguro(datos.motivo || ""),                                    // I: motivo técnico
+    textoSeguro(datos.comprobante || ""),                               // J: comprobante
+    textoSeguro(datos.idPedido || ""),                                  // K: id pedido
+    textoSeguro(pinesAsignados)                                         // L: pines asignados
   ]);
   SpreadsheetApp.flush();
 
@@ -323,25 +454,61 @@ function obtenerHoja(nombre, opcional) {
 
 // Texto que se escribe en la hoja: si empieza como fórmula (= + - @) se guarda como texto
 function textoSeguro(valor) {
-  var texto = String(valor === undefined || valor === null ? "" : valor).slice(0, 1000);
+  var texto = String(valor === undefined || valor === null ? "" : valor).slice(0, 3000);
   return /^[=+\-@]/.test(texto) ? "'" + texto : texto;
 }
 
 // Cambia el estado del pago con esa referencia completa (la fila más reciente).
 // Si soloSiEstado se indica, solo cambia cuando el estado actual coincide.
+// Devuelve true si cambió el estado. Al salir de "En proceso" se borra qué pedido lo tenía.
 function cambiarEstadoPago(referencia, nuevoEstado, soloSiEstado) {
   var refBuscada = String(referencia || "").replace(/\s+/g, "");
-  if (!refBuscada) return;
+  if (!refBuscada) return false;
   var hoja = obtenerHoja("pagos");
   var rows = hoja.getDataRange().getValues();
   for (var r = rows.length - 1; r >= 1; r--) {
     if (String(rows[r][2]).replace(/\s+/g, "") !== refBuscada) continue;
-    if (soloSiEstado && String(rows[r][4]).trim().toLowerCase() !== soloSiEstado) return;
+    if (soloSiEstado && String(rows[r][4]).trim().toLowerCase() !== soloSiEstado) return false;
     hoja.getRange(r + 1, 5).setValue(nuevoEstado);
     SpreadsheetApp.flush();
+    olvidarPedidoDePago(refBuscada);
     actualizarEstadoFirebase(refBuscada, nuevoEstado);
-    return;
+    return true;
   }
+  return false;
+}
+
+function olvidarPedidoDePago(referencia) {
+  var props = PropertiesService.getScriptProperties();
+  var idPedido = props.getProperty("proc_" + referencia);
+  if (idPedido) props.deleteProperty("pedido_" + idPedido);
+  props.deleteProperty("proc_" + referencia);
+}
+
+function hojaAsignaciones() {
+  var hoja = obtenerHoja(HOJA_ASIGNACIONES, true);
+  if (!hoja) {
+    hoja = SpreadsheetApp.getActiveSpreadsheet().insertSheet(HOJA_ASIGNACIONES);
+    hoja.appendRow(COLUMNAS_ASIGNACIONES);
+  }
+  return hoja;
+}
+
+// Busca (de la más reciente a la más antigua) la asignación de pines de un pedido
+function buscarAsignacion(idPedido) {
+  var hoja = obtenerHoja(HOJA_ASIGNACIONES, true);
+  if (!idPedido || !hoja) return null;
+  var rows = hoja.getDataRange().getValues();
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][1]) !== idPedido) continue;
+    return {
+      fila: i + 1,
+      columna: Number(rows[i][4]),
+      pines: String(rows[i][5] || "").split(" | ").filter(function (p) { return p; }),
+      estado: String(rows[i][6] || "")
+    };
+  }
+  return null;
 }
 
 // Un fallo de Firebase nunca debe tumbar la operación: la hoja es la fuente de verdad
@@ -393,8 +560,10 @@ function liberarPagosAtascados() {
     var rows = hoja.getDataRange().getValues();
     for (var i = 1; i < rows.length; i++) {
       if (String(rows[i][4]).trim().toLowerCase() === "en proceso") {
+        var ref = String(rows[i][2]).replace(/\s+/g, "");
         hoja.getRange(i + 1, 5).setValue("Verificado");
-        actualizarEstadoFirebase(String(rows[i][2]).replace(/\s+/g, ""), "Verificado");
+        olvidarPedidoDePago(ref);
+        actualizarEstadoFirebase(ref, "Verificado");
       }
     }
     SpreadsheetApp.flush();
