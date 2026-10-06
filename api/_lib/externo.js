@@ -73,8 +73,12 @@ export async function pedirJSON(url, { metodo = 'POST', cuerpo, reintentos = 0, 
 }
 
 // Atajo para Apps Script: POST con { accion, ... }
+// Al Apps Script de recargas se le añade SCRIPT_RECARGAS_TOKEN en el cuerpo (Apps Script no puede
+// leer cabeceras): así solo Vercel puede pedir pines o cambiar pagos aunque la URL se filtre.
 export function llamarScript(url, cuerpo, opciones = {}) {
-  return pedirJSON(url, { ...opciones, cuerpo });
+  const token = (process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
+  const esScriptRecargas = Boolean(url) && String(url).trim() === (process.env.SCRIPT_RECARGAS_URL || '').trim();
+  return pedirJSON(url, { ...opciones, cuerpo: token && esScriptRecargas ? { ...cuerpo, token } : cuerpo });
 }
 
 // =========================================================================

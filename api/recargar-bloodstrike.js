@@ -188,18 +188,18 @@ export default async function handler(req, res) {
     if (respuestaIncierta) {
       console.error("⚠️ Respuesta incierta de FazerCards:", detalleIncierto, "| REF:", dataVerificacion.referencia);
 
-      // Registrar el incidente y bloquear el pago (nadie puede reutilizarlo mientras se revisa), en paralelo
-      await Promise.allSettled([
-        callGoogleScript(URL_GOOGLE_SCRIPT, {
-          accion: "registrar_error",
-          idJugador: id,
-          paquete: paquete,
-          referencia: dataVerificacion.referencia,
-          codigosUsados: "API FAZERCARDS (INCIERTO)",
-          urlImagen: `⚠️ REVISAR EN FAZERCARDS SI LA ORDEN EXISTE ANTES DE REPETIR | Motivo: ${detalleIncierto} | 🧾 REF: ${dataVerificacion.referencia} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}`
-        }).catch((e) => console.error("❌ registrar_error falló:", e.message)),
-        marcarReferencia(URL_GOOGLE_SCRIPT, "marcar_usado", dataVerificacion.referencia)
-      ]);
+      // Registrar el incidente y LUEGO bloquear el pago (nadie puede reutilizarlo mientras se revisa).
+      // EN ORDEN, no en paralelo: el Apps Script puede devolver el pago a "Verificado" al registrar
+      // el error; marcar_usado debe ser SIEMPRE la última escritura.
+      await callGoogleScript(URL_GOOGLE_SCRIPT, {
+        accion: "registrar_error",
+        idJugador: id,
+        paquete: paquete,
+        referencia: dataVerificacion.referencia,
+        codigosUsados: "API FAZERCARDS (INCIERTO)",
+        urlImagen: `⚠️ REVISAR EN FAZERCARDS SI LA ORDEN EXISTE ANTES DE REPETIR | Motivo: ${detalleIncierto} | 🧾 REF: ${dataVerificacion.referencia} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}`
+      }).catch((e) => console.error("❌ registrar_error falló:", e.message));
+      await marcarReferencia(URL_GOOGLE_SCRIPT, "marcar_usado", dataVerificacion.referencia);
 
       // El frontend reconoce "fallo técnico" y muestra el modal de "recarga en proceso"
       return res.status(202).json({

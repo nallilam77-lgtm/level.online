@@ -2,8 +2,10 @@ import { obtenerIp, minutosBloqueado, registrarFallo } from './_lib/limitador.js
 import { llamarScript, conCache, catalogoValido, ErrorExterno } from './_lib/externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from './_lib/validacion.js';
 
-// Tiempos (maxDuration de Vercel = 60 s): precios 8 + verificar 10 + códigos 10 + bot 20 + registros 8 = 56 s
-const TIEMPO_ESCRITURA_CRITICA_MS = 10000;
+// Tiempos (maxDuration de Vercel = 60 s), peor caso con fallo del bot:
+// precios 8 + verificar 9 + códigos 9 + bot 20 + registrar_error 6 + marcar_usado 6 = 58 s
+const TIEMPO_ESCRITURA_CRITICA_MS = 9000;
+const TIEMPO_INCIDENTE_MS = 6000;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
@@ -60,12 +62,12 @@ export default async function handler(req, res) {
 
     // Marcar una referencia se puede repetir sin efectos secundarios: 1 reintento rápido.
     // Los fallos solo quedan en los logs para no interrumpir la respuesta al cliente.
-    const marcarReferencia = (accion, ref) =>
-      llamarScript(URL_GOOGLE_SCRIPT, { accion, referencia: ref }, { reintentos: 1 })
+    const marcarReferencia = (accion, ref, tiempoMs) =>
+      llamarScript(URL_GOOGLE_SCRIPT, { accion, referencia: ref }, { reintentos: 1, tiempoMs })
         .catch((e) => console.error(`❌ ${accion} falló para REF ${ref}:`, e.message));
     // Los registros agregan filas: sin reintento para no duplicarlas
-    const registrarEnHoja = (cuerpo) =>
-      llamarScript(URL_GOOGLE_SCRIPT, cuerpo)
+    const registrarEnHoja = (cuerpo, tiempoMs) =>
+      llamarScript(URL_GOOGLE_SCRIPT, cuerpo, { tiempoMs })
         .catch((e) => console.error(`❌ ${cuerpo.accion} falló para REF ${cuerpo.referencia || cuerpo.referencias}:`, e.message));
 
     // Antes de consultar la hoja de pagos: ¿esta IP o este jugador acumula demasiados fallos?
@@ -142,14 +144,14 @@ export default async function handler(req, res) {
     } catch (error) {
       // No se sabe si Apps Script alcanzó a sacar pines: se bloquea el pago y pasa a revisión manual
       console.error("⚠️ obtener_codigo sin respuesta:", error.message, "| REF:", dataVerificacion.referencia);
-      await Promise.allSettled([
-        registrarEnHoja({
-          accion: "registrar_error", idJugador: id, paquete: paquete, referencia: dataVerificacion.referencia,
-          codigosUsados: "DESCONOCIDO",
-          urlImagen: `⚠️ obtener_codigo no respondió (${error.message}). REVISAR SI SE SACARON PINES DE LA HOJA | 🧾 REF: ${dataVerificacion.referencia} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}`
-        }),
-        marcarReferencia("marcar_usado", dataVerificacion.referencia)
-      ]);
+      // EN ORDEN, no en paralelo: el Apps Script puede devolver el pago a "Verificado" al registrar
+      // el error; marcar_usado debe ser SIEMPRE la última escritura para que el pago quede bloqueado.
+      await registrarEnHoja({
+        accion: "registrar_error", idJugador: id, paquete: paquete, referencia: dataVerificacion.referencia,
+        codigosUsados: "DESCONOCIDO",
+        urlImagen: `⚠️ obtener_codigo no respondió (${error.message}). REVISAR SI SE SACARON PINES DE LA HOJA | 🧾 REF: ${dataVerificacion.referencia} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}`
+      }, TIEMPO_INCIDENTE_MS);
+      await marcarReferencia("marcar_usado", dataVerificacion.referencia, TIEMPO_INCIDENTE_MS);
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago está verificado y la recarga quedó en revisión." });
     }
 
@@ -216,19 +218,19 @@ export default async function handler(req, res) {
       const stringPendientes = pinesPendientes.length > 0 ? pinesPendientes.join(" | ") : "Ninguno";
       const stringExitosos = pinesExitosos.length > 0 ? pinesExitosos.join(" | ") : "Ninguno";
 
-      // 📝 ANOTAR EL INCIDENTE (SALVANDO LOS PINES) Y 🔥 QUEMAR EL PAGO, en paralelo para ganar tiempo
-      await Promise.allSettled([
-        registrarEnHoja({
-          accion: "registrar_error",
-          idJugador: id,
-          paquete: paquete,
-          referencia: dataVerificacion.referencia,
-          codigosUsados: stringPendientes,
-          // Agregada la Referencia aquí para que la veas claramente en la hoja de errores
-          urlImagen: `⚠️ MOTIVO: ${errorMsg} | 🧾 REF: ${dataVerificacion.referencia} | ✅ SE USARON: ${stringExitosos} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}`
-        }),
-        marcarReferencia("marcar_usado", dataVerificacion.referencia)
-      ]);
+      // 📝 ANOTAR EL INCIDENTE (SALVANDO LOS PINES) Y LUEGO 🔥 QUEMAR EL PAGO.
+      // EN ORDEN, no en paralelo: el Apps Script puede devolver el pago a "Verificado" al registrar
+      // el error; marcar_usado debe ser SIEMPRE la última escritura para que el pago quede bloqueado.
+      await registrarEnHoja({
+        accion: "registrar_error",
+        idJugador: id,
+        paquete: paquete,
+        referencia: dataVerificacion.referencia,
+        codigosUsados: stringPendientes,
+        // Agregada la Referencia aquí para que la veas claramente en la hoja de errores
+        urlImagen: `⚠️ MOTIVO: ${errorMsg} | 🧾 REF: ${dataVerificacion.referencia} | ✅ SE USARON: ${stringExitosos} | 🔗 CAPTURE: ${urlImagen || "Sin comprobante"}`
+      }, TIEMPO_INCIDENTE_MS);
+      await marcarReferencia("marcar_usado", dataVerificacion.referencia, TIEMPO_INCIDENTE_MS);
 
       // 🤫 Se devuelve un error genérico para que tu página web muestre "En proceso de 1 a 5 minutos"
       return res.status(400).json({
