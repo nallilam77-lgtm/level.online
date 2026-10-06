@@ -52,8 +52,9 @@
   function borrarNumerosProhibidos(texto, nucleos) {
     let limpio = texto;
     nucleos.forEach((nucleo) => {
-      const patron = new RegExp(`(?<!\\d)(?:[VEJ]${SEPARADOR})?(?:\\+?58${SEPARADOR}|0${SEPARADOR})?${patronFlexible(nucleo)}`, 'gi');
-      limpio = limpio.replace(patron, ' ');
+      // (^|\D) en vez de lookbehind: compatible con Safari de iPhones antiguos
+      const patron = new RegExp(`(^|\\D)(?:[VEJ]${SEPARADOR})?(?:\\+?58${SEPARADOR}|0${SEPARADOR})?${patronFlexible(nucleo)}`, 'gim');
+      limpio = limpio.replace(patron, '$1 ');
     });
     return limpio;
   }
