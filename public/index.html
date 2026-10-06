@@ -327,15 +327,6 @@
     }
     .btn-canal:hover { transform: scale(1.03); }
 
-    /* --- Footer --- */
-    footer {
-      text-align: center; padding: 20px 15px; background: rgba(5, 2, 8, 0.9);
-      border-top: 1px solid rgba(255, 153, 0, 0.1); color: #64748b; font-size: 12px; margin-top: auto;
-    }
-    footer span { color: var(--primary); font-weight: bold; }
-    footer a { color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
-    footer a:hover { color: var(--primary); }
-
     /* --- Botón Flotante WhatsApp --- */
     .whatsapp-float {
       position: fixed; bottom: 20px; right: 20px; width: 55px; height: 55px;
@@ -354,6 +345,7 @@
       .trust-grid { grid-template-columns: repeat(3, 1fr); }
     }
   </style>
+  <link rel="stylesheet" href="css/pie-legal.css">
 </head>
 <body class="no-scroll">
 
@@ -385,7 +377,7 @@
   <div class="terms-modal-overlay" id="termsModal">
     <div class="terms-modal">
       <h3>📜 Términos y Condiciones</h3>
-      <p>Antes de continuar, te invitamos a leer nuestros <a href="terminos.html" target="_blank">Términos y Servicios</a>. Al hacer clic en "Aceptar y continuar", confirmas que has leído y aceptas todas nuestras políticas y condiciones de servicio.</p>
+      <p>Antes de continuar, te invitamos a leer nuestros <a href="terminos.html" target="_blank">Términos y Condiciones</a>, la <a href="privacidad.html" target="_blank">Política de Privacidad</a> y la <a href="reembolsos.html" target="_blank">Política de Reembolsos</a>. Al hacer clic en "Aceptar y continuar", confirmas que has leído y aceptas todas nuestras políticas y condiciones de servicio.</p>
       <div class="terms-modal-buttons">
         <button class="btn-terms-aceptar" onclick="aceptarTerminos()">Aceptar y continuar</button>
         <button class="btn-terms-salir" onclick="cerrarModalTerminos()">Salir</button>
@@ -405,7 +397,9 @@
     <a href="freefire.html">🔥 Free Fire</a>
     <a href="roblox.html">🧱 Roblox</a>
     <a href="bloodstrike.html">🎯 Blood Strike</a>
-    <a href="terminos.html">📜 Términos y Servicios</a>
+    <a href="terminos.html">📜 Términos y Condiciones</a>
+    <a href="privacidad.html">🔒 Política de Privacidad</a>
+    <a href="reembolsos.html">💸 Política de Reembolsos</a>
   </aside>
 
   <nav>
@@ -493,8 +487,14 @@
     </div>
   </main>
 
-  <footer>
-    <p>&copy; 2026 <span>LEVEL UP</span> - Centro de Recargas. Todos los derechos reservados. | <a href="terminos.html">Términos y Servicios</a></p>
+  <footer class="pie-legal">
+    <div class="pie-legal-enlaces" role="navigation" aria-label="Información legal">
+      <a href="terminos.html">Términos y Condiciones</a>
+      <a href="privacidad.html">Política de Privacidad</a>
+      <a href="reembolsos.html">Política de Reembolsos</a>
+    </div>
+    <p class="pie-legal-aviso">Level Up es un servicio de recarga independiente. No está afiliado, patrocinado ni respaldado por Garena (Free Fire), Roblox Corporation ni NetEase Games (Blood Strike). Todas las marcas y logotipos pertenecen a sus respectivos dueños.</p>
+    <p class="pie-legal-copy">&copy; 2026 <strong>Level Up</strong>. Todos los derechos reservados.</p>
   </footer>
 
   <a href="https://wa.me/584141916377" target="_blank" rel="noopener noreferrer" class="whatsapp-float" aria-label="Escribir a Soporte">

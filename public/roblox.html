@@ -439,8 +439,9 @@
       .anim-slide-up { opacity: 1; }
     }
   </style>
+  <link rel="stylesheet" href="css/pie-legal.css">
 </head>
-<body>
+<body class="pagina-juego">
 
   <!-- BURBUJA DE NOTIFICACIÓN INFERIOR (TOAST BUBBLE) -->
   <div id="toastBubble" class="toast-bubble"></div>
@@ -474,6 +475,7 @@
       <h2 class="modal-titulo" id="tituloErrorGeneral">❌ ATENCIÓN</h2>
       <p id="textoErrorPago" class="modal-texto">Tuvimos algunos inconvenientes procesando tu solicitud.</p>
       <div id="notaErrorExtra" class="modal-nota danger"></div>
+      <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20compra%20de%20Roblox." target="_blank" rel="noopener noreferrer" class="btn-whatsapp" style="animation: none; margin-top: 12px;">💬 ESCRIBIR A SOPORTE</a>
       <button class="btn-cerrar-dark" style="margin-top: 12px;" onclick="cerrarModalNoEncontrado()">ENTENDIDO</button>
     </div>
   </div>
@@ -488,6 +490,7 @@
       <div class="modal-nota warning">
         ⏳ <strong>No te preocupes:</strong> Tu código de Roblox será generado y enviado automáticamente en un lapso de <strong>1 a 5 minutos</strong>. Puedes cerrar esta ventana.
       </div>
+      <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20compra%20de%20Roblox." target="_blank" rel="noopener noreferrer" class="btn-whatsapp" style="animation: none; margin-top: 12px;">💬 ESCRIBIR A SOPORTE</a>
       <a href="index.html" class="btn-volver-inicio" style="background: #101d36; color: #fff;">ENTENDIDO, VOLVER AL INICIO</a>
     </div>
   </div>
@@ -634,8 +637,22 @@
       </div>
 
       <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🚀 OBTENER CÓDIGO DE ROBLOX</button>
+      <p class="aviso-aceptacion">Al procesar tu pedido aceptas los <a href="terminos.html" target="_blank">Términos y Condiciones</a>, la <a href="privacidad.html" target="_blank">Política de Privacidad</a> y la <a href="reembolsos.html" target="_blank">Política de Reembolsos</a>.</p>
     </div>
   </div>
+
+  <footer class="pie-legal">
+    <div class="pie-legal-enlaces" role="navigation" aria-label="Información legal">
+      <a href="terminos.html">Términos y Condiciones</a>
+      <a href="privacidad.html">Política de Privacidad</a>
+      <a href="reembolsos.html">Política de Reembolsos</a>
+    </div>
+    <p class="pie-legal-aviso">Level Up es un servicio de recarga independiente. No está afiliado, patrocinado ni respaldado por Garena (Free Fire), Roblox Corporation ni NetEase Games (Blood Strike). Todas las marcas y logotipos pertenecen a sus respectivos dueños.</p>
+    <p class="pie-legal-copy">&copy; 2026 <strong>Level Up</strong>. Todos los derechos reservados.</p>
+  </footer>
+
+  <!-- Soporte oficial por WhatsApp, siempre visible -->
+  <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20compra%20de%20Roblox." target="_blank" rel="noopener noreferrer" class="whatsapp-soporte" aria-label="Escribir a Soporte por WhatsApp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.031 0C5.385 0 0 5.383 0 12.029c0 2.124.553 4.195 1.605 6.01L.036 24l6.11-1.603c1.737 1.002 3.738 1.531 5.885 1.531 6.643 0 12.028-5.381 12.028-12.027C24.059 5.383 18.675 0 12.031 0zm3.565 17.27c-.54.269-3.187.584-3.557.584-.37 0-1.802-.234-4.225-2.656-2.424-2.425-2.657-3.856-2.657-4.226 0-.37.316-3.018.584-3.557.269-.54.912-.767 1.451-.497.54.269 1.433 3.493 1.433 3.864 0 .37-.197.808-.466 1.077-.466.466.269.269-.538.448-.179 1.077.359.627 1.614 1.882 2.241 2.241.628.359.808.09 1.077-.179.269-.269.808-.466 1.077-.466.37 0 3.595.892 3.864 1.432.27.539.043 1.182-.497 1.451z"/></svg></a>
 
   <!-- Barra de compra fija inferior -->
   <div class="sticky-cta" id="stickyCta">
