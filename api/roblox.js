@@ -1,6 +1,6 @@
 // Este archivo vive en /api/roblox.js dentro de tu proyecto en Vercel
 import { obtenerIp, minutosBloqueado, registrarFallo } from './_lib/limitador.js';
-import { llamarScript, conCache } from './_lib/externo.js';
+import { llamarScript, LECTURA_APPS_SCRIPT, conCache } from './_lib/externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from './_lib/validacion.js';
 
 // Debe ser menor que maxDuration de esta función en vercel.json (60 s).
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
     // 6. Precios: lectura con caché en memoria (instantánea y con respaldo si Apps Script falla)
     if (tipo === 'obtener_precios') {
       const { datos } = await conCache('precios:roblox',
-        () => llamarScript(scriptUrl, payload, { reintentos: 1 }),
+        () => llamarScript(scriptUrl, payload, LECTURA_APPS_SCRIPT),
         { esValido: (d) => d?.status === 'success' && d.precios && typeof d.precios === 'object' });
       return res.status(200).json(datos);
     }

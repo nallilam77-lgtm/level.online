@@ -1,4 +1,4 @@
-import { llamarScript, conCache, catalogoValido, cabecerasCachePrecios } from './_lib/externo.js';
+import { llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasCachePrecios } from './_lib/externo.js';
 import { faltaConfiguracion } from './_lib/validacion.js';
 
 export default async function handler(req, res) {
@@ -10,9 +10,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Lectura sin efectos secundarios: se permite 1 reintento rápido dentro de los 8 s
+    // Lectura sin efectos secundarios (20 s con 1 reintento). Con copia en caché el cliente no espera.
     const { datos } = await conCache('precios:ff',
-      () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 1 }),
+      () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT),
       { esValido: catalogoValido });
     cabecerasCachePrecios(res);
     return res.status(200).json(datos);

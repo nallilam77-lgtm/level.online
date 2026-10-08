@@ -1,5 +1,11 @@
-import { llamarScript } from './_lib/externo.js';
+import { llamarScript, LECTURA_APPS_SCRIPT } from './_lib/externo.js';
 import { faltaConfiguracion } from './_lib/validacion.js';
+
+// IDs ya validados (por instancia de Vercel): el mismo jugador suele verificar su ID varias veces
+// mientras compra, y así solo la primera consulta espera a Apps Script. Solo se guardan los válidos.
+const VALIDOS_MS = 10 * 60 * 1000;
+const MAX_VALIDOS = 5000;
+const validados = new Map();
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -18,9 +24,18 @@ export default async function handler(req, res) {
     return faltaConfiguracion(res, ["SCRIPT_VALIDADOR_URL"], { valid: false, message: "El validador de IDs no está disponible. Intenta de nuevo en unos minutos." });
   }
 
+  const guardado = validados.get(String(id));
+  if (guardado && Date.now() - guardado.momento < VALIDOS_MS) {
+    return res.status(200).json({ valid: true, player_name: guardado.player_name });
+  }
+
   try {
-    // Consulta sin efectos secundarios: 1 reintento rápido dentro de los 8 s
-    const data = await llamarScript(URL_VALIDADOR, { id: String(id) }, { reintentos: 1 });
+    const data = await llamarScript(URL_VALIDADOR, { id: String(id) }, LECTURA_APPS_SCRIPT);
+    if (data?.valid === true) {
+      validados.delete(String(id));
+      validados.set(String(id), { player_name: data.player_name ? String(data.player_name).slice(0, 60) : undefined, momento: Date.now() });
+      if (validados.size > MAX_VALIDOS) validados.delete(validados.keys().next().value);
+    }
 
     // Solo se devuelven los campos que usa la página, nunca la respuesta cruda de Apps Script
     return res.status(200).json({

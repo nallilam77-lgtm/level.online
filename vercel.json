@@ -2,7 +2,13 @@
   "functions": {
     "api/recargar.js": { "maxDuration": 180 },
     "api/recargar-bloodstrike.js": { "maxDuration": 120 },
-    "api/roblox.js": { "maxDuration": 60 }
+    "api/roblox.js": { "maxDuration": 60 },
+    "api/verificar.js": { "maxDuration": 30 },
+    "api/consultar-ordenes.js": { "maxDuration": 30 },
+    "api/precios.js": { "maxDuration": 30 },
+    "api/precios-bloodstrike.js": { "maxDuration": 30 },
+    "api/subir-imagen.js": { "maxDuration": 30 },
+    "api/ruleta.js": { "maxDuration": 30 }
   },
   "headers": [
     {

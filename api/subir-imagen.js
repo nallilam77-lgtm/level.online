@@ -1,4 +1,4 @@
-import { llamarScript } from './_lib/externo.js';
+import { llamarScript, ESCRITURA_APPS_SCRIPT } from './_lib/externo.js';
 import { textoParaHoja } from './_lib/validacion.js';
 
 const TIPOS_IMAGEN = /^image\/(png|jpe?g|webp|gif|heic|heif)$/;
@@ -30,14 +30,14 @@ export default async function handler(req, res) {
 
   try {
     // 2. EL TRUCO PARA EVITAR QUE VERCEL MATE LA FUNCIÓN (TIMEOUT)
-    // Le damos a Google Drive un máximo de 8 segundos para responder.
+    // Le damos a Google Drive un máximo de 20 segundos para responder (maxDuration 30 en vercel.json).
     // Sin reintento: cada llamada crea un archivo nuevo en Drive.
     const data = await llamarScript(process.env.SCRIPT_RECARGAS_URL, {
       accion: "subir_imagen",
       base64: req.body.base64,
       nombre: textoParaHoja(req.body.nombre || "comprobante", 100),
       mimeType: TIPOS_IMAGEN.test(String(req.body.mimeType)) ? req.body.mimeType : "image/jpeg"
-    });
+    }, ESCRITURA_APPS_SCRIPT);
 
     // Si Google Apps Script responde, pero dice que hubo un error al guardar
     if (data.status === "error") {
@@ -53,7 +53,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error("Error al subir imagen a Google Drive:", error.message);
 
-    // Si el error fue provocado porque pasaron los 8 segundos (nuestro cronómetro)
+    // Si el error fue provocado porque pasaron los 20 segundos (nuestro cronómetro)
     if (error.tiempoAgotado) {
       return res.status(200).json({ 
         status: "success", 

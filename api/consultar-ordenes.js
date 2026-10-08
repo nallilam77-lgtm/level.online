@@ -1,4 +1,4 @@
-import { pedirJSON } from './_lib/externo.js';
+import { pedirJSON, LECTURA_APPS_SCRIPT } from './_lib/externo.js';
 import { faltaConfiguracion } from './_lib/validacion.js';
 
 export default async function handler(req, res) {
@@ -36,8 +36,8 @@ export default async function handler(req, res) {
         }
 
         // Hacemos la petición a la nueva hoja de cálculo de Google
-        // Consulta sin efectos secundarios: máximo 8 s con 1 reintento rápido
-        const data = await pedirJSON(`${scriptUrl}?id=${encodeURIComponent(playerId)}`, { metodo: 'GET', reintentos: 1 });
+        // Consulta sin efectos secundarios: presupuesto de lectura (20 s con 1 reintento)
+        const data = await pedirJSON(`${scriptUrl}?id=${encodeURIComponent(playerId)}`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT });
 
         // Si la hoja no devuelve nada o el ID no tiene recargas exitosas
         if (!Array.isArray(data) || data.length === 0) {

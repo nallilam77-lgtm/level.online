@@ -8,6 +8,14 @@
 // (compras, registros, ruleta), porque un reintento tras un timeout podría duplicar la operación.
 
 export const TIEMPO_LIMITE_MS = 8000;
+
+// Apps Script tarda 5-15 s cuando "despierta" (arranque en frío). Presupuestos para llamarlo:
+// - LECTURA: sin efectos secundarios. 20 s en total; si el primer intento pasa de 12 s se corta
+//   y se reintenta, porque el segundo suele encontrar el script ya despierto y responde rápido.
+// - ESCRITURA: crea algo (archivo, giro de ruleta). 20 s en un solo intento, nunca se reintenta.
+// Las funciones que los usan tienen maxDuration 30 en vercel.json para que Vercel no las corte antes.
+export const LECTURA_APPS_SCRIPT = { tiempoMs: 20000, intentoMs: 12000, reintentos: 1, reintentarTrasTimeout: true };
+export const ESCRITURA_APPS_SCRIPT = { tiempoMs: 20000 };
 // Espera antes de cada reintento: 400 ms, 1,2 s, 2,4 s... (le da tiempo a Apps Script de "despertar")
 const ESPERAS_REINTENTO_MS = [400, 1200, 2400];
 

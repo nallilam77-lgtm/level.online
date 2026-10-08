@@ -1,4 +1,4 @@
-import { llamarScript } from './_lib/externo.js';
+import { llamarScript, ESCRITURA_APPS_SCRIPT } from './_lib/externo.js';
 
 // La ruleta es un extra: si su Apps Script no está configurado o no responde,
 // se avisa al cliente con un 503 claro y la compra no se ve afectada (nunca 500).
@@ -48,14 +48,14 @@ export default async function handler(req, res) {
         let ganoPremio = numeroAleatorio <= 2; // Exactamente el 2% (de 0 a 2)
         let premioStr = ganoPremio ? "100 Diamantes 💎" : "Vacío ❌";
 
-        // Máximo 8 s y sin reintento: cada llamada consume el giro de la referencia
+        // Máximo 20 s y sin reintento: cada llamada consume el giro de la referencia
         const resultadoGAS = await llamarScript(URL_GOOGLE_SCRIPT, {
             accion: "girar_ruleta", // Identificador opcional para tu Google Script
             referencia: String(referencia),
             id_jugador: String(id),
             juego: juego || "Free Fire",
             premio: premioStr
-        });
+        }, ESCRITURA_APPS_SCRIPT);
 
         // Si Google Script detecta que la referencia ya jugó o hubo un error de BD
         if (resultadoGAS?.status === "error") {
@@ -86,7 +86,7 @@ export default async function handler(req, res) {
         });
 
     } catch (error) {
-        // Apps Script lento (más de 8 s), caído o devolviendo HTML, u otro fallo inesperado
+        // Apps Script lento (más de 20 s), caído o devolviendo HTML, u otro fallo inesperado
         console.error("Error en ruleta.js:", error.message);
         const mensaje = error.tiempoAgotado
             ? "La ruleta está tardando en responder. Espera un minuto e intenta de nuevo; si te dice que ya giraste, escríbenos por WhatsApp."
