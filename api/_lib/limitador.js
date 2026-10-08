@@ -5,6 +5,7 @@
 // Sin ella cae a memoria local: protección débil, porque cada instancia cuenta por separado.
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 import { createHash } from 'node:crypto';
+import { obtenerDb, conTiempoLimite as limitarTiempo } from './firestore.js';
 
 const COLECCION = 'limites_recarga';
 const VENTANA_MS = 30 * 60 * 1000;  // los fallos se cuentan dentro de 30 minutos
@@ -17,45 +18,8 @@ const MAX_CLAVES_EN_MEMORIA = 10000;
 // muchos clientes móviles comparten IP (CGNAT de las operadoras).
 const MAX_FALLOS = { ip: 15, jugador: 5 };
 
-let promesaDb = null;
-let avisoSinFirestore = false;
-
-// firebase-admin pesa: se importa solo si hay credenciales y solo la primera vez que se usa,
-// para no alargar el arranque en frío de las funciones.
-function obtenerDb() {
-  const cuenta = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!cuenta) {
-    if (!avisoSinFirestore) {
-      console.error("⚠️ limitador: falta FIREBASE_SERVICE_ACCOUNT. Usando memoria local (protección débil).");
-      avisoSinFirestore = true;
-    }
-    return Promise.resolve(null);
-  }
-  if (!promesaDb) {
-    promesaDb = (async () => {
-      try {
-        const [{ initializeApp, cert, getApps }, { getFirestore }] = await Promise.all([
-          import('firebase-admin/app'),
-          import('firebase-admin/firestore'),
-        ]);
-        const app = getApps().length ? getApps()[0] : initializeApp({ credential: cert(JSON.parse(cuenta)) });
-        return getFirestore(app);
-      } catch (error) {
-        console.error("❌ limitador: FIREBASE_SERVICE_ACCOUNT inválida o firebase-admin no disponible:", error.message);
-        return null;
-      }
-    })();
-  }
-  return promesaDb;
-}
-
-function conTiempoLimite(promesa) {
-  let temporizador;
-  const limite = new Promise((_, rechazar) => {
-    temporizador = setTimeout(() => rechazar(new Error(`Firestore tardó más de ${TIEMPO_FIRESTORE_MS} ms`)), TIEMPO_FIRESTORE_MS);
-  });
-  return Promise.race([promesa, limite]).finally(() => clearTimeout(temporizador));
-}
+// Sin FIREBASE_SERVICE_ACCOUNT, obtenerDb() devuelve null y se usa la memoria local
+const conTiempoLimite = (promesa) => limitarTiempo(promesa, TIEMPO_FIRESTORE_MS);
 
 const memoria = new Map();
 function guardarEnMemoria(clave, registro) {

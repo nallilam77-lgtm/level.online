@@ -242,6 +242,53 @@
     }
     .btn-actualizar:hover { background: rgba(30, 144, 255, 0.3); color: #fff; }
 
+    /* --- SECCIÓN RECLAMAR PREMIO (RULETA) --- */
+    .ruleta-box {
+      border-color: rgba(255, 0, 127, 0.5);
+      background: linear-gradient(160deg, rgba(60, 0, 40, 0.8), rgba(25, 15, 35, 0.85));
+      box-shadow: 0 8px 25px rgba(0,0,0,0.6), 0 0 25px rgba(255, 0, 127, 0.18);
+      text-align: center;
+    }
+    .ruleta-box h3 { color: #ff4fa3; }
+    .ruleta-ayuda { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+    .ruleta-box input { border-color: rgba(255, 0, 127, 0.35); min-width: 0; }
+    .ruleta-box input:focus { border-color: #ff4fa3; }
+    .btn-girar {
+      background: linear-gradient(135deg, #ff007f, #ff9900); color: #fff;
+    }
+    .btn-girar:hover { box-shadow: 0 4px 14px rgba(255, 0, 127, 0.45); }
+    .btn-girar:disabled { opacity: 0.6; cursor: wait; transform: none; }
+    .ruleta-mensaje { font-size: 13px; font-weight: 700; min-height: 18px; margin-top: 4px; }
+    .ruleta-mensaje.error { color: #ff6b6b; }
+    .ruleta-mensaje.info { color: #ffa502; }
+    .ruleta-mensaje.exito { color: #2ed573; }
+
+    .ruleta-escenario { display: none; position: relative; width: 240px; height: 240px; margin: 22px auto 14px; }
+    .ruleta-escenario.visible { display: block; }
+    .ruleta-puntero {
+      position: absolute; top: -14px; left: 50%; transform: translateX(-50%); z-index: 2;
+      border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 22px solid #ff9900;
+      filter: drop-shadow(0 0 6px rgba(255, 153, 0, 0.8));
+    }
+    .ruleta-rueda {
+      width: 100%; height: 100%; border-radius: 50%; position: relative; overflow: hidden;
+      border: 4px solid #ff007f; box-shadow: inset 0 0 20px rgba(0,0,0,0.8), 0 0 20px rgba(255, 0, 127, 0.3);
+      transition: transform 5s cubic-bezier(0.12, 0.9, 0.12, 1);
+    }
+    .ruleta-etiqueta {
+      position: absolute; top: 0; left: 50%; height: 50%; width: 70px; margin-left: -35px;
+      transform-origin: 50% 100%; padding-top: 14px;
+      font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 12px; color: #fff;
+      text-shadow: 0 2px 4px #000; pointer-events: none;
+    }
+    .ruleta-centro {
+      position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px;
+      border-radius: 50%; background: #0a0510; border: 3px solid #ff9900;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ruleta-rueda { transition-duration: 1s; }
+    }
+
     /* --- Grilla de Juegos --- */
     .grid-container { 
       display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; 
@@ -342,6 +389,7 @@
       .grid-container { grid-template-columns: repeat(3, 1fr); max-width: 800px; }
       .card { height: 150px; }
       .consulta-section, .trust-section, .about-section { max-width: 750px; }
+      .ruleta-escenario { width: 280px; height: 280px; }
       .trust-grid { grid-template-columns: repeat(3, 1fr); }
     }
   </style>
@@ -424,6 +472,26 @@
           <button class="btn-consultar" onclick="validarYConsultar()">Buscar</button>
         </div>
         <div id="resultadoOrdenes"></div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: RECLAMAR PREMIO (RULETA). El premio lo decide el servidor; aquí solo se anima. -->
+    <section class="consulta-section animate-up delay-1" id="ruleta">
+      <div class="consulta-box ruleta-box">
+        <h3>🎁 Reclamar Premio</h3>
+        <p class="ruleta-ayuda">¿Ya recibiste tu recarga? Cada pago te da <strong>un giro</strong> en la Ruleta de la Suerte.</p>
+        <form class="consulta-input-group" id="formRuleta" onsubmit="reclamarPremio(event)">
+          <input type="text" id="inputReferenciaRuleta" inputmode="numeric" autocomplete="off" maxlength="20"
+                 placeholder="Últimos 5 dígitos de tu referencia" aria-label="Últimos 5 dígitos de la referencia de pago"
+                 oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+          <button type="submit" class="btn-consultar btn-girar" id="btnGirar">Girar</button>
+        </form>
+        <div class="ruleta-escenario" id="ruletaEscenario" aria-hidden="true">
+          <div class="ruleta-puntero"></div>
+          <div class="ruleta-rueda" id="ruletaRueda"></div>
+          <div class="ruleta-centro"></div>
+        </div>
+        <p class="ruleta-mensaje" id="ruletaMensaje" role="status" aria-live="polite"></p>
       </div>
     </section>
 
@@ -684,6 +752,106 @@
         contenedor.innerHTML = "<p style='color: #ff6b6b; text-align:center; margin-top:8px;'>Error al conectar con el servidor.</p>";
       }
     }
+
+    // --- RECLAMAR PREMIO (RULETA) ---
+    // El servidor sortea el premio y quema la referencia ANTES de responder;
+    // la rueda solo se detiene en la casilla que él indica.
+    let rotacionRuleta = 0;
+    const COLORES_CASILLAS = ['#3a0a2e', '#1a122c'];
+
+    function mensajeRuleta(texto, tipo) {
+      const p = document.getElementById('ruletaMensaje');
+      p.textContent = texto;
+      p.className = 'ruleta-mensaje ' + (tipo || '');
+    }
+
+    function dibujarRuleta(casillas) {
+      const rueda = document.getElementById('ruletaRueda');
+      const grados = 360 / casillas.length;
+      rueda.style.background = 'conic-gradient(' + casillas.map((_, i) =>
+        `${COLORES_CASILLAS[i % 2]} ${i * grados}deg ${(i + 1) * grados}deg`).join(', ') + ')';
+      rueda.replaceChildren(...casillas.map((texto, i) => {
+        const etiqueta = document.createElement('span');
+        etiqueta.className = 'ruleta-etiqueta';
+        etiqueta.textContent = texto;
+        etiqueta.style.transform = `rotate(${(i + 0.5) * grados}deg)`;
+        return etiqueta;
+      }));
+    }
+
+    // Gira varias vueltas y deja el centro de la casilla indicada bajo el puntero (arriba)
+    function girarHasta(casilla, total) {
+      return new Promise((resolver) => {
+        const rueda = document.getElementById('ruletaRueda');
+        const grados = 360 / total;
+        const desvio = (Math.random() - 0.5) * grados * 0.6; // solo estético: sigue dentro de la casilla
+        const base = rotacionRuleta - (rotacionRuleta % 360) + 360 * 6;
+        rotacionRuleta = base + (360 - (casilla + 0.5) * grados) + desvio;
+        let terminado = false;
+        const fin = () => { if (!terminado) { terminado = true; resolver(); } };
+        rueda.addEventListener('transitionend', fin, { once: true });
+        setTimeout(fin, 5500); // por si el navegador no dispara transitionend
+        void rueda.offsetWidth; // la rueda acaba de mostrarse: fuerza el cálculo para que la transición se anime
+        requestAnimationFrame(() => { rueda.style.transform = `rotate(${rotacionRuleta}deg)`; });
+      });
+    }
+
+    async function reclamarPremio(event) {
+      event.preventDefault();
+      const input = document.getElementById('inputReferenciaRuleta');
+      const boton = document.getElementById('btnGirar');
+      const referencia = input.value.trim();
+      if (!/^\d{5,20}$/.test(referencia)) {
+        mensajeRuleta('Escribe al menos los últimos 5 dígitos de tu referencia de pago.', 'error');
+        return;
+      }
+
+      boton.disabled = true;
+      mensajeRuleta('Validando tu pago...', 'info');
+      try {
+        const respuesta = await fetch('/api/ruleta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ referencia })
+        });
+        const data = await respuesta.json();
+
+        if (data.status !== 'success') {
+          mensajeRuleta('⚠️ ' + (data.message || 'No se pudo validar la referencia.'), 'error');
+          return;
+        }
+
+        if (data.jugado) {
+          document.getElementById('ruletaEscenario').classList.remove('visible');
+          mensajeRuleta(data.ganador
+            ? `🎉 Esta referencia ya giró y ganó: ${data.premio}. Si aún no lo recibes, escríbenos por WhatsApp.`
+            : `Esta referencia ya usó su giro. Resultado: ${data.premio}. ¡Te esperamos en tu próxima recarga!`, 'info');
+          return;
+        }
+
+        dibujarRuleta(data.casillas);
+        document.getElementById('ruletaEscenario').classList.add('visible');
+        mensajeRuleta('¡La suerte está echada! 🎲', 'info');
+        await girarHasta(data.casilla, data.casillas.length);
+        mensajeRuleta(data.ganador
+          ? `🎉 ¡BRUTAL! Ganaste ${data.premioGenerado}. Te lo enviaremos pronto; guarda tu referencia.`
+          : '❌ No hubo suerte esta vez. ¡Gracias por participar!', data.ganador ? 'exito' : 'info');
+        input.value = '';
+      } catch (error) {
+        mensajeRuleta('❌ Error de conexión con el servidor. Intenta de nuevo.', 'error');
+      } finally {
+        boton.disabled = false;
+      }
+    }
+
+    // Al volver de una recarga (index.html?ref=12345#ruleta) la referencia llega rellenada
+    (function prepararRuletaDesdeUrl() {
+      const ref = new URLSearchParams(location.search).get('ref');
+      if (ref && /^\d{5,20}$/.test(ref)) {
+        document.getElementById('inputReferenciaRuleta').value = ref;
+        mensajeRuleta('Tu referencia está lista: pulsa «Girar» 🎰', 'info');
+      }
+    })();
 
     // --- ATAJO SECRETO (Ctrl + Alt + Shift) ---
     window.addEventListener('keydown', (e) => {

@@ -1,6 +1,6 @@
 // =====================================================================
 // LEVEL UP - Apps Script de RECARGAS FREE FIRE (variable SCRIPT_RECARGAS_URL en Vercel)
-// Usado por: api/recargar.js, api/precios.js, api/subir-imagen.js y MacroDroid.
+// Usado por: api/recargar.js, api/precios.js, api/subir-imagen.js, api/ruleta.js y MacroDroid.
 //
 // Cómo actualizarlo: pega este archivo en el editor de Apps Script y luego
 // Implementar > Gestionar implementaciones > editar (lápiz) > Versión: "Nueva versión" > Implementar.
@@ -33,6 +33,12 @@ const ESPERA_CANDADO_MS = 8000;
 // Pestaña de auditoría: qué pines se entregaron a cada pedido y qué pasó con ellos
 const HOJA_ASIGNACIONES = "asignaciones_pines";
 const COLUMNAS_ASIGNACIONES = ["fecha", "id pedido", "referencia", "columna", "n.º columna", "pines", "estado"];
+
+// Ruleta: pestaña donde se anotan los ganadores (para entregar el premio) y máximo de pagos
+// con los mismos últimos 5 dígitos que se devuelven a Vercel
+const HOJA_RULETA = "ruleta";
+const COLUMNAS_RULETA = ["fecha-hora", "id jugador", "referencia", "paquete", "premio", "estado de entrega"];
+const MAX_CANDIDATOS_RULETA = 5;
 
 // Columnas de la pestaña "errores" (A-E son las de siempre; F-L agregan el detalle)
 const COLUMNAS_ERRORES = ["fecha-hora", "id", "estado de los pines", "producto", "informe completo",
@@ -72,6 +78,9 @@ function doPost(e) {
     // Lecturas y subidas: no tocan pagos ni pines, así que NO esperan el candado
     if (accion === "obtener_precios") return obtenerPrecios();
     if (accion === "subir_imagen") return subirImagen(datos);
+    // Ruleta: consultar solo lee la hoja; el premio lo decide y lo guarda Vercel (Firestore GirosRuleta)
+    if (accion === "consultar_ruleta") return consultarRuleta(datos);
+    if (accion === "registrar_premio_ruleta") return registrarPremioRuleta(datos);
 
     switch (accion) {
       case "verificar_pago":       return conCandado(function () { return verificarPago(datos); });
@@ -434,6 +443,72 @@ function registrarError(datos) {
   // del bot (con pines quizá ya canjeados). Vercel decide el estado final después de
   // registrar el error: marcar_usado (bloquear para revisión) o marcar_verificado (liberar).
   return responder({ status: "success", message: "Error guardado correctamente y códigos respaldados" });
+}
+
+// ==========================================
+// 🎰 9: RULETA - CONSULTAR QUÉ PAGOS PUEDEN GIRAR (sin candado: solo lectura)
+// Devuelve los pagos "Usado" (recarga completada) cuya referencia coincide, del más reciente
+// al más antiguo, con el jugador y paquete de la pestaña "finalizados" si aparecen.
+// La columna F de "pagos" es la marca de la ruleta anterior ("listo"/"usado"): esos pagos
+// ya giraron con el sistema viejo y se informan como ruletaAnterior.
+// ==========================================
+function consultarRuleta(datos) {
+  var buscada = String(datos.referencia || "").replace(/\s+/g, "");
+  if (!/^\d{5,20}$/.test(buscada)) return responder({ status: "success", candidatos: [] });
+
+  var rows = obtenerHoja("pagos").getDataRange().getValues();
+  var candidatos = [];
+  for (var i = rows.length - 1; i >= 1 && candidatos.length < MAX_CANDIDATOS_RULETA; i--) {
+    var referencia = String(rows[i][2]).replace(/\s+/g, "");
+    // 5 dígitos: coinciden los últimos 5. Referencia completa: coincidencia exacta.
+    var coincide = buscada.length === 5 ? referencia.slice(-5) === buscada : referencia === buscada;
+    if (!referencia || !coincide) continue;
+    if (String(rows[i][4]).trim().toLowerCase() !== "usado") continue;
+    var marcaAnterior = String(rows[i][5] || "").trim().toLowerCase();
+    candidatos.push({
+      referencia: referencia,
+      ruletaAnterior: marcaAnterior === "listo" || marcaAnterior === "usado",
+      idJugador: "",
+      paquete: ""
+    });
+  }
+
+  var hojaFinalizados = obtenerHoja("finalizados", true);
+  if (hojaFinalizados && candidatos.length) {
+    var filas = hojaFinalizados.getDataRange().getValues();
+    candidatos.forEach(function (c) {
+      for (var j = filas.length - 1; j >= 1; j--) {
+        if (String(filas[j][3]).replace(/\s+/g, "") !== c.referencia) continue;
+        c.idJugador = String(filas[j][1] || "");
+        c.paquete = String(filas[j][2] || "");
+        break;
+      }
+    });
+  }
+  return responder({ status: "success", candidatos: candidatos });
+}
+
+// ==========================================
+// 🎰 10: RULETA - ANOTAR UN GANADOR EN LA PESTAÑA "ruleta"
+// Firestore (GirosRuleta) ya registró el giro: esta fila es solo para entregar el premio.
+// ==========================================
+function registrarPremioRuleta(datos) {
+  var hoja = obtenerHoja(HOJA_RULETA, true);
+  if (!hoja) {
+    hoja = SpreadsheetApp.getActiveSpreadsheet().insertSheet(HOJA_RULETA);
+    hoja.appendRow(COLUMNAS_RULETA);
+  }
+  var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
+  hoja.appendRow([
+    fechaHora,
+    textoSeguro(datos.idJugador || "Sin registrar: pedirlo por WhatsApp"),
+    textoSeguro(datos.referencia),
+    textoSeguro(datos.paquete || ""),
+    textoSeguro(datos.premio),
+    "PENDIENTE"
+  ]);
+  SpreadsheetApp.flush();
+  return responder({ status: "success" });
 }
 
 // ==========================================
