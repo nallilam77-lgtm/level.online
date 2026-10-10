@@ -267,17 +267,23 @@
     }
 
     .card {
+      --card-accent: var(--accent-cyan); --card-accent-rgb: 34, 211, 238;
       background: var(--surface); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
       height: 120px; border-radius: var(--radius-card); overflow: hidden; cursor: pointer;
-      border: 1px solid var(--border-glass); text-decoration: none; color: white;
+      border: 1px solid rgba(var(--card-accent-rgb), 0.3); text-decoration: none; color: white;
       transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
-      position: relative; box-shadow: var(--shadow-lg), var(--shadow-glow);
+      position: relative; box-shadow: var(--shadow-lg), 0 10px 25px -5px rgba(var(--card-accent-rgb), 0.2);
     }
 
     .card:hover, .card:focus-visible {
-      transform: translateY(-4px); border-color: var(--primary);
-      box-shadow: var(--shadow-lg), var(--shadow-glow-hover);
+      transform: translateY(-4px); border-color: var(--card-accent);
+      box-shadow: var(--shadow-lg), 0 0 20px rgba(var(--card-accent-rgb), 0.4);
     }
+
+    /* Acento de cada juego (el mismo que usa su página) */
+    .card--freefire { --card-accent: #ff9900; --card-accent-rgb: 255, 153, 0; }
+    .card--bloodstrike { --card-accent: #ff0000; --card-accent-rgb: 255, 0, 0; }
+    .card--roblox { --card-accent: #0066ff; --card-accent-rgb: 0, 102, 255; }
     
     .img-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
     .img-container::after {
@@ -454,17 +460,17 @@
       
       <div class="grid-container">
         <!-- Tarjeta Free Fire -->
-        <a href="#" class="card" onclick="interceptarJuego(event, 'freefire.html')">
+        <a href="#" class="card card--freefire" onclick="interceptarJuego(event, 'freefire.html')">
           <div class="img-container"><img src="free fire.jpg" alt="Free Fire" loading="lazy"></div>
           <h3>Free Fire</h3>
         </a>
         <!-- Tarjeta Roblox -->
-        <a href="#" class="card" onclick="interceptarJuego(event, 'roblox.html')">
+        <a href="#" class="card card--roblox" onclick="interceptarJuego(event, 'roblox.html')">
           <div class="img-container"><img src="roblox.jpg" alt="Roblox" loading="lazy"></div>
           <h3>Roblox</h3>
         </a>
         <!-- Tarjeta Blood Strike -->
-        <a href="#" class="card" onclick="interceptarJuego(event, 'bloodstrike.html')">
+        <a href="#" class="card card--bloodstrike" onclick="interceptarJuego(event, 'bloodstrike.html')">
           <div class="img-container"><img src="bloodstrike.jpg" alt="Blood Strike" loading="lazy"></div>
           <h3>Blood Strike</h3>
         </a>

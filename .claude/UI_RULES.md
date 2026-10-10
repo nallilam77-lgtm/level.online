@@ -30,7 +30,23 @@ Colores definidos **solo** como variables en `:root` (nunca valores sueltos repe
 ```
 
 - Fondos: `--bg-base` o grises muy oscuros. Nunca claros.
-- Acentos vibrantes (cian o verde neón) solo en lo que debe destacar: botones de acción, precios, estados activos y foco. Si todo brilla, nada destaca.
+- Acentos vibrantes solo en lo que debe destacar: botones de acción, precios, estados activos y foco. Si todo brilla, nada destaca.
+- **Cian y verde neón son el acento de Level Up** (inicio, páginas legales, admin).
+
+### Acento por juego
+
+Cada tienda (y su tarjeta en el catálogo de inicio) usa el acento de su logo en bordes, botones de compra, sombras y glows. El fondo slate y el glass no cambian. Se definen en el `:root` de cada página como `--game-*` y nunca como valores sueltos:
+
+| Juego | `--game-accent` (bordes, glows) | `--game-text` (textos destacados) | `--game-gradient` (botones de compra) | Texto sobre el botón |
+|---|---|---|---|---|
+| Free Fire | `#ff9900` | `#ff9900` | `#ff9900 → #ffcc00` | `#0f172a` |
+| Blood Strike | `#ff0000` | `#22d3ee` (la "X" del logo) | `#8b0000 → #ff1a1a` | `#ffffff` |
+| Roblox | `#0066ff` | `#4d94ff` | `#003fbf → #0066ff` | `#ffffff` |
+
+- Hover de tarjetas: `box-shadow: 0 0 20px rgba(<acento>, 0.4)`.
+- Roblox: `#0066ff` no llega a 4.5:1 sobre slate, así que el texto usa `#4d94ff`.
+- Blood Strike: los textos destacados van en cian para no confundirse con los mensajes de error (rojos).
+- En inicio, cada tarjeta de juego lleva su clase (`card--freefire`, `card--bloodstrike`, `card--roblox`) con el mismo acento.
 - Contraste de texto mínimo WCAG AA (4.5:1) sobre el fondo.
 
 ## 3. Glassmorphism en navegación y tarjetas de producto

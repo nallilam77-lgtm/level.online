@@ -11,36 +11,40 @@
   <script src="/js/lector-referencia.js" defer></script>
   <style>
     :root {
+      /* Acento del juego (Blood Strike: rojo intenso con detalles cian (la "X" del logo)): bordes, botones, sombras y glows */
+      --game-accent: #ff0000;
+      --game-accent-rgb: 255, 0, 0;
+      --game-accent-2: #22d3ee;
+      --game-accent-2-rgb: 34, 211, 238;
+      --game-text: #22d3ee;
+      --game-gradient: linear-gradient(135deg, #8b0000, #ff1a1a);
+      --on-game-cta: #ffffff;
       /* Paleta Level Up: ver .claude/UI_RULES.md */
       --bg-base: #0f172a;
       --bg-deep: #0b1120;
       --surface: rgba(15, 23, 42, 0.6);
       --border-glass: rgba(148, 163, 184, 0.15);
-      --accent-cyan: #22d3ee;
-      --accent-cyan-strong: #06b6d4;
-      --accent-neon: #39ff14;
-      --cta-gradient: linear-gradient(135deg, var(--accent-cyan), var(--accent-neon));
-      --on-cta: #0f172a;   /* texto sobre cian/neón: el blanco no contrasta */
+      --cta-gradient: var(--game-gradient);
+      --on-cta: var(--on-game-cta);
       --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
-      --shadow-glow: 0 10px 25px -5px rgba(6, 182, 212, 0.2);
+      --shadow-glow: 0 10px 25px -5px rgba(var(--game-accent-rgb), 0.2);
 
-      --shadow-glow-hover: 0 12px 30px -5px rgba(6, 182, 212, 0.35);
+      --shadow-glow-hover: 0 0 20px rgba(var(--game-accent-rgb), 0.4);
 
       --glass-blur: 12px;
 
       --radius-card: 16px;
       --text-main: #f1f5f9;
       --text-muted: #94a3b8;
-      --accent: var(--accent-cyan);
-      --accent-rgb: 34, 211, 238;
+      --accent: var(--game-accent);
+      --accent-rgb: var(--game-accent-rgb);
       --primary-gradient: var(--cta-gradient);
       --bg-dark: var(--bg-deep);
       --panel-bg: var(--bg-base);
       --card-bg: #1e293b;
       --card-border: #334155;
       --price-bg: var(--bg-deep);
-      --cyan-text: var(--accent-cyan);
-      --cyan-glow: rgba(34, 211, 238, 0.4);
+      --game-glow: rgba(var(--game-accent-rgb), 0.4);
       --danger: #ff3b3b;
       --danger-dark: #2a0b10;
       --warning: #ffcc00;
@@ -56,7 +60,7 @@
     body {
       font-family: 'Poppins', sans-serif;
       background: var(--bg-dark);
-      background-image: radial-gradient(circle at 15% 0%, rgba(34, 211, 238, 0.14), transparent 45%), radial-gradient(circle at 100% 100%, rgba(57, 255, 20, 0.07), transparent 40%), radial-gradient(circle at top, var(--bg-base) 0%, var(--bg-deep) 70%);
+      background-image: radial-gradient(circle at 15% 0%, rgba(var(--game-accent-rgb), 0.14), transparent 45%), radial-gradient(circle at 100% 100%, rgba(var(--game-accent-2-rgb), 0.07), transparent 40%), radial-gradient(circle at top, var(--bg-base) 0%, var(--bg-deep) 70%);
       background-attachment: fixed;
       color: var(--text-main);
       min-height: 100vh;
@@ -79,8 +83,8 @@
       100% { opacity: 1; transform: scale(1); }
     }
     @keyframes floating {
-      0%, 100% { transform: translateY(0); text-shadow: 0 0 15px rgba(34, 211, 238, 0.6); }
-      50% { transform: translateY(-5px); text-shadow: 0 0 25px rgba(34, 211, 238, 0.9); }
+      0%, 100% { transform: translateY(0); text-shadow: 0 0 15px rgba(var(--game-accent-rgb), 0.6); }
+      50% { transform: translateY(-5px); text-shadow: 0 0 25px rgba(var(--game-accent-rgb), 0.9); }
     }
     @keyframes pulse-whatsapp {
       0% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0.6); }
@@ -88,12 +92,12 @@
       100% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0); }
     }
     @keyframes pulse-ia {
-      0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.6); }
-      70% { box-shadow: 0 0 0 15px rgba(34, 211, 238, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+      0% { box-shadow: 0 0 0 0 rgba(var(--game-accent-rgb), 0.6); }
+      70% { box-shadow: 0 0 0 15px rgba(var(--game-accent-rgb), 0); }
+      100% { box-shadow: 0 0 0 0 rgba(var(--game-accent-rgb), 0); }
     }
     @keyframes spin { 100% { transform: rotate(360deg); } }
-    @keyframes typingBounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); box-shadow: 0 0 8px var(--cyan-text); } }
+    @keyframes typingBounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); box-shadow: 0 0 8px var(--game-text); } }
 
     .anim-slide-up { opacity: 0; animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     .delay-1 { animation-delay: 0.1s; }
@@ -114,59 +118,59 @@
     }
 
     .top-nav { margin-bottom: 12px; }
-    .btn-back { color: var(--cyan-text); text-decoration: none; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; transition: 0.3s; min-height: 44px; padding-right: 8px; }
-    .btn-back:hover { transform: translateX(-5px); color: #fff; text-shadow: 0 0 8px var(--cyan-text); }
+    .btn-back { color: var(--game-text); text-decoration: none; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; transition: 0.3s; min-height: 44px; padding-right: 8px; }
+    .btn-back:hover { transform: translateX(-5px); color: #fff; text-shadow: 0 0 8px var(--game-text); }
 
     .title-banner { 
       text-align: center; font-family: 'Montserrat', sans-serif; font-size: 24px; font-weight: 900; 
-      color: var(--accent-cyan); letter-spacing: 1px; margin-bottom: 12px;
-      text-transform: uppercase; text-shadow: 0 0 18px rgba(34, 211, 238, 0.6);
+      color: var(--game-accent); letter-spacing: 1px; margin-bottom: 12px;
+      text-transform: uppercase; text-shadow: 0 0 18px rgba(var(--game-accent-rgb), 0.6);
     }
 
     .step-title { font-size: 12px; font-weight: 800; color: var(--text-main); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 
     .id-section { margin-bottom: 20px; }
     .id-input-group { display: flex; flex-direction: column; gap: 10px; }
-    .input-field { width: 100%; background: var(--bg-deep); border: 2px solid var(--card-border); border-radius: 12px; padding: 12px 14px; color: var(--cyan-text); font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 700; outline: none; transition: all 0.3s ease; text-align: center; }
-    .input-field:focus { border-color: var(--cyan-text); box-shadow: 0 0 12px var(--cyan-glow); }
+    .input-field { width: 100%; background: var(--bg-deep); border: 2px solid var(--card-border); border-radius: 12px; padding: 12px 14px; color: var(--game-text); font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 700; outline: none; transition: all 0.3s ease; text-align: center; }
+    .input-field:focus { border-color: var(--game-text); box-shadow: 0 0 12px var(--game-glow); }
 
-    .btn-verify { width: 100%; background: var(--primary-gradient); color: var(--on-cta); border: none; border-radius: 12px; padding: 12px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; text-transform: uppercase; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 4px 15px rgba(34, 211, 238, 0.4); }
-    .btn-verify:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(34, 211, 238, 0.6); }
+    .btn-verify { width: 100%; background: var(--primary-gradient); color: var(--on-cta); border: none; border-radius: 12px; padding: 12px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; text-transform: uppercase; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 4px 15px rgba(var(--game-accent-rgb), 0.4); }
+    .btn-verify:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(var(--game-accent-rgb), 0.6); }
     .btn-verify:active { transform: scale(0.97); }
     .btn-verify:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
     
-    .id-status { font-size: 12px; margin-top: 8px; display: none; font-weight: 700; text-align: center; padding: 6px; border-radius: 8px; background: rgba(0,0,0,0.4); border: 1px solid rgba(34, 211, 238, 0.2); animation: popIn 0.3s ease; }
+    .id-status { font-size: 12px; margin-top: 8px; display: none; font-weight: 700; text-align: center; padding: 6px; border-radius: 8px; background: rgba(0,0,0,0.4); border: 1px solid rgba(var(--game-accent-rgb), 0.2); animation: popIn 0.3s ease; }
 
     .catalog-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
     .product-card { background: rgba(30, 41, 59, 0.55); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); border: 1px solid var(--border-glass); border-radius: var(--radius-card); padding: 20px 8px; box-shadow: var(--shadow-lg), var(--shadow-glow); text-align: center; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; overflow: hidden; }
-    .product-card:hover { border-color: var(--cyan-text); transform: translateY(-3px); box-shadow: var(--shadow-lg), var(--shadow-glow-hover); }
+    .product-card:hover { border-color: var(--game-accent); transform: translateY(-3px); box-shadow: var(--shadow-lg), var(--shadow-glow-hover); }
     .product-card:active { transform: scale(0.97); }
-.product-card.selected { border-color: var(--accent-cyan); background: linear-gradient(160deg, rgba(34, 211, 238, 0.16), rgba(34, 211, 238, 0.04)); box-shadow: var(--shadow-lg), 0 0 18px rgba(34, 211, 238, 0.4); transform: translateY(-2px) scale(1.01); }
+.product-card.selected { border-color: var(--game-accent); background: linear-gradient(160deg, rgba(var(--game-accent-rgb), 0.16), rgba(var(--game-accent-rgb), 0.04)); box-shadow: var(--shadow-lg), 0 0 18px rgba(var(--game-accent-rgb), 0.4); transform: translateY(-2px) scale(1.01); }
     .product-card.full-width { grid-column: span 2; }
     
     .diamonds-count { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 22px; color: #ffffff; line-height: 1.1; display: flex; align-items: center; justify-content: center; gap: 4px; }
-    .price-box { display: inline-block; background: rgba(34, 211, 238, 0.08); border-radius: 50px; padding: 5px 10px; border: 1px solid rgba(34, 211, 238, 0.25); }
-    .price-text { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--cyan-text); letter-spacing: 0.5px; white-space: nowrap; }
+    .price-box { display: inline-block; background: rgba(var(--game-accent-rgb), 0.08); border-radius: 50px; padding: 5px 10px; border: 1px solid rgba(var(--game-accent-rgb), 0.25); }
+    .price-text { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--game-text); letter-spacing: 0.5px; white-space: nowrap; }
 
-    .checkout-section { display: none; background: rgba(0, 0, 0, 0.4); border: 1px dashed rgba(34, 211, 238, 0.4); border-radius: 16px; padding: 16px 12px; margin-top: 16px; animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); scroll-margin-top: 12px; }
+    .checkout-section { display: none; background: rgba(0, 0, 0, 0.4); border: 1px dashed rgba(var(--game-accent-rgb), 0.4); border-radius: 16px; padding: 16px 12px; margin-top: 16px; animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); scroll-margin-top: 12px; }
     .checkout-section.active { display: block; }
     
-    .bank-card { background: linear-gradient(135deg, rgba(34, 211, 238, 0.05), rgba(0, 0, 0, 0.5)); border: 1px solid var(--cyan-text); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: inset 0 0 15px rgba(34, 211, 238, 0.05); position: relative; overflow: hidden; }
+    .bank-card { background: linear-gradient(135deg, rgba(var(--game-accent-rgb), 0.05), rgba(0, 0, 0, 0.5)); border: 1px solid var(--game-text); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: inset 0 0 15px rgba(var(--game-accent-rgb), 0.05); position: relative; overflow: hidden; }
     .bank-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; color: #cbd5e1; font-weight: 600; }
-    .bank-row span { color: var(--cyan-text); font-weight: 900; font-size: 14px; }
+    .bank-row span { color: var(--game-text); font-weight: 900; font-size: 14px; }
     
     .btn-copy { background: var(--bg-deep); color: white; border: 1px solid var(--card-border); padding: 12px; min-height: 44px; border-radius: 12px; width: 100%; cursor: pointer; font-weight: 700; margin-bottom: 16px; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; }
-    .btn-copy:hover { border-color: var(--cyan-text); color: var(--cyan-text); background: var(--bg-base); }
+    .btn-copy:hover { border-color: var(--game-text); color: var(--game-text); background: var(--bg-base); }
     .btn-copy:active { transform: scale(0.96); }
-    .btn-copy.copied { background: var(--cyan-text); border-color: var(--cyan-text); color: #000; font-weight: 900; }
+    .btn-copy.copied { background: var(--game-text); border-color: var(--game-text); color: #000; font-weight: 900; }
 
     .file-upload-box { margin-bottom: 16px; }
     input[type="file"] { background: var(--bg-deep); padding: 10px; border-radius: 12px; border: 2px dashed var(--card-border); color: var(--text-muted); font-size: 12px; cursor: pointer; width: 100%; box-sizing: border-box; transition: 0.3s; }
-    input[type="file"]:hover { border-color: var(--cyan-text); background: rgba(34, 211, 238, 0.03); }
-    input[type="file"]::file-selector-button { background: var(--cyan-text); color: #000; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 900; cursor: pointer; margin-right: 10px; transition: 0.3s; }
+    input[type="file"]:hover { border-color: var(--game-text); background: rgba(var(--game-accent-rgb), 0.03); }
+    input[type="file"]::file-selector-button { background: var(--game-text); color: #000; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 900; cursor: pointer; margin-right: 10px; transition: 0.3s; }
     
-    .btn-submit-order { width: 100%; background: var(--primary-gradient); color: var(--on-cta); border: none; padding: 14px; border-radius: 14px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; text-transform: uppercase; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 6px 20px rgba(34, 211, 238, 0.4); margin-top: 8px; }
-    .btn-submit-order:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 10px 25px rgba(34, 211, 238, 0.7); filter: brightness(1.2); }
+    .btn-submit-order { width: 100%; background: var(--primary-gradient); color: var(--on-cta); border: none; padding: 14px; border-radius: 14px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; text-transform: uppercase; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 6px 20px rgba(var(--game-accent-rgb), 0.4); margin-top: 8px; }
+    .btn-submit-order:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 10px 25px rgba(var(--game-accent-rgb), 0.7); filter: brightness(1.2); }
     .btn-submit-order:active { transform: scale(0.96); }
 
     /* ======================================================= */
@@ -179,20 +183,20 @@
       right: 16px;
       width: 54px;
       height: 54px;
-      background: linear-gradient(135deg, var(--cyan-text), #06b6d4);
+      background: linear-gradient(135deg, var(--game-text), var(--game-accent));
       border: none;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      box-shadow: 0 8px 25px var(--cyan-glow);
+      box-shadow: 0 8px 25px var(--game-glow);
       z-index: 9999;
       transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       /* Solo unos pulsos al cargar para llamar la atención, sin gastar batería */
       animation: pulse-ia 2.5s 3;
     }
-    .floating-chat-btn:hover { transform: scale(1.1); box-shadow: 0 12px 30px rgba(34, 211, 238, 0.7); }
+    .floating-chat-btn:hover { transform: scale(1.1); box-shadow: 0 12px 30px rgba(var(--game-accent-rgb), 0.7); }
     .floating-chat-btn svg { width: 28px; height: 28px; fill: #000; }
 
     .chat-modal-window {
@@ -203,9 +207,9 @@
       width: 360px;
       max-width: calc(100vw - 40px);
       background: var(--panel-bg);
-      border: 2px solid var(--cyan-text);
+      border: 2px solid var(--game-text);
       border-radius: 20px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px var(--cyan-glow);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px var(--game-glow);
       z-index: 10000;
       overflow: hidden;
       animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -221,8 +225,8 @@
       border-bottom: 1px solid var(--card-border);
     }
     .chat-title-box { display: flex; align-items: center; gap: 8px; }
-    .chat-avatar-ai { width: 32px; height: 32px; background: rgba(34, 211, 238, 0.1); border: 1px solid var(--cyan-text); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; }
-    .chat-title-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--cyan-text); text-transform: uppercase; }
+    .chat-avatar-ai { width: 32px; height: 32px; background: rgba(var(--game-accent-rgb), 0.1); border: 1px solid var(--game-text); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .chat-title-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--game-text); text-transform: uppercase; }
     .chat-subtitle-text { font-size: 10px; color: var(--text-muted); font-weight: 600; }
     
     .btn-close-chat { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; transition: 0.2s; width: 44px; height: 44px; margin: -8px -10px -8px 0; }
@@ -246,12 +250,12 @@
       word-break: break-word;
     }
     .msg-bubble.bot { background: var(--bg-base); color: #fff; border: 1px solid var(--card-border); align-self: flex-start; }
-    .msg-bubble.user { background: var(--card-bg); border: 1px solid var(--cyan-text); color: #fff; align-self: flex-end; }
+    .msg-bubble.user { background: var(--card-bg); border: 1px solid var(--game-text); color: #fff; align-self: flex-end; }
     .msg-bubble.error { background: var(--danger-dark); color: var(--danger); border: 1px solid var(--danger); align-self: center; text-align: center; }
 
     /* Animación de los puntitos de la IA */
     .typing-indicator { display: flex; gap: 4px; padding: 2px 4px; align-items: center; }
-    .typing-dot { width: 6px; height: 6px; background: var(--cyan-text); border-radius: 50%; animation: typingBounce 1.4s infinite ease-in-out both; }
+    .typing-dot { width: 6px; height: 6px; background: var(--game-text); border-radius: 50%; animation: typingBounce 1.4s infinite ease-in-out both; }
     .typing-dot:nth-child(1) { animation-delay: -0.32s; }
     .typing-dot:nth-child(2) { animation-delay: -0.16s; }
 
@@ -266,9 +270,9 @@
     .btn-whatsapp-redirect { background: var(--whatsapp); color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; margin-top: 8px; width: 100%; text-decoration: none; text-transform: uppercase; }
 
     /* Estilos para las tarjetas dentro del chat */
-    .chat-action-card { background: rgba(0, 0, 0, 0.6); border: 1px solid var(--cyan-text); padding: 12px; border-radius: 12px; margin-top: 8px; text-align: center; }
+    .chat-action-card { background: rgba(0, 0, 0, 0.6); border: 1px solid var(--game-text); padding: 12px; border-radius: 12px; margin-top: 8px; text-align: center; }
     .chat-action-card input[type="file"] { margin-bottom: 8px; background: var(--bg-base); }
-    .chat-action-card .resultado-ia-chat { display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; background: rgba(34, 211, 238,0.1); padding: 8px; border-radius: 8px; border: 1px dashed var(--cyan-text); }
+    .chat-action-card .resultado-ia-chat { display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; background: rgba(var(--game-accent-rgb),0.1); padding: 8px; border-radius: 8px; border: 1px dashed var(--game-text); }
 
     /* Modales generales */
     /* Modales generales: cubren TODA la pantalla. inset: 0 incluye la franja de la barra del
@@ -282,8 +286,8 @@
     body.modal-abierto .sticky-cta { visibility: hidden; pointer-events: none; }
     /* Botones de envío bloqueados mientras se procesa (evita doble clic) */
     .btn-confirmar:disabled, .btn-submit-order:disabled, .sticky-cta-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; filter: grayscale(0.3); }
-    .modal-content { background: var(--panel-bg); border: 2px solid var(--cyan-text); border-radius: 20px; padding: 24px 18px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(34, 211, 238, 0.2); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; }
-    .modal-titulo { color: var(--cyan-text); margin-top: 0; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 20px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .modal-content { background: var(--panel-bg); border: 2px solid var(--game-text); border-radius: 20px; padding: 24px 18px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(var(--game-accent-rgb), 0.2); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; }
+    .modal-titulo { color: var(--game-text); margin-top: 0; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 20px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
     
     .whatsapp-theme { border-color: var(--whatsapp) !important; background: var(--whatsapp-dark) !important; box-shadow: 0 0 40px rgba(29, 185, 84, 0.15) !important; }
     .whatsapp-theme .modal-titulo { color: var(--whatsapp) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
@@ -312,27 +316,27 @@
 
     .modal-botones { display: flex; gap: 8px; margin-top: 12px; }
     .btn-revisar, .btn-confirmar { flex: 1; padding: 12px; min-height: 44px; border-radius: 10px; font-weight: 800; cursor: pointer; border: none; font-size: 12px; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); text-transform: uppercase; font-family: 'Montserrat', sans-serif; }
-    .btn-revisar { background: var(--card-bg); border: 1px solid var(--cyan-text); color: var(--cyan-text); }
+    .btn-revisar { background: var(--card-bg); border: 1px solid var(--game-text); color: var(--game-text); }
     .btn-revisar:hover { background: #333; }
     .btn-confirmar { background: var(--primary-gradient); color: var(--on-cta); }
-    .btn-confirmar:hover { box-shadow: 0 6px 15px rgba(34, 211, 238, 0.6); }
+    .btn-confirmar:hover { box-shadow: 0 6px 15px rgba(var(--game-accent-rgb), 0.6); }
     
     .btn-cerrar-dark { background: var(--bg-base); color: white; border: 1px solid var(--card-border); padding: 12px; min-height: 44px; border-radius: 10px; font-weight: 800; width: 100%; cursor: pointer; transition: 0.3s; font-family: 'Montserrat', sans-serif; font-size: 12px; }
-    .btn-cerrar-dark:hover { background: var(--card-bg); border-color: var(--cyan-text); }
+    .btn-cerrar-dark:hover { background: var(--card-bg); border-color: var(--game-text); }
 
-    .modal-anime-card { background: var(--panel-bg); border: 2px solid var(--cyan-text); border-radius: 20px; padding: 24px 18px; max-width: 360px; width: 100%; text-align: center; box-shadow: 0 0 40px rgba(34, 211, 238, 0.3); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-    .anime-avatar-box { width: 120px; height: 120px; margin: 0 auto 15px auto; border-radius: 20px; overflow: hidden; border: 2px solid var(--accent-cyan); box-shadow: 0 0 20px rgba(34, 211, 238, 0.4); }
+    .modal-anime-card { background: var(--panel-bg); border: 2px solid var(--game-text); border-radius: 20px; padding: 24px 18px; max-width: 360px; width: 100%; text-align: center; box-shadow: 0 0 40px rgba(var(--game-accent-rgb), 0.3); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .anime-avatar-box { width: 120px; height: 120px; margin: 0 auto 15px auto; border-radius: 20px; overflow: hidden; border: 2px solid var(--game-accent); box-shadow: 0 0 20px rgba(var(--game-accent-rgb), 0.4); }
     .anime-avatar-box img { width: 100%; height: 100%; object-fit: cover; }
-    .anime-status-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--accent-cyan); margin-bottom: 15px; transition: all 0.3s; }
+    .anime-status-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--game-accent); margin-bottom: 15px; transition: all 0.3s; }
     .progress-bar-container { width: 100%; height: 8px; background: var(--bg-base); border-radius: 8px; overflow: hidden; border: 1px solid var(--card-border); }
-    .progress-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #22d3ee, #39ff14); box-shadow: 0 0 10px #22d3ee; transition: width 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .progress-bar-fill { width: 0%; height: 100%; background: var(--game-gradient); box-shadow: 0 0 10px var(--game-accent); transition: width 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 
-    .tx-caja { background: var(--bg-deep); border: 2px dashed var(--cyan-text); padding: 12px; border-radius: 12px; margin: 15px 0; font-size: 18px; font-weight: 900; color: var(--cyan-text); letter-spacing: 2px; user-select: all; }
+    .tx-caja { background: var(--bg-deep); border: 2px dashed var(--game-text); padding: 12px; border-radius: 12px; margin: 15px 0; font-size: 18px; font-weight: 900; color: var(--game-text); letter-spacing: 2px; user-select: all; }
     .tx-caja.warning { border-color: var(--warning); color: var(--warning); }
     .tx-caja.success { border-color: var(--success); color: var(--success); }
     
     .btn-volver-inicio { background: var(--primary-gradient); color: var(--on-cta); padding: 12px 20px; border-radius: 10px; font-weight: 900; text-decoration: none; display: inline-block; width: 100%; transition: 0.3s; font-family: 'Montserrat', sans-serif; font-size: 13px; }
-    .btn-volver-inicio:hover { box-shadow: 0 8px 20px rgba(34, 211, 238, 0.5); }
+    .btn-volver-inicio:hover { box-shadow: 0 8px 20px rgba(var(--game-accent-rgb), 0.5); }
 
     .toast-bubble {
       position: fixed;
@@ -341,14 +345,14 @@
       transform: translateX(-50%);
       background: rgba(15, 23, 42, 0.95);
       backdrop-filter: blur(10px);
-      border: 1px solid var(--cyan-text);
+      border: 1px solid var(--game-text);
       color: white;
       padding: 12px 24px;
       border-radius: 50px;
       font-family: 'Poppins', sans-serif;
       font-size: 13px;
       font-weight: 600;
-      box-shadow: 0 10px 30px var(--cyan-glow);
+      box-shadow: 0 10px 30px var(--game-glow);
       z-index: 30000;
       transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
       text-align: center;
@@ -359,7 +363,7 @@
     }
     /* Aparece por encima de la barra de compra fija */
     .toast-bubble.show { bottom: calc(96px + env(safe-area-inset-bottom)); }
-    .loader-spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(34, 211, 238, 0.2); border-top-color: var(--cyan-text); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; }
+    .loader-spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(var(--game-accent-rgb), 0.2); border-top-color: var(--game-text); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; }
     
     /* Estilos para el botón flotante deshabilitado */
     .floating-chat-btn.disabled {
@@ -403,11 +407,11 @@
     .bank-row .bank-value { margin-left: auto; text-align: right; word-break: break-all; }
     .btn-mini-copy { flex-shrink: 0; min-width: 44px; min-height: 36px; background: var(--price-bg); border: 1px solid var(--card-border); border-radius: 10px; color: #fff; font-size: 14px; cursor: pointer; transition: all 0.2s ease; }
     .btn-mini-copy:hover { border-color: var(--accent); }
-    .btn-mini-copy.copied { background: var(--cyan-text); border-color: var(--cyan-text); color: #000; }
+    .btn-mini-copy.copied { background: var(--game-text); border-color: var(--game-text); color: #000; }
     .bank-total { text-align: center; padding-top: 4px; }
     .bank-total-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
     .bank-total-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 4px; }
-    .bank-total-amount { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 26px; color: var(--cyan-text); text-shadow: 0 0 14px rgba(var(--accent-rgb), 0.35); }
+    .bank-total-amount { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 26px; color: var(--game-text); text-shadow: 0 0 14px rgba(var(--accent-rgb), 0.35); }
 
     .visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
     .upload-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 110px; padding: 16px; border: 2px dashed var(--card-border); border-radius: 14px; background: var(--price-bg); cursor: pointer; text-align: center; transition: all 0.3s ease; }
@@ -423,9 +427,9 @@
     .upload-preview-ok { font-size: 11px; font-weight: 700; color: var(--success); }
     .btn-change-file { flex-shrink: 0; min-height: 44px; padding: 0 14px; display: inline-flex; align-items: center; background: var(--card-border); color: #fff; border-radius: 10px; font-size: 11px; font-weight: 800; text-transform: uppercase; cursor: pointer; }
 
-    .ia-box { display: none; margin-top: 12px; padding: 12px; background: rgba(var(--accent-rgb), 0.05); border: 1px dashed var(--cyan-text); border-radius: 12px; }
-    .ia-loading { color: var(--cyan-text); font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-    .ia-loading::before { content: ''; width: 14px; height: 14px; border: 2px solid rgba(var(--accent-rgb), 0.3); border-top-color: var(--cyan-text); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+    .ia-box { display: none; margin-top: 12px; padding: 12px; background: rgba(var(--accent-rgb), 0.05); border: 1px dashed var(--game-text); border-radius: 12px; }
+    .ia-loading { color: var(--game-text); font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .ia-loading::before { content: ''; width: 14px; height: 14px; border: 2px solid rgba(var(--accent-rgb), 0.3); border-top-color: var(--game-text); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
     .ia-result { display: none; font-size: 12px; font-weight: 700; color: var(--text-main); line-height: 1.5; }
     .ia-result strong { color: var(--accent); font-size: 15px; letter-spacing: 1px; }
     .ia-result small { display: block; color: var(--text-muted); font-weight: 600; }
@@ -435,7 +439,7 @@
     .resumen-box { background: rgba(0, 0, 0, 0.5); padding: 14px; border-radius: 12px; text-align: left; border: 1px solid var(--card-border); margin-bottom: 12px; }
     .resumen-row { display: flex; justify-content: space-between; gap: 12px; margin: 6px 0; font-size: 12px; color: var(--text-muted); font-weight: 600; }
     .resumen-row span { color: var(--text-main); font-weight: 800; text-align: right; word-break: break-word; }
-    .resumen-row span.destacado { color: var(--cyan-text); }
+    .resumen-row span.destacado { color: var(--game-text); }
     .aviso-warning { font-size: 11px; color: var(--warning); background: rgba(255, 204, 0, 0.08); padding: 10px; border-radius: 8px; border-left: 4px solid var(--warning); text-align: left; line-height: 1.4; margin-bottom: 15px; }
 
 .sticky-cta {
@@ -446,13 +450,13 @@
       backdrop-filter: blur(var(--glass-blur));
       -webkit-backdrop-filter: blur(var(--glass-blur));
       border-top: 1px solid var(--border-glass);
-      box-shadow: 0 -10px 25px -5px rgba(0, 0, 0, 0.5), 0 -6px 20px -8px rgba(6, 182, 212, 0.2);
+      box-shadow: 0 -10px 25px -5px rgba(0, 0, 0, 0.5), 0 -6px 20px -8px rgba(var(--game-accent-rgb), 0.2);
     }
     .sticky-cta-inner { width: 100%; max-width: 480px; display: flex; align-items: center; gap: 12px; }
     .sticky-cta-info { flex: 1; min-width: 0; }
     .sticky-cta-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
     .sticky-cta-value { font-family: 'Montserrat', sans-serif; font-size: 15px; font-weight: 900; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .sticky-cta-value .precio { color: var(--cyan-text); }
+    .sticky-cta-value .precio { color: var(--game-text); }
     .sticky-cta-btn { flex-shrink: 0; min-height: 48px; padding: 0 18px; border: none; border-radius: 12px; background: var(--cta-gradient); color: var(--on-cta); font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.3); transition: transform 0.2s ease, box-shadow 0.2s ease; }
     .sticky-cta-btn:active { transform: scale(0.96); }
     .sticky-cta-btn.ready { box-shadow: 0 0 22px rgba(var(--accent-rgb), 0.6); }
@@ -534,7 +538,7 @@
         ⏳ <strong>No te preocupes:</strong> Tu recarga se completará automáticamente en un lapso de <strong>1 a 5 minutos</strong>. Puedes cerrar esta ventana.
       </div>
       <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20recarga%20de%20Blood%20Strike." target="_blank" rel="noopener noreferrer" class="btn-whatsapp" style="animation: none; margin-top: 12px;">💬 ESCRIBIR A SOPORTE</a>
-      <a href="index.html" class="btn-volver-inicio" style="background: var(--card-bg); border: 1px solid var(--cyan-text); color: var(--cyan-text);">ENTENDIDO, VOLVER AL INICIO</a>
+      <a href="index.html" class="btn-volver-inicio" style="background: var(--card-bg); border: 1px solid var(--game-text); color: var(--game-text);">ENTENDIDO, VOLVER AL INICIO</a>
     </div>
   </div>
 
@@ -545,24 +549,24 @@
       <h2 class="modal-titulo" style="font-size: 20px;">¡RECARGA EXITOSA!</h2>
       <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado y el oro ya está en tu cuenta.</p>
       <div class="tx-caja success" id="codigoTxnExito">TXN-XXXXXX</div>
-      <button type="button" class="btn-confirmar" style="background: linear-gradient(135deg, #22d3ee, #06b6d4); color: var(--on-cta); margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(34, 211, 238, 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
+      <button type="button" class="btn-confirmar" style="background: var(--game-gradient); color: var(--on-cta); margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(var(--game-accent-rgb), 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
       <a href="index.html" class="btn-volver-inicio" style="background: var(--success); color: #000;">NUEVA RECARGA</a>
     </div>
   </div>
 
   <!-- Modal Ruleta Automática -->
   <div id="modalRuletaAutomatica" class="overlay-pantalla">
-    <div class="modal-content" style="border-color: #22d3ee; background: var(--panel-bg); box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 40px rgba(34, 211, 238, 0.2);">
-      <h2 class="modal-titulo" style="color: #22d3ee; text-shadow: 0 0 10px rgba(34, 211, 238,0.4);">🎰 RULETA BLOOD STRIKE 🎰</h2>
+    <div class="modal-content" style="border-color: var(--game-accent); background: var(--panel-bg); box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 40px rgba(var(--game-accent-rgb), 0.2);">
+      <h2 class="modal-titulo" style="color: var(--game-accent); text-shadow: 0 0 10px rgba(var(--game-accent-rgb),0.4);">🎰 RULETA BLOOD STRIKE 🎰</h2>
       <p id="textoEstadoRuleta" style="font-size: 13px; color: var(--text-main); margin-bottom: 20px; font-weight: 800; animation: floating 2s infinite;">Validando tu ticket y girando...</p>
       <div style="position: relative; width: 220px; height: 220px; margin: 0 auto 25px auto;">
-        <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 22px solid #22d3ee; z-index: 10; filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.8));"></div>
-        <div id="ruletaGiraAuto" style="width: 100%; height: 100%; border-radius: 50%; border: 4px solid #22d3ee; transition: transform 4s cubic-bezier(0.15, 0.95, 0.15, 1); background: conic-gradient(#111 0deg 180deg, #222 180deg 360deg); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
+        <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 22px solid var(--game-accent); z-index: 10; filter: drop-shadow(0 0 8px rgba(var(--game-accent-rgb), 0.8));"></div>
+        <div id="ruletaGiraAuto" style="width: 100%; height: 100%; border-radius: 50%; border: 4px solid var(--game-accent); transition: transform 4s cubic-bezier(0.15, 0.95, 0.15, 1); background: conic-gradient(#111 0deg 180deg, #222 180deg 360deg); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
           <span style="position: absolute; top: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: #fff; text-shadow: 0 2px 5px #000;">VACÍO ❌</span>
-          <span style="position: absolute; bottom: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--cyan-text); text-shadow: 0 2px 5px #000; transform: rotate(180deg);">100 🪙</span>
+          <span style="position: absolute; bottom: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--game-text); text-shadow: 0 2px 5px #000; transform: rotate(180deg);">100 🪙</span>
         </div>
       </div>
-      <button class="btn-cerrar-dark" id="btnCerrarRuleta" style="display: none; width: 100%; background: #22d3ee; color: var(--on-cta); border-color: #22d3ee;" onclick="cerrarRuletaAuto()">ENTENDIDO, VOLVER AL INICIO</button>
+      <button class="btn-cerrar-dark" id="btnCerrarRuleta" style="display: none; width: 100%; background: var(--game-accent); color: var(--on-cta); border-color: var(--game-accent);" onclick="cerrarRuletaAuto()">ENTENDIDO, VOLVER AL INICIO</button>
     </div>
   </div>
 
@@ -639,7 +643,7 @@
           <div class="bank-row">Teléfono: <span class="bank-value">Cargando...</span></div>
           <div class="bank-row">Cédula: <span class="bank-value">Cargando...</span></div>
         </div>
-        <hr style="border-color: rgba(34, 211, 238, 0.2); margin: 12px 0;">
+        <hr style="border-color: rgba(var(--game-accent-rgb), 0.2); margin: 12px 0;">
         <div class="bank-total">
           <div class="bank-total-label">Total a pagar</div>
           <div class="bank-total-row">
@@ -773,7 +777,7 @@
     const SCRIPT_PRECIOS_URL = '/api/precios-bloodstrike'; 
     const SCRIPT_RECARGAS_URL = '/api/recargar-bloodstrike';
 
-    window.mostrarBurbuja = function(mensaje, color = 'var(--cyan-text)') {
+    window.mostrarBurbuja = function(mensaje, color = 'var(--game-text)') {
       const burbuja = document.getElementById('toastBubble');
       burbuja.innerText = mensaje;
       burbuja.style.borderColor = color;
@@ -986,7 +990,7 @@
       idVerificado = true; 
       nombreJugadorVerificado = "Jugador Confirmado";
       statusDiv.style.display = 'block'; 
-      statusDiv.style.color = 'var(--cyan-text)'; 
+      statusDiv.style.color = 'var(--game-text)'; 
       statusDiv.innerHTML = `✔️️ <strong style="color: #fff;">ID Aceptado y Confirmado</strong>`;
       
       verificarEstadoDesbloqueo();
@@ -1028,13 +1032,13 @@
       if (!resultBox || !file.type.startsWith("image/")) return;
 
       resultBox.style.display = 'flex';
-      resultBox.innerHTML = `<span style="font-size:11px; color:var(--cyan-text);">🔍 Leyendo comprobante...</span>`;
+      resultBox.innerHTML = `<span style="font-size:11px; color:var(--game-text);">🔍 Leyendo comprobante...</span>`;
 
       const referencia = await leerReferenciaCapture(file);
       if (!referencia) { resultBox.style.display = 'none'; return; }
 
       resultBox.innerHTML = `
-        <span style="color: var(--text-main); font-size: 11px; font-weight: bold;">Encontré: <span style="font-size: 14px; color: var(--cyan-text); letter-spacing: 1px;">${referencia}</span></span>
+        <span style="color: var(--text-main); font-size: 11px; font-weight: bold;">Encontré: <span style="font-size: 14px; color: var(--game-text); letter-spacing: 1px;">${referencia}</span></span>
         <button type="button" onclick="usarReferenciaIA('inputRefChat', null, '${referencia}')" style="background: var(--primary-gradient); color: var(--on-cta); border: none; padding: 6px 10px; border-radius: 6px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-size: 10px;">Usar Número</button>
       `;
     };
@@ -1047,7 +1051,7 @@
 
     window.copiarDatosBanco = function() {
       navigator.clipboard.writeText(`Banco: ${datosBancoGlobal.banco}\nTeléfono: ${datosBancoGlobal.telefono}\nCédula: ${datosBancoGlobal.cedula}`).then(() => {
-        mostrarBurbuja("✅ ¡Datos copiados al portapapeles!", "var(--cyan-text)");
+        mostrarBurbuja("✅ ¡Datos copiados al portapapeles!", "var(--game-text)");
         const btn = document.getElementById('btnCopiarDatos'); 
         btn.innerHTML = "✅ ¡Copiado con éxito!"; btn.classList.add('copied');
         setTimeout(() => { btn.innerHTML = "📋 Copiar todos los datos"; btn.classList.remove('copied'); }, 3000);
@@ -1063,7 +1067,7 @@
       if (!valor) return;
 
       navigator.clipboard.writeText(valor).then(() => {
-        mostrarBurbuja(`✅ ${nombres[campo]} copiado`, "var(--cyan-text)");
+        mostrarBurbuja(`✅ ${nombres[campo]} copiado`, "var(--game-text)");
         boton.textContent = '✓'; boton.classList.add('copied');
         setTimeout(() => { boton.textContent = '📋'; boton.classList.remove('copied'); }, 2000);
       });
@@ -1332,7 +1336,7 @@
 
           if (data.status === "success") {
               textoEstado.innerText = "¡La suerte está echada! 🎲";
-              textoEstado.style.color = "var(--cyan-text)";
+              textoEstado.style.color = "var(--game-text)";
                
               rueda.style.transform = `rotate(${data.gradosDestino}deg)`;
 
@@ -1413,7 +1417,7 @@
 
     window.verificarIdDesdeChat = function(id, paqueteTexto) {
         document.getElementById('inputPlayerId').value = id;
-        mostrarBurbuja("⏳ Confirmando ID...", "var(--cyan-text)");
+        mostrarBurbuja("⏳ Confirmando ID...", "var(--game-text)");
 
         setTimeout(() => {
             idVerificado = true;
@@ -1515,7 +1519,7 @@
                 let paqueteChat = matchVerificar[2].replace(/[^\w\s.-]/g, '');
                 htmlRespuesta = htmlRespuesta.replace(matchVerificar[0], `
                     <div class="chat-action-card">
-                        <p style="color:var(--cyan-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
+                        <p style="color:var(--game-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
                         <p style="font-size:12px; margin-bottom:8px;">Verifica que este ID sea correcto:<br><b style="font-size:16px; color:#fff;">${idChat}</b></p>
                         <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">✅ SÍ, ES MI ID</button>
                     </div>
@@ -1530,7 +1534,7 @@
                 if (!idVerificado) {
                     htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], `
                         <div class="chat-action-card">
-                            <p style="color:var(--cyan-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
+                            <p style="color:var(--game-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
                             <p style="font-size:12px; margin-bottom:8px;">Antes de pagar, confirma que tu ID es exacto:<br><b style="font-size:16px; color:#fff;">${idChat}</b></p>
                             <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">✅ SÍ, ESTÁ CORRECTO</button>
                         </div>
@@ -1552,10 +1556,10 @@
             if (htmlRespuesta.includes("[ACCION_PAGO]")) {
                 htmlRespuesta = htmlRespuesta.replace("[ACCION_PAGO]", `
                     <div class="chat-action-card">
-                        <p style="color:var(--cyan-text); font-weight:900; font-size:13px;">🏦 DATOS DE PAGO</p>
+                        <p style="color:var(--game-text); font-weight:900; font-size:13px;">🏦 DATOS DE PAGO</p>
                         <p style="font-size:12px; margin: 8px 0; line-height:1.5;">Banco: ${datosBancoGlobal.banco}<br>Tel: ${datosBancoGlobal.telefono}<br>Cédula: ${datosBancoGlobal.cedula}</p>
                         <button class="btn-copy" style="padding: 10px; font-size: 11px; margin-bottom: 12px;" onclick="copiarDatosBanco()">📋 COPIAR DATOS</button>
-                        <hr style="border-color: rgba(34, 211, 238,0.2); margin: 12px 0;">
+                        <hr style="border-color: rgba(var(--game-accent-rgb),0.2); margin: 12px 0;">
                         <p style="color:var(--text-main); font-weight:bold; font-size: 12px; margin-bottom:8px;">Sube tu comprobante:</p>
                         <input type="file" id="inputComprobanteChat" accept="image/*" onchange="analizarCaptureChat(this)">
                          
