@@ -19,3 +19,23 @@ Optimizar el código aplicando buenas prácticas:
 
 ## Reglas
 - No leer ni modificar `.env`. Las variables disponibles están documentadas en `.env.example`; si se agrega una nueva, actualizar ese archivo.
+
+---
+
+## Session Start Protocol (inicio de sesión)
+
+Antes de modificar código, leer:
+- `.claude/COMMON_MISTAKES.md`: errores que ya ocurrieron (reintentos, orden de llamadas, tiempos).
+- `.claude/ARCHITECTURE_MAP.md`: estructura, flujo de recarga y variables de entorno.
+- `.claude/QUICK_START.md`: cómo comprobar, desplegar y diagnosticar.
+
+Para preguntas que no tocan código no hace falta leerlos.
+
+Al terminar una tarea: si se descubre un error nuevo o cambia la arquitectura, actualizar el archivo correspondiente de `.claude/`.
+
+No cargar salvo que se pida: `.claude/completions/`, `.claude/sessions/`, `docs/archive/`.
+
+---
+
+**Last Updated**: 2026-10-10
+**Optimized with**: [Claude Token Optimizer](https://github.com/nadimtuhin/claude-token-optimizer)
