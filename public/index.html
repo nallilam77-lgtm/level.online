@@ -203,6 +203,21 @@
     @keyframes brilloFuego { to { background-position: 200% center; } }
     .subtitulo { color: var(--text-muted); font-size: 14px; font-weight: 400; margin-top: 5px; }
 
+    /* Botón "INFLUENCERS" del hero: lleva al Panel de Creadores */
+    .btn-influencers {
+      display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; min-height: 44px; padding: 0 22px;
+      border-radius: 999px; text-decoration: none; color: var(--on-cta); background: var(--cta-gradient);
+      font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; letter-spacing: 2px;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset, 0 8px 22px -6px rgba(57, 255, 20, 0.55);
+      animation: pulsoInfluencers 2.4s ease-in-out infinite; transition: transform 0.2s ease;
+    }
+    .btn-influencers:hover, .btn-influencers:focus-visible { transform: translateY(-2px) scale(1.04); }
+    @keyframes pulsoInfluencers {
+      0%, 100% { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset, 0 8px 22px -6px rgba(57, 255, 20, 0.55); }
+      50% { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset, 0 8px 32px -2px rgba(34, 211, 238, 0.7); }
+    }
+    @media (prefers-reduced-motion: reduce) { .btn-influencers { animation: none; } }
+
     /* --- Títulos de Categorías --- */
     .categoria-titulo {
       text-align: center; font-family: 'Montserrat', sans-serif; font-size: 18px; 
@@ -222,23 +237,50 @@
     }
     .consulta-box h3 {
       font-family: 'Montserrat', sans-serif; color: var(--primary); font-size: 16px;
-      margin-bottom: 12px; text-align: center; text-transform: uppercase; font-weight: 900;
+      margin-bottom: 6px; text-align: center; text-transform: uppercase; font-weight: 900;
     }
+    .consulta-subtitulo { text-align: center; color: var(--text-muted); font-size: 12px; margin-bottom: 16px; }
+    /* Barra de búsqueda: input y botón dentro de un mismo contenedor redondeado */
     .consulta-input-group {
-      display: flex; gap: 12px; margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 6px 6px 6px 14px;
+      background: rgba(11, 17, 32, 0.75); border: 1px solid var(--border-glass); border-radius: 16px;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
     }
+    .consulta-input-group:focus-within {
+      border-color: var(--primary);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 3px rgba(34, 211, 238, 0.15);
+    }
+    .consulta-icono { font-size: 16px; opacity: 0.7; flex-shrink: 0; }
     .consulta-box input {
-      flex: 1; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(34, 211, 238, 0.3);
-      min-height: 44px; padding: 10px 14px; border-radius: 10px; color: #fff; font-family: 'Poppins', sans-serif;
-      font-size: 13px; outline: none; transition: border-color 0.3s;
+      flex: 1; min-width: 0; min-height: 44px; background: transparent; border: none; padding: 0 4px;
+      color: #fff; font-family: 'Poppins', sans-serif; font-size: 16px; outline: none;
     }
-    .consulta-box input:focus { border-color: var(--primary); }
+    .consulta-box input::placeholder { color: var(--text-muted); font-size: 14px; }
     .btn-consultar {
-      background: var(--primary); color: var(--on-cta); border: none; padding: 0 20px; min-height: 44px;
-      border-radius: 10px; font-weight: 800; text-transform: uppercase; cursor: pointer;
-      font-family: 'Montserrat', sans-serif; font-size: 12px; transition: transform 0.2s, box-shadow 0.2s;
+      flex-shrink: 0; background: var(--cta-gradient); color: var(--on-cta); border: none; padding: 0 20px; min-height: 44px;
+      border-radius: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
+      font-family: 'Montserrat', sans-serif; font-size: 12px; box-shadow: var(--shadow-glow);
+      transition: transform 0.2s ease, box-shadow 0.25s ease;
     }
-    .btn-consultar:hover { transform: scale(1.03); box-shadow: 0 4px 12px var(--primary-glow); }
+    .btn-consultar:hover, .btn-consultar:focus-visible { transform: translateY(-1px); box-shadow: var(--shadow-glow-hover); }
+    .btn-consultar:active { transform: scale(0.97); }
+
+    /* --- Acceso al Panel de Creadores --- */
+    .creadores-cta { max-width: 550px; margin: 0 auto 48px; padding: 0 16px; }
+    .creadores-cta-enlace {
+      display: flex; align-items: center; gap: 16px; padding: 20px 24px; text-decoration: none; color: var(--text-main);
+      background: linear-gradient(135deg, rgba(34, 211, 238, 0.12), rgba(57, 255, 20, 0.06)), var(--surface);
+      backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+      border: 1px solid rgba(34, 211, 238, 0.35); border-radius: var(--radius-card);
+      box-shadow: var(--shadow-lg), var(--shadow-glow); transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .creadores-cta-enlace:hover, .creadores-cta-enlace:focus-visible { transform: translateY(-3px); box-shadow: var(--shadow-lg), var(--shadow-glow-hover); }
+    .creadores-cta-icono { font-size: 30px; flex-shrink: 0; }
+    .creadores-cta-texto { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+    .creadores-cta-texto strong { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; text-transform: uppercase; color: var(--primary); }
+    .creadores-cta-texto small { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+    .creadores-cta-flecha { font-size: 22px; color: var(--primary); flex-shrink: 0; }
 
     /* Resultados de órdenes dinámicos */
     .orden-card {
@@ -366,8 +408,8 @@
     @media (min-width: 650px) {
       .grid-container { grid-template-columns: repeat(3, 1fr); max-width: 800px; gap: 32px; padding-bottom: 64px; }
       .card { height: 150px; }
-      .consulta-section, .trust-section, .about-section { max-width: 750px; }
-      .consulta-section, .trust-section { margin-bottom: 64px; }
+      .consulta-section, .trust-section, .about-section, .creadores-cta { max-width: 750px; }
+      .consulta-section, .trust-section, .creadores-cta { margin-bottom: 64px; }
       .about-section { margin-bottom: 64px; padding: 40px 32px; }
       .trust-grid { grid-template-columns: repeat(3, 1fr); gap: 32px; }
     }
@@ -424,6 +466,7 @@
     <a href="freefire.html">🔥 Free Fire</a>
     <a href="roblox.html">🧱 Roblox</a>
     <a href="bloodstrike.html">🎯 Blood Strike</a>
+    <a href="creadores.html">⭐ Panel de Creadores</a>
     <a href="terminos.html">📜 Términos y Condiciones</a>
     <a href="privacidad.html">🔒 Política de Privacidad</a>
     <a href="reembolsos.html">💸 Política de Reembolsos</a>
@@ -440,15 +483,18 @@
     <header class="animate-up">
       <h1 class="titulo-principal">LEVEL UP</h1>
       <p class="subtitulo">El centro de recargas más rápido de Venezuela</p>
+      <a href="creadores.html" class="btn-influencers"><span aria-hidden="true">⭐</span> INFLUENCERS</a>
     </header>
 
     <!-- SECCIÓN: CONSULTAR ESTADO DE ÓRDENES -->
     <section class="consulta-section animate-up delay-1">
       <div class="consulta-box">
         <h3>🔍 Consulta tus Últimas Recargas</h3>
+        <p class="consulta-subtitulo">Escribe el ID o usuario con el que recargaste</p>
         <div class="consulta-input-group">
-          <input type="text" id="inputPlayerId" placeholder="Ingresa tu ID de jugador">
-          <button class="btn-consultar" onclick="validarYConsultar()">Buscar</button>
+          <span class="consulta-icono" aria-hidden="true">🎮</span>
+          <input type="text" id="inputPlayerId" placeholder="Tu ID o usuario" aria-label="ID o usuario de jugador" autocomplete="off" spellcheck="false" enterkeyhint="search" onkeydown="if (event.key === 'Enter') validarYConsultar()">
+          <button type="button" class="btn-consultar" onclick="validarYConsultar()">Buscar</button>
         </div>
         <div id="resultadoOrdenes"></div>
       </div>
@@ -476,6 +522,18 @@
         </a>
       </div>
     </div>
+
+    <!-- ACCESO AL PANEL DE CREADORES -->
+    <section class="creadores-cta animate-up delay-3">
+      <a href="creadores.html" class="creadores-cta-enlace">
+        <span class="creadores-cta-icono" aria-hidden="true">⭐</span>
+        <span class="creadores-cta-texto">
+          <strong>Panel de Creadores</strong>
+          <small>¿Tienes comunidad? Comparte tu código, dale descuento a tus seguidores y gana comisión.</small>
+        </span>
+        <span class="creadores-cta-flecha" aria-hidden="true">→</span>
+      </a>
+    </section>
 
     <section class="trust-section animate-up delay-3">
       <h2 class="categoria-titulo" style="font-size: 16px; margin-bottom: 20px;"><span>⚡</span> Compra Segura</h2>

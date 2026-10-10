@@ -2,6 +2,7 @@
   "functions": {
     "api/recargar.js": { "maxDuration": 180 },
     "api/juego.js": { "maxDuration": 30 },
+    "api/creadores.js": { "maxDuration": 30 },
     "api/consultar-ordenes.js": { "maxDuration": 30 },
     "api/subir-imagen.js": { "maxDuration": 30 },
     "api/ruleta.js": { "maxDuration": 30 }

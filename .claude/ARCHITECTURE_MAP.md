@@ -22,13 +22,15 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 │   └── validacion.js     PAQUETE_VALIDO, textoParaHoja(), faltaConfiguracion()
 ├── juego.js              GET/POST ?juego=<freefire|bloodstrike|roblox>&accion=<precios|verificar|descuento> (30 s)
 ├── recargar.js           POST ?juego=<freefire|bloodstrike|roblox> (maxDuration 180)
+├── creadores.js          POST { codigo, pin } -> panel del creador (nivel, ventas, comisión, movimientos)
 ├── subir-imagen.js       Comprobante de pago → Drive (límite 4 MB)
 ├── consultar-ordenes.js  Consulta de pedidos (página de inicio)
 ├── ruleta.js             Ruleta de la suerte (opcional: 503 si no hay script)
 └── ia-soporte.js         Chat de soporte con Gemini (rota GEMINI_KEYS)
 apps-script/recargas.gs   Copia del Apps Script de recargas Free Fire (v2, con idPedido)
 public/                   Frontend estático; cada página lleva su CSS/JS en línea
-├── index.html            Inicio + consultar órdenes
+├── index.html            Inicio + consultar órdenes + acceso al Panel de Creadores
+├── creadores.html + css/creadores.css   Panel de Creadores (niveles, reglas y consulta con código + PIN)
 ├── freefire.html / bloodstrike.html / roblox.html   Tiendas por juego
 ├── admin.html            Panel (lee Firestore)
 ├── js/lector-referencia.js   Lee la referencia del comprobante (Tesseract)
@@ -70,3 +72,10 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 | Gemini | `GEMINI_KEYS` / `GEMINI_API_KEY`, `GEMINI_MODEL` | ia-soporte |
 
 Detalle de cada variable: `.env.example`.
+
+## Códigos de descuento y Panel de Creadores (hoja de Free Fire)
+
+- **Descuentos**: A código · B descuento en % (vacío en creadores = según nivel) · C usos · D dinero movido (Bs) · E creador (vacío = promo normal) · F PIN · G comisión pagada (USD).
+- **movimientos_descuentos** (se crea sola): cada venta con código; en creadores, comisión del 3 % en Bs y en USD con la tasa del día.
+- **config!B1**: tasa Bs por 1 USD (actualizarla a mano).
+- Niveles (`NIVELES_CREADOR` en `recargas.gs`): Aliado 0-99 usos 0,65 % · Pro 100-249 1 % · Diamante 250+ 1,5 %. Si se cambian, actualizar también el texto de `creadores.html`.

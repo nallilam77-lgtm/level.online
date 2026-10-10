@@ -18,7 +18,7 @@
 // se devuelven al inventario (devolver_codigos). La pestaña "errores" gana las columnas F-L.
 //
 // Códigos de descuento: pestaña "Descuentos" (A: código, B: descuento, C: usos, D: dinero total
-// movido), común a Free Fire y Blood Strike. Vercel consulta el código (validar_descuento), calcula
+// movido, E: creador, F: PIN, G: comisión pagada en USD), común a Free Fire y Blood Strike. Vercel consulta el código (validar_descuento), calcula
 // el precio con descuento y, al terminar la recarga, suma +1 uso y el monto cobrado a ese código:
 // Free Fire dentro de registrar_finalizado; Blood Strike con registrar_uso_descuento.
 // =====================================================================
@@ -46,8 +46,24 @@ const COLUMNAS_RULETA = ["fecha-hora", "id jugador", "referencia", "paquete", "p
 const MAX_CANDIDATOS_RULETA = 5;
 
 // Códigos de descuento (acepta "Descuentos" o "descuentos"). Columna B:
-//   "10%" -> porcentaje sobre el precio;  "50" o "50 Bs" -> monto fijo en bolívares.
+//   siempre porcentaje sobre el precio: "10%" o "10" = 10 % de descuento.
 const HOJA_DESCUENTOS = "descuentos";
+
+// Panel de creadores (códigos con la columna E "creador" llena):
+//   - Nivel según los usos del código: el descuento de sus seguidores sube con el nivel.
+//   - Comisión fija del creador sobre cada venta con su código, en USD con la tasa del día
+//     (pestaña "config", celda B1 = Bs por 1 USD). Mínimo para retirar: RETIRO_MINIMO_USD.
+const NIVELES_CREADOR = [
+  { nombre: "Aliado", desde: 0, descuento: 0.65 },
+  { nombre: "Pro", desde: 100, descuento: 1.0 },
+  { nombre: "Diamante", desde: 250, descuento: 1.5 }
+];
+const COMISION_CREADOR = 0.03;
+const RETIRO_MINIMO_USD = 10;
+const HOJA_CONFIG = "config";
+// Historial de ventas con código (para los últimos movimientos y la comisión de cada creador)
+const HOJA_MOVIMIENTOS_DESCUENTOS = "movimientos_descuentos";
+const COLUMNAS_MOVIMIENTOS_DESCUENTOS = ["fecha-hora", "código", "juego", "id pedido", "venta (Bs)", "comisión (Bs)", "tasa Bs/USD", "comisión (USD)"];
 
 // Columnas de la pestaña "errores" (A-E son las de siempre; F-L agregan el detalle)
 const COLUMNAS_ERRORES = ["fecha-hora", "id", "estado de los pines", "producto", "informe completo",
@@ -92,6 +108,8 @@ function doPost(e) {
     if (accion === "registrar_premio_ruleta") return registrarPremioRuleta(datos);
     // Descuentos: consultar un código solo lee la pestaña "Descuentos"
     if (accion === "validar_descuento") return validarDescuento(datos);
+    // Panel de creadores: solo lee "Descuentos" y "movimientos_descuentos"
+    if (accion === "consultar_creador") return consultarCreador(datos);
 
     switch (accion) {
       case "verificar_pago":       return conCandado(function () { return verificarPago(datos); });
@@ -390,7 +408,7 @@ function registrarFinalizado(datos) {
     hojaAsignaciones().getRange(asignacion.fila, 7).setValue("USADOS (recarga finalizada " + fechaHora + ")");
   }
   // Código de descuento usado en esta recarga: +1 uso y el monto cobrado en la pestaña "Descuentos"
-  if (datos.codigoDescuento) sumarUsoDescuento(datos.codigoDescuento, datos.montoCobrado);
+  if (datos.codigoDescuento) sumarUsoDescuento(datos.codigoDescuento, datos.montoCobrado, "Free Fire", datos.idPedido);
   SpreadsheetApp.flush();
   // (Se quitó la llamada a /api/sincronizar-pedidos: ese endpoint no existe en la tienda
   //  y la petición alargaba el candado en cada recarga.)
@@ -527,7 +545,10 @@ function registrarPremioRuleta(datos) {
 
 // ==========================================
 // 🎟️ 11: CÓDIGOS DE DESCUENTO (pestaña "Descuentos")
-// A: código | B: descuento ("10%" o "50") | C: usos | D: dinero total movido
+// A: código | B: descuento en % ("10%" o "10") | C: usos | D: dinero total movido (Bs)
+// E: creador (nombre o WhatsApp; vacío = código promocional normal) | F: PIN del creador
+// G: comisión ya pagada al creador (USD)
+// Códigos de creador con B vacío: el descuento sale de su nivel (NIVELES_CREADOR) según sus usos.
 // El precio con descuento lo calcula Vercel; aquí solo se lee el código y se anotan los usos.
 // ==========================================
 
@@ -535,7 +556,7 @@ function registrarPremioRuleta(datos) {
 function validarDescuento(datos) {
   var fila = buscarFilaDescuento(datos.codigo);
   if (!fila) return responder({ status: "success", valido: false });
-  var descuento = interpretarDescuento(fila.descuento);
+  var descuento = descuentoDeFila(fila);
   if (!descuento) {
     console.error("Descuentos: el código " + fila.codigo + " tiene un descuento no válido en la columna B: '" + fila.descuento + "'");
     return responder({ status: "success", valido: false });
@@ -546,58 +567,170 @@ function validarDescuento(datos) {
 // Juegos que registran su recarga en OTRA hoja (Blood Strike): Vercel avisa aquí el uso de un
 // código al terminar la recarga. Con candado, igual que registrarFinalizado.
 function registrarUsoDescuento(datos) {
-  sumarUsoDescuento(datos.codigo, datos.montoCobrado);
+  sumarUsoDescuento(datos.codigo, datos.montoCobrado, datos.juego, datos.idPedido);
   SpreadsheetApp.flush();
   return responder({ status: "success" });
 }
 
 // Se llama desde registrarFinalizado y registrarUsoDescuento, que ya tienen el candado
-// (dos recargas no pisan el contador).
+// (dos recargas no pisan el contador). Suma +1 uso y el monto en "Descuentos" y anota la venta
+// en "movimientos_descuentos" (con la comisión si es código de creador).
 // Un fallo aquí nunca impide que la recarga quede anotada en "finalizados".
-function sumarUsoDescuento(codigo, montoCobrado) {
+function sumarUsoDescuento(codigo, montoCobrado, juego, idPedido) {
   try {
     var fila = buscarFilaDescuento(codigo);
     if (!fila) {
       console.error("Descuentos: no se encontró el código " + codigo + " al registrar su uso");
       return;
     }
+    var monto = limpiarMontoVES(montoCobrado);
     var celdas = obtenerHoja(HOJA_DESCUENTOS).getRange(fila.numero, 3, 1, 2); // C: usos, D: dinero movido
     var actuales = celdas.getValues()[0];
     var usos = limpiarMontoVES(actuales[0]) + 1;
-    var dinero = Math.round((limpiarMontoVES(actuales[1]) + limpiarMontoVES(montoCobrado)) * 100) / 100;
+    var dinero = redondear2(limpiarMontoVES(actuales[1]) + monto);
     celdas.setValues([[usos, dinero]]);
+
+    // Historial: la comisión en USD se calcula con la tasa del día de la venta
+    var comisionBs = fila.creador ? redondear2(monto * COMISION_CREADOR) : "";
+    var tasa = fila.creador ? leerTasaUsd() : null;
+    var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
+    hojaMovimientosDescuentos().appendRow([
+      fechaHora, textoSeguro(fila.codigo), textoSeguro(juego || "Free Fire"), textoSeguro(idPedido || ""),
+      monto, comisionBs, tasa || "", tasa ? redondear2(comisionBs / tasa) : ""
+    ]);
   } catch (err) {
     console.error("Descuentos: no se pudo sumar el uso del código " + codigo + ": " + err);
   }
 }
 
-// Busca el código sin distinguir mayúsculas ni espacios. Devuelve { numero, codigo, descuento } o null.
+// Busca el código sin distinguir mayúsculas ni espacios. Devuelve los datos de su fila o null.
 function buscarFilaDescuento(codigo) {
   var buscado = String(codigo || "").trim().toUpperCase();
   if (!buscado) return null;
   var hoja = obtenerHoja(HOJA_DESCUENTOS, true);
   if (!hoja || hoja.getLastRow() < 2) return null;
   // Valores tal como se ven en la hoja: así "10%" llega como "10%" y no como 0.1
-  var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, 2).getDisplayValues();
+  var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, 7).getDisplayValues();
   for (var i = 0; i < filas.length; i++) {
     if (String(filas[i][0]).trim().toUpperCase() === buscado) {
-      return { numero: i + 2, codigo: String(filas[i][0]).trim(), descuento: String(filas[i][1]).trim() };
+      return {
+        numero: i + 2,
+        codigo: String(filas[i][0]).trim(),
+        descuento: String(filas[i][1]).trim(),
+        usos: limpiarMontoVES(filas[i][2]),
+        ventasBs: limpiarMontoVES(filas[i][3]),
+        creador: String(filas[i][4]).trim(),
+        pin: String(filas[i][5]).trim(),
+        pagadoUsd: limpiarMontoVES(filas[i][6])
+      };
     }
   }
   return null;
 }
 
-// "10%" -> porcentaje (entre 0 y 100); "50", "50 Bs", "1.250,50" -> monto fijo en Bs.
-// Vacío, 0 o con otro formato -> null (el código se trata como no válido).
+// Descuento que se aplica con este código: el de la columna B si tiene valor; si está vacía y es
+// un código de creador, el de su nivel actual. null = código no válido.
+function descuentoDeFila(fila) {
+  if (fila.descuento) return interpretarDescuento(fila.descuento);
+  if (fila.creador) return { tipo: "porcentaje", valor: nivelCreador(fila.usos).descuento };
+  return null;
+}
+
+// Los descuentos son SIEMPRE porcentaje: "10%", "10" o "12,5" -> 10 % / 12,5 % del precio.
+// Debe ser mayor que 0 y menor que 100. Vacío, 0, 100 o texto -> null (código no válido).
 function interpretarDescuento(texto) {
-  var t = String(texto || "").trim();
-  if (!t) return null;
-  if (t.indexOf("%") !== -1) {
-    var porcentaje = limpiarMontoVES(t.replace("%", ""));
-    return porcentaje > 0 && porcentaje < 100 ? { tipo: "porcentaje", valor: porcentaje } : null;
+  var porcentaje = limpiarMontoVES(String(texto || "").replace("%", "").trim());
+  return porcentaje > 0 && porcentaje < 100 ? { tipo: "porcentaje", valor: porcentaje } : null;
+}
+
+// ==========================================
+// ⭐ 12: PANEL DE CREADORES (sin candado: solo lectura)
+// El creador consulta con su código y su PIN (columna F, se lo das tú por WhatsApp).
+// Sin PIN configurado no se muestran datos: el código es público, sus ganancias no.
+// ==========================================
+function consultarCreador(datos) {
+  var fila = buscarFilaDescuento(datos.codigo);
+  if (!fila || !fila.creador) return responder({ status: "success", encontrado: false });
+  if (!fila.pin) return responder({ status: "success", encontrado: false, sinPin: true });
+  if (String(datos.pin || "").trim() !== fila.pin) return responder({ status: "success", encontrado: false });
+
+  var tasaActual = leerTasaUsd();
+  var movimientos = [];
+  var comisionTotalUsd = 0;
+  var hoja = obtenerHoja(HOJA_MOVIMIENTOS_DESCUENTOS, true);
+  if (hoja && hoja.getLastRow() > 1) {
+    var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, COLUMNAS_MOVIMIENTOS_DESCUENTOS.length).getValues();
+    for (var i = 0; i < filas.length; i++) {
+      if (String(filas[i][1]).trim().toUpperCase() !== fila.codigo.toUpperCase()) continue;
+      var comisionBs = limpiarMontoVES(filas[i][5]);
+      // Venta anotada sin tasa (la celda estaba vacía ese día): se usa la tasa de hoy
+      var comisionUsd = filas[i][7] !== "" ? limpiarMontoVES(filas[i][7]) : (tasaActual ? comisionBs / tasaActual : 0);
+      comisionTotalUsd += comisionUsd;
+      movimientos.push({
+        fecha: filas[i][0] instanceof Date ? Utilities.formatDate(filas[i][0], "America/Caracas", "dd/MM/yyyy HH:mm") : String(filas[i][0]),
+        juego: String(filas[i][2]),
+        ventaBs: limpiarMontoVES(filas[i][4]),
+        comisionUsd: redondear2(comisionUsd)
+      });
+    }
   }
-  var monto = limpiarMontoVES(t);
-  return monto > 0 ? { tipo: "monto", valor: monto } : null;
+
+  var nivel = nivelCreador(fila.usos);
+  var siguiente = siguienteNivelCreador(fila.usos);
+  var descuentoActual = descuentoDeFila(fila);
+  comisionTotalUsd = redondear2(comisionTotalUsd);
+  var saldoUsd = redondear2(Math.max(0, comisionTotalUsd - fila.pagadoUsd));
+
+  return responder({
+    status: "success", encontrado: true,
+    codigo: fila.codigo,
+    nivel: { nombre: nivel.nombre, descuento: nivel.descuento },
+    siguienteNivel: siguiente ? { nombre: siguiente.nombre, descuento: siguiente.descuento, faltanUsos: siguiente.desde - fila.usos } : null,
+    descuentoSeguidores: descuentoActual ? descuentoActual.valor : nivel.descuento,
+    usos: fila.usos,
+    ventasBs: fila.ventasBs,
+    comisionPorcentaje: COMISION_CREADOR * 100,
+    comisionTotalUsd: comisionTotalUsd,
+    pagadoUsd: redondear2(fila.pagadoUsd),
+    saldoUsd: saldoUsd,
+    retiroMinimoUsd: RETIRO_MINIMO_USD,
+    faltaParaRetiroUsd: redondear2(Math.max(0, RETIRO_MINIMO_USD - saldoUsd)),
+    tasa: tasaActual,
+    movimientos: movimientos.slice(-10).reverse()
+  });
+}
+
+// Nivel según los usos: el último cuyo "desde" ya se alcanzó
+function nivelCreador(usos) {
+  var nivel = NIVELES_CREADOR[0];
+  for (var i = 0; i < NIVELES_CREADOR.length; i++) if (usos >= NIVELES_CREADOR[i].desde) nivel = NIVELES_CREADOR[i];
+  return nivel;
+}
+
+function siguienteNivelCreador(usos) {
+  for (var i = 0; i < NIVELES_CREADOR.length; i++) if (usos < NIVELES_CREADOR[i].desde) return NIVELES_CREADOR[i];
+  return null;
+}
+
+// Tasa Bs por USD de la pestaña "config", celda B1. null si falta o no es un número.
+function leerTasaUsd() {
+  var hoja = obtenerHoja(HOJA_CONFIG, true);
+  if (!hoja) return null;
+  var tasa = limpiarMontoVES(hoja.getRange("B1").getValue());
+  return tasa > 0 ? tasa : null;
+}
+
+function hojaMovimientosDescuentos() {
+  var hoja = obtenerHoja(HOJA_MOVIMIENTOS_DESCUENTOS, true);
+  if (!hoja) {
+    hoja = SpreadsheetApp.getActiveSpreadsheet().insertSheet(HOJA_MOVIMIENTOS_DESCUENTOS);
+    hoja.appendRow(COLUMNAS_MOVIMIENTOS_DESCUENTOS);
+  }
+  return hoja;
+}
+
+function redondear2(n) {
+  return Math.round(Number(n) * 100) / 100;
 }
 
 // ==========================================

@@ -1,6 +1,6 @@
 // Códigos de descuento, compartidos por todas las tiendas.
 // La tabla vive en la pestaña "Descuentos" de la hoja de recargas de Free Fire (SCRIPT_RECARGAS_URL):
-// A: código | B: descuento ("10%" o "50") | C: usos | D: dinero total movido.
+// A: código | B: descuento en % ("10%" o "10") | C: usos | D: dinero total movido.
 // El descuento SIEMPRE se calcula aquí, en el servidor: el navegador solo envía el código.
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache } from './externo.js';

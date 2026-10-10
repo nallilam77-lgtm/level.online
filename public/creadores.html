@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Panel de Creadores de Level Up: niveles, beneficios para tus seguidores y consulta de tus comisiones.">
+  <meta name="theme-color" content="#0f172a">
+  <title>Panel de Creadores - Level Up</title>
+
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="apple-touch-icon" href="logo.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/paginas-legales.css">
+  <link rel="stylesheet" href="css/creadores.css">
+  <link rel="stylesheet" href="css/pie-legal.css">
+</head>
+<body>
+
+  <div class="sidebar-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
+
+  <aside class="sidebar" id="sidebarMenu">
+    <button type="button" class="close-btn" onclick="toggleMenu()" aria-label="Cerrar menú">✖</button>
+    <div class="sidebar-logo">
+      <img src="logo.png" alt="Logo Level Up"> LEVEL<span>UP</span>
+    </div>
+
+    <a href="index.html">🏠 Inicio</a>
+    <a href="freefire.html">🔥 Free Fire</a>
+    <a href="roblox.html">🧱 Roblox</a>
+    <a href="bloodstrike.html">🎯 Blood Strike</a>
+    <a href="creadores.html" aria-current="page">⭐ Panel de Creadores</a>
+    <a href="terminos.html">📜 Términos y Condiciones</a>
+    <a href="privacidad.html">🔒 Política de Privacidad</a>
+    <a href="reembolsos.html">💸 Política de Reembolsos</a>
+  </aside>
+
+  <div class="barra-superior">
+    <button type="button" class="menu-toggle" onclick="toggleMenu()" aria-label="Abrir menú">☰</button>
+    <a href="index.html" class="nav-logo">
+      <img src="logo.png" alt="Logo Level Up"> LEVEL<span>UP</span>
+    </a>
+  </div>
+
+  <main>
+    <header class="animate-up">
+      <h1 class="titulo-principal">⭐ Panel de Creadores</h1>
+      <p class="subtitulo">Comparte tu código: tus seguidores ahorran en cada recarga y tú ganas comisión.</p>
+    </header>
+
+    <div class="creadores-container">
+
+      <!-- CONSULTA: código + PIN -> nivel, ventas, comisión y últimos movimientos -->
+      <section class="panel-caja animate-up" aria-labelledby="tituloConsulta">
+        <h2 id="tituloConsulta">📊 Consulta tu panel</h2>
+        <p>Escribe tu código de creador y el PIN que te dimos por WhatsApp.</p>
+
+        <form id="formPanel" novalidate>
+          <div class="consulta-campos">
+            <div class="campo">
+              <label for="inputCodigoCreador">Tu código</label>
+              <input type="text" id="inputCodigoCreador" placeholder="Ej: JUANGAMER" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+            </div>
+            <div class="campo">
+              <label for="inputPinCreador">PIN</label>
+              <input type="password" id="inputPinCreador" placeholder="••••" inputmode="numeric" maxlength="8" autocomplete="off" required>
+            </div>
+          </div>
+          <button type="submit" class="btn-consultar-panel" id="btnConsultarPanel">Consultar</button>
+        </form>
+        <div class="panel-mensaje" id="panelMensaje" role="status" aria-live="polite"></div>
+
+        <div class="panel-resultado" id="panelResultado">
+          <div class="nivel-actual">
+            <span class="insignia" id="resInsignia"></span>
+            <p>Tus seguidores ahorran <strong id="resDescuento"></strong> en cada recarga.</p>
+          </div>
+
+          <div>
+            <div class="barra"><div class="barra-relleno" id="resBarraNivel"></div></div>
+            <p class="barra-texto" id="resTextoNivel"></p>
+          </div>
+
+          <div class="estadisticas">
+            <div class="estadistica"><span>Recargas con tu código</span><strong id="resUsos"></strong></div>
+            <div class="estadistica"><span>Ventas generadas</span><strong id="resVentas"></strong></div>
+            <div class="estadistica"><span>Comisión acumulada</span><strong id="resComision"></strong></div>
+            <div class="estadistica destacada"><span>Saldo por cobrar</span><strong id="resSaldo"></strong></div>
+          </div>
+
+          <div class="retiro" id="resRetiro">
+            <h3>💵 Retiro mínimo: <span id="resMinimo"></span></h3>
+            <div class="barra"><div class="barra-relleno" id="resBarraRetiro"></div></div>
+            <p class="barra-texto" id="resTextoRetiro"></p>
+            <a class="btn-retiro" id="btnRetiro" target="_blank" rel="noopener noreferrer">💬 Solicitar mi retiro por WhatsApp</a>
+          </div>
+
+          <div class="movimientos">
+            <h3>🧾 Últimos movimientos</h3>
+            <div class="tabla-scroll">
+              <table>
+                <thead><tr><th>Fecha</th><th>Juego</th><th>Venta</th><th>Tu comisión</th></tr></thead>
+                <tbody id="resMovimientos"></tbody>
+              </table>
+            </div>
+            <p class="nota-tasa" id="resNotaTasa"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- NIVELES Y BENEFICIOS -->
+      <section class="panel-caja animate-up" aria-labelledby="tituloNiveles">
+        <h2 id="tituloNiveles">🏆 Niveles y beneficios</h2>
+        <p>Tu nivel sube solo con las recargas hechas con tu código. Mientras más alto, más ahorran tus seguidores.</p>
+        <div class="niveles">
+          <article class="nivel-tarjeta">
+            <span class="insignia aliado">🤝 Aliado</span>
+            <p class="nivel-usos">De 1 a 99 usos</p>
+            <div class="nivel-dato">Descuento para tus seguidores <strong>0,65 %</strong></div>
+            <div class="nivel-dato">Tu comisión <strong>3 %</strong></div>
+          </article>
+          <article class="nivel-tarjeta">
+            <span class="insignia pro">⚡ Pro</span>
+            <p class="nivel-usos">De 100 a 249 usos</p>
+            <div class="nivel-dato">Descuento para tus seguidores <strong>1 %</strong></div>
+            <div class="nivel-dato">Tu comisión <strong>3 %</strong></div>
+          </article>
+          <article class="nivel-tarjeta">
+            <span class="insignia diamante">💎 Diamante</span>
+            <p class="nivel-usos">250 usos o más</p>
+            <div class="nivel-dato">Descuento para tus seguidores <strong>1,5 %</strong></div>
+            <div class="nivel-dato">Tu comisión <strong>3 %</strong></div>
+          </article>
+        </div>
+      </section>
+
+      <!-- REGLAS DE ORO -->
+      <section class="panel-caja animate-up" aria-labelledby="tituloReglas">
+        <h2 id="tituloReglas">📜 Reglas de oro</h2>
+        <p>Para que el programa sea justo para todos:</p>
+        <ul class="reglas">
+          <li><span aria-hidden="true">💵</span><p><strong>Retiro mínimo de $10 USD</strong>Tu comisión se acumula hasta llegar a $10; desde ahí puedes pedir tu pago por WhatsApp.</p></li>
+          <li><span aria-hidden="true">✍️</span><p><strong>Códigos 100 % manuales</strong>Cada código lo creamos nosotros por WhatsApp. No hay registro automático ni códigos autogestionados.</p></li>
+          <li><span aria-hidden="true">🛡️</span><p><strong>Supervisión antifraude estricta</strong>Revisamos cada venta. Las recargas falsas, autocompras o abusos anulan la comisión y el código.</p></li>
+        </ul>
+        <a class="btn-whatsapp-creador" href="https://wa.me/584141916377?text=Hola%2C%20quiero%20ser%20creador%20de%20Level%20Up%20y%20tener%20mi%20c%C3%B3digo" target="_blank" rel="noopener noreferrer">💬 Quiero mi código de creador</a>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="pie-legal">
+    <div class="pie-legal-enlaces" role="navigation" aria-label="Información legal">
+      <a href="terminos.html">Términos y Condiciones</a>
+      <a href="privacidad.html">Política de Privacidad</a>
+      <a href="reembolsos.html">Política de Reembolsos</a>
+    </div>
+    <p class="pie-legal-aviso">Level Up es un servicio de recarga independiente. No está afiliado, patrocinado ni respaldado por Garena (Free Fire), Roblox Corporation ni NetEase Games (Blood Strike). Todas las marcas y logotipos pertenecen a sus respectivos dueños.</p>
+    <p class="pie-legal-copy">&copy; 2026 <strong>Level Up</strong>. Todos los derechos reservados.</p>
+  </footer>
+
+  <a href="https://wa.me/584141916377" target="_blank" rel="noopener noreferrer" class="whatsapp-float" aria-label="Escribir a Soporte por WhatsApp">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12.031 0C5.385 0 0 5.383 0 12.029c0 2.124.553 4.195 1.605 6.01L.036 24l6.11-1.603c1.737 1.002 3.738 1.531 5.885 1.531 6.643 0 12.028-5.381 12.028-12.027C24.059 5.383 18.675 0 12.031 0zm3.565 17.27c-.54.269-3.187.584-3.557.584-.37 0-1.802-.234-4.225-2.656-2.424-2.425-2.657-3.856-2.657-4.226 0-.37.316-3.018.584-3.557.269-.54.912-.767 1.451-.497.54.269 1.433 3.493 1.433 3.864 0 .37-.197.808-.466 1.077-.466.466.269.269-.538.448-.179 1.077.359.627 1.614 1.882 2.241 2.241.628.359.808.09 1.077-.179.269-.269.808-.466 1.077-.466.37 0 3.595.892 3.864 1.432.27.539.043 1.182-.497 1.451z"/>
+    </svg>
+  </a>
+
+  <script>
+    const body = document.body;
+
+    function toggleMenu() {
+      const sidebar = document.getElementById('sidebarMenu');
+      const overlay = document.getElementById('menuOverlay');
+
+      if (sidebar.classList.contains('open')) {
+        sidebar.classList.remove('open');
+        overlay.style.display = 'none';
+        body.classList.remove('no-scroll');
+      } else {
+        sidebar.classList.add('open');
+        overlay.style.display = 'block';
+        body.classList.add('no-scroll');
+      }
+    }
+
+    // =========================================================================
+    // PANEL DE CREADORES: POST /api/creadores { codigo, pin }
+    // Todo lo que llega del servidor se pinta con textContent (nunca como HTML).
+    // =========================================================================
+    const WHATSAPP = '584141916377';
+    const CLASE_NIVEL = { Aliado: 'aliado', Pro: 'pro', Diamante: 'diamante' };
+    const ICONO_NIVEL = { Aliado: '🤝', Pro: '⚡', Diamante: '💎' };
+    const $ = (id) => document.getElementById(id);
+
+    const formatoBs = (n) => `${Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs`;
+    const formatoUsd = (n) => `$${Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const formatoPorcentaje = (n) => `${Number(n).toLocaleString('es-VE', { maximumFractionDigits: 2 })} %`;
+
+    function mostrarMensaje(texto) {
+      const mensaje = $('panelMensaje');
+      mensaje.className = 'panel-mensaje error';
+      mensaje.textContent = texto;
+    }
+
+    function pintarPanel(d) {
+      const insignia = $('resInsignia');
+      insignia.className = `insignia ${CLASE_NIVEL[d.nivel.nombre] || 'aliado'}`;
+      insignia.textContent = `${ICONO_NIVEL[d.nivel.nombre] || '⭐'} ${d.nivel.nombre} · ${d.codigo}`;
+      $('resDescuento').textContent = formatoPorcentaje(d.descuentoSeguidores);
+
+      // Progreso hacia el siguiente nivel
+      if (d.siguienteNivel) {
+        const desdeActual = d.usos + d.siguienteNivel.faltanUsos;
+        $('resBarraNivel').style.width = `${Math.min(100, (d.usos / desdeActual) * 100)}%`;
+        $('resTextoNivel').textContent = `Te faltan ${d.siguienteNivel.faltanUsos} recargas para subir a ${d.siguienteNivel.nombre} (tus seguidores ahorrarán ${formatoPorcentaje(d.siguienteNivel.descuento)}).`;
+      } else {
+        $('resBarraNivel').style.width = '100%';
+        $('resTextoNivel').textContent = '¡Estás en el nivel máximo! Tus seguidores tienen el mejor descuento.';
+      }
+
+      $('resUsos').textContent = d.usos.toLocaleString('es-VE');
+      $('resVentas').textContent = formatoBs(d.ventasBs);
+      $('resComision').textContent = formatoUsd(d.comisionTotalUsd);
+      $('resSaldo').textContent = formatoUsd(d.saldoUsd);
+
+      // Retiro: progreso hasta el mínimo
+      $('resMinimo').textContent = formatoUsd(d.retiroMinimoUsd);
+      $('resBarraRetiro').style.width = `${Math.min(100, (d.saldoUsd / d.retiroMinimoUsd) * 100)}%`;
+      const listo = d.faltaParaRetiroUsd <= 0;
+      $('resRetiro').classList.toggle('listo', listo);
+      $('resTextoRetiro').textContent = listo
+        ? `¡Ya puedes retirar ${formatoUsd(d.saldoUsd)}! Escríbenos por WhatsApp.`
+        : `Te faltan ${formatoUsd(d.faltaParaRetiroUsd)} para tu primer retiro.`;
+      $('btnRetiro').href = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola, soy creador de Level Up (código ${d.codigo}) y quiero retirar mi saldo de ${formatoUsd(d.saldoUsd)}.`)}`;
+
+      // Últimos movimientos
+      const tbody = $('resMovimientos');
+      tbody.replaceChildren();
+      if (!d.movimientos.length) {
+        const fila = tbody.insertRow();
+        const celda = fila.insertCell();
+        celda.colSpan = 4;
+        celda.className = 'sin-movimientos';
+        celda.textContent = 'Todavía no hay recargas con tu código. ¡Compártelo con tu comunidad!';
+      }
+      for (const m of d.movimientos) {
+        const fila = tbody.insertRow();
+        [m.fecha, m.juego, formatoBs(m.ventaBs), formatoUsd(m.comisionUsd)].forEach((valor, i) => {
+          const celda = fila.insertCell();
+          celda.textContent = valor;
+          if (i === 3) celda.className = 'comision';
+        });
+      }
+      $('resNotaTasa').textContent = `Comisión del ${formatoPorcentaje(d.comisionPorcentaje)} sobre cada venta, convertida a dólares con la tasa del día de la venta.`;
+
+      $('panelResultado').classList.add('visible');
+    }
+
+    $('formPanel').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const codigo = $('inputCodigoCreador').value.replace(/\s+/g, '').toUpperCase();
+      const pin = $('inputPinCreador').value.trim();
+      $('inputCodigoCreador').value = codigo;
+      $('panelResultado').classList.remove('visible');
+      $('panelMensaje').textContent = '';
+
+      if (!/^[A-Z0-9_-]{2,30}$/.test(codigo) || !/^\d{4,8}$/.test(pin)) {
+        mostrarMensaje('Escribe tu código y tu PIN (de 4 a 8 números).');
+        return;
+      }
+
+      const boton = $('btnConsultarPanel');
+      boton.disabled = true;
+      boton.textContent = 'Consultando...';
+      try {
+        const res = await fetch('/api/creadores', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo, pin })
+        });
+        const datos = await res.json();
+        if (datos.encontrado) pintarPanel(datos);
+        else mostrarMensaje(datos.message || 'Código o PIN incorrecto.');
+      } catch (error) {
+        mostrarMensaje('No pudimos consultar tu panel. Revisa tu conexión e intenta de nuevo.');
+      } finally {
+        boton.disabled = false;
+        boton.textContent = 'Consultar';
+      }
+    });
+  </script>
+
+</body>
+</html>

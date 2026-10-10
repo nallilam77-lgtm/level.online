@@ -16,7 +16,8 @@ const MAX_CLAVES_EN_MEMORIA = 10000;
 // Fallos permitidos por tipo de clave. La IP tiene más margen porque en Venezuela
 // muchos clientes móviles comparten IP (CGNAT de las operadoras).
 // "descuento": códigos de descuento inválidos por IP (frena que se adivinen probando).
-const MAX_FALLOS = { ip: 15, jugador: 5, descuento: 10 };
+// "panel" / "panelcodigo": PIN incorrecto en el panel de creadores, por IP y por código.
+const MAX_FALLOS = { ip: 15, jugador: 5, descuento: 10, panel: 8, panelcodigo: 20 };
 
 let promesaDb = null;
 let avisoSinFirestore = false;
