@@ -1,10 +1,13 @@
+// Blood Strike: precios y recarga directa por la API de FazerCards.
+// Lo usan api/juego.js (acción precios) y api/recargar.js (recargar).
 import { randomUUID } from 'node:crypto';
-import { obtenerIp, minutosBloqueado, registrarFallo } from './_lib/limitador.js';
-import { llamarScript, conCache, catalogoValido, ErrorExterno } from './_lib/externo.js';
-import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from './_lib/validacion.js';
-import { FASES, informeError } from './_lib/reporte.js';
+import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
+import { pedirJSON, llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasCachePrecios, ErrorExterno } from '../externo.js';
+import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
+import { FASES } from '../reporte.js';
+import { formatearVES, limpiarMontoVES, crearUtilidadesPedido } from '../recarga-comun.js';
 
-// Tiempos (maxDuration de Vercel = 120 s en vercel.json). Peor caso con respuesta incierta:
+// Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con respuesta incierta:
 // precios 12 + verificar 32 + FazerCards 40 + registrar 12 + marcar 12 = 108 s
 const TIEMPOS = {
   // Solo si el Apps Script de Blood Strike anuncia "version: 2" (verificar_pago idempotente)
@@ -26,29 +29,39 @@ const CODIGOS_FAZER = {
   "5800": "5800_bc"
 };
 
-const formatearVES = (monto) => Number(monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// =========================================================================
+// ACCIONES DE api/juego.js
+// =========================================================================
 
-function limpiarMontoVES(valor) {
-  if (!valor) return 0;
-  if (typeof valor === 'number') return valor;
-  let m = String(valor).trim().replace(/[^0-9.,-]/g, '');
-  if (!m) return 0;
-
-  let lastComma = m.lastIndexOf(',');
-  let lastDot = m.lastIndexOf('.');
-
-  if (lastComma > lastDot) {
-    m = m.replace(/\./g, '').replace(',', '.');
-  } else if (lastComma !== -1 && lastDot === -1) {
-    m = m.replace(',', '.');
-  } else if (lastDot !== -1 && lastComma === -1) {
-    let parts = m.split('.');
-    if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
-      m = m.replace(/\./g, '');
-    }
+async function precios(req, res) {
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ status: "error", message: "Método no permitido" });
   }
-  return parseFloat(m) || 0;
+
+  const URL_GOOGLE_SCRIPT = process.env.SCRIPT_BLOOD;
+  if (!URL_GOOGLE_SCRIPT) {
+    return faltaConfiguracion(res, ["SCRIPT_BLOOD"], { status: "error", message: "Error interno al conectar con Google Sheets" });
+  }
+
+  try {
+    // GET con la acción en la URL para evitar redirecciones de POST.
+    // Lectura sin efectos secundarios (20 s con 1 reintento). Con copia en caché el cliente no espera.
+    const { datos } = await conCache('precios:bs',
+      () => pedirJSON(`${URL_GOOGLE_SCRIPT}?accion=obtener_precios`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT }),
+      { esValido: catalogoValido });
+    cabecerasCachePrecios(res);
+    return res.status(200).json(datos);
+  } catch (error) {
+    console.error("Error al obtener precios de Blood Strike:", error.message);
+    return res.status(503).json({ status: "error", message: "Error interno al conectar con Google Sheets" });
+  }
 }
+
+export const acciones = { precios };
+
+// =========================================================================
+// RECARGA (api/recargar.js)
+// =========================================================================
 
 /**
  * Crea la orden en FazerCards y clasifica el resultado:
@@ -90,7 +103,7 @@ async function crearOrdenFazer({ apiKey, offerId, idJugador }) {
   }
 }
 
-export default async function handler(req, res) {
+export async function recargar(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
 
   try {
@@ -118,17 +131,10 @@ export default async function handler(req, res) {
     const idPedido = randomUUID();
     const comprobante = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
 
-    // Marcar una referencia se puede repetir sin efectos secundarios: reintentos rápidos
-    const marcarReferencia = (accion, ref) =>
-      llamarScript(URL_GOOGLE_SCRIPT, { accion, referencia: ref, idPedido }, { reintentos: 2, tiempoMs: TIEMPOS.incidente, reintentarTrasTimeout: true })
-        .then(() => true)
-        .catch((e) => { console.error(`❌ ${accion} falló para REF ${ref}:`, e.message); return false; });
-    // Los registros agregan filas: sin reintento tras timeout para no duplicarlas
-    const registrarEnHoja = (cuerpo) =>
-      llamarScript(URL_GOOGLE_SCRIPT, cuerpo, { tiempoMs: TIEMPOS.incidente, reintentos: 1 })
-        .then(() => true)
-        .catch((e) => { console.error(`❌ ${cuerpo.accion} falló para el pedido ${idPedido}:`, e.message, '| Informe:', cuerpo.urlImagen); return false; });
-    const informe = (datos) => informeError({ idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, noAplica: true, ...datos });
+    const { marcarReferencia, registrarEnHoja, informe } = crearUtilidadesPedido({
+      urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
+      datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, noAplica: true },
+    });
 
     // Antes de consultar la hoja de pagos: ¿esta IP o este jugador acumula demasiados fallos?
     const clavesLimite = [`ip:${obtenerIp(req)}`, `jugador:bs:${id}`];
@@ -211,7 +217,7 @@ export default async function handler(req, res) {
     if (!offerIdFinal) {
       const liberado = await marcarReferencia("marcar_verificado", referenciaCompleta);
       await registrarEnHoja(informe({
-        fase: FASES.apiBloodStrike, motivo: `El paquete "${paquete}" (${numeroOro} de oro) no tiene un offer_id de FazerCards configurado en recargar-bloodstrike.js. No se llamó a la API.`,
+        fase: FASES.apiBloodStrike, motivo: `El paquete "${paquete}" (${numeroOro} de oro) no tiene un offer_id de FazerCards configurado en CODIGOS_FAZER (api/_lib/juegos/bloodstrike.js). No se llamó a la API.`,
         referenciaCompleta,
         estadoPago: liberado ? 'LIBERADO (vuelve a "Verificado"): el cliente puede reintentar o elegir otro paquete' : `SIN CONFIRMAR: la referencia ${referenciaCompleta} puede seguir "En proceso"`,
       }));
@@ -283,7 +289,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ status: "success", message: "Recarga de Blood Strike procesada exitosamente." });
 
   } catch (error) {
-    console.error("Error crítico en recargar-bloodstrike.js:", error.message);
+    console.error("Error crítico en la recarga de Blood Strike:", error.message);
     if (error instanceof ErrorExterno) {
       return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si te dice que ya fue utilizado, escríbenos por WhatsApp." });
     }

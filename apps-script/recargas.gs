@@ -1,6 +1,6 @@
 // =====================================================================
 // LEVEL UP - Apps Script de RECARGAS FREE FIRE (variable SCRIPT_RECARGAS_URL en Vercel)
-// Usado por: api/recargar.js, api/precios.js, api/subir-imagen.js y MacroDroid.
+// Usado por: api/_lib/juegos/freefire.js (precios, recarga), api/subir-imagen.js y MacroDroid.
 //
 // Cómo actualizarlo: pega este archivo en el editor de Apps Script y luego
 // Implementar > Gestionar implementaciones > editar (lápiz) > Versión: "Nueva versión" > Implementar.

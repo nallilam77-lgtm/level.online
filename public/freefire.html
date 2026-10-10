@@ -770,7 +770,7 @@
     let datosBancoGlobal = { banco: "", telefono: "", cedula: "" }; let isProcessing = false;
     let globalTxnCode = "";
     
-    const SCRIPT_VALIDADOR_URL = '/api/verificar'; const SCRIPT_RECARGAS_URL = '/api/recargar';
+    const SCRIPT_VALIDADOR_URL = '/api/juego?juego=freefire&accion=verificar'; const SCRIPT_RECARGAS_URL = '/api/recargar?juego=freefire';
 
     window.mostrarBurbuja = function(mensaje, color = 'var(--game-accent)') {
       const burbuja = document.getElementById('toastBubble');
@@ -815,7 +815,7 @@
       container.innerHTML = '<div class="product-card skeleton"></div>'.repeat(6);
 
       try {
-        const res = await fetch('/api/precios');
+        const res = await fetch('/api/juego?juego=freefire&accion=precios');
         const data = await res.json();
 
         if (!data || data.status !== "success" || !data.catalogo || data.catalogo.length === 0) {

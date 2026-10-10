@@ -1,15 +1,18 @@
 {
   "functions": {
     "api/recargar.js": { "maxDuration": 180 },
-    "api/recargar-bloodstrike.js": { "maxDuration": 120 },
-    "api/roblox.js": { "maxDuration": 60 },
-    "api/verificar.js": { "maxDuration": 30 },
+    "api/juego.js": { "maxDuration": 30 },
     "api/consultar-ordenes.js": { "maxDuration": 30 },
-    "api/precios.js": { "maxDuration": 30 },
-    "api/precios-bloodstrike.js": { "maxDuration": 30 },
     "api/subir-imagen.js": { "maxDuration": 30 },
     "api/ruleta.js": { "maxDuration": 30 }
   },
+  "rewrites": [
+    { "source": "/api/precios", "destination": "/api/juego?juego=freefire&accion=precios" },
+    { "source": "/api/precios-bloodstrike", "destination": "/api/juego?juego=bloodstrike&accion=precios" },
+    { "source": "/api/verificar", "destination": "/api/juego?juego=freefire&accion=verificar" },
+    { "source": "/api/recargar-bloodstrike", "destination": "/api/recargar?juego=bloodstrike" },
+    { "source": "/api/roblox", "destination": "/api/recargar?juego=roblox" }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",

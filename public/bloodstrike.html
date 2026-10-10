@@ -774,8 +774,8 @@
     let globalTxnCode = "";
     
     // RUTAS ACTUALIZADAS PARA BLOOD STRIKE
-    const SCRIPT_PRECIOS_URL = '/api/precios-bloodstrike'; 
-    const SCRIPT_RECARGAS_URL = '/api/recargar-bloodstrike';
+    const SCRIPT_PRECIOS_URL = '/api/juego?juego=bloodstrike&accion=precios'; 
+    const SCRIPT_RECARGAS_URL = '/api/recargar?juego=bloodstrike';
 
     window.mostrarBurbuja = function(mensaje, color = 'var(--game-text)') {
       const burbuja = document.getElementById('toastBubble');

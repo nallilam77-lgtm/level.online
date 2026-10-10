@@ -7,7 +7,7 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 ## 1. Reintentar operaciones que crean algo
 
 **Síntoma**: pines entregados dos veces, compras de Roblox/Blood Strike duplicadas, filas repetidas en la hoja.
-**Regla**: solo se reintenta lo idempotente (leer precios, validar ID, `marcar_usado`, y `verificar_pago`/`obtener_codigo` porque llevan `idPedido`). Nunca se reintenta tras un timeout: compras (`api/roblox.js`, FazerCards en `recargar-bloodstrike.js`), `registrar_*`, ruleta, `subir_imagen`.
+**Regla**: solo se reintenta lo idempotente (leer precios, validar ID, `marcar_usado`, y `verificar_pago`/`obtener_codigo` porque llevan `idPedido`). Nunca se reintenta tras un timeout: compras (`api/_lib/juegos/roblox.js`, FazerCards en `api/_lib/juegos/bloodstrike.js`), `registrar_*`, ruleta, `subir_imagen`.
 **Dónde**: comentario de cabecera de `api/_lib/externo.js` (`reintentarTrasTimeout`).
 
 ## 2. Ejecutar en paralelo `registrar_error` y `marcar_usado`

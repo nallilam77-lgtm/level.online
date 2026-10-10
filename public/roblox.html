@@ -755,7 +755,8 @@
     let isProcessing = false;
     let globalTxnCode = "";
     
-    const API_ROBLOX = '/api/roblox';
+    const API_PRECIOS_ROBLOX = '/api/juego?juego=roblox&accion=precios';
+    const API_COMPRA_ROBLOX = '/api/recargar?juego=roblox';
 
     // FUNCIÓN DE NOTIFICACIÓN TIPO BURBUJA DE ABAJO (De Free Fire)
     window.mostrarBurbuja = function(mensaje, color = 'var(--game-accent)') {
@@ -787,11 +788,7 @@
     async function cargarCatalogoRoblox() {
       const container = document.getElementById('catalogContainer');
       try {
-        const response = await fetch(API_ROBLOX, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipo: "obtener_precios" })
-        });
+        const response = await fetch(API_PRECIOS_ROBLOX);
         
         const data = await response.json();
 
@@ -1134,11 +1131,10 @@
           textoElem.innerHTML = "🔍 Verificando pago y conectando a bóveda...";
           barraFill.style.width = '45%';
 
-          let respuestaServidor = await fetch(API_ROBLOX, {
+          let respuestaServidor = await fetch(API_COMPRA_ROBLOX, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                tipo: "compra",
                 referencia: referenciaUsuario,
                 user: usuarioRoblox,
                 producto: paqueteSeleccionado.producto,
