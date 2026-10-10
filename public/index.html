@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="description" content="Level Up - Centro de Recargas de Free Fire, Roblox y Blood Strike. El servicio más rápido y seguro de Venezuela.">
-  <meta name="theme-color" content="#1a0018">
+  <meta name="theme-color" content="#0f172a">
   <title>Level Up - Centro de Recargas</title>
   
   <link rel="icon" type="image/png" href="logo.png">
@@ -17,17 +17,35 @@
   <style>
     /* --- Variables y Reset --- */
     :root {
-      --primary: #ff9900;
-      --primary-glow: rgba(255, 153, 0, 0.4);
-      --text-main: #ffffff;
-      --text-muted: #a0aec0;
+      /* Paleta Level Up: ver .claude/UI_RULES.md */
+      --bg-base: #0f172a;
+      --bg-deep: #0b1120;
+      --surface: rgba(15, 23, 42, 0.6);
+      --border-glass: rgba(148, 163, 184, 0.15);
+      --accent-cyan: #22d3ee;
+      --accent-cyan-strong: #06b6d4;
+      --accent-neon: #39ff14;
+      --cta-gradient: linear-gradient(135deg, var(--accent-cyan), var(--accent-neon));
+      --on-cta: #0f172a;   /* texto sobre cian/neón: el blanco no contrasta */
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+      --shadow-glow: 0 10px 25px -5px rgba(6, 182, 212, 0.2);
+
+      --shadow-glow-hover: 0 12px 30px -5px rgba(6, 182, 212, 0.35);
+
+      --glass-blur: 12px;
+
+      --radius-card: 16px;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --primary: var(--accent-cyan);
+      --primary-glow: rgba(34, 211, 238, 0.4);
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
     body {
       font-family: 'Poppins', sans-serif;
-      background: radial-gradient(circle at top left, #1a0018, #0a0510 60%, #000000 100%);
+      background: radial-gradient(circle at top left, #083344, #0b1120 60%, #000000 100%);
       color: var(--text-main); 
       min-height: 100vh; 
       overflow-x: hidden;
@@ -39,8 +57,8 @@
     main { flex: 1; padding-bottom: 50px; }
 
     ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #0a0510; }
-    ::-webkit-scrollbar-thumb { background: #ff9900; border-radius: 4px; }
+    ::-webkit-scrollbar-track { background: #0b1120; }
+    ::-webkit-scrollbar-thumb { background: #22d3ee; border-radius: 4px; }
 
     /* --- Animaciones Globales --- */
     @keyframes fadeUp {
@@ -61,8 +79,8 @@
     
     .sidebar {
       position: fixed; top: 0; left: -300px; width: 280px; height: 100vh;
-      background: rgba(15, 5, 20, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-      border-right: 1px solid rgba(255, 153, 0, 0.2); z-index: 1001;
+      background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+      border-right: 1px solid var(--border-glass); box-shadow: var(--shadow-lg); z-index: 1001;
       transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       padding-top: 80px; display: flex; flex-direction: column;
       box-shadow: 15px 0 40px rgba(0,0,0,0.9);
@@ -85,11 +103,11 @@
     .sidebar-logo span { color: var(--primary); }
     
     .sidebar a {
-      color: #cdd6e5; padding: 16px 25px; text-decoration: none;
+      color: #cbd5e1; padding: 16px 25px; text-decoration: none;
       font-size: 15px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.03);
       transition: all 0.3s ease; display: flex; align-items: center; gap: 12px;
     }
-    .sidebar a:hover { color: var(--primary); padding-left: 32px; border-left: 4px solid var(--primary); background: rgba(255,153,0,0.1); }
+    .sidebar a:hover { color: var(--primary); padding-left: 32px; border-left: 4px solid var(--primary); background: rgba(34, 211, 238,0.1); }
 
     .sidebar-overlay {
       display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8);
@@ -104,7 +122,7 @@
       animation: fadeIn 0.3s ease; padding: 15px;
     }
     .tutorial-modal {
-      background: rgba(20, 12, 28, 0.95); border: 1px solid rgba(255, 153, 0, 0.4);
+      background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(34, 211, 238, 0.4);
       padding: 20px; border-radius: 20px; width: 100%; max-width: 340px; text-align: center;
       box-shadow: 0 15px 35px rgba(0,0,0,0.9); animation: fadeUp 0.3s ease;
       position: relative;
@@ -116,7 +134,7 @@
     .video-container {
       position: relative; width: 100%; padding-bottom: 177.78%; /* Proporción 9:16 para Shorts */
       height: 0; border-radius: 12px; overflow: hidden; background: #000;
-      border: 1px solid rgba(255, 153, 0, 0.2);
+      border: 1px solid rgba(34, 211, 238, 0.2);
     }
     .video-container iframe {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;
@@ -136,7 +154,7 @@
       animation: fadeIn 0.3s ease;
     }
     .secret-modal, .terms-modal {
-      background: rgba(20, 12, 28, 0.95); border: 1px solid rgba(255, 153, 0, 0.4);
+      background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(34, 211, 238, 0.4);
       padding: 25px; border-radius: 20px; width: 90%; max-width: 380px; text-align: center;
       box-shadow: 0 15px 35px rgba(0,0,0,0.9); animation: fadeUp 0.3s ease;
     }
@@ -160,9 +178,9 @@
     /* --- Navbar --- */
     nav {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 15px 30px; background: rgba(10, 5, 16, 0.8);
-      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); 
-      border-bottom: 1px solid rgba(255, 153, 0, 0.1);
+      padding: 16px 24px; background: var(--surface);
+      backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+      border-bottom: 1px solid var(--border-glass); box-shadow: var(--shadow-lg);
       position: sticky; top: 0; z-index: 100;
     }
     .nav-logo { 
@@ -174,11 +192,11 @@
     .nav-logo span { color: var(--primary); }
     
     /* --- Hero Section --- */
-    header { text-align: center; padding: 40px 15px 20px; position: relative; }
+    header { text-align: center; padding: 48px 16px 40px; position: relative; }
     .titulo-principal {
       font-family: 'Montserrat', sans-serif; font-size: clamp(32px, 6vw, 45px); 
       letter-spacing: 2px; text-transform: uppercase; font-weight: 900; 
-      background: linear-gradient(90deg, #ffb732, #ffffff, #ffb732);
+      background: linear-gradient(90deg, #67e8f9, #ffffff, #67e8f9);
       background-size: 200% auto; color: transparent; -webkit-background-clip: text;
       animation: brilloFuego 5s linear infinite;
     }
@@ -188,35 +206,35 @@
     /* --- Títulos de Categorías --- */
     .categoria-titulo {
       text-align: center; font-family: 'Montserrat', sans-serif; font-size: 18px; 
-      color: var(--primary); margin: 25px 0 15px; text-transform: uppercase; 
+      color: var(--primary); margin: 0 0 24px; text-transform: uppercase;
       font-weight: 900; letter-spacing: 1px; display: flex; align-items: center; justify-content: center; gap: 8px;
     }
     .categoria-titulo span { font-size: 20px; }
 
     /* --- SECCIÓN CONSULTAR ÓRDENES --- */
     .consulta-section {
-      max-width: 550px; margin: 10px auto 25px; padding: 0 15px;
+      max-width: 550px; margin: 16px auto 48px; padding: 0 16px;
     }
     .consulta-box {
-      background: rgba(25, 15, 35, 0.75); backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 153, 0, 0.35); border-radius: 16px;
-      padding: 20px 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.6);
+      background: var(--surface); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+      border: 1px solid var(--border-glass); border-radius: var(--radius-card);
+      padding: 24px; box-shadow: var(--shadow-lg), var(--shadow-glow);
     }
     .consulta-box h3 {
       font-family: 'Montserrat', sans-serif; color: var(--primary); font-size: 16px;
       margin-bottom: 12px; text-align: center; text-transform: uppercase; font-weight: 900;
     }
     .consulta-input-group {
-      display: flex; gap: 8px; margin-bottom: 12px;
+      display: flex; gap: 12px; margin-bottom: 12px;
     }
     .consulta-box input {
-      flex: 1; background: rgba(10, 5, 16, 0.9); border: 1px solid rgba(255, 153, 0, 0.3);
-      padding: 10px 12px; border-radius: 10px; color: #fff; font-family: 'Poppins', sans-serif;
+      flex: 1; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(34, 211, 238, 0.3);
+      min-height: 44px; padding: 10px 14px; border-radius: 10px; color: #fff; font-family: 'Poppins', sans-serif;
       font-size: 13px; outline: none; transition: border-color 0.3s;
     }
     .consulta-box input:focus { border-color: var(--primary); }
     .btn-consultar {
-      background: var(--primary); color: #000; border: none; padding: 0 16px;
+      background: var(--primary); color: var(--on-cta); border: none; padding: 0 20px; min-height: 44px;
       border-radius: 10px; font-weight: 800; text-transform: uppercase; cursor: pointer;
       font-family: 'Montserrat', sans-serif; font-size: 12px; transition: transform 0.2s, box-shadow 0.2s;
     }
@@ -224,7 +242,7 @@
 
     /* Resultados de órdenes dinámicos */
     .orden-card {
-      background: rgba(15, 8, 22, 0.9); border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 10px; padding: 12px; margin-top: 10px; font-size: 12px;
     }
     .orden-card p { margin-bottom: 5px; color: var(--text-muted); }
@@ -244,27 +262,27 @@
 
     /* --- Grilla de Juegos --- */
     .grid-container { 
-      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; 
-      max-width: 550px; margin: 0 auto; padding: 0 15px 25px;
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px;
+      max-width: 550px; margin: 0 auto; padding: 0 16px 48px;
     }
-    
+
     .card {
-      background: rgba(25, 15, 35, 0.6); backdrop-filter: blur(10px);
-      height: 110px; border-radius: 10px; overflow: hidden; cursor: pointer; 
-      border: 1px solid rgba(255, 153, 0, 0.2); text-decoration: none; color: white;
-      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; 
-      position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+      background: var(--surface); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+      height: 120px; border-radius: var(--radius-card); overflow: hidden; cursor: pointer;
+      border: 1px solid var(--border-glass); text-decoration: none; color: white;
+      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+      position: relative; box-shadow: var(--shadow-lg), var(--shadow-glow);
     }
-    
-    .card:hover {
+
+    .card:hover, .card:focus-visible {
       transform: translateY(-4px); border-color: var(--primary);
-      box-shadow: 0 8px 20px var(--primary-glow);
+      box-shadow: var(--shadow-lg), var(--shadow-glow-hover);
     }
     
     .img-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
     .img-container::after {
       content: ''; position: absolute; inset: 0;
-      background: linear-gradient(to top, rgba(15,5,20,0.95) 0%, rgba(15,5,20,0.3) 60%, rgba(15,5,20,0) 100%); 
+      background: linear-gradient(to top, rgba(15, 23, 42,0.95) 0%, rgba(15, 23, 42,0.3) 60%, rgba(15, 23, 42,0) 100%); 
       z-index: 1;
     }
     
@@ -282,17 +300,18 @@
 
     /* --- Sección Garantías --- */
     .trust-section {
-      max-width: 550px; margin: 15px auto 35px; padding: 0 15px; position: relative;
+      max-width: 550px; margin: 0 auto 48px; padding: 0 16px; position: relative;
     }
     .trust-grid {
-      display: grid; grid-template-columns: 1fr; gap: 12px;
+      display: grid; grid-template-columns: 1fr; gap: 24px;
     }
     .trust-card {
-      background: rgba(25, 15, 35, 0.4); backdrop-filter: blur(10px);
-      border: 1px dashed rgba(255, 153, 0, 0.3); border-radius: 12px;
-      padding: 15px; text-align: center; transition: all 0.3s ease;
+      background: var(--surface); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+      border: 1px solid var(--border-glass); border-radius: var(--radius-card);
+      padding: 24px; text-align: center; box-shadow: var(--shadow-lg), var(--shadow-glow);
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
     }
-    .trust-card:hover { border-color: var(--primary); background: rgba(30, 20, 45, 0.8); }
+    .trust-card:hover { border-color: var(--primary); box-shadow: var(--shadow-lg), var(--shadow-glow-hover); }
     
     .trust-icon { font-size: 26px; margin-bottom: 8px; }
     .trust-card h3 { color: #fff; font-size: 14px; font-weight: 800; margin-bottom: 5px; text-transform: uppercase; }
@@ -311,10 +330,10 @@
 
     /* --- Acerca de Nosotros --- */
     .about-section {
-      max-width: 550px; margin: 15px auto 30px; padding: 25px 20px;
-      background: rgba(25, 15, 35, 0.5); backdrop-filter: blur(10px);
-      border-radius: 18px; border: 1px solid rgba(255, 153, 0, 0.15); 
-      text-align: center; box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+      width: calc(100% - 32px); max-width: 550px; margin: 0 auto 48px; padding: 32px 24px;
+      background: var(--surface); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+      border-radius: var(--radius-card); border: 1px solid var(--border-glass);
+      text-align: center; box-shadow: var(--shadow-lg), var(--shadow-glow);
     }
     .about-section h2 { color: var(--primary); margin-bottom: 12px; font-family: 'Montserrat', sans-serif; font-size: 20px; font-weight: 900; text-transform: uppercase; }
     .about-section p { color: #cbd5e1; line-height: 1.6; font-size: 13px; margin-bottom: 20px; }
@@ -339,10 +358,12 @@
     .whatsapp-float svg { width: 30px; height: 30px; fill: currentColor; }
 
     @media (min-width: 650px) {
-      .grid-container { grid-template-columns: repeat(3, 1fr); max-width: 800px; }
+      .grid-container { grid-template-columns: repeat(3, 1fr); max-width: 800px; gap: 32px; padding-bottom: 64px; }
       .card { height: 150px; }
       .consulta-section, .trust-section, .about-section { max-width: 750px; }
-      .trust-grid { grid-template-columns: repeat(3, 1fr); }
+      .consulta-section, .trust-section { margin-bottom: 64px; }
+      .about-section { margin-bottom: 64px; padding: 40px 32px; }
+      .trust-grid { grid-template-columns: repeat(3, 1fr); gap: 32px; }
     }
   </style>
   <link rel="stylesheet" href="css/pie-legal.css">

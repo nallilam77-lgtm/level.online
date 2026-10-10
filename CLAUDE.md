@@ -19,6 +19,7 @@ Optimizar el código aplicando buenas prácticas:
 
 ## Reglas
 - No leer ni modificar `.env`. Las variables disponibles están documentadas en `.env.example`; si se agrega una nueva, actualizar ese archivo.
+- Antes de modificar estilos, diseño o cualquier HTML/CSS de `public/`, leer **siempre** `.claude/UI_RULES.md` y cumplir sus reglas sin excepción.
 
 ---
 

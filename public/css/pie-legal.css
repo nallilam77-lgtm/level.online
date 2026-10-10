@@ -12,7 +12,7 @@
   /* Abajo deja sitio al botón flotante de WhatsApp (index y páginas legales) */
   padding: 22px 16px calc(88px + env(safe-area-inset-bottom));
   text-align: center;
-  background: rgba(5, 2, 8, 0.9);
+  background: rgba(15, 23, 42, 0.9);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   font-family: 'Poppins', sans-serif;
   color: #94a3b8;
@@ -44,7 +44,7 @@
   margin: 0 auto 10px;
   font-size: 11px;
   line-height: 1.55;
-  color: #8391a7;
+  color: #94a3b8;
 }
 
 .pie-legal-copy {
