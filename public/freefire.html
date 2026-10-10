@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
   <!-- Lector de referencias con Tesseract (compartido entre juegos; Tesseract se descarga bajo demanda) -->
   <script src="/js/lector-referencia.js" defer></script>
+  <script src="/js/descuento.js" defer></script>
   <style>
     :root {
       /* Acento del juego (Free Fire: naranja con detalles amarillos): bordes, botones, sombras y glows */
@@ -145,6 +146,7 @@
     .step-title.done .step-num::after { content: '✓'; font-size: 12px; }
 
     .id-section { margin-bottom: 20px; }
+
     .id-input-group { display: flex; flex-direction: column; gap: 10px; }
     .input-field { width: 100%; background: #1e293b; border: 2px solid var(--card-border); border-radius: 12px; padding: 12px 14px; color: var(--game-text); font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 700; outline: none; transition: all 0.3s ease; text-align: center; }
     .input-field:focus { border-color: var(--game-accent); box-shadow: 0 0 12px rgba(var(--game-accent-rgb), 0.2); }
@@ -486,6 +488,7 @@
     }
   </style>
   <link rel="stylesheet" href="css/pie-legal.css">
+  <link rel="stylesheet" href="css/descuento.css">
 </head>
 <body class="pagina-juego">
 
@@ -622,6 +625,16 @@
         <button type="button" id="btnVerifyId" class="btn-verify">VERIFICAR ID</button>
       </div>
       <div id="idStatus" class="id-status"></div>
+    </div>
+
+    <!-- CÓDIGO DE DESCUENTO (opcional): lo verifica el servidor; lógica en js/descuento.js -->
+    <div class="descuento-section anim-slide-up delay-3">
+      <label class="descuento-label" for="inputDescuento">🎟️ ¿Tienes un código de descuento? Pégalo o escríbelo aquí</label>
+      <div class="descuento-grupo">
+        <input type="text" id="inputDescuento" class="input-field descuento-input" placeholder="Ej: LEVELUP10" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+        <button type="button" id="btnVerificarDescuento" class="btn-descuento">VERIFICAR</button>
+      </div>
+      <div id="descuentoEstado" class="descuento-estado" role="status" aria-live="polite"></div>
     </div>
 
     <div class="step-title anim-slide-up delay-3" id="stepTitlePaquete"><span class="step-num">2</span> SELECCIONA TU RECARGA</div>
@@ -823,32 +836,50 @@
           return;
         }
 
-        let paquetes = data.catalogo;
-        paquetes.sort((a, b) => window.formatearMontoVES(a.diamantes) - window.formatearMontoVES(b.diamantes));
-        
-        window.catalogoGlobal = paquetes;
-
-        container.innerHTML = '';
-        paquetes.forEach((item, index) => {
-          const card = document.createElement('div');
-          const esUltimoImpar = (paquetes.length % 2 !== 0) && (index === paquetes.length - 1);
-          let delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
-          card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar || item.spanFull ? 'full-width' : ''} ${item.etiqueta ? 'has-badge' : ''}`;
-          // Accesible con teclado y lectores de pantalla
-          card.setAttribute('role', 'button');
-          card.setAttribute('tabindex', '0');
-          const cantidad = String(item.diamantes).replace(/diamantes/gi, '').trim();
-          // "etiqueta" es opcional en el catálogo (ej: "🔥 Más popular"); si no viene, no se muestra badge
-          card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}<div class="diamonds-count">${cantidad} 💎</div><div class="diamonds-label">Diamantes</div><div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
-          card.addEventListener('click', () => seleccionarProducto(card, item));
-          card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, item); } });
-          container.appendChild(card);
-        });
+        catalogoSinDescuento = data.catalogo;
+        // Si el cliente ya aplicó un código antes de que cargara el catálogo, se mantiene
+        if (!descuento.codigo()) renderizarCatalogo(catalogoSinDescuento);
 
       } catch (e) {
         container.innerHTML = '<div class="catalog-message error">Error de conexión al cargar el catálogo.</div>';
       }
     }
+
+    // Dibuja el catálogo. Con descuento, cada paquete trae "precioOriginal" (tachado) y "precio"
+    // ya descontado por el servidor. Si había un paquete elegido, se vuelve a elegir con el precio nuevo.
+    function renderizarCatalogo(lista) {
+      const container = document.getElementById('catalogContainer');
+      const paquetes = [...lista].sort((a, b) => window.formatearMontoVES(a.diamantes) - window.formatearMontoVES(b.diamantes));
+      window.catalogoGlobal = paquetes;
+      const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.diamantes) : null;
+
+      container.innerHTML = '';
+      paquetes.forEach((item, index) => {
+        const card = document.createElement('div');
+        const esUltimoImpar = (paquetes.length % 2 !== 0) && (index === paquetes.length - 1);
+        let delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
+        card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar || item.spanFull ? 'full-width' : ''} ${item.etiqueta ? 'has-badge' : ''}`;
+        // Accesible con teclado y lectores de pantalla
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        const cantidad = String(item.diamantes).replace(/diamantes/gi, '').trim();
+        const precioTachado = item.precioOriginal !== undefined ? `<div class="price-original">${item.precioOriginal} Bs</div>` : '';
+        // "etiqueta" es opcional en el catálogo (ej: "🔥 Más popular"); si no viene, no se muestra badge
+        card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}<div class="diamonds-count">${cantidad} 💎</div><div class="diamonds-label">Diamantes</div>${precioTachado}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
+        card.addEventListener('click', () => seleccionarProducto(card, item));
+        card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, item); } });
+        container.appendChild(card);
+        if (elegido !== null && String(item.diamantes) === elegido) seleccionarProducto(card, item);
+      });
+    }
+
+    // Código de descuento (js/descuento.js): el servidor devuelve los precios ya descontados
+    let catalogoSinDescuento = null;
+    const descuento = CodigoDescuento.iniciar({
+      juego: 'freefire',
+      alAplicar: (catalogo) => renderizarCatalogo(catalogo),
+      alQuitar: () => { if (catalogoSinDescuento) renderizarCatalogo(catalogoSinDescuento); },
+    });
 
     function seleccionarProducto(cardElement, paquete) {
       document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
@@ -1222,8 +1253,10 @@
             body: JSON.stringify({ 
                 id: playerId, 
                 paquete: `${diamantesClean} Diamantes`, 
-                referencia: referenciaUsuario, 
-                urlImagen: captureUrl 
+                referencia: referenciaUsuario,
+                urlImagen: captureUrl,
+                // Solo el código: el servidor recalcula el descuento y el precio a cobrar
+                ...(descuento.codigo() && { codigoDescuento: descuento.codigo() })
             })
           });
           

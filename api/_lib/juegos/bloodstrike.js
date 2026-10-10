@@ -6,6 +6,7 @@ import { pedirJSON, llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido,
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido } from '../recarga-comun.js';
+import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con respuesta incierta:
 // precios 12 + verificar 32 + FazerCards 40 + registrar 12 + marcar 12 = 108 s
@@ -57,7 +58,15 @@ async function precios(req, res) {
   }
 }
 
-export const acciones = { precios };
+// Catálogo de Blood Strike para la acción "descuento" (misma caché que la acción precios)
+async function catalogoBloodStrike() {
+  const { datos } = await conCache('precios:bs',
+    () => pedirJSON(`${process.env.SCRIPT_BLOOD}?accion=obtener_precios`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT }),
+    { esValido: catalogoValido });
+  return datos.catalogo;
+}
+
+export const acciones = { precios, descuento: crearAccionDescuento('Blood Strike', catalogoBloodStrike) };
 
 // =========================================================================
 // RECARGA (api/recargar.js)
@@ -165,7 +174,13 @@ export async function recargar(req, res) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado." });
     }
-    const precioReal = limpiarMontoVES(paqueteGsheet.precio);
+    const precioLista = limpiarMontoVES(paqueteGsheet.precio);
+
+    // Descuento opcional (tabla común en la hoja de Free Fire): se vuelve a consultar el código
+    // (pudo desactivarse) antes de tocar el pago
+    const descuento = await aplicarDescuentoARecarga(req.body?.codigoDescuento, precioLista);
+    if (descuento.error) return res.status(descuento.error.codigo).json(descuento.error.cuerpo);
+    const { desc, precio: precioReal } = descuento;
 
     // ==========================================
     // FASE 2: BUSCAR PAGO Y VERIFICAR
@@ -274,7 +289,10 @@ export async function recargar(req, res) {
         codigosUsados: "API Directa (FazerCards)",
         urlImagen: comprobante,
         idPedido
-      })
+      }),
+      // +1 uso y el monto cobrado del código, en la pestaña "Descuentos" (hoja de Free Fire).
+      // Si falla, la recarga ya está hecha: queda en los logs de Vercel para anotarlo a mano.
+      desc && registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: precioReal, idPedido, juego: 'Blood Strike' }),
     ]);
     if (!pagoMarcado || !finalizadoGuardado) {
       const pendiente = [!pagoMarcado && 'marcar el pago como "Usado"', !finalizadoGuardado && 'anotar la recarga en "finalizados"'].filter(Boolean).join(' y ');

@@ -1,6 +1,6 @@
 // =====================================================================
 // LEVEL UP - Apps Script de RECARGAS FREE FIRE (variable SCRIPT_RECARGAS_URL en Vercel)
-// Usado por: api/_lib/juegos/freefire.js (precios, recarga), api/subir-imagen.js y MacroDroid.
+// Usado por: api/_lib/juegos/freefire.js (precios, recarga, descuentos), api/subir-imagen.js y MacroDroid.
 //
 // Cómo actualizarlo: pega este archivo en el editor de Apps Script y luego
 // Implementar > Gestionar implementaciones > editar (lápiz) > Versión: "Nueva versión" > Implementar.
@@ -16,6 +16,11 @@
 // obtener_codigo devuelve el mismo resultado (la tienda puede reintentar sin sacar pines de más),
 // cada asignación queda en la pestaña "asignaciones_pines" y los pines que el bot nunca recibió
 // se devuelven al inventario (devolver_codigos). La pestaña "errores" gana las columnas F-L.
+//
+// Códigos de descuento: pestaña "Descuentos" (A: código, B: descuento, C: usos, D: dinero total
+// movido), común a Free Fire y Blood Strike. Vercel consulta el código (validar_descuento), calcula
+// el precio con descuento y, al terminar la recarga, suma +1 uso y el monto cobrado a ese código:
+// Free Fire dentro de registrar_finalizado; Blood Strike con registrar_uso_descuento.
 // =====================================================================
 
 const PROJECT_ID = "levelupstore-87d4d";
@@ -33,6 +38,16 @@ const ESPERA_CANDADO_MS = 8000;
 // Pestaña de auditoría: qué pines se entregaron a cada pedido y qué pasó con ellos
 const HOJA_ASIGNACIONES = "asignaciones_pines";
 const COLUMNAS_ASIGNACIONES = ["fecha", "id pedido", "referencia", "columna", "n.º columna", "pines", "estado"];
+
+// Ruleta: pestaña donde se anotan los ganadores (para entregar el premio) y máximo de pagos
+// con los mismos últimos 5 dígitos que se devuelven a Vercel
+const HOJA_RULETA = "ruleta";
+const COLUMNAS_RULETA = ["fecha-hora", "id jugador", "referencia", "paquete", "premio", "estado de entrega"];
+const MAX_CANDIDATOS_RULETA = 5;
+
+// Códigos de descuento (acepta "Descuentos" o "descuentos"). Columna B:
+//   "10%" -> porcentaje sobre el precio;  "50" o "50 Bs" -> monto fijo en bolívares.
+const HOJA_DESCUENTOS = "descuentos";
 
 // Columnas de la pestaña "errores" (A-E son las de siempre; F-L agregan el detalle)
 const COLUMNAS_ERRORES = ["fecha-hora", "id", "estado de los pines", "producto", "informe completo",
@@ -72,6 +87,11 @@ function doPost(e) {
     // Lecturas y subidas: no tocan pagos ni pines, así que NO esperan el candado
     if (accion === "obtener_precios") return obtenerPrecios();
     if (accion === "subir_imagen") return subirImagen(datos);
+    // Ruleta: consultar solo lee la hoja; el premio lo decide y lo guarda Vercel (Firestore GirosRuleta)
+    if (accion === "consultar_ruleta") return consultarRuleta(datos);
+    if (accion === "registrar_premio_ruleta") return registrarPremioRuleta(datos);
+    // Descuentos: consultar un código solo lee la pestaña "Descuentos"
+    if (accion === "validar_descuento") return validarDescuento(datos);
 
     switch (accion) {
       case "verificar_pago":       return conCandado(function () { return verificarPago(datos); });
@@ -82,6 +102,7 @@ function doPost(e) {
       case "marcar_verificado":    return conCandado(function () { return marcarVerificado(datos); });
       case "registrar_finalizado": return conCandado(function () { return registrarFinalizado(datos); });
       case "registrar_error":      return conCandado(function () { return registrarError(datos); });
+      case "registrar_uso_descuento": return conCandado(function () { return registrarUsoDescuento(datos); });
     }
     return responder({ status: "error", message: "Acción no válida" });
   } catch (error) {
@@ -368,6 +389,8 @@ function registrarFinalizado(datos) {
   if (asignacion && asignacion.estado.indexOf("ASIGNADOS") === 0) {
     hojaAsignaciones().getRange(asignacion.fila, 7).setValue("USADOS (recarga finalizada " + fechaHora + ")");
   }
+  // Código de descuento usado en esta recarga: +1 uso y el monto cobrado en la pestaña "Descuentos"
+  if (datos.codigoDescuento) sumarUsoDescuento(datos.codigoDescuento, datos.montoCobrado);
   SpreadsheetApp.flush();
   // (Se quitó la llamada a /api/sincronizar-pedidos: ese endpoint no existe en la tienda
   //  y la petición alargaba el candado en cada recarga.)
@@ -434,6 +457,147 @@ function registrarError(datos) {
   // del bot (con pines quizá ya canjeados). Vercel decide el estado final después de
   // registrar el error: marcar_usado (bloquear para revisión) o marcar_verificado (liberar).
   return responder({ status: "success", message: "Error guardado correctamente y códigos respaldados" });
+}
+
+// ==========================================
+// 🎰 9: RULETA - CONSULTAR QUÉ PAGOS PUEDEN GIRAR (sin candado: solo lectura)
+// Devuelve los pagos "Usado" (recarga completada) cuya referencia coincide, del más reciente
+// al más antiguo, con el jugador y paquete de la pestaña "finalizados" si aparecen.
+// La columna F de "pagos" es la marca de la ruleta anterior ("listo"/"usado"): esos pagos
+// ya giraron con el sistema viejo y se informan como ruletaAnterior.
+// ==========================================
+function consultarRuleta(datos) {
+  var buscada = String(datos.referencia || "").replace(/\s+/g, "");
+  if (!/^\d{5,20}$/.test(buscada)) return responder({ status: "success", candidatos: [] });
+
+  var rows = obtenerHoja("pagos").getDataRange().getValues();
+  var candidatos = [];
+  for (var i = rows.length - 1; i >= 1 && candidatos.length < MAX_CANDIDATOS_RULETA; i--) {
+    var referencia = String(rows[i][2]).replace(/\s+/g, "");
+    // 5 dígitos: coinciden los últimos 5. Referencia completa: coincidencia exacta.
+    var coincide = buscada.length === 5 ? referencia.slice(-5) === buscada : referencia === buscada;
+    if (!referencia || !coincide) continue;
+    if (String(rows[i][4]).trim().toLowerCase() !== "usado") continue;
+    var marcaAnterior = String(rows[i][5] || "").trim().toLowerCase();
+    candidatos.push({
+      referencia: referencia,
+      ruletaAnterior: marcaAnterior === "listo" || marcaAnterior === "usado",
+      idJugador: "",
+      paquete: ""
+    });
+  }
+
+  var hojaFinalizados = obtenerHoja("finalizados", true);
+  if (hojaFinalizados && candidatos.length) {
+    var filas = hojaFinalizados.getDataRange().getValues();
+    candidatos.forEach(function (c) {
+      for (var j = filas.length - 1; j >= 1; j--) {
+        if (String(filas[j][3]).replace(/\s+/g, "") !== c.referencia) continue;
+        c.idJugador = String(filas[j][1] || "");
+        c.paquete = String(filas[j][2] || "");
+        break;
+      }
+    });
+  }
+  return responder({ status: "success", candidatos: candidatos });
+}
+
+// ==========================================
+// 🎰 10: RULETA - ANOTAR UN GANADOR EN LA PESTAÑA "ruleta"
+// Firestore (GirosRuleta) ya registró el giro: esta fila es solo para entregar el premio.
+// ==========================================
+function registrarPremioRuleta(datos) {
+  var hoja = obtenerHoja(HOJA_RULETA, true);
+  if (!hoja) {
+    hoja = SpreadsheetApp.getActiveSpreadsheet().insertSheet(HOJA_RULETA);
+    hoja.appendRow(COLUMNAS_RULETA);
+  }
+  var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
+  hoja.appendRow([
+    fechaHora,
+    textoSeguro(datos.idJugador || "Sin registrar: pedirlo por WhatsApp"),
+    textoSeguro(datos.referencia),
+    textoSeguro(datos.paquete || ""),
+    textoSeguro(datos.premio),
+    "PENDIENTE"
+  ]);
+  SpreadsheetApp.flush();
+  return responder({ status: "success" });
+}
+
+// ==========================================
+// 🎟️ 11: CÓDIGOS DE DESCUENTO (pestaña "Descuentos")
+// A: código | B: descuento ("10%" o "50") | C: usos | D: dinero total movido
+// El precio con descuento lo calcula Vercel; aquí solo se lee el código y se anotan los usos.
+// ==========================================
+
+// Sin candado: solo lectura. Vercel pregunta si el código existe y cuánto descuenta.
+function validarDescuento(datos) {
+  var fila = buscarFilaDescuento(datos.codigo);
+  if (!fila) return responder({ status: "success", valido: false });
+  var descuento = interpretarDescuento(fila.descuento);
+  if (!descuento) {
+    console.error("Descuentos: el código " + fila.codigo + " tiene un descuento no válido en la columna B: '" + fila.descuento + "'");
+    return responder({ status: "success", valido: false });
+  }
+  return responder({ status: "success", valido: true, codigo: fila.codigo, tipo: descuento.tipo, valor: descuento.valor });
+}
+
+// Juegos que registran su recarga en OTRA hoja (Blood Strike): Vercel avisa aquí el uso de un
+// código al terminar la recarga. Con candado, igual que registrarFinalizado.
+function registrarUsoDescuento(datos) {
+  sumarUsoDescuento(datos.codigo, datos.montoCobrado);
+  SpreadsheetApp.flush();
+  return responder({ status: "success" });
+}
+
+// Se llama desde registrarFinalizado y registrarUsoDescuento, que ya tienen el candado
+// (dos recargas no pisan el contador).
+// Un fallo aquí nunca impide que la recarga quede anotada en "finalizados".
+function sumarUsoDescuento(codigo, montoCobrado) {
+  try {
+    var fila = buscarFilaDescuento(codigo);
+    if (!fila) {
+      console.error("Descuentos: no se encontró el código " + codigo + " al registrar su uso");
+      return;
+    }
+    var celdas = obtenerHoja(HOJA_DESCUENTOS).getRange(fila.numero, 3, 1, 2); // C: usos, D: dinero movido
+    var actuales = celdas.getValues()[0];
+    var usos = limpiarMontoVES(actuales[0]) + 1;
+    var dinero = Math.round((limpiarMontoVES(actuales[1]) + limpiarMontoVES(montoCobrado)) * 100) / 100;
+    celdas.setValues([[usos, dinero]]);
+  } catch (err) {
+    console.error("Descuentos: no se pudo sumar el uso del código " + codigo + ": " + err);
+  }
+}
+
+// Busca el código sin distinguir mayúsculas ni espacios. Devuelve { numero, codigo, descuento } o null.
+function buscarFilaDescuento(codigo) {
+  var buscado = String(codigo || "").trim().toUpperCase();
+  if (!buscado) return null;
+  var hoja = obtenerHoja(HOJA_DESCUENTOS, true);
+  if (!hoja || hoja.getLastRow() < 2) return null;
+  // Valores tal como se ven en la hoja: así "10%" llega como "10%" y no como 0.1
+  var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, 2).getDisplayValues();
+  for (var i = 0; i < filas.length; i++) {
+    if (String(filas[i][0]).trim().toUpperCase() === buscado) {
+      return { numero: i + 2, codigo: String(filas[i][0]).trim(), descuento: String(filas[i][1]).trim() };
+    }
+  }
+  return null;
+}
+
+// "10%" -> porcentaje (entre 0 y 100); "50", "50 Bs", "1.250,50" -> monto fijo en Bs.
+// Vacío, 0 o con otro formato -> null (el código se trata como no válido).
+function interpretarDescuento(texto) {
+  var t = String(texto || "").trim();
+  if (!t) return null;
+  if (t.indexOf("%") !== -1) {
+    var porcentaje = limpiarMontoVES(t.replace("%", ""));
+    return porcentaje > 0 && porcentaje < 100 ? { tipo: "porcentaje", valor: porcentaje } : null;
+  }
+  var monto = limpiarMontoVES(t);
+  return monto > 0 ? { tipo: "monto", valor: monto } : null;
 }
 
 // ==========================================

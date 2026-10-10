@@ -1,0 +1,21 @@
+/* Código de descuento de las tiendas (js/descuento.js). Va entre el ID del jugador y el catálogo.
+   Usa los colores del juego de cada página (--game-accent, --game-text...). */
+.descuento-section { margin-bottom: 24px; }
+.descuento-label { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; }
+.descuento-grupo { display: flex; gap: 12px; }
+.descuento-input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: 1px; }
+.descuento-input:disabled { opacity: 0.7; }
+.btn-descuento {
+  flex-shrink: 0; min-height: 44px; padding: 0 18px; border-radius: 12px;
+  border: 1px solid var(--game-accent); background: rgba(var(--game-accent-rgb), 0.12); color: var(--game-text);
+  font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 12px; letter-spacing: 0.5px;
+  cursor: pointer; transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+.btn-descuento:hover, .btn-descuento:focus-visible { background: rgba(var(--game-accent-rgb), 0.22); box-shadow: var(--shadow-glow-hover); }
+.btn-descuento:disabled { opacity: 0.6; cursor: wait; }
+.descuento-estado { font-size: 12px; font-weight: 600; margin-top: 8px; }
+.descuento-estado:empty { display: none; }
+.descuento-estado.ok { color: var(--success); }
+.descuento-estado.error { color: var(--danger); }
+/* Precio original tachado sobre el precio con descuento en cada paquete */
+.price-original { font-size: 11px; font-weight: 600; color: var(--text-muted); text-decoration: line-through; margin-bottom: 4px; }

@@ -11,15 +11,16 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 ├── _lib/                 Código compartido (el "_" evita que Vercel lo publique)
 │   ├── juegos/           Lógica de cada tienda (enrutada por api/juego.js y api/recargar.js)
 │   │   ├── index.js      Lista cerrada de juegos + carga diferida (cargarJuego)
-│   │   ├── freefire.js   acciones { precios, verificar } + recargar: pines + bot de Railway
-│   │   ├── bloodstrike.js  acciones { precios } + recargar: API de FazerCards
+│   │   ├── freefire.js   acciones { precios, verificar, descuento } + recargar: pines + bot de Railway
+│   │   ├── bloodstrike.js  acciones { precios, descuento } + recargar: API de FazerCards
 │   │   └── roblox.js     acciones { precios } + recargar: compra en su Apps Script (sin reintentos)
 │   ├── recarga-comun.js  limpiarMontoVES, formatearVES, crearUtilidadesPedido (Free Fire y Blood Strike)
+│   ├── descuentos.js     Códigos de descuento (tabla común en la pestaña "Descuentos" de la hoja de Free Fire)
 │   ├── externo.js        pedirJSON/llamarScript: timeouts, reintentos, caché en memoria (conCache)
 │   ├── limitador.js      Límite de intentos fallidos (Firestore o memoria)
 │   ├── reporte.js        informeError(), FASES, ESTADO_PINES → pestaña "errores"
 │   └── validacion.js     PAQUETE_VALIDO, textoParaHoja(), faltaConfiguracion()
-├── juego.js              GET/POST ?juego=<freefire|bloodstrike|roblox>&accion=<precios|verificar> (30 s)
+├── juego.js              GET/POST ?juego=<freefire|bloodstrike|roblox>&accion=<precios|verificar|descuento> (30 s)
 ├── recargar.js           POST ?juego=<freefire|bloodstrike|roblox> (maxDuration 180)
 ├── subir-imagen.js       Comprobante de pago → Drive (límite 4 MB)
 ├── consultar-ordenes.js  Consulta de pedidos (página de inicio)
@@ -31,6 +32,7 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 ├── freefire.html / bloodstrike.html / roblox.html   Tiendas por juego
 ├── admin.html            Panel (lee Firestore)
 ├── js/lector-referencia.js   Lee la referencia del comprobante (Tesseract)
+├── js/descuento.js + css/descuento.css   Campo "código de descuento" (Free Fire y Blood Strike)
 └── terminos / privacidad / reembolsos.html + css/   Páginas legales
 ```
 

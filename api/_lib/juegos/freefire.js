@@ -6,6 +6,7 @@ import { llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasC
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
 import { FASES, ESTADO_PINES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido } from '../recarga-comun.js';
+import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con fallo del bot:
 // precios 8 + verificar 32 + códigos 32 + bot 45 + devolver pines 15 + registrar 12 + marcar 12 = 156 s
@@ -98,7 +99,15 @@ async function verificar(req, res) {
   }
 }
 
-export const acciones = { precios, verificar };
+// Catálogo de Free Fire para la acción "descuento" (misma caché que la acción precios)
+async function catalogoFreeFire() {
+  const { datos } = await conCache('precios:ff',
+    () => llamarScript(process.env.SCRIPT_RECARGAS_URL, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT),
+    { esValido: catalogoValido });
+  return datos.catalogo;
+}
+
+export const acciones = { precios, verificar, descuento: crearAccionDescuento('Free Fire', catalogoFreeFire) };
 
 // =========================================================================
 // RECARGA (api/recargar.js)
@@ -248,7 +257,12 @@ export async function recargar(req, res) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado." });
     }
-    const precioReal = limpiarMontoVES(paqueteGsheet.precio);
+    const precioLista = limpiarMontoVES(paqueteGsheet.precio);
+
+    // Descuento opcional: se vuelve a consultar el código (pudo desactivarse) antes de tocar el pago
+    const descuento = await aplicarDescuentoARecarga(req.body?.codigoDescuento, precioLista);
+    if (descuento.error) return res.status(descuento.error.codigo).json(descuento.error.cuerpo);
+    const { desc, precio: precioReal } = descuento;
 
     // ==========================================
     // FASE 2: BUSCAR PAGO Y VERIFICAR
@@ -414,7 +428,9 @@ export async function recargar(req, res) {
         referencias: referenciaCompleta,
         codigosUsados: pinesExtraidos.join(" | "),
         urlImagen: comprobante,
-        idPedido
+        idPedido,
+        // recargas.gs suma +1 uso y el monto cobrado al código en la pestaña "Descuentos"
+        ...(desc && { codigoDescuento: desc.codigo, montoCobrado: precioReal })
       })
     ]);
     if (!pagoMarcado || !finalizadoGuardado) {
