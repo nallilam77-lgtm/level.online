@@ -1,8 +1,11 @@
-// Roblox: precios y compra (el Apps Script de GAS_URL verifica el pago y entrega).
-// Lo usan api/juego.js (acción precios) y api/recargar.js (recargar).
+// Roblox: precios, códigos de descuento y compra (el Apps Script de GAS_URL, apps-script/roblox.gs,
+// verifica el pago y entrega). Lo usan api/juego.js (precios, descuento) y api/recargar.js (recargar).
+import { randomUUID } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
+import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
+import { limpiarMontoVES } from '../recarga-comun.js';
 
 // Debe ser menor que maxDuration de api/recargar.js en vercel.json (180 s).
 // La compra no se reintenta: el Apps Script de Roblox no tiene idPedido y repetirla podría duplicarla.
@@ -14,6 +17,27 @@ function cabecerasCors(res) {
   res.setHeader('Access-Control-Allow-Origin', 'https://levelupstore.online');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+// El Apps Script de Roblox exige el token si tiene la propiedad TOKEN_VERCEL (es el mismo secreto
+// que el de recargas). llamarScript solo lo añade solo para SCRIPT_RECARGAS_URL, así que va aquí.
+function conToken(cuerpo) {
+  const token = (process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
+  return token ? { ...cuerpo, token } : cuerpo;
+}
+
+// Precios de la hoja { "50 Robux": 1100, ... }, con caché en memoria (instantánea y con respaldo)
+async function obtenerPreciosRoblox(scriptUrl) {
+  const { datos } = await conCache('precios:roblox',
+    () => llamarScript(scriptUrl, conToken({ tipo: 'obtener_precios' }), LECTURA_APPS_SCRIPT),
+    { esValido: (d) => d?.status === 'success' && d.precios && typeof d.precios === 'object' });
+  return datos;
+}
+
+// Catálogo en lista para la acción "descuento" (misma caché que la acción precios)
+async function catalogoRoblox() {
+  const { precios } = await obtenerPreciosRoblox(process.env.GAS_URL);
+  return Object.entries(precios).map(([producto, precio]) => ({ producto, precio }));
 }
 
 // =========================================================================
@@ -33,10 +57,7 @@ async function precios(req, res) {
   }
 
   try {
-    // Lectura con caché en memoria (instantánea y con respaldo si Apps Script falla)
-    const { datos } = await conCache('precios:roblox',
-      () => llamarScript(scriptUrl, { tipo: 'obtener_precios' }, LECTURA_APPS_SCRIPT),
-      { esValido: (d) => d?.status === 'success' && d.precios && typeof d.precios === 'object' });
+    const datos = await obtenerPreciosRoblox(scriptUrl);
     cabecerasCachePrecios(res);
     return res.status(200).json(datos);
   } catch (error) {
@@ -45,7 +66,7 @@ async function precios(req, res) {
   }
 }
 
-export const acciones = { precios };
+export const acciones = { precios, descuento: crearAccionDescuento('Roblox', catalogoRoblox) };
 
 // =========================================================================
 // COMPRA (api/recargar.js)
@@ -85,7 +106,34 @@ export async function recargar(req, res) {
       return res.status(429).json({ status: 'error', message: `Demasiados intentos fallidos. Espera ${minutosEspera} minutos para volver a intentar.` });
     }
 
-    const payload = { tipo: 'compra', referencia: String(referencia), user: usuario, producto: String(producto), url_capture: textoParaHoja(url_capture || 'Sin comprobante') };
+    // Código de descuento (opcional): se valida de nuevo aquí y el precio lo calcula el servidor
+    // sobre el precio de la hoja. El Apps Script solo acepta un monto menor que su precio.
+    let desc = null;
+    let montoACobrar;
+    if (req.body?.codigoDescuento) {
+      let precioLista = 0;
+      try {
+        const { precios } = await obtenerPreciosRoblox(scriptUrl);
+        if (Object.hasOwn(precios, String(producto))) precioLista = limpiarMontoVES(precios[String(producto)]);
+      } catch (error) {
+        console.error('Roblox: no se pudieron leer los precios para el descuento:', error.message);
+        return res.status(503).json({ status: 'error', message: 'No pudimos aplicar tu código de descuento ahora. Intenta de nuevo en un momento.' });
+      }
+      if (!(precioLista > 0)) {
+        return res.status(400).json({ status: 'error', message: 'Ese paquete ya no está disponible. Recarga la página.' });
+      }
+      const descuento = await aplicarDescuentoARecarga(req.body.codigoDescuento, precioLista);
+      if (descuento.error) return res.status(descuento.error.codigo).json(descuento.error.cuerpo);
+      ({ desc, precio: montoACobrar } = descuento);
+    }
+
+    // Identifica la venta en "movimientos_descuentos" (evita anotar dos veces el mismo uso)
+    const idPedido = `rbx-${randomUUID()}`;
+    const payload = conToken({
+      tipo: 'compra', referencia: String(referencia), user: usuario, producto: String(producto),
+      url_capture: textoParaHoja(url_capture || 'Sin comprobante'),
+      ...(desc && { montoACobrar, codigoDescuento: desc.codigo }),
+    });
 
     // Apps Script verifica el pago y la entrega, puede tardar más. Sin reintento
     // (podría duplicar la compra). Si se agota el tiempo, la compra sigue en Apps Script.
@@ -94,7 +142,8 @@ export async function recargar(req, res) {
       data = await llamarScript(scriptUrl, payload, { tiempoMs: TIEMPO_COMPRA_MS });
     } catch (error) {
       if (!error.tiempoAgotado) throw error;
-      console.error('⚠️ Compra Roblox sin respuesta a tiempo | REF:', payload.referencia);
+      console.error('⚠️ Compra Roblox sin respuesta a tiempo | REF:', payload.referencia,
+        desc ? `| código ${desc.codigo} (${montoACobrar} Bs, pedido ${idPedido}): si se entregó, anotar el uso a mano` : '');
       return res.status(202).json({ status: 'error', message: 'Fallo técnico momentáneo: tu compra quedó en proceso. Si en 5 minutos no la recibes, escríbenos por WhatsApp.' });
     }
 
@@ -102,6 +151,12 @@ export async function recargar(req, res) {
     // "Fallo técnico" no cuenta: el pago sí existía y quedó en proceso.
     if (data?.status !== 'success' && !String(data?.message || '').toLowerCase().includes('fallo técnico')) {
       await registrarFallo(clavesLimite);
+    }
+
+    // Compra entregada con código: +1 uso y la comisión del creador (pestaña "Descuentos").
+    // Si falla, la compra ya está hecha: queda en los logs de Vercel para anotarlo a mano.
+    if (data?.status === 'success' && desc) {
+      await registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: montoACobrar, idPedido, idJugador: usuario, juego: 'Roblox' });
     }
 
     return res.status(200).json(data);

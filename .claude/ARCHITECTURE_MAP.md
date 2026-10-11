@@ -13,7 +13,7 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 │   │   ├── index.js      Lista cerrada de juegos + carga diferida (cargarJuego)
 │   │   ├── freefire.js   acciones { precios, verificar, descuento } + recargar: pines + bot de Railway
 │   │   ├── bloodstrike.js  acciones { precios, descuento } + recargar: API de FazerCards
-│   │   └── roblox.js     acciones { precios } + recargar: compra en su Apps Script (sin reintentos)
+│   │   └── roblox.js     acciones { precios, descuento } + recargar: compra en apps-script/roblox.gs (sin reintentos; manda montoACobrar con código)
 │   ├── recarga-comun.js  limpiarMontoVES, formatearVES, crearUtilidadesPedido (Free Fire y Blood Strike)
 │   ├── descuentos.js     Códigos de descuento (tabla común en la pestaña "Descuentos" de la hoja de Free Fire)
 │   ├── externo.js        pedirJSON/llamarScript: timeouts, reintentos, caché en memoria (conCache)
@@ -65,7 +65,7 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 | Apps Script órdenes | `SCRIPT_RECARGAS_VERIFICACION` | consultar-ordenes |
 | Apps Script validador | `SCRIPT_VALIDADOR_URL` | juegos/freefire (verificar) |
 | Apps Script ruleta (`apps-script/ruleta.gs`) | `SCRIPT_RULETA_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | ruleta |
-| Apps Script Roblox | `GAS_URL` | juegos/roblox |
+| Apps Script Roblox (`apps-script/roblox.gs`) | `GAS_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | juegos/roblox |
 | Apps Script + FazerCards | `SCRIPT_BLOOD`, `FAZER_API_KEY` | juegos/bloodstrike |
 | Bot Railway | `RAILWAY_SECRET` | juegos/freefire (recarga) |
 | Firestore | `FIREBASE_SERVICE_ACCOUNT` | _lib/limitador |

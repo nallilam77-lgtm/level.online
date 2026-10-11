@@ -9,6 +9,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
   <!-- Lector de referencias con Tesseract (compartido entre juegos; Tesseract se descarga bajo demanda) -->
   <script src="/js/lector-referencia.js" defer></script>
+  <!-- Código de descuento (compartido con Free Fire y Blood Strike) -->
+  <script src="/js/descuento.js" defer></script>
   <style>
     :root {
       /* Acento del juego (Roblox: azul): bordes, botones, sombras y glows */
@@ -469,6 +471,7 @@
     }
   </style>
   <link rel="stylesheet" href="css/pie-legal.css">
+  <link rel="stylesheet" href="css/descuento.css">
 </head>
 <body class="pagina-juego">
 
@@ -607,6 +610,16 @@
         <button type="button" id="btnVerifyId" class="btn-verify">CONFIRMAR USUARIO</button>
       </div>
       <div id="idStatus" class="id-status"></div>
+    </div>
+
+    <!-- CÓDIGO DE DESCUENTO (opcional): lo verifica el servidor; lógica en js/descuento.js -->
+    <div class="descuento-section anim-slide-up delay-3">
+      <label class="descuento-label" for="inputDescuento">🎟️ ¿Tienes un código de descuento? Pégalo o escríbelo aquí</label>
+      <div class="descuento-grupo">
+        <input type="text" id="inputDescuento" class="input-field descuento-input" placeholder="Ej: LEVELUP10" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+        <button type="button" id="btnVerificarDescuento" class="btn-descuento">VERIFICAR</button>
+      </div>
+      <div id="descuentoEstado" class="descuento-estado" role="status" aria-live="polite"></div>
     </div>
 
     <div class="step-title anim-slide-up delay-3" id="stepTitlePaquete"><span class="step-num">2</span> SELECCIONA TU PAQUETE DE ROBUX</div>
@@ -814,29 +827,9 @@
         const data = await response.json();
 
         if (data.status === "success" && data.precios) {
-          container.innerHTML = '';
-          const precios = data.precios;
-          let index = 0;
-          for (const producto in precios) {
-            const precio = precios[producto];
-            const card = document.createElement('div');
-            let delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
-            const esUltimoImpar = (Object.keys(precios).length % 2 !== 0) && (index === Object.keys(precios).length - 1);
-            card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar ? 'full-width' : ''}`;
-            // Accesible con teclado y lectores de pantalla
-            card.setAttribute('role', 'button');
-            card.setAttribute('tabindex', '0');
-            // "800 Robux" → número grande + "Robux" pequeño; otros nombres se muestran completos
-            const partes = String(producto).match(/^\s*([\d.,]+)\s+(.+)$/);
-            card.innerHTML = partes
-              ? `<div class="robux-count">${partes[1]}</div><div class="product-label">${partes[2]}</div><div class="price-box"><div class="price-text">${formatoBs(precio)}</div></div>`
-              : `<div class="robux-count" style="margin-bottom: 10px;">${producto}</div><div class="price-box"><div class="price-text">${formatoBs(precio)}</div></div>`;
-            const paquete = { producto: producto, precio: precio };
-            card.addEventListener('click', () => seleccionarProducto(card, paquete));
-            card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, paquete); } });
-            container.appendChild(card);
-            index++;
-          }
+          catalogoSinDescuento = Object.entries(data.precios).map(([producto, precio]) => ({ producto, precio }));
+          // Si el cliente ya aplicó un código antes de que cargara el catálogo, se mantiene
+          if (!descuento.codigo()) renderizarCatalogo(catalogoSinDescuento);
         } else {
             container.innerHTML = '<div class="catalog-message error">Error al cargar el catálogo de Roblox.</div>';
         }
@@ -844,6 +837,43 @@
         container.innerHTML = '<div class="catalog-message error">Fallo de conexión al cargar el catálogo.</div>';
       }
     }
+
+    // Dibuja el catálogo. Con descuento, cada paquete trae "precioOriginal" (tachado) y "precio"
+    // ya descontado por el servidor. Si había un paquete elegido, se vuelve a elegir con el precio nuevo.
+    function renderizarCatalogo(lista) {
+      const container = document.getElementById('catalogContainer');
+      const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.producto) : null;
+      container.innerHTML = '';
+      lista.forEach((item, index) => {
+        const card = document.createElement('div');
+        const delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
+        const esUltimoImpar = (lista.length % 2 !== 0) && (index === lista.length - 1);
+        card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar ? 'full-width' : ''}`;
+        // Accesible con teclado y lectores de pantalla
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        const tachado = item.precioOriginal !== undefined ? `<div class="price-original">${formatoBs(item.precioOriginal)}</div>` : '';
+        const precio = `${tachado}<div class="price-box"><div class="price-text">${formatoBs(item.precio)}</div></div>`;
+        // "800 Robux" → número grande + "Robux" pequeño; otros nombres se muestran completos
+        const partes = String(item.producto).match(/^\s*([\d.,]+)\s+(.+)$/);
+        card.innerHTML = partes
+          ? `<div class="robux-count">${partes[1]}</div><div class="product-label">${partes[2]}</div>${precio}`
+          : `<div class="robux-count" style="margin-bottom: 10px;">${item.producto}</div>${precio}`;
+        const paquete = { producto: item.producto, precio: item.precio };
+        card.addEventListener('click', () => seleccionarProducto(card, paquete));
+        card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, paquete); } });
+        container.appendChild(card);
+        if (elegido !== null && String(item.producto) === elegido) seleccionarProducto(card, paquete);
+      });
+    }
+
+    // Código de descuento (js/descuento.js): el servidor devuelve los precios ya descontados
+    let catalogoSinDescuento = null;
+    const descuento = CodigoDescuento.iniciar({
+      juego: 'roblox',
+      alAplicar: (catalogo) => renderizarCatalogo(catalogo),
+      alQuitar: () => { if (catalogoSinDescuento) renderizarCatalogo(catalogoSinDescuento); },
+    });
 
     function seleccionarProducto(cardElement, paquete) {
       document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
@@ -1159,7 +1189,9 @@
                 referencia: referenciaUsuario,
                 user: usuarioRoblox,
                 producto: paqueteSeleccionado.producto,
-                url_capture: captureUrl
+                url_capture: captureUrl,
+                // Solo el código: el servidor recalcula el descuento y el precio a cobrar
+                ...(descuento.codigo() && { codigoDescuento: descuento.codigo() })
             })
           });
           

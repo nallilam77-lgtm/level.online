@@ -1,5 +1,5 @@
 // =========================================================================
-// CÓDIGO DE DESCUENTO EN LAS TIENDAS (Free Fire y Blood Strike)
+// CÓDIGO DE DESCUENTO EN LAS TIENDAS (Free Fire, Blood Strike y Roblox)
 // Solo se envía el código: el servidor devuelve el catálogo con los precios ya descontados y,
 // al recargar, vuelve a calcular el descuento por su cuenta (el navegador nunca decide el precio).
 //
