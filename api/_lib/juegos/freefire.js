@@ -434,7 +434,12 @@ export async function recargar(req, res) {
       })
     ]);
     if (!pagoMarcado || !finalizadoGuardado) {
-      const pendiente = [!pagoMarcado && 'marcar el pago como "Usado"', !finalizadoGuardado && 'anotar la recarga en "finalizados"'].filter(Boolean).join(' y ');
+      const pendiente = [
+        !pagoMarcado && 'marcar el pago como "Usado"',
+        !finalizadoGuardado && 'anotar la recarga en "finalizados"',
+        // registrar_finalizado es quien suma el uso del código: sin él, el creador pierde esa comisión
+        !finalizadoGuardado && desc && `anotar el uso del código ${desc.codigo} (${precioReal} Bs, pedido ${idPedido}) en "Descuentos"`,
+      ].filter(Boolean).join(' y ');
       await registrarEnHoja(informe({
         fase: FASES.cierre,
         motivo: `La recarga SÍ se entregó, pero Apps Script no respondió al cierre: falta ${pendiente}`,

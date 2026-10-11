@@ -279,7 +279,7 @@ export async function recargar(req, res) {
     // ==========================================
     // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS (en paralelo)
     // ==========================================
-    const [pagoMarcado, finalizadoGuardado] = await Promise.all([
+    const [pagoMarcado, finalizadoGuardado, usoDescuentoGuardado] = await Promise.all([
       marcarReferencia("marcar_usado", referenciaCompleta),
       registrarEnHoja({
         accion: "registrar_finalizado",
@@ -291,11 +291,16 @@ export async function recargar(req, res) {
         idPedido
       }),
       // +1 uso y el monto cobrado del código, en la pestaña "Descuentos" (hoja de Free Fire).
-      // Si falla, la recarga ya está hecha: queda en los logs de Vercel para anotarlo a mano.
-      desc && registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: precioReal, idPedido, juego: 'Blood Strike' }),
+      // Si falla, la recarga ya está hecha: va al informe de "errores" para anotarlo a mano
+      // (sin él, el creador pierde la comisión y la recarga no cuenta para su meta semanal).
+      desc ? registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: precioReal, idPedido, juego: 'Blood Strike' }) : true,
     ]);
-    if (!pagoMarcado || !finalizadoGuardado) {
-      const pendiente = [!pagoMarcado && 'marcar el pago como "Usado"', !finalizadoGuardado && 'anotar la recarga en "finalizados"'].filter(Boolean).join(' y ');
+    if (!pagoMarcado || !finalizadoGuardado || !usoDescuentoGuardado) {
+      const pendiente = [
+        !pagoMarcado && 'marcar el pago como "Usado"',
+        !finalizadoGuardado && 'anotar la recarga en "finalizados"',
+        !usoDescuentoGuardado && `anotar el uso del código ${desc.codigo} (${precioReal} Bs, pedido ${idPedido}) en "Descuentos"`,
+      ].filter(Boolean).join(' y ');
       await registrarEnHoja(informe({
         fase: FASES.cierre,
         motivo: `La recarga SÍ se entregó (FazerCards confirmó la orden), pero Apps Script no respondió al cierre: falta ${pendiente}`,

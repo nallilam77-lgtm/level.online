@@ -73,6 +73,9 @@ const RETIRO_MINIMO_USD = 10;
 const COLUMNA_NIVELES_BAJADOS = 11;
 // Columna L: comisión en Bs de ventas hechas sin ninguna tasa conocida (se pasa a H y J al haber tasa)
 const COLUMNA_POR_CONVERTIR = 12;
+// Primera semana (su lunes, "yyyyMMdd") que cuenta para las metas: las anteriores no se revisan,
+// porque la regla aún no se había anunciado. "" = revisar desde ya.
+const INICIO_METAS_SEMANALES = "20261012";
 const HOJA_REVISIONES_CREADORES = "revisiones_creadores";
 const COLUMNAS_REVISIONES_CREADORES = ["fecha-hora", "código", "creador", "semana", "recargas", "meta", "nivel antes", "nivel después", "resultado"];
 const HOJA_CONFIG = "config";
@@ -608,6 +611,11 @@ function sumarUsoDescuento(codigo, montoCobrado, juego, idPedido) {
       console.error("Descuentos: no se encontró el código " + codigo + " al registrar su uso");
       return;
     }
+    // Mismo pedido ya anotado (un reintento de Vercel): no se cuenta dos veces el uso ni la comisión
+    if (idPedido && pedidoYaAnotado(String(idPedido), fila.codigo)) {
+      console.log("Descuentos: el pedido " + idPedido + " ya estaba anotado para " + fila.codigo);
+      return;
+    }
     var hoja = obtenerHoja(HOJA_DESCUENTOS);
     var monto = limpiarMontoVES(montoCobrado);
     var tasa = leerTasaUsd() || ultimaTasaConocida();
@@ -639,6 +647,17 @@ function sumarUsoDescuento(codigo, montoCobrado, juego, idPedido) {
   } catch (err) {
     console.error("Descuentos: no se pudo sumar el uso del código " + codigo + ": " + err);
   }
+}
+
+// ¿Ya hay una venta de este pedido con este código en "movimientos_descuentos"? (columnas B y D)
+function pedidoYaAnotado(idPedido, codigo) {
+  var hoja = obtenerHoja(HOJA_MOVIMIENTOS_DESCUENTOS, true);
+  if (!hoja || hoja.getLastRow() < 2) return false;
+  var filas = hoja.getRange(2, 2, hoja.getLastRow() - 1, 3).getValues(); // B..D
+  for (var i = filas.length - 1; i >= 0; i--) {
+    if (String(filas[i][2]) === idPedido && String(filas[i][0]).trim().toUpperCase() === codigo.toUpperCase()) return true;
+  }
+  return false;
 }
 
 // G = % actual del creador (lo que ganará en sus PRÓXIMAS ventas; no cambia lo ya ganado)
@@ -914,6 +933,9 @@ function revisarMetasSemanales() {
   var props = PropertiesService.getScriptProperties();
   if (props.getProperty("ultima_revision_semanal") === desde) {
     return "La semana del " + textoClave(desde) + " ya estaba revisada.";
+  }
+  if (INICIO_METAS_SEMANALES && desde < INICIO_METAS_SEMANALES) {
+    return "Las metas cuentan desde la semana del " + textoClave(INICIO_METAS_SEMANALES) + ": la semana del " + textoClave(desde) + " no se revisa.";
   }
 
   var lock = LockService.getScriptLock();
