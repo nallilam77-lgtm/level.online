@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Panel de Creadores de Level Up: niveles, beneficios para tus seguidores y consulta de tus comisiones.">
+  <meta name="description" content="Panel de Creadores de Level Up: el descuento de tus seguidores es tu ganancia. Niveles, metas semanales y consulta de tus comisiones.">
   <meta name="theme-color" content="#0f172a">
   <title>Panel de Creadores - Level Up</title>
 
@@ -47,7 +47,7 @@
   <main>
     <header class="animate-up">
       <h1 class="titulo-principal">⭐ Panel de Creadores</h1>
-      <p class="subtitulo">Comparte tu código: tus seguidores ahorran en cada recarga y tú ganas comisión.</p>
+      <p class="subtitulo">Comparte tu código: el mismo porcentaje que ahorra tu seguidor en cada recarga es la ganancia que te llevas tú.</p>
     </header>
 
     <div class="creadores-container">
@@ -75,7 +75,7 @@
         <div class="panel-resultado" id="panelResultado">
           <div class="nivel-actual">
             <span class="insignia" id="resInsignia"></span>
-            <p>Tus seguidores ahorran <strong id="resDescuento"></strong> en cada recarga.</p>
+            <p>Tus seguidores ahorran <strong id="resDescuento"></strong> en cada recarga y tú ganas ese mismo porcentaje.</p>
           </div>
 
           <div>
@@ -83,18 +83,25 @@
             <p class="barra-texto" id="resTextoNivel"></p>
           </div>
 
+          <div class="meta-semanal" id="resMeta">
+            <h3>🎯 Meta semanal de tu nivel: <span id="resMetaTotal"></span></h3>
+            <div class="barra"><div class="barra-relleno" id="resBarraMeta"></div></div>
+            <p class="barra-texto" id="resTextoMeta"></p>
+          </div>
+
           <div class="estadisticas">
             <div class="estadistica"><span>Recargas con tu código</span><strong id="resUsos"></strong></div>
             <div class="estadistica"><span>Ventas generadas</span><strong id="resVentas"></strong></div>
-            <div class="estadistica"><span>Comisión acumulada</span><strong id="resComision"></strong></div>
-            <div class="estadistica destacada"><span>Saldo por cobrar</span><strong id="resSaldo"></strong></div>
+            <div class="estadistica"><span>Tu ganancia por venta</span><strong id="resPorcentaje"></strong></div>
+            <div class="estadistica destacada"><span>Por cobrar</span><strong id="resPendiente"></strong></div>
           </div>
 
           <div class="retiro" id="resRetiro">
             <h3>💵 Retiro mínimo: <span id="resMinimo"></span></h3>
+            <p class="barra-texto" id="resTotal"></p>
             <div class="barra"><div class="barra-relleno" id="resBarraRetiro"></div></div>
             <p class="barra-texto" id="resTextoRetiro"></p>
-            <a class="btn-retiro" id="btnRetiro" target="_blank" rel="noopener noreferrer">💬 Solicitar mi retiro por WhatsApp</a>
+            <a class="btn-retiro" id="btnRetiro" target="_blank" rel="noopener noreferrer">💬 Solicitar mi pago por WhatsApp</a>
           </div>
 
           <div class="movimientos">
@@ -113,25 +120,29 @@
       <!-- NIVELES Y BENEFICIOS -->
       <section class="panel-caja animate-up" aria-labelledby="tituloNiveles">
         <h2 id="tituloNiveles">🏆 Niveles y beneficios</h2>
-        <p>Tu nivel sube solo con las recargas hechas con tu código. Mientras más alto, más ahorran tus seguidores.</p>
+        <p>Tu nivel sube solo con las recargas hechas con tu código, y cada nivel tiene una meta semanal que debes cumplir para mantenerlo. Cada lunes revisamos la semana anterior automáticamente.</p>
+        <div class="formula">
+          <strong>Descuento de tu seguidor = tu ganancia</strong>
+          <p>El porcentaje que se descuenta al cliente es exactamente la comisión que te llevas tú. Mientras más alto tu nivel, más ahorran ellos y más ganas tú. Cada venta guarda su ganancia: si cambias de nivel, lo que ya ganaste no cambia.</p>
+        </div>
         <div class="niveles">
           <article class="nivel-tarjeta">
             <span class="insignia aliado">🤝 Aliado</span>
             <p class="nivel-usos">De 1 a 99 usos</p>
-            <div class="nivel-dato">Descuento para tus seguidores <strong>0,65 %</strong></div>
-            <div class="nivel-dato">Tu comisión <strong>3 %</strong></div>
+            <div class="nivel-dato">Descuento del cliente = tu ganancia <strong>0,65 %</strong></div>
+            <div class="nivel-dato">Meta semanal <strong>5 recargas</strong></div>
           </article>
           <article class="nivel-tarjeta">
             <span class="insignia pro">⚡ Pro</span>
             <p class="nivel-usos">De 100 a 249 usos</p>
-            <div class="nivel-dato">Descuento para tus seguidores <strong>1 %</strong></div>
-            <div class="nivel-dato">Tu comisión <strong>3 %</strong></div>
+            <div class="nivel-dato">Descuento del cliente = tu ganancia <strong>1 %</strong></div>
+            <div class="nivel-dato">Meta semanal <strong>15 recargas</strong></div>
           </article>
           <article class="nivel-tarjeta">
             <span class="insignia diamante">💎 Diamante</span>
             <p class="nivel-usos">250 usos o más</p>
-            <div class="nivel-dato">Descuento para tus seguidores <strong>1,5 %</strong></div>
-            <div class="nivel-dato">Tu comisión <strong>3 %</strong></div>
+            <div class="nivel-dato">Descuento del cliente = tu ganancia <strong>1,5 %</strong></div>
+            <div class="nivel-dato">Meta semanal <strong>30 recargas</strong></div>
           </article>
         </div>
       </section>
@@ -141,7 +152,8 @@
         <h2 id="tituloReglas">📜 Reglas de oro</h2>
         <p>Para que el programa sea justo para todos:</p>
         <ul class="reglas">
-          <li><span aria-hidden="true">💵</span><p><strong>Retiro mínimo de $10 USD</strong>Tu comisión se acumula hasta llegar a $10; desde ahí puedes pedir tu pago por WhatsApp.</p></li>
+          <li><span aria-hidden="true">💵</span><p><strong>Retiro mínimo de $10 USD</strong>Cada venta suma tu ganancia en dólares a la tasa del día en que se hizo; al llegar a $10 puedes pedir tu pago por WhatsApp.</p></li>
+          <li><span aria-hidden="true">🎯</span><p><strong>Meta semanal obligatoria</strong>Cada nivel exige un mínimo de recargas con tu código por semana (de lunes a domingo). Si no la cumples, el lunes bajas un nivel automáticamente; si la cumples la semana siguiente, lo recuperas.</p></li>
           <li><span aria-hidden="true">✍️</span><p><strong>Códigos 100 % manuales</strong>Cada código lo creamos nosotros por WhatsApp. No hay registro automático ni códigos autogestionados.</p></li>
           <li><span aria-hidden="true">🛡️</span><p><strong>Supervisión antifraude estricta</strong>Revisamos cada venta. Las recargas falsas, autocompras o abusos anulan la comisión y el código.</p></li>
         </ul>
@@ -195,7 +207,8 @@
     const $ = (id) => document.getElementById(id);
 
     const formatoBs = (n) => `${Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs`;
-    const formatoUsd = (n) => `$${Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    // Sin tasa del dólar configurada, los montos en USD llegan como null
+    const formatoUsd = (n) => (n === null || n === undefined ? '—' : `$${Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
     const formatoPorcentaje = (n) => `${Number(n).toLocaleString('es-VE', { maximumFractionDigits: 2 })} %`;
 
     function mostrarMensaje(texto) {
@@ -210,8 +223,11 @@
       insignia.textContent = `${ICONO_NIVEL[d.nivel.nombre] || '⭐'} ${d.nivel.nombre} · ${d.codigo}`;
       $('resDescuento').textContent = formatoPorcentaje(d.descuentoSeguidores);
 
-      // Progreso hacia el siguiente nivel
-      if (d.siguienteNivel) {
+      // Progreso hacia el siguiente nivel (o aviso de castigo: se recupera cumpliendo la meta semanal)
+      if (d.nivelesBajados > 0 && d.siguienteNivel && d.semana) {
+        $('resBarraNivel').style.width = `${Math.min(100, (d.semana.usos / d.semana.meta) * 100)}%`;
+        $('resTextoNivel').textContent = `Bajaste de nivel por no cumplir la meta semanal. Cumple tu meta de esta semana (${d.semana.meta} recargas) y el lunes vuelves a ${d.siguienteNivel.nombre}.`;
+      } else if (d.siguienteNivel) {
         const desdeActual = d.usos + d.siguienteNivel.faltanUsos;
         $('resBarraNivel').style.width = `${Math.min(100, (d.usos / desdeActual) * 100)}%`;
         $('resTextoNivel').textContent = `Te faltan ${d.siguienteNivel.faltanUsos} recargas para subir a ${d.siguienteNivel.nombre} (tus seguidores ahorrarán ${formatoPorcentaje(d.siguienteNivel.descuento)}).`;
@@ -220,20 +236,36 @@
         $('resTextoNivel').textContent = '¡Estás en el nivel máximo! Tus seguidores tienen el mejor descuento.';
       }
 
+      // Meta semanal (oculta si el servidor todavía no la envía)
+      $('resMeta').hidden = !d.semana;
+      if (d.semana) {
+        const { meta, usos, cumplida } = d.semana;
+        $('resMeta').classList.toggle('cumplida', cumplida);
+        $('resMetaTotal').textContent = `${meta} recargas`;
+        $('resBarraMeta').style.width = `${Math.min(100, (usos / meta) * 100)}%`;
+        $('resTextoMeta').textContent = cumplida
+          ? `¡Meta cumplida! Llevas ${usos} recargas esta semana: ${d.nivelesBajados > 0 ? 'el lunes recuperas un nivel' : `mantienes tu nivel ${d.nivel.nombre}`}.`
+          : `Llevas ${usos} de ${meta} recargas esta semana. Te faltan ${meta - usos} antes del domingo para ${d.nivelesBajados > 0 ? 'recuperar tu nivel' : 'no bajar de nivel el lunes'}.`;
+      }
+
       $('resUsos').textContent = d.usos.toLocaleString('es-VE');
       $('resVentas').textContent = formatoBs(d.ventasBs);
-      $('resComision').textContent = formatoUsd(d.comisionTotalUsd);
-      $('resSaldo').textContent = formatoUsd(d.saldoUsd);
+      $('resPorcentaje').textContent = formatoPorcentaje(d.comisionPorcentaje);
+      $('resPendiente').textContent = formatoUsd(d.pendienteUsd);
 
-      // Retiro: progreso hasta el mínimo
+      // Retiro: progreso de lo pendiente de cobro hasta el mínimo
       $('resMinimo').textContent = formatoUsd(d.retiroMinimoUsd);
-      $('resBarraRetiro').style.width = `${Math.min(100, (d.saldoUsd / d.retiroMinimoUsd) * 100)}%`;
-      const listo = d.faltaParaRetiroUsd <= 0;
+      const sinTasa = d.pendienteUsd === null;
+      $('resTotal').textContent = sinTasa ? '' : `Comisión total generada con tu código: ${formatoUsd(d.comisionTotalUsd)}.`;
+      $('resBarraRetiro').style.width = sinTasa ? '0%' : `${Math.min(100, (d.pendienteUsd / d.retiroMinimoUsd) * 100)}%`;
+      const listo = !sinTasa && d.faltaParaRetiroUsd <= 0;
       $('resRetiro').classList.toggle('listo', listo);
-      $('resTextoRetiro').textContent = listo
-        ? `¡Ya puedes retirar ${formatoUsd(d.saldoUsd)}! Escríbenos por WhatsApp.`
-        : `Te faltan ${formatoUsd(d.faltaParaRetiroUsd)} para tu primer retiro.`;
-      $('btnRetiro').href = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola, soy creador de Level Up (código ${d.codigo}) y quiero retirar mi saldo de ${formatoUsd(d.saldoUsd)}.`)}`;
+      $('resTextoRetiro').textContent = sinTasa
+        ? 'Tu comisión en dólares se mostrará cuando actualicemos la tasa del día.'
+        : listo
+          ? `¡Ya puedes cobrar ${formatoUsd(d.pendienteUsd)}! Escríbenos por WhatsApp para tu pago.`
+          : `Te faltan ${formatoUsd(d.faltaParaRetiroUsd)} para llegar al mínimo de retiro.`;
+      $('btnRetiro').href = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola, soy creador de Level Up (código ${d.codigo}) y quiero cobrar mi comisión pendiente de ${formatoUsd(d.pendienteUsd)}.`)}`;
 
       // Últimos movimientos
       const tbody = $('resMovimientos');
@@ -253,7 +285,9 @@
           if (i === 3) celda.className = 'comision';
         });
       }
-      $('resNotaTasa').textContent = `Comisión del ${formatoPorcentaje(d.comisionPorcentaje)} sobre cada venta, convertida a dólares con la tasa del día de la venta.`;
+      $('resNotaTasa').textContent = d.tasa
+        ? `Hoy ganas el mismo ${formatoPorcentaje(d.comisionPorcentaje)} que se descuenta a tus seguidores. Cada venta guarda su ganancia con el porcentaje de tu nivel y la tasa de ese día (hoy: ${Number(d.tasa).toLocaleString('es-VE')} Bs por USD). Lo que ya te pagamos no vuelve a contar.`
+        : `Hoy ganas el mismo ${formatoPorcentaje(d.comisionPorcentaje)} que se descuenta a tus seguidores. Cada venta guarda su ganancia con el porcentaje de tu nivel y la tasa de ese día.`;
 
       $('panelResultado').classList.add('visible');
     }

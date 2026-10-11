@@ -11,6 +11,8 @@ const PIN_VALIDO = /^\d{4,8}$/;
 const NO_ENCONTRADO = "Código o PIN incorrecto. Si eres creador y no tienes tu PIN, pídelo por WhatsApp.";
 
 const numero = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+// Sin tasa del dólar en la hoja, los montos en USD llegan como null (no se inventan)
+const numeroONulo = (v) => (v === null || v === undefined || v === '' ? null : numero(v));
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
@@ -51,25 +53,30 @@ export default async function handler(req, res) {
       status: "success",
       encontrado: true,
       codigo: String(datos.codigo),
-      nivel: { nombre: String(datos.nivel?.nombre || ''), descuento: numero(datos.nivel?.descuento) },
+      nivel: { nombre: String(datos.nivel?.nombre || ''), descuento: numero(datos.nivel?.descuento), metaSemanal: numero(datos.nivel?.metaSemanal) },
       siguienteNivel: datos.siguienteNivel
         ? { nombre: String(datos.siguienteNivel.nombre), descuento: numero(datos.siguienteNivel.descuento), faltanUsos: numero(datos.siguienteNivel.faltanUsos) }
         : null,
+      // Niveles perdidos por no cumplir la meta semanal (se recuperan cumpliéndola)
+      nivelesBajados: numero(datos.nivelesBajados),
       descuentoSeguidores: numero(datos.descuentoSeguidores),
       usos: numero(datos.usos),
       ventasBs: numero(datos.ventasBs),
       comisionPorcentaje: numero(datos.comisionPorcentaje),
-      comisionTotalUsd: numero(datos.comisionTotalUsd),
-      pagadoUsd: numero(datos.pagadoUsd),
-      saldoUsd: numero(datos.saldoUsd),
+      comisionTotalUsd: numeroONulo(datos.comisionTotalUsd),
+      pendienteUsd: numeroONulo(datos.pendienteUsd),
       retiroMinimoUsd: numero(datos.retiroMinimoUsd),
-      faltaParaRetiroUsd: numero(datos.faltaParaRetiroUsd),
+      faltaParaRetiroUsd: numeroONulo(datos.faltaParaRetiroUsd),
       tasa: datos.tasa ? numero(datos.tasa) : null,
+      // Meta semanal del nivel (null si el Apps Script aún no la envía: la página oculta el bloque)
+      semana: datos.semana && numero(datos.semana.meta) > 0
+        ? { meta: numero(datos.semana.meta), usos: numero(datos.semana.usos), cumplida: Boolean(datos.semana.cumplida) }
+        : null,
       movimientos: movimientos.map((m) => ({
         fecha: String(m.fecha || '').slice(0, 20),
         juego: String(m.juego || '').slice(0, 20),
         ventaBs: numero(m.ventaBs),
-        comisionUsd: numero(m.comisionUsd),
+        comisionUsd: numeroONulo(m.comisionUsd),
       })),
     });
   } catch (error) {

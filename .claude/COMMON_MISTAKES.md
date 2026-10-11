@@ -44,3 +44,8 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 - Modelos `gemini-1.5-*` retirados (404). Por defecto `gemini-2.5-flash` vía `GEMINI_MODEL`.
 - `firebase-admin` se importa de forma perezosa en `_lib/limitador.js` para no alargar el cold start: no moverlo a un `import` estático.
 - Variable nueva → documentarla en `.env.example`. Nunca leer ni editar `.env`.
+
+## 9. Recalcular la comisión de los creadores desde D
+
+**Síntoma**: al bajar de nivel (meta semanal) o al cambiar la tasa, el pendiente de un creador cambia sobre ventas ya hechas.
+**Regla**: H (total) y J (pendiente) de "Descuentos" son saldos: solo los suma `sumarComisionCreador` en cada venta y los baja Registrar pago. Nunca volver a calcularlos como D × % ÷ tasa.

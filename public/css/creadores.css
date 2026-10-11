@@ -78,6 +78,13 @@
 }
 .retiro.listo .btn-retiro { display: flex; }
 
+/* Meta semanal: mismo bloque que el retiro; borde neón al cumplirla */
+.meta-semanal { padding: 20px; border-radius: 14px; background: rgba(11, 17, 32, 0.6); border: 1px solid var(--border-glass); transition: border-color 0.25s ease; }
+.meta-semanal[hidden] { display: none; }
+.meta-semanal h3 { font-size: 13px; font-weight: 800; color: var(--text-main); margin-bottom: 12px; }
+.meta-semanal.cumplida { border-color: rgba(57, 255, 20, 0.5); }
+.meta-semanal.cumplida .barra-texto { color: var(--accent-neon); font-weight: 700; }
+
 .movimientos h3 { font-size: 13px; font-weight: 800; color: var(--text-main); margin-bottom: 12px; }
 .tabla-scroll { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border-glass); }
 .movimientos table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -90,6 +97,12 @@
 .nota-tasa { font-size: 11px; color: var(--text-muted); margin-top: 8px; }
 
 /* --- Niveles --- */
+.formula {
+  margin-bottom: 24px; padding: 20px 24px; border-radius: 14px;
+  background: rgba(11, 17, 32, 0.6); border: 1px solid rgba(34, 211, 238, 0.4); box-shadow: var(--shadow-glow);
+}
+.formula strong { display: block; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; color: var(--primary); margin-bottom: 6px; }
+.formula p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 .niveles { display: grid; grid-template-columns: 1fr; gap: 16px; }
 .nivel-tarjeta {
   padding: 24px; border-radius: 14px; background: rgba(30, 41, 59, 0.55); border: 1px solid var(--border-glass);
