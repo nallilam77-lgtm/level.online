@@ -42,8 +42,8 @@ export async function obtenerDescuento(codigo) {
 // Anota +1 uso y el monto cobrado de un código (acción registrar_uso_descuento de recargas.gs).
 // Para los juegos cuya recarga se registra en OTRA hoja (Blood Strike); Free Fire lo hace dentro
 // de registrar_finalizado. Es una escritura: sin reintento tras timeout para no contar dos veces.
-export function registrarUsoDescuento({ codigo, montoCobrado, idPedido, juego }) {
-  return llamarScript(urlTablaDescuentos(), { accion: "registrar_uso_descuento", codigo, montoCobrado, idPedido, juego }, { tiempoMs: 12000, reintentos: 1 })
+export function registrarUsoDescuento({ codigo, montoCobrado, idPedido, idJugador, juego }) {
+  return llamarScript(urlTablaDescuentos(), { accion: "registrar_uso_descuento", codigo, montoCobrado, idPedido, idJugador, juego }, { tiempoMs: 12000, reintentos: 1 })
     .then((r) => r?.status === 'success')
     .catch((e) => { console.error(`❌ registrar_uso_descuento falló (${juego}, código ${codigo}, pedido ${idPedido}):`, e.message); return false; });
 }

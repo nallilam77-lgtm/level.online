@@ -79,9 +79,11 @@ const INICIO_METAS_SEMANALES = "20261012";
 const HOJA_REVISIONES_CREADORES = "revisiones_creadores";
 const COLUMNAS_REVISIONES_CREADORES = ["fecha-hora", "código", "creador", "semana", "recargas", "meta", "nivel antes", "nivel después", "resultado"];
 const HOJA_CONFIG = "config";
-// Historial de ventas con código (para los últimos movimientos y la comisión de cada creador)
+// Historial de ventas con código (para los últimos movimientos y la comisión de cada creador).
+// D = id del jugador que recargó (para ver quién compra con cada código); I = id del pedido
+// (evita anotar dos veces la misma venta). Las filas viejas tienen el id del pedido en D.
 const HOJA_MOVIMIENTOS_DESCUENTOS = "movimientos_descuentos";
-const COLUMNAS_MOVIMIENTOS_DESCUENTOS = ["fecha-hora", "código", "juego", "id pedido", "venta (Bs)", "comisión (Bs)", "tasa Bs/USD", "comisión (USD)"];
+const COLUMNAS_MOVIMIENTOS_DESCUENTOS = ["fecha-hora", "código", "juego", "id jugador", "venta (Bs)", "comisión (Bs)", "tasa Bs/USD", "comisión (USD)", "id pedido"];
 // Registro de cada pago a un creador (lo crea el menú ⭐ Creadores > Registrar pago)
 const HOJA_PAGOS_CREADORES = "pagos_creadores";
 const COLUMNAS_PAGOS_CREADORES = ["fecha-hora", "código", "creador", "ventas liquidadas (Bs)", "comisión (%)", "tasa Bs/USD", "pagado (USD)"];
@@ -429,7 +431,7 @@ function registrarFinalizado(datos) {
     hojaAsignaciones().getRange(asignacion.fila, 7).setValue("USADOS (recarga finalizada " + fechaHora + ")");
   }
   // Código de descuento usado en esta recarga: +1 uso y el monto cobrado en la pestaña "Descuentos"
-  if (datos.codigoDescuento) sumarUsoDescuento(datos.codigoDescuento, datos.montoCobrado, "Free Fire", datos.idPedido);
+  if (datos.codigoDescuento) sumarUsoDescuento(datos.codigoDescuento, datos.montoCobrado, "Free Fire", datos.idPedido, datos.idJugador);
   SpreadsheetApp.flush();
   // (Se quitó la llamada a /api/sincronizar-pedidos: ese endpoint no existe en la tienda
   //  y la petición alargaba el candado en cada recarga.)
@@ -595,7 +597,7 @@ function validarDescuento(datos) {
 // Juegos que registran su recarga en OTRA hoja (Blood Strike): Vercel avisa aquí el uso de un
 // código al terminar la recarga. Con candado, igual que registrarFinalizado.
 function registrarUsoDescuento(datos) {
-  sumarUsoDescuento(datos.codigo, datos.montoCobrado, datos.juego, datos.idPedido);
+  sumarUsoDescuento(datos.codigo, datos.montoCobrado, datos.juego, datos.idPedido, datos.idJugador);
   SpreadsheetApp.flush();
   return responder({ status: "success" });
 }
@@ -604,7 +606,7 @@ function registrarUsoDescuento(datos) {
 // (dos recargas no pisan el contador). Suma +1 uso y el monto en "Descuentos", suma la comisión de
 // ESTA venta a H y J del creador y la anota en "movimientos_descuentos".
 // Un fallo aquí nunca impide que la recarga quede anotada en "finalizados".
-function sumarUsoDescuento(codigo, montoCobrado, juego, idPedido) {
+function sumarUsoDescuento(codigo, montoCobrado, juego, idPedido, idJugador) {
   try {
     var fila = buscarFilaDescuento(codigo);
     if (!fila) {
@@ -641,21 +643,23 @@ function sumarUsoDescuento(codigo, montoCobrado, juego, idPedido) {
     // Historial de la venta (también para los códigos promocionales, sin comisión)
     var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
     hojaMovimientosDescuentos().appendRow([
-      fechaHora, textoSeguro(fila.codigo), textoSeguro(juego || "Free Fire"), textoSeguro(idPedido || ""),
-      monto, comisionBs, comisionUsdVenta !== "" ? tasa : "", comisionUsdVenta
+      fechaHora, textoSeguro(fila.codigo), textoSeguro(juego || "Free Fire"), textoSeguro(idJugador || "Sin ID"),
+      monto, comisionBs, comisionUsdVenta !== "" ? tasa : "", comisionUsdVenta, textoSeguro(idPedido || "")
     ]);
   } catch (err) {
     console.error("Descuentos: no se pudo sumar el uso del código " + codigo + ": " + err);
   }
 }
 
-// ¿Ya hay una venta de este pedido con este código en "movimientos_descuentos"? (columnas B y D)
+// ¿Ya hay una venta de este pedido con este código en "movimientos_descuentos"?
+// El id del pedido está en I (o en D en las filas anteriores al cambio).
 function pedidoYaAnotado(idPedido, codigo) {
   var hoja = obtenerHoja(HOJA_MOVIMIENTOS_DESCUENTOS, true);
   if (!hoja || hoja.getLastRow() < 2) return false;
-  var filas = hoja.getRange(2, 2, hoja.getLastRow() - 1, 3).getValues(); // B..D
+  var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, COLUMNAS_MOVIMIENTOS_DESCUENTOS.length).getValues();
   for (var i = filas.length - 1; i >= 0; i--) {
-    if (String(filas[i][2]) === idPedido && String(filas[i][0]).trim().toUpperCase() === codigo.toUpperCase()) return true;
+    if (String(filas[i][1]).trim().toUpperCase() !== codigo.toUpperCase()) continue;
+    if (String(filas[i][8]) === idPedido || String(filas[i][3]) === idPedido) return true;
   }
   return false;
 }
@@ -1193,6 +1197,10 @@ function hojaMovimientosDescuentos() {
   if (!hoja) {
     hoja = SpreadsheetApp.getActiveSpreadsheet().insertSheet(HOJA_MOVIMIENTOS_DESCUENTOS);
     hoja.appendRow(COLUMNAS_MOVIMIENTOS_DESCUENTOS);
+  } else if (!String(hoja.getRange(1, 9).getValue() || "").trim()) {
+    // Pestaña anterior al cambio: D pasa a ser "id jugador" e I guarda el id del pedido
+    hoja.getRange(1, 4).setValue(COLUMNAS_MOVIMIENTOS_DESCUENTOS[3]);
+    hoja.getRange(1, 9).setValue(COLUMNAS_MOVIMIENTOS_DESCUENTOS[8]);
   }
   return hoja;
 }

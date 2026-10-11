@@ -293,7 +293,7 @@ export async function recargar(req, res) {
       // +1 uso y el monto cobrado del código, en la pestaña "Descuentos" (hoja de Free Fire).
       // Si falla, la recarga ya está hecha: va al informe de "errores" para anotarlo a mano
       // (sin él, el creador pierde la comisión y la recarga no cuenta para su meta semanal).
-      desc ? registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: precioReal, idPedido, juego: 'Blood Strike' }) : true,
+      desc ? registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: precioReal, idPedido, idJugador: id, juego: 'Blood Strike' }) : true,
     ]);
     if (!pagoMarcado || !finalizadoGuardado || !usoDescuentoGuardado) {
       const pendiente = [

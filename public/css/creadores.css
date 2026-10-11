@@ -114,6 +114,23 @@
 .nivel-dato { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; border-top: 1px solid rgba(148, 163, 184, 0.1); font-size: 13px; color: var(--text-muted); }
 .nivel-dato strong { white-space: nowrap; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 16px; color: var(--text-main); }
 
+/* --- Cupos limitados --- */
+.chip-cupos {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 8px 16px; border-radius: 999px;
+  font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--accent-neon); background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(57, 255, 20, 0.4);
+  box-shadow: 0 0 16px rgba(57, 255, 20, 0.15);
+}
+.punto-vivo { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-neon); animation: latido 1.6s ease-in-out infinite; }
+@keyframes latido { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.75); } }
+@media (prefers-reduced-motion: reduce) { .punto-vivo { animation: none; } }
+.aviso-cupos {
+  margin-top: 24px; padding: 20px 24px; border-radius: 14px;
+  background: rgba(11, 17, 32, 0.6); border: 1px solid rgba(57, 255, 20, 0.4); box-shadow: 0 0 20px rgba(57, 255, 20, 0.1);
+}
+.aviso-cupos strong { display: block; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; color: var(--accent-neon); margin-bottom: 6px; }
+.aviso-cupos p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
 /* --- Reglas de oro --- */
 .reglas { list-style: none; display: grid; gap: 12px; }
 .reglas li { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border-radius: 12px; background: rgba(11, 17, 32, 0.5); border: 1px solid var(--border-glass); }
