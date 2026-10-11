@@ -55,6 +55,16 @@
 .nivel-actual p { color: var(--text-muted); font-size: 13px; }
 .nivel-actual strong { color: var(--text-main); }
 
+/* Compartir y copiar el código */
+.compartir { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.btn-compartir, .btn-copiar {
+  min-height: 48px; border-radius: 12px; cursor: pointer; font-family: 'Montserrat', sans-serif; font-weight: 900;
+  font-size: 13px; letter-spacing: 0.5px; transition: transform 0.2s ease, box-shadow 0.25s ease;
+}
+.btn-compartir { border: none; background: var(--cta-gradient); color: var(--on-cta); box-shadow: var(--shadow-glow); }
+.btn-copiar { background: rgba(15, 23, 42, 0.6); color: var(--primary); border: 1px solid rgba(34, 211, 238, 0.4); }
+.btn-compartir:hover, .btn-compartir:focus-visible, .btn-copiar:hover, .btn-copiar:focus-visible { transform: translateY(-2px); box-shadow: var(--shadow-glow-hover); }
+
 .barra { height: 10px; border-radius: 999px; background: rgba(148, 163, 184, 0.15); overflow: hidden; }
 .barra-relleno { height: 100%; width: 0; border-radius: 999px; background: var(--cta-gradient); transition: width 0.8s ease; }
 .barra-texto { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
@@ -131,6 +141,24 @@
 .aviso-cupos strong { display: block; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; color: var(--accent-neon); margin-bottom: 6px; }
 .aviso-cupos p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 
+/* --- Preguntas frecuentes --- */
+.faq { display: grid; gap: 12px; }
+.faq details { border-radius: 12px; background: rgba(11, 17, 32, 0.5); border: 1px solid var(--border-glass); transition: border-color 0.25s ease; }
+.faq details[open] { border-color: rgba(34, 211, 238, 0.4); }
+.faq summary {
+  list-style: none; cursor: pointer; min-height: 48px; padding: 14px 44px 14px 16px; position: relative;
+  font-size: 13px; font-weight: 700; color: var(--text-main); display: flex; align-items: center;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: '+'; position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  font-family: 'Montserrat', sans-serif; font-size: 20px; font-weight: 900; color: var(--primary); transition: transform 0.25s ease;
+}
+.faq details[open] summary::after { transform: translateY(-50%) rotate(45deg); }
+.faq summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 12px; }
+.faq details p { padding: 0 16px 16px; font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+.faq details p strong { color: var(--text-main); }
+
 /* --- Reglas de oro --- */
 .reglas { list-style: none; display: grid; gap: 12px; }
 .reglas li { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border-radius: 12px; background: rgba(11, 17, 32, 0.5); border: 1px solid var(--border-glass); }
@@ -150,5 +178,6 @@
   .panel-caja { padding: 40px 32px; }
   .consulta-campos { grid-template-columns: 2fr 1fr; }
   .estadisticas { grid-template-columns: repeat(4, 1fr); }
+  .compartir { grid-template-columns: 2fr 1fr; }
   .niveles { grid-template-columns: repeat(3, 1fr); }
 }

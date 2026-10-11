@@ -546,7 +546,7 @@
   <!-- PANTALLA DE PROCESAMIENTO CON BARRA -->
   <div id="pantallaProcesando" class="overlay-pantalla">
     <div class="modal-anime-card" id="cajaContenedorAnime">
-      <div class="anime-avatar-box"><img src="jugando.gif" alt="Procesando recarga"></div>
+      <div class="anime-avatar-box"><picture><source srcset="jugando.webp" type="image/webp"><img src="jugando.gif" alt="Procesando recarga" width="120" height="120" loading="lazy"></picture></div>
       <div class="anime-status-text" id="textoContadorAnimado">🔍 Iniciando sistema...</div>
       <div class="progress-bar-container"><div class="progress-bar-fill" id="barraProgresoFill" style="width: 5%;"></div></div>
     </div>
@@ -785,6 +785,27 @@
       }
     }
 
+    // Precio de la hoja ("1100,00", "1.700,00" o número) -> número. Solo para MOSTRARLO con formato:
+    // paquete.precio se envía tal cual al servidor.
+    function montoANumero(valor) {
+      if (typeof valor === 'number') return valor;
+      let m = String(valor || '').trim().replace(/[^0-9.,]/g, '');
+      if (!m) return 0;
+      const ultimaComa = m.lastIndexOf(','), ultimoPunto = m.lastIndexOf('.');
+      if (ultimaComa > ultimoPunto) m = m.replace(/\./g, '').replace(',', '.');
+      else if (ultimaComa !== -1) m = m.replace(/,/g, '');
+      else if (ultimoPunto !== -1) {
+        const partes = m.split('.');
+        if (partes.length > 2 || partes[1].length === 3) m = m.replace(/\./g, '');
+      }
+      return parseFloat(m) || 0;
+    }
+    // "1.700,00 Bs". Si el precio no se entiende, se muestra como viene de la hoja.
+    function formatoBs(valor) {
+      const n = montoANumero(valor);
+      return n > 0 ? `${n.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs` : `${valor} Bs`;
+    }
+
     async function cargarCatalogoRoblox() {
       const container = document.getElementById('catalogContainer');
       try {
@@ -808,8 +829,8 @@
             // "800 Robux" → número grande + "Robux" pequeño; otros nombres se muestran completos
             const partes = String(producto).match(/^\s*([\d.,]+)\s+(.+)$/);
             card.innerHTML = partes
-              ? `<div class="robux-count">${partes[1]}</div><div class="product-label">${partes[2]}</div><div class="price-box"><div class="price-text">${precio} Bs</div></div>`
-              : `<div class="robux-count" style="margin-bottom: 10px;">${producto}</div><div class="price-box"><div class="price-text">${precio} Bs</div></div>`;
+              ? `<div class="robux-count">${partes[1]}</div><div class="product-label">${partes[2]}</div><div class="price-box"><div class="price-text">${formatoBs(precio)}</div></div>`
+              : `<div class="robux-count" style="margin-bottom: 10px;">${producto}</div><div class="price-box"><div class="price-text">${formatoBs(precio)}</div></div>`;
             const paquete = { producto: producto, precio: precio };
             card.addEventListener('click', () => seleccionarProducto(card, paquete));
             card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, paquete); } });
@@ -828,7 +849,7 @@
       document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
       cardElement.classList.add('selected'); 
       paqueteSeleccionado = paquete;
-      document.getElementById('montoPagar').innerText = `${paquete.precio} Bs`;
+      document.getElementById('montoPagar').innerText = formatoBs(paquete.precio);
       verificarEstadoDesbloqueo();
     }
 
@@ -897,7 +918,7 @@
         value.append(`${paqueteSeleccionado.producto} · `);
         const precio = document.createElement('span');
         precio.className = 'precio';
-        precio.textContent = `${paqueteSeleccionado.precio} Bs`;
+        precio.textContent = formatoBs(paqueteSeleccionado.precio);
         value.appendChild(precio);
         btn.textContent = estado.pago ? 'PROCESAR' : 'PAGAR';
         btn.classList.toggle('ready', estado.pago);
@@ -1046,7 +1067,7 @@
 
       document.getElementById('resumenId').textContent = usuario;
       document.getElementById('resumenPaquete').textContent = `${paqueteSeleccionado.producto}`; 
-      document.getElementById('resumenMonto').textContent = `${paqueteSeleccionado.precio} Bs`;
+      document.getElementById('resumenMonto').textContent = formatoBs(paqueteSeleccionado.precio);
       document.getElementById('modalConfirmacion').style.display = 'flex';
     };
 
@@ -1167,14 +1188,14 @@
              if (msgLower.includes("insuficiente") || resultado.insuficiente) {
                  document.getElementById('pantallaProcesando').style.display = 'none';
                  let pagado = parseFloat(resultado.montoPagado || 0);
-                 let precioReal = parseFloat(resultado.precioOficial || paqueteSeleccionado.precio) || 0;
+                 let precioReal = montoANumero(resultado.precioOficial || paqueteSeleccionado.precio);
                  let faltante = (precioReal > pagado) ? (precioReal - pagado).toFixed(2) : 0;
                  
                  document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (<strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${paqueteSeleccionado.producto}</strong>.`;
                  document.getElementById('waMontoEncontrado').innerText = pagado > 0 ? pagado.toFixed(2) + " Bs" : "Monto menor";
                  document.getElementById('waMontoFaltante').innerText = faltante + " Bs";
 
-                 let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* para Roblox ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Paquete:* ${paqueteSeleccionado.producto} (${paqueteSeleccionado.precio} Bs)%0A*Monto Encontrado:* ${pagado} Bs%0A*Falta:* ${faltante} Bs%0A*Usuario Roblox:* ${usuarioRoblox}`;
+                 let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* para Roblox ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Paquete:* ${paqueteSeleccionado.producto} (${formatoBs(paqueteSeleccionado.precio)})%0A*Monto Encontrado:* ${pagado} Bs%0A*Falta:* ${faltante} Bs%0A*Usuario Roblox:* ${usuarioRoblox}`;
                  document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
                  document.getElementById('modalWhatsApp').style.display = 'flex';
              } 

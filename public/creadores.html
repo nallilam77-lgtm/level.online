@@ -79,6 +79,11 @@
             <p>Tus seguidores ahorran <strong id="resDescuento"></strong> en cada recarga y tú ganas ese mismo porcentaje.</p>
           </div>
 
+          <div class="compartir">
+            <button type="button" class="btn-compartir" id="btnCompartir">📣 Compartir mi código</button>
+            <button type="button" class="btn-copiar" id="btnCopiar">📋 Copiar código</button>
+          </div>
+
           <div>
             <div class="barra"><div class="barra-relleno" id="resBarraNivel"></div></div>
             <p class="barra-texto" id="resTextoNivel"></p>
@@ -145,6 +150,46 @@
             <div class="nivel-dato">Descuento del cliente = tu ganancia <strong>1,5 %</strong></div>
             <div class="nivel-dato">Meta semanal <strong>30 recargas</strong></div>
           </article>
+        </div>
+      </section>
+
+      <!-- PREGUNTAS FRECUENTES -->
+      <section class="panel-caja animate-up" aria-labelledby="tituloFaq">
+        <h2 id="tituloFaq">❓ Preguntas frecuentes</h2>
+        <p>Lo que más nos preguntan los creadores.</p>
+        <div class="faq">
+          <details>
+            <summary>¿En qué juegos funciona mi código?</summary>
+            <p>En <strong>Free Fire</strong> y <strong>Blood Strike</strong>. Tus seguidores lo escriben en el campo "¿Tienes un código de descuento?" antes de pagar. En Roblox todavía no se pueden usar códigos.</p>
+          </details>
+          <details>
+            <summary>¿Cuánto gano por cada recarga?</summary>
+            <p>Exactamente el mismo porcentaje que ahorra tu seguidor: 0,65 % en Aliado, 1 % en Pro y 1,5 % en Diamante, sobre lo que pagó. Se suma en dólares a la tasa del día de cada venta.</p>
+          </details>
+          <details>
+            <summary>¿Cómo y cuándo me pagan?</summary>
+            <p>Cuando lo que tienes por cobrar llega a $10, en tu panel aparece el botón "Solicitar mi pago por WhatsApp". Nos escribes y coordinamos el pago contigo; al pagarte, tu saldo pendiente vuelve a $0.</p>
+          </details>
+          <details>
+            <summary>¿Qué pasa si no cumplo la meta semanal?</summary>
+            <p>Cada lunes revisamos la semana anterior (de lunes a domingo). Si no llegaste a la meta de tu nivel, bajas un nivel; si la cumples la semana siguiente, lo recuperas. En tu panel ves cuántas recargas llevas esta semana.</p>
+          </details>
+          <details>
+            <summary>Si bajo de nivel, ¿pierdo lo que ya gané?</summary>
+            <p>No. Cada venta guarda su ganancia en el momento en que se hace. Bajar de nivel solo cambia el porcentaje de tus próximas ventas.</p>
+          </details>
+          <details>
+            <summary>¿Cada cuánto se actualiza mi panel?</summary>
+            <p>Al instante: cada recarga con tu código suma a tu panel en cuanto se completa. Consulta cuando quieras con tu código y tu PIN.</p>
+          </details>
+          <details>
+            <summary>¿Puedo usar mi propio código?</summary>
+            <p>No. Las autocompras, recargas falsas o cualquier abuso anulan la comisión y pueden costarte el código y tu cupo.</p>
+          </details>
+          <details>
+            <summary>Olvidé mi PIN, ¿qué hago?</summary>
+            <p>Escríbenos por WhatsApp desde el número con el que te registramos y te lo enviamos de nuevo.</p>
+          </details>
         </div>
       </section>
 
@@ -216,6 +261,37 @@
     const formatoUsd = (n) => (n === null || n === undefined ? '—' : `$${Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
     const formatoPorcentaje = (n) => `${Number(n).toLocaleString('es-VE', { maximumFractionDigits: 2 })} %`;
 
+    // Código del creador consultado (para compartir y copiar)
+    let creadorActual = null;
+
+    function textoParaCompartir(d) {
+      return `🎮 Recarga Free Fire y Blood Strike en Level Up con mi código ${d.codigo} y ahorra ${formatoPorcentaje(d.descuentoSeguidores)} en cada recarga. Entrega en minutos 👉 https://www.levelupstore.online`;
+    }
+
+    // En el celular abre el menú de compartir (WhatsApp, Instagram, Telegram...); si el navegador
+    // no lo tiene, abre WhatsApp con el mensaje listo
+    $('btnCompartir').addEventListener('click', async () => {
+      if (!creadorActual) return;
+      const texto = textoParaCompartir(creadorActual);
+      if (navigator.share) {
+        try { await navigator.share({ text: texto }); return; }
+        catch (e) { if (e.name === 'AbortError') return; }
+      }
+      window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+    });
+
+    $('btnCopiar').addEventListener('click', async () => {
+      if (!creadorActual) return;
+      const boton = $('btnCopiar');
+      try {
+        await navigator.clipboard.writeText(creadorActual.codigo);
+        boton.textContent = '✅ ¡Copiado!';
+      } catch (e) {
+        boton.textContent = creadorActual.codigo; // sin permiso para copiar: al menos se ve el código
+      }
+      setTimeout(() => { boton.textContent = '📋 Copiar código'; }, 2000);
+    });
+
     function mostrarMensaje(texto) {
       const mensaje = $('panelMensaje');
       mensaje.className = 'panel-mensaje error';
@@ -223,6 +299,7 @@
     }
 
     function pintarPanel(d) {
+      creadorActual = { codigo: d.codigo, descuentoSeguidores: d.descuentoSeguidores };
       const insignia = $('resInsignia');
       insignia.className = `insignia ${CLASE_NIVEL[d.nivel.nombre] || 'aliado'}`;
       insignia.textContent = `${ICONO_NIVEL[d.nivel.nombre] || '⭐'} ${d.nivel.nombre} · ${d.codigo}`;

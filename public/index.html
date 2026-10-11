@@ -117,7 +117,7 @@
 
     /* --- MODAL TUTORIAL RECARGA (SHORT YOUTUBE) --- */
     .tutorial-modal-overlay {
-      display: flex; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
+      display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
       z-index: 99999; backdrop-filter: blur(8px); align-items: center; justify-content: center;
       animation: fadeIn 0.3s ease; padding: 15px;
     }
@@ -217,6 +217,15 @@
       50% { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset, 0 8px 32px -2px rgba(34, 211, 238, 0.7); }
     }
     @media (prefers-reduced-motion: reduce) { .btn-influencers { animation: none; } }
+    .acciones-hero { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 20px; }
+    .acciones-hero .btn-influencers { margin-top: 0; }
+    .btn-tutorial {
+      display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 20px; border-radius: 999px;
+      font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 13px; letter-spacing: 1px; cursor: pointer;
+      color: var(--primary); background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(34, 211, 238, 0.4);
+      transition: transform 0.2s ease, box-shadow 0.25s ease;
+    }
+    .btn-tutorial:hover, .btn-tutorial:focus-visible { transform: translateY(-2px); box-shadow: 0 8px 22px -6px rgba(34, 211, 238, 0.55); }
 
     /* --- Títulos de Categorías --- */
     .categoria-titulo {
@@ -416,16 +425,16 @@
   </style>
   <link rel="stylesheet" href="css/pie-legal.css">
 </head>
-<body class="no-scroll">
+<body>
 
-  <!-- MODAL TUTORIAL DE RECARGA (SHORT DE YOUTUBE AUTOMÁTICO) -->
+  <!-- MODAL TUTORIAL DE RECARGA (SHORT DE YOUTUBE): solo se abre solo en la primera visita -->
   <div class="tutorial-modal-overlay" id="tutorialModal" onclick="cerrarTutorialAfuera(event)">
     <div class="tutorial-modal" id="tutorialBox">
       <div class="tutorial-close-btn" onclick="cerrarTutorial()" aria-label="Cerrar">✖</div>
       <h3>🔥 Aprende a recargar en Level Up</h3>
       <div class="video-container">
-        <!-- Reproducción automática con autoplay y mute requerido por navegadores -->
-        <iframe id="youtubeShort" src="https://www.youtube.com/embed/X5OnxF-ROe4?autoplay=1&mute=1&loop=1&playlist=X5OnxF-ROe4" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        <!-- El video se carga al abrir el modal (data-src): así no gasta datos en cada visita -->
+        <iframe id="youtubeShort" title="Cómo recargar en Level Up" data-src="https://www.youtube.com/embed/X5OnxF-ROe4?autoplay=1&mute=1&loop=1&playlist=X5OnxF-ROe4" allow="autoplay; encrypted-media" allowfullscreen></iframe>
       </div>
     </div>
   </div>
@@ -483,7 +492,10 @@
     <header class="animate-up">
       <h1 class="titulo-principal">LEVEL UP</h1>
       <p class="subtitulo">El centro de recargas más rápido de Venezuela</p>
-      <a href="creadores.html" class="btn-influencers"><span aria-hidden="true">⭐</span> INFLUENCERS</a>
+      <div class="acciones-hero">
+        <a href="creadores.html" class="btn-influencers"><span aria-hidden="true">⭐</span> INFLUENCERS</a>
+        <button type="button" class="btn-tutorial" onclick="abrirTutorial()"><span aria-hidden="true">▶</span> ¿Cómo recargar?</button>
+      </div>
     </header>
 
     <!-- SECCIÓN: CONSULTAR ESTADO DE ÓRDENES -->
@@ -593,6 +605,22 @@
     let urlDestinoPendiente = '';
 
     // --- FUNCIONES DEL MODAL TUTORIAL (SHORT YOUTUBE) ---
+    function abrirTutorial() {
+      const iframe = document.getElementById('youtubeShort');
+      iframe.src = iframe.dataset.src;
+      document.getElementById('tutorialModal').style.display = 'flex';
+      body.classList.add('no-scroll');
+    }
+
+    // Se abre solo en la primera visita; después, con el botón "¿Cómo recargar?".
+    // Si el navegador bloquea el almacenamiento, no se abre solo (mejor que en cada visita).
+    try {
+      if (!localStorage.getItem('tutorial_visto')) {
+        localStorage.setItem('tutorial_visto', '1');
+        abrirTutorial();
+      }
+    } catch (e) { /* almacenamiento bloqueado: el botón sigue disponible */ }
+
     function cerrarTutorial() {
       const modal = document.getElementById('tutorialModal');
       const iframe = document.getElementById('youtubeShort');
