@@ -25,7 +25,7 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 ├── creadores.js          POST { codigo, pin } -> panel del creador (nivel, ventas, comisión, movimientos)
 ├── subir-imagen.js       Comprobante de pago → Drive (límite 4 MB)
 ├── consultar-ordenes.js  Consulta de pedidos (página de inicio)
-├── ruleta.js             Ruleta de la suerte (opcional: 503 si no hay script)
+├── ruleta.js             Ruleta de la suerte (apps-script/ruleta.gs; reintenta: el giro es idempotente)
 └── ia-soporte.js         Chat de soporte con Gemini (rota GEMINI_KEYS)
 apps-script/recargas.gs   Copia del Apps Script de recargas Free Fire (v2, con idPedido)
 public/                   Frontend estático; cada página lleva su CSS/JS en línea
@@ -64,7 +64,7 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 | Apps Script recargas | `SCRIPT_RECARGAS_URL`, `SCRIPT_RECARGAS_TOKEN` | juegos/freefire (precios, recarga), subir-imagen |
 | Apps Script órdenes | `SCRIPT_RECARGAS_VERIFICACION` | consultar-ordenes |
 | Apps Script validador | `SCRIPT_VALIDADOR_URL` | juegos/freefire (verificar) |
-| Apps Script ruleta | `SCRIPT_RULETA_URL` | ruleta |
+| Apps Script ruleta (`apps-script/ruleta.gs`) | `SCRIPT_RULETA_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | ruleta |
 | Apps Script Roblox | `GAS_URL` | juegos/roblox |
 | Apps Script + FazerCards | `SCRIPT_BLOOD`, `FAZER_API_KEY` | juegos/bloodstrike |
 | Bot Railway | `RAILWAY_SECRET` | juegos/freefire (recarga) |

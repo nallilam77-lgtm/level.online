@@ -5,14 +5,15 @@
 // (leer precios, validar un ID, marcar una referencia como usada) o lo que el Apps Script hace
 // idempotente con un idPedido (verificar_pago y obtener_codigo en recargas.gs v2: repetir la
 // petición devuelve el mismo resultado). Nunca se reintenta lo que crea algo sin esa protección
-// (compras, registros, ruleta), porque un reintento tras un timeout podría duplicar la operación.
+// (compras, registros), porque un reintento tras un timeout podría duplicar la operación.
+// La ruleta sí se reintenta: apps-script/ruleta.gs devuelve el premio ya anotado si se repite el giro.
 
 export const TIEMPO_LIMITE_MS = 8000;
 
 // Apps Script tarda 5-15 s cuando "despierta" (arranque en frío). Presupuestos para llamarlo:
 // - LECTURA: sin efectos secundarios. 20 s en total; si el primer intento pasa de 12 s se corta
 //   y se reintenta, porque el segundo suele encontrar el script ya despierto y responde rápido.
-// - ESCRITURA: crea algo (archivo, giro de ruleta). 20 s en un solo intento, nunca se reintenta.
+// - ESCRITURA: crea algo (un archivo en Drive). 20 s en un solo intento, nunca se reintenta.
 // Las funciones que los usan tienen maxDuration 30 en vercel.json para que Vercel no las corte antes.
 export const LECTURA_APPS_SCRIPT = { tiempoMs: 20000, intentoMs: 12000, reintentos: 1, reintentarTrasTimeout: true };
 export const ESCRITURA_APPS_SCRIPT = { tiempoMs: 20000 };
