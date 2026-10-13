@@ -9,9 +9,9 @@
 // Estilos en css/aviso-codigo.css. Si la página no tiene #inputDescuento, no hace nada.
 // =========================================================================
 (function () {
-  const CLAVE_CERRADO = 'aviso_codigo_cerrado';
+  const CLAVE_CERRADO = 'aviso_codigo_cerrado_v3'; // cambiar el sufijo vuelve a mostrarla a quien la cerró
   const DIAS_CERRADO = 3;
-  const RETRASO_MS = 5000; // deja ver la página antes de mostrar nada
+  const RETRASO_MS = 3000; // deja ver la página antes de mostrar nada
 
   function cerradoHace() {
     try { return Date.now() - Number(localStorage.getItem(CLAVE_CERRADO) || 0); }
