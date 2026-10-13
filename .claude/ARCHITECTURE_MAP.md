@@ -35,7 +35,7 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 ├── admin.html            Panel (lee Firestore)
 ├── js/lector-referencia.js   Lee la referencia del comprobante (Tesseract)
 ├── js/descuento.js + css/descuento.css   Campo "código de descuento" (Free Fire, Blood Strike y Roblox)
-├── js/aviso-codigo.js + css/aviso-codigo.css   Burbuja "Paga 1,5 % menos con un código de creador" (encima del botón de WhatsApp; se oculta si el campo está a la vista, hay código aplicado o un modal/chat abierto; la X la cierra 3 días)
+├── js/aviso-codigo.js + css/aviso-codigo.css   Burbuja "Paga 1,5 % menos con un código de creador" (encima del botón de WhatsApp; se oculta mientras se escribe en el campo, hay código aplicado o un modal/chat abierto; la X la cierra 3 días)
 └── terminos / privacidad / reembolsos.html + css/   Páginas legales
 ```
 

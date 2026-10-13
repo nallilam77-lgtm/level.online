@@ -3,7 +3,7 @@
 // Burbuja pequeña encima del botón de WhatsApp (abajo a la izquierda). Al tocarla lleva al
 // campo #inputDescuento; la X la cierra por 3 días.
 // Para no estorbar se oculta sola cuando:
-//   - el campo del código está a la vista (ya no hace falta señalarlo),
+//   - el cliente está escribiendo en el campo del código (no tapa el teclado ni el campo),
 //   - ya hay un código aplicado (el campo queda deshabilitado),
 //   - hay un modal abierto (body.modal-abierto) o el chat de IA está abierto.
 // Estilos en css/aviso-codigo.css. Si la página no tiene #inputDescuento, no hace nada.
@@ -33,13 +33,13 @@
       '<button type="button" class="aviso-codigo-cerrar" aria-label="Cerrar anuncio">✕</button>';
     document.body.appendChild(aviso);
 
-    let campoVisible = false;
+    let escribiendo = false;
     let cerrado = false;
     let listo = false;
 
     function actualizar() {
       const chatAbierto = document.querySelector('.chat-modal-window.active');
-      const mostrar = listo && !cerrado && !campoVisible && !input.disabled &&
+      const mostrar = listo && !cerrado && !escribiendo && !input.disabled &&
         !document.body.classList.contains('modal-abierto') && !chatAbierto;
       aviso.classList.toggle('visible', mostrar);
     }
@@ -56,12 +56,8 @@
       actualizar();
     });
 
-    if ('IntersectionObserver' in window) {
-      new IntersectionObserver((entradas) => {
-        campoVisible = entradas[0].isIntersecting;
-        actualizar();
-      }).observe(input);
-    }
+    input.addEventListener('focus', () => { escribiendo = true; actualizar(); });
+    input.addEventListener('blur', () => { escribiendo = false; actualizar(); });
     // Código aplicado (input deshabilitado), modales y chat: se vigilan sin tocar el código de cada página
     const vigilante = new MutationObserver(actualizar);
     vigilante.observe(input, { attributes: true, attributeFilter: ['disabled'] });
