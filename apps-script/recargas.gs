@@ -59,7 +59,7 @@ const HOJA_DESCUENTOS = "descuentos";
 //     J (pendiente de pago). Cambiar el % o la tasa no toca lo ya ganado.
 //     G muestra el % actual. Registrar pago deja J en 0. Mínimo para retirar: RETIRO_MINIMO_USD (sobre J).
 const PORCENTAJE_CREADOR = 1.5;
-const RETIRO_MINIMO_USD = 1;
+const RETIRO_MINIMO_USD = 3;
 // Columna L: comisión en Bs de ventas hechas sin ninguna tasa conocida (se pasa a H y J al haber tasa)
 const COLUMNA_POR_CONVERTIR = 12;
 const HOJA_CONFIG = "config";
