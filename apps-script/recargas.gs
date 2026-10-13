@@ -27,6 +27,7 @@
 // Sin pines de un paquete: la tienda pide obtener_codigo con manualSiNoHay. En vez de rechazar
 // la compra, el pedido se anota en la pestaña "sin_codigo" (id del jugador, paquete, referencia...)
 // para hacer la recarga a mano, y al cliente se le responde como una recarga exitosa.
+// Menú "🖐️ Recargas Free Fire" > "Todas manuales": TODOS los pedidos van a "sin_codigo" aunque haya pines.
 // =====================================================================
 
 const PROJECT_ID = "levelupstore-87d4d";
@@ -49,6 +50,10 @@ const ESTADO_SIN_CODIGO = "SIN CÓDIGO";
 
 // Recargas pagadas que no tenían pines: se hacen a mano. Marca la casilla "¿hecha?" al terminar.
 const HOJA_SIN_CODIGO = "sin_codigo";
+// Interruptor (menú "🖐️ Recargas Free Fire"): "manual" = TODOS los pedidos van a "sin_codigo"
+// aunque haya pines; "automatico" = se usan los pines y solo van a "sin_codigo" si faltan.
+// Mientras no se haya elegido nada, el modo es manual.
+const PROPIEDAD_MODO_RECARGA = "MODO_RECARGA_FF";
 const COLUMNAS_SIN_CODIGO = ["fecha-hora", "id jugador", "paquete", "referencia", "cobrado (Bs)", "comprobante", "código descuento", "id pedido", "¿hecha?"];
 
 // Ruleta: pestaña donde se anotan los ganadores (para entregar el premio) y máximo de pagos
@@ -270,6 +275,9 @@ function obtenerCodigo(datos) {
     }
   }
 
+  // Modo manual: no se toca el inventario, el pedido va directo a "sin_codigo"
+  if (modoManualActivo() && puedeIrASinCodigo(datos, idPedido)) return pasarASinCodigo(datos, idPedido, "modo manual activado");
+
   var hojaCodigos = obtenerHoja("codigos");
   var diamantesBuscados = String(datos.diamantes || "").replace(/[^0-9]/g, "");
   var cantidadNecesaria = (diamantesBuscados === "220") ? 2 : 1;
@@ -345,6 +353,22 @@ function pasarASinCodigo(datos, idPedido, motivo) {
     textoSeguro(motivo), "", "", ESTADO_SIN_CODIGO + " (recarga manual en la pestaña " + HOJA_SIN_CODIGO + ")"]);
   SpreadsheetApp.flush();
   return responder({ status: "success", pines: [], manual: true });
+}
+
+function modoManualActivo() {
+  return PropertiesService.getScriptProperties().getProperty(PROPIEDAD_MODO_RECARGA) !== "automatico";
+}
+
+function activarModoManual() { cambiarModoRecarga("manual"); }
+function activarModoAutomatico() { cambiarModoRecarga("automatico"); }
+function verModoRecarga() { cambiarModoRecarga(null); }
+
+function cambiarModoRecarga(modo) {
+  if (modo) PropertiesService.getScriptProperties().setProperty(PROPIEDAD_MODO_RECARGA, modo);
+  SpreadsheetApp.getUi().alert("Recargas de Free Fire", modoManualActivo()
+    ? "🖐️ MODO MANUAL: todos los pedidos van a la pestaña \"" + HOJA_SIN_CODIGO + "\" para que los hagas tú. No se usan los pines."
+    : "⚡ MODO AUTOMÁTICO: se usan los pines de \"codigos\". Solo van a \"" + HOJA_SIN_CODIGO + "\" los paquetes sin pines.",
+    SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function hojaSinCodigo() {
@@ -999,6 +1023,12 @@ function onEdit(e) {
 
 // Menú "⭐ Creadores" en la hoja de cálculo (aparece al abrirla)
 function onOpen() {
+  SpreadsheetApp.getUi().createMenu("🖐️ Recargas Free Fire")
+    .addItem("🖐️ Todas manuales (pestaña sin_codigo)", "activarModoManual")
+    .addItem("⚡ Automáticas con los pines", "activarModoAutomatico")
+    .addSeparator()
+    .addItem("❓ Ver modo actual", "verModoRecarga")
+    .addToUi();
   SpreadsheetApp.getUi().createMenu("⭐ Creadores")
     .addItem("💵 Registrar pago del creador seleccionado", "registrarPagoCreador")
     .addItem("🔄 Actualizar % de comisión", "recalcularComisiones")
