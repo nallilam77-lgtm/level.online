@@ -162,8 +162,10 @@ export async function conCache(clave, obtener, { frescoMs = 60_000, respaldoMs =
 
 export const catalogoValido = (datos) => datos?.status === 'success' && Array.isArray(datos.catalogo) && datos.catalogo.length > 0;
 
-// Precios: el navegador y la CDN de Vercel reutilizan la respuesta 60 s y,
-// mientras se renueva, siguen sirviendo la copia anterior hasta 10 minutos.
+// Precios: el navegador y la CDN de Vercel reutilizan la respuesta solo 20 s. Sin
+// stale-while-revalidate: con él la CDN seguía sirviendo precios viejos varios minutos después
+// de cambiarlos en la hoja. La carga real sobre Apps Script ya la frena conCache (1 consulta por
+// minuto), así que un cambio en la hoja se ve en ~1,5 minutos como mucho.
 export function cabecerasCachePrecios(res) {
-  res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60, stale-while-revalidate=600');
+  res.setHeader('Cache-Control', 'public, max-age=20, s-maxage=20');
 }
