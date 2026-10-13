@@ -36,7 +36,7 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 ├── js/lector-referencia.js   Lee la referencia del comprobante (Tesseract)
 ├── js/descuento.js + css/descuento.css   Campo "código de descuento" (Free Fire, Blood Strike y Roblox)
 ├── js/aviso-codigo.js + css/aviso-codigo.css   Burbuja "Paga 1,5 % menos con un código de creador" (encima del botón de WhatsApp; se oculta mientras se escribe en el campo, hay código aplicado o un modal/chat abierto; la X la cierra 3 días)
-├── img/og-*.jpg            Vista previa al compartir en WhatsApp (1200×630). Las etiquetas og: van en el <head> de cada página con URL absoluta y ?v=N: si cambias la imagen, sube el ?v= porque WhatsApp la guarda en caché. Soporte: wa.me/584141916377
+├── img/og-*.jpg            Vista previa al compartir en WhatsApp (1200×630). Las etiquetas og: van en el <head> de cada página con URL absoluta y ?v=N: si cambias la imagen, sube el ?v= porque WhatsApp la guarda en caché. Soporte: wa.me/584228887089
 └── terminos / privacidad / reembolsos.html + css/   Páginas legales
 ```
 
