@@ -11,6 +11,8 @@ import { limpiarMontoVES } from '../recarga-comun.js';
 // La compra no se reintenta: el Apps Script de Roblox no tiene idPedido y repetirla podría duplicarla.
 const TIEMPO_COMPRA_MS = 45000;
 const MENSAJE_SIN_CONFIGURAR = 'La tienda de Roblox no está disponible en este momento. Intenta más tarde.';
+// Con esta cantidad de códigos o menos, el paquete se muestra como "¡Últimos!"
+const POCOS_CODIGOS = 3;
 
 // CORS: solo tu dominio (igual que vercel.json)
 function cabecerasCors(res) {
@@ -34,10 +36,23 @@ async function obtenerPreciosRoblox(scriptUrl) {
   return datos;
 }
 
+// Stock de cada paquete para el cliente: nunca la cantidad exacta de códigos del inventario,
+// solo 'disponible', 'pocos' o 'agotado'. Sin datos de stock (Apps Script anterior) → {}.
+function estadoStock(stock) {
+  if (!stock || typeof stock !== 'object') return {};
+  const estados = {};
+  for (const [producto, cantidad] of Object.entries(stock)) {
+    const n = Number(cantidad) || 0;
+    estados[producto] = n <= 0 ? 'agotado' : n <= POCOS_CODIGOS ? 'pocos' : 'disponible';
+  }
+  return estados;
+}
+
 // Catálogo en lista para la acción "descuento" (misma caché que la acción precios)
 async function catalogoRoblox() {
-  const { precios } = await obtenerPreciosRoblox(process.env.GAS_URL);
-  return Object.entries(precios).map(([producto, precio]) => ({ producto, precio }));
+  const { precios, stock } = await obtenerPreciosRoblox(process.env.GAS_URL);
+  const estados = estadoStock(stock);
+  return Object.entries(precios).map(([producto, precio]) => ({ producto, precio, ...(estados[producto] && { stock: estados[producto] }) }));
 }
 
 // =========================================================================
@@ -59,7 +74,7 @@ async function precios(req, res) {
   try {
     const datos = await obtenerPreciosRoblox(scriptUrl);
     cabecerasCachePrecios(res);
-    return res.status(200).json(datos);
+    return res.status(200).json({ status: 'success', precios: datos.precios, stock: estadoStock(datos.stock) });
   } catch (error) {
     console.error('Error al obtener precios de Roblox:', error.message);
     return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
@@ -67,6 +82,19 @@ async function precios(req, res) {
 }
 
 export const acciones = { precios, descuento: crearAccionDescuento('Roblox', catalogoRoblox) };
+
+// Solo los campos que usa la página, nunca la respuesta cruda de Apps Script
+function respuestaCompra(data) {
+  if (data?.status === 'success') {
+    return { status: 'success', code: String(data.code ?? ''), message: String(data.message || '¡Código canjeado con éxito!') };
+  }
+  return {
+    status: 'error',
+    message: String(data?.message || 'No pudimos completar la compra. Intenta de nuevo.'),
+    ...(data?.insuficiente && { insuficiente: true, montoPagado: Number(data.montoPagado) || 0, precioOficial: Number(data.precioOficial) || 0 }),
+    ...(data?.agotado && { agotado: true }),
+  };
+}
 
 // =========================================================================
 // COMPRA (api/recargar.js)
@@ -131,7 +159,7 @@ export async function recargar(req, res) {
     const idPedido = `rbx-${randomUUID()}`;
     const payload = conToken({
       tipo: 'compra', referencia: String(referencia), user: usuario, producto: String(producto),
-      url_capture: textoParaHoja(url_capture || 'Sin comprobante'),
+      url_capture: textoParaHoja(url_capture || 'Sin comprobante'), idPedido,
       ...(desc && { montoACobrar, codigoDescuento: desc.codigo }),
     });
 
@@ -159,7 +187,7 @@ export async function recargar(req, res) {
       await registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: montoACobrar, idPedido, idJugador: usuario, juego: 'Roblox' });
     }
 
-    return res.status(200).json(data);
+    return res.status(200).json(respuestaCompra(data));
 
   } catch (error) {
     console.error('Error en la compra de Roblox:', error.message);

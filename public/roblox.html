@@ -386,6 +386,15 @@
     .product-card.skeleton { cursor: default; height: 112px; border-color: transparent; background: linear-gradient(90deg, var(--card-bg) 0px, var(--card-border) 80px, var(--card-bg) 160px); background-size: 400px 100%; animation: shimmer 1.2s linear infinite; }
     .product-card.skeleton:hover { transform: none; box-shadow: none; }
     .catalog-message { text-align: center; grid-column: span 2; color: var(--text-muted); padding: 20px 0; font-size: 13px; }
+    /* Stock de cada paquete (lo envía /api/juego?juego=roblox&accion=precios) */
+    .stock-resumen { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: -2px 0 12px; }
+    .stock-resumen:empty { display: none; }
+    .stock-resumen strong { color: var(--success); }
+    .stock-resumen .stock-agotados { display: block; color: var(--danger); }
+    .product-badge.pocos { background: var(--warning); color: var(--bg-base); }
+    .product-badge.agotado { background: var(--danger); color: var(--text-main); }
+    .product-card.agotado { cursor: not-allowed; opacity: 0.5; filter: grayscale(0.7); }
+    .product-card.agotado:hover, .product-card.agotado:active { transform: none; border-color: var(--border-glass); box-shadow: var(--shadow-lg), var(--shadow-glow); }
     .catalog-message.error { color: var(--danger); }
 
     .bank-row .bank-value { margin-left: auto; text-align: right; word-break: break-all; }
@@ -625,6 +634,7 @@
     </div>
 
     <div class="step-title anim-slide-up delay-3" id="stepTitlePaquete"><span class="step-num">2</span> SELECCIONA TU PAQUETE DE ROBUX</div>
+    <p class="stock-resumen" id="stockResumen" role="status" aria-live="polite"></p>
     <div class="catalog-grid anim-slide-up delay-3" id="catalogContainer">
       <div class="product-card skeleton"></div><div class="product-card skeleton"></div>
       <div class="product-card skeleton"></div><div class="product-card skeleton"></div>
@@ -829,7 +839,8 @@
         const data = await response.json();
 
         if (data.status === "success" && data.precios) {
-          catalogoSinDescuento = Object.entries(data.precios).map(([producto, precio]) => ({ producto, precio }));
+          const stock = data.stock || {};
+          catalogoSinDescuento = Object.entries(data.precios).map(([producto, precio]) => ({ producto, precio, stock: stock[producto] }));
           // Si el cliente ya aplicó un código antes de que cargara el catálogo, se mantiene
           if (!descuento.codigo()) renderizarCatalogo(catalogoSinDescuento);
         } else {
@@ -842,31 +853,71 @@
 
     // Dibuja el catálogo. Con descuento, cada paquete trae "precioOriginal" (tachado) y "precio"
     // ya descontado por el servidor. Si había un paquete elegido, se vuelve a elegir con el precio nuevo.
+    // Los textos vienen de la hoja: se pintan con textContent, nunca como HTML.
+    // item.stock: 'disponible' | 'pocos' | 'agotado' (sin dato = se vende normal).
     function renderizarCatalogo(lista) {
       const container = document.getElementById('catalogContainer');
       const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.producto) : null;
-      container.innerHTML = '';
+      container.replaceChildren();
+      const div = (clase, texto) => { const el = document.createElement('div'); el.className = clase; el.textContent = texto; return el; };
       lista.forEach((item, index) => {
         const card = document.createElement('div');
+        const agotado = item.stock === 'agotado';
         const delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
         const esUltimoImpar = (lista.length % 2 !== 0) && (index === lista.length - 1);
-        card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar ? 'full-width' : ''}`;
+        card.className = `product-card anim-slide-up ${delayClass}${esUltimoImpar ? ' full-width' : ''}${agotado ? ' agotado' : ''}`;
         // Accesible con teclado y lectores de pantalla
         card.setAttribute('role', 'button');
-        card.setAttribute('tabindex', '0');
-        const tachado = item.precioOriginal !== undefined ? `<div class="price-original">${formatoBs(item.precioOriginal)}</div>` : '';
-        const precio = `${tachado}<div class="price-box"><div class="price-text">${formatoBs(item.precio)}</div></div>`;
+        card.setAttribute('tabindex', agotado ? '-1' : '0');
+        if (agotado) card.setAttribute('aria-disabled', 'true');
+        if (agotado || item.stock === 'pocos') {
+          card.classList.add('has-badge');
+          card.appendChild(div(`product-badge ${item.stock}`, agotado ? 'Agotado' : '¡Últimos!'));
+        }
         // "800 Robux" → número grande + "Robux" pequeño; otros nombres se muestran completos
         const partes = String(item.producto).match(/^\s*([\d.,]+)\s+(.+)$/);
-        card.innerHTML = partes
-          ? `<div class="robux-count">${partes[1]}</div><div class="product-label">${partes[2]}</div>${precio}`
-          : `<div class="robux-count" style="margin-bottom: 10px;">${item.producto}</div>${precio}`;
+        if (partes) {
+          card.append(div('robux-count', partes[1]), div('product-label', partes[2]));
+        } else {
+          const nombre = div('robux-count', item.producto);
+          nombre.style.marginBottom = '10px';
+          card.appendChild(nombre);
+        }
+        if (item.precioOriginal !== undefined) card.appendChild(div('price-original', formatoBs(item.precioOriginal)));
+        const caja = div('price-box', '');
+        caja.appendChild(div('price-text', formatoBs(item.precio)));
+        card.appendChild(caja);
+        container.appendChild(card);
+        if (agotado) {
+          if (elegido === String(item.producto)) { paqueteSeleccionado = null; verificarEstadoDesbloqueo(); }
+          return;
+        }
         const paquete = { producto: item.producto, precio: item.precio };
         card.addEventListener('click', () => seleccionarProducto(card, paquete));
         card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, paquete); } });
-        container.appendChild(card);
         if (elegido !== null && String(item.producto) === elegido) seleccionarProducto(card, paquete);
       });
+      pintarResumenStock(lista);
+    }
+
+    // "✅ Hay Robux de: 400, 800 y 1.700 · ❌ Agotado: 4.500"
+    function pintarResumenStock(lista) {
+      const resumen = document.getElementById('stockResumen');
+      resumen.replaceChildren();
+      if (!lista.some((p) => p.stock)) return; // el servidor aún no envía stock
+      const nombre = (p) => { const m = String(p.producto).match(/^\s*([\d.,]+)/); return m ? m[1] : String(p.producto); };
+      const unir = (nombres) => nombres.length > 1 ? `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}` : nombres[0];
+      const conStock = lista.filter((p) => p.stock !== 'agotado').map(nombre);
+      const agotados = lista.filter((p) => p.stock === 'agotado').map(nombre);
+      const fuerte = document.createElement('strong');
+      fuerte.textContent = conStock.length ? `✅ Hay Robux de: ${unir(conStock)}` : '😕 Todos los paquetes están agotados por ahora';
+      resumen.appendChild(fuerte);
+      if (agotados.length && conStock.length) {
+        const span = document.createElement('span');
+        span.className = 'stock-agotados';
+        span.textContent = `❌ Agotado: ${unir(agotados)}`;
+        resumen.appendChild(span);
+      }
     }
 
     // Código de descuento (js/descuento.js): el servidor devuelve los precios ya descontados
@@ -1225,7 +1276,7 @@
                  let precioReal = montoANumero(resultado.precioOficial || paqueteSeleccionado.precio);
                  let faltante = (precioReal > pagado) ? (precioReal - pagado).toFixed(2) : 0;
                  
-                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (<strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${paqueteSeleccionado.producto}</strong>.`;
+                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (<strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${escaparHtml(paqueteSeleccionado.producto)}</strong>.`;
                  document.getElementById('waMontoEncontrado').innerText = pagado > 0 ? pagado.toFixed(2) + " Bs" : "Monto menor";
                  document.getElementById('waMontoFaltante').innerText = faltante + " Bs";
 
@@ -1241,6 +1292,8 @@
              } 
              else {
                  mostrarErrorGeneral("❌ ERROR", escaparHtml(msg), "");
+                 // Se agotó mientras pagaba: el catálogo se actualiza para que elija otro
+                 if (resultado.agotado) cargarCatalogoRoblox();
              }
 
              isProcessing = false; btnConfirmar.disabled = false;

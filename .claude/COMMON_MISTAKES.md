@@ -50,6 +50,10 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 - `firebase-admin` se importa de forma perezosa en `_lib/limitador.js` para no alargar el cold start: no moverlo a un `import` estático.
 - Variable nueva → documentarla en `.env.example`. Nunca leer ni editar `.env`.
 
+## 8b. Orden de la compra de Roblox (`apps-script/roblox.gs`)
+
+**Regla**: buscar pago y código sin tocar nada → marcar pago "Usado" → marcar el código `USADO-…` → anotar en "Exitosas" y compactar. Lo que va después de gastar el pago (registro, compactar) va en try/catch y nunca impide devolver el código al cliente. El stock que ve el cliente es solo disponible/pocos/agotado.
+
 ## 9. Recalcular la comisión de los creadores desde D
 
 **Síntoma**: al cambiar el % de comisión o la tasa, el pendiente de un creador cambia sobre ventas ya hechas.
