@@ -14,7 +14,7 @@ for f in api/*.js api/_lib/*.js; do node --check "$f" || echo "FALLA $f"; done
 ## Local
 
 ```bash
-npm install          # única dependencia: firebase-admin
+npm install          # dependencias: firebase-admin y @vercel/functions (waitUntil en _lib/externo.js)
 npx vercel dev       # sirve public/ y api/ en local (necesita .env con las variables de .env.example)
 ```
 

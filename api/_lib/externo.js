@@ -8,6 +8,8 @@
 // (compras, registros), porque un reintento tras un timeout podría duplicar la operación.
 // La ruleta sí se reintenta: apps-script/ruleta.gs devuelve el premio ya anotado si se repite el giro.
 
+import { waitUntil } from '@vercel/functions';
+
 export const TIEMPO_LIMITE_MS = 8000;
 
 // Apps Script tarda 5-15 s cuando "despierta" (arranque en frío). Presupuestos para llamarlo:
@@ -107,6 +109,8 @@ export function llamarScript(url, cuerpo, opciones = {}) {
 // - Dentro de `frescoMs`: responde al instante sin llamar a Apps Script.
 // - Pasado ese tiempo consulta de nuevo; si Apps Script falla o tarda, devuelve la
 //   última copia buena (hasta `respaldoMs`) para que la página nunca se quede sin precios.
+//   Si solo tarda, la consulta termina después de responder (waitUntil) y la próxima visita
+//   ya ve lo nuevo: un cambio en la hoja tarda como mucho ~2 minutos en verse.
 // - Peticiones simultáneas comparten una sola llamada a Apps Script.
 // =========================================================================
 const cache = new Map();
@@ -138,7 +142,8 @@ export async function conCache(clave, obtener, { frescoMs = 60_000, respaldoMs =
   const consulta = enCurso.get(clave);
   try {
     // Con copia guardada no se hace esperar al cliente: si Apps Script tarda más de 1,5 s
-    // se responde con la copia y la consulta sigue renovando la caché en segundo plano.
+    // se responde con la copia y la consulta sigue renovando la caché en segundo plano
+    // (waitUntil: sin él, Vercel congela la función al responder y la copia vieja no se renovaba).
     const datos = hayRespaldo
       ? await Promise.race([consulta, esperar(esperaConRespaldoMs).then(() => { throw LENTO; })])
       : await consulta;
@@ -147,7 +152,7 @@ export async function conCache(clave, obtener, { frescoMs = 60_000, respaldoMs =
     if (!hayRespaldo) throw error;
     if (error === LENTO) {
       // Solo tardó: es lo normal en Apps Script, no un fallo. Solo se avisa si la renovación falla.
-      consulta.catch((e) => console.error(`⚠️ ${clave}: no se pudo renovar (${e.message}). Se sigue usando la copia anterior.`));
+      waitUntil(consulta.catch((e) => console.error(`⚠️ ${clave}: no se pudo renovar (${e.message}). Se sigue usando la copia anterior.`)));
     } else {
       console.error(`⚠️ ${clave}: Apps Script falló (${error.message}). Usando copia de hace ${Math.round(edad / 1000)} s.`);
     }

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@vercel/functions": "3.9.9",
     "firebase-admin": "^14.4.0"
   }
 }
