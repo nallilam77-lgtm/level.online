@@ -58,3 +58,9 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 
 **Síntoma**: al cambiar el % de comisión o la tasa, el pendiente de un creador cambia sobre ventas ya hechas.
 **Regla**: H (total) y J (pendiente) de "Descuentos" son saldos: solo los suma `sumarComisionCreador` en cada venta y los baja Registrar pago. Nunca volver a calcularlos como D × % ÷ tasa. Si se cambia el % y hay que aplicarlo a ventas pasadas, usar `pasarVentasAnterioresAlPorcentaje` (venta por venta, cada una con su tasa).
+
+## 10. Bot de Railway: `BlockingIOError: [Errno 11] Resource temporarily unavailable`
+
+**Síntoma**: todas las recargas de Free Fire caen en "errores"; el log del bot muestra ese error al abrir Playwright (`async_playwright()`).
+**Causa**: el contenedor se quedaba sin procesos: Chromium y su Playwright se abrían en cada canje, sin init que recogiera los procesos terminados (zombis) y con canjes en paralelo.
+**Regla** (repo `bot-levelup`): `tini` como ENTRYPOINT en el Dockerfile, un solo Chromium reutilizado (contexto nuevo por canje, cerrado en `finally`), un canje a la vez (`asyncio.Semaphore(1)`) y 503 si el navegador no abre (Vercel lo trata como "no procesado" y devuelve los pines). Mientras el bot falle, usar el modo manual de recargas.gs (menú "🖐️ Recargas Free Fire").
