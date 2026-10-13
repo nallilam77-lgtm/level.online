@@ -801,6 +801,102 @@ function recalcularComisiones() {
   }
 }
 
+// ==========================================
+// ♻️ VENTAS ANTERIORES AL % ACTUAL (se ejecuta una vez desde el menú ⭐ Creadores)
+// Al pasar a PORCENTAJE_CREADOR, lo ya ganado seguía con el % de su nivel de entonces. Esto
+// recalcula cada venta de "movimientos_descuentos" con el % actual y la tasa DE ESA VENTA
+// (sin tasa guardada: la de hoy), corrige F-H de cada movimiento y deja en cada creador:
+//   H = suma de todas sus ventas + ventas de D que no están en movimientos (a la tasa de hoy)
+//   J = H - lo ya pagado ("pagos_creadores"), nunca negativo. L queda vacía (ya está incluida).
+// Una sola vez por porcentaje (propiedad "retroactivo_<%>"): repetirla no suma de nuevo.
+// ==========================================
+function pasarVentasAnterioresAlPorcentaje() {
+  var ui = SpreadsheetApp.getUi();
+  var props = PropertiesService.getScriptProperties();
+  var clave = "retroactivo_" + PORCENTAJE_CREADOR;
+  if (props.getProperty(clave)) {
+    ui.alert("Las ventas anteriores ya se pasaron al " + PORCENTAJE_CREADOR + " % el " + props.getProperty(clave) + ".");
+    return;
+  }
+  var tasaHoy = leerTasaUsd();
+  if (!tasaHoy) {
+    ui.alert("Falta la tasa del dólar en la pestaña 'config', celda B1.");
+    return;
+  }
+  var respuesta = ui.alert("Ventas anteriores al " + PORCENTAJE_CREADOR + " %",
+    "Se recalculará lo ganado por cada creador con el " + PORCENTAJE_CREADOR + " % en TODAS sus ventas, " +
+    "cada una con la tasa de su día. Lo que ya les pagaste se descuenta del pendiente.\n\n¿Continuar?", ui.ButtonSet.YES_NO);
+  if (respuesta !== ui.Button.YES) return;
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    ui.alert("El sistema está procesando una recarga. Intenta de nuevo en unos segundos.");
+    return;
+  }
+  var resumen = [];
+  try {
+    var hoja = obtenerHoja(HOJA_DESCUENTOS);
+    var creadores = {};
+    leerFilasDescuentos(hoja).forEach(function (fila) {
+      if (fila.codigo && fila.creador) creadores[fila.codigo.toUpperCase()] = { fila: fila, totalUsd: 0, ventasBs: 0, pagadoUsd: 0 };
+    });
+
+    // 1) Cada venta con el % actual y su propia tasa
+    var hojaMov = obtenerHoja(HOJA_MOVIMIENTOS_DESCUENTOS, true);
+    if (hojaMov && hojaMov.getLastRow() > 1) {
+      var rango = hojaMov.getRange(2, 1, hojaMov.getLastRow() - 1, 8);
+      var movs = rango.getValues();
+      var cambiados = [];
+      for (var i = 0; i < movs.length; i++) {
+        var c = creadores[String(movs[i][1]).trim().toUpperCase()];
+        var fg = [movs[i][5], movs[i][6], movs[i][7]];
+        if (c) {
+          var venta = limpiarMontoVES(movs[i][4]);
+          var tasa = limpiarMontoVES(movs[i][6]) || tasaHoy;
+          var comisionBs = redondear4(venta * PORCENTAJE_CREADOR / 100);
+          var comisionUsdVenta = redondear4(comisionBs / tasa);
+          c.ventasBs += venta;
+          c.totalUsd += comisionUsdVenta;
+          fg = [comisionBs, tasa, comisionUsdVenta];
+        }
+        cambiados.push(fg);
+      }
+      hojaMov.getRange(2, 6, cambiados.length, 3).setValues(cambiados);
+    }
+
+    // 2) Lo ya pagado a cada creador
+    var hojaPagos = obtenerHoja(HOJA_PAGOS_CREADORES, true);
+    if (hojaPagos && hojaPagos.getLastRow() > 1) {
+      hojaPagos.getRange(2, 1, hojaPagos.getLastRow() - 1, COLUMNAS_PAGOS_CREADORES.length).getValues().forEach(function (pago) {
+        var c = creadores[String(pago[1]).trim().toUpperCase()];
+        if (c) c.pagadoUsd += limpiarMontoVES(pago[6]);
+      });
+    }
+
+    // 3) Nuevos saldos H y J (y G al % actual)
+    asegurarColumnas(hoja, COLUMNA_POR_CONVERTIR);
+    Object.keys(creadores).forEach(function (codigo) {
+      var c = creadores[codigo];
+      var sinMovimientoBs = Math.max(0, c.fila.ventasBs - c.ventasBs);
+      var totalUsd = redondear4(c.totalUsd + sinMovimientoBs * PORCENTAJE_CREADOR / 100 / tasaHoy);
+      var pendienteUsd = redondear4(Math.max(0, totalUsd - c.pagadoUsd));
+      hoja.getRange(c.fila.numero, 8).setValue(totalUsd).setNumberFormat("0.00");
+      hoja.getRange(c.fila.numero, 10).setValue(pendienteUsd).setNumberFormat("0.00");
+      hoja.getRange(c.fila.numero, COLUMNA_POR_CONVERTIR).setValue("");
+      escribirPorcentajeCreador(hoja, c.fila);
+      resumen.push(c.fila.codigo + ": total " + formatoDolar(c.fila.comisionTotalUsd) + " → " + formatoDolar(totalUsd) +
+        ", por cobrar " + formatoDolar(c.fila.pendienteUsd) + " → " + formatoDolar(pendienteUsd));
+    });
+    props.setProperty("saldos_por_venta", props.getProperty("saldos_por_venta") || "retroactivo");
+    props.setProperty(clave, Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss"));
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  console.log("Ventas anteriores al " + PORCENTAJE_CREADOR + " %:\n" + resumen.join("\n"));
+  ui.alert("Listo: ventas anteriores al " + PORCENTAJE_CREADOR + " %", resumen.join("\n") || "No hay creadores.", ui.ButtonSet.OK);
+}
+
 // Disparador simple de Google Sheets: se ejecuta solo cuando TÚ editas la hoja a mano
 function onEdit(e) {
   try {
@@ -821,6 +917,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu("⭐ Creadores")
     .addItem("💵 Registrar pago del creador seleccionado", "registrarPagoCreador")
     .addItem("🔄 Actualizar % de comisión", "recalcularComisiones")
+    .addItem("♻️ Pasar ventas anteriores al % actual", "pasarVentasAnterioresAlPorcentaje")
     .addSeparator()
     .addItem("⏰ Activar recálculo automático cada hora", "activarRecalculoHorario")
     .addToUi();
