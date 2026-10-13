@@ -34,7 +34,8 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 ├── freefire.html / bloodstrike.html / roblox.html   Tiendas por juego
 ├── admin.html            Panel (lee Firestore)
 ├── js/lector-referencia.js   Lee la referencia del comprobante (Tesseract)
-├── js/descuento.js + css/descuento.css   Campo "código de descuento" (Free Fire y Blood Strike)
+├── js/descuento.js + css/descuento.css   Campo "código de descuento" (Free Fire, Blood Strike y Roblox)
+├── js/aviso-codigo.js + css/aviso-codigo.css   Burbuja "Paga 1,5 % menos con un código de creador" (encima del botón de WhatsApp; se oculta si el campo está a la vista, hay código aplicado o un modal/chat abierto; la X la cierra 3 días)
 └── terminos / privacidad / reembolsos.html + css/   Páginas legales
 ```
 

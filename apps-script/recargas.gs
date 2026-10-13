@@ -69,6 +69,8 @@ const HOJA_CONFIG = "config";
 const HOJA_MOVIMIENTOS_DESCUENTOS = "movimientos_descuentos";
 const COLUMNAS_MOVIMIENTOS_DESCUENTOS = ["fecha-hora", "código", "juego", "id jugador", "venta (Bs)", "comisión (Bs)", "tasa Bs/USD", "comisión (USD)", "id pedido"];
 // Registro de cada pago a un creador (lo crea el menú ⭐ Creadores > Registrar pago)
+// Ventas que muestra el panel de cada creador en "Últimos movimientos"
+const MOVIMIENTOS_PANEL = 10;
 const HOJA_PAGOS_CREADORES = "pagos_creadores";
 const COLUMNAS_PAGOS_CREADORES = ["fecha-hora", "código", "creador", "ventas liquidadas (Bs)", "comisión (%)", "tasa Bs/USD", "pagado (USD)"];
 
@@ -164,9 +166,10 @@ function guardarPagoMacroDroid(datos) {
 
   // Si MacroDroid manda la misma notificación dos veces, no se crea un segundo pago
   // (con dos filas iguales el cliente podría gastar el mismo pago dos veces).
-  var rows = hoja.getDataRange().getValues();
-  for (var i = rows.length - 1; i >= 1; i--) {
-    if (String(rows[i][2]).replace(/\s+/g, "") === ref) {
+  var ultima = hoja.getLastRow();
+  var referencias = ultima > 1 ? hoja.getRange(2, 3, ultima - 1, 1).getValues() : [];
+  for (var i = referencias.length - 1; i >= 0; i--) {
+    if (String(referencias[i][0]).replace(/\s+/g, "") === ref) {
       return responder({ status: "success", duplicado: true, message: "Pago ya registrado" });
     }
   }
@@ -636,14 +639,18 @@ function sumarUsoDescuento(codigo, montoCobrado, juego, idPedido, idJugador) {
 }
 
 // ¿Ya hay una venta de este pedido con este código en "movimientos_descuentos"?
-// El id del pedido está en I (o en D en las filas anteriores al cambio).
+// El id del pedido está en I (o en D en las filas anteriores al cambio). Se busca con TextFinder:
+// esto corre dentro del candado en cada venta con código y la pestaña no para de crecer.
 function pedidoYaAnotado(idPedido, codigo) {
   var hoja = obtenerHoja(HOJA_MOVIMIENTOS_DESCUENTOS, true);
-  if (!hoja || hoja.getLastRow() < 2) return false;
-  var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, COLUMNAS_MOVIMIENTOS_DESCUENTOS.length).getValues();
-  for (var i = filas.length - 1; i >= 0; i--) {
-    if (String(filas[i][1]).trim().toUpperCase() !== codigo.toUpperCase()) continue;
-    if (String(filas[i][8]) === idPedido || String(filas[i][3]) === idPedido) return true;
+  if (!idPedido || !hoja || hoja.getLastRow() < 2) return false;
+  var celdas = hoja.getRange(2, 1, hoja.getLastRow() - 1, COLUMNAS_MOVIMIENTOS_DESCUENTOS.length)
+    .createTextFinder(idPedido).matchEntireCell(true).matchCase(true).findAll();
+  for (var i = 0; i < celdas.length; i++) {
+    var columna = celdas[i].getColumn();
+    if (columna !== 4 && columna !== 9) continue;
+    var codigoFila = String(hoja.getRange(celdas[i].getRow(), 2).getValue()).trim().toUpperCase();
+    if (codigoFila === codigo.toUpperCase()) return true;
   }
   return false;
 }
@@ -1030,20 +1037,21 @@ function consultarCreador(datos) {
 
   // Últimos movimientos: la comisión guardada en cada venta (columna H de "movimientos_descuentos";
   // las ventas viejas sin ella se estiman con la columna F y la tasa actual).
+  // Se lee desde el final por bloques y se para al tener los 10 más recientes.
   var movimientos = [];
+  var codigoBuscado = fila.codigo.toUpperCase();
   var hoja = obtenerHoja(HOJA_MOVIMIENTOS_DESCUENTOS, true);
-  if (hoja && hoja.getLastRow() > 1) {
-    var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, COLUMNAS_MOVIMIENTOS_DESCUENTOS.length).getValues();
-    for (var i = 0; i < filas.length; i++) {
-      if (String(filas[i][1]).trim().toUpperCase() !== fila.codigo.toUpperCase()) continue;
-      var ventaBs = limpiarMontoVES(filas[i][4]);
+  if (hoja) {
+    recorrerDesdeElFinal(hoja, 8, function (mov) {
+      if (String(mov[1]).trim().toUpperCase() !== codigoBuscado) return false;
       movimientos.push({
-        fecha: filas[i][0] instanceof Date ? Utilities.formatDate(filas[i][0], "America/Caracas", "dd/MM/yyyy HH:mm") : String(filas[i][0]),
-        juego: String(filas[i][2]),
-        ventaBs: ventaBs,
-        comisionUsd: comisionDeMovimiento(filas[i], tasaActual)
+        fecha: mov[0] instanceof Date ? Utilities.formatDate(mov[0], "America/Caracas", "dd/MM/yyyy HH:mm") : String(mov[0]),
+        juego: String(mov[2]),
+        ventaBs: limpiarMontoVES(mov[4]),
+        comisionUsd: comisionDeMovimiento(mov, tasaActual)
       });
-    }
+      return movimientos.length >= MOVIMIENTOS_PANEL;
+    });
   }
 
   return responder({
@@ -1058,7 +1066,7 @@ function consultarCreador(datos) {
     retiroMinimoUsd: RETIRO_MINIMO_USD,
     faltaParaRetiroUsd: pendienteUsd === null ? null : redondear2(Math.max(0, RETIRO_MINIMO_USD - pendienteUsd)),
     tasa: tasaActual,
-    movimientos: movimientos.slice(-10).reverse()
+    movimientos: movimientos
   });
 }
 
@@ -1142,6 +1150,18 @@ function redondear4(n) {
 
 function responder(objeto) {
   return ContentService.createTextOutput(JSON.stringify(objeto)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Recorre una pestaña (sin la fila de títulos) de la última fila a la primera, por bloques de
+// 500 filas y con las primeras `columnas` columnas. alVisitar(fila) devuelve true para parar:
+// así no se lee la pestaña entera cuando lo buscado está al final (lo más reciente).
+function recorrerDesdeElFinal(hoja, columnas, alVisitar) {
+  var BLOQUE = 500;
+  for (var fin = hoja.getLastRow(); fin >= 2; fin -= BLOQUE) {
+    var inicio = Math.max(2, fin - BLOQUE + 1);
+    var filas = hoja.getRange(inicio, 1, fin - inicio + 1, columnas).getValues();
+    for (var i = filas.length - 1; i >= 0; i--) if (alVisitar(filas[i])) return;
+  }
 }
 
 // Acepta "pagos" o "Pagos". Con opcional=true devuelve null si no existe.
