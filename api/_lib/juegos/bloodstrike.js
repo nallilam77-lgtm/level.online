@@ -140,7 +140,7 @@ export async function recargar(req, res) {
     const idPedido = randomUUID();
     const comprobante = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
 
-    const { marcarReferencia, registrarEnHoja, informe } = crearUtilidadesPedido({
+    const { marcarReferencia, registrarEnHoja, informe, bloquearPago } = crearUtilidadesPedido({
       urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
       datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, noAplica: true },
     });
@@ -194,7 +194,8 @@ export async function recargar(req, res) {
       console.error(`❌ [${FASES.verificacion}] ${error.message}`);
       await registrarEnHoja(informe({
         fase: FASES.verificacion, motivo: `Apps Script de Blood Strike no respondió a verificar_pago: ${error.message}`,
-        estadoPago: `SIN CONFIRMAR: si la fila del pago (referencia terminada en ${referencia}) quedó "En proceso", cámbiala a "Verificado"`,
+        // "En proceso" ya impide reutilizarlo: NUNCA se devuelve a "Verificado"
+        estadoPago: `SIN CONFIRMAR: si la fila del pago (referencia terminada en ${referencia}) quedó "En proceso", márcala "Usado" y haz la recarga a mano`,
       }));
       if (error instanceof ErrorExterno) {
         return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si te dice que ya fue utilizado, escríbenos por WhatsApp." });
@@ -210,10 +211,14 @@ export async function recargar(req, res) {
 
     if (dataVerificacion.insuficiente) {
       await registrarFallo(clavesLimite);
-      await marcarReferencia("marcar_verificado", referenciaCompleta);
-
       const pagado = Number(dataVerificacion.montoPagado) || 0;
       const faltante = precioReal - pagado;
+      // El pago queda "Usado": el cliente completa la diferencia o pide la devolución por WhatsApp
+      await bloquearPago(referenciaCompleta, {
+        fase: FASES.verificacion, noAplica: true,
+        motivo: `Pago insuficiente: pagó ${formatearVES(pagado)} Bs y el paquete cuesta ${formatearVES(precioReal)} Bs (faltan ${formatearVES(faltante)} Bs)`,
+        queHacer: 'NO se recargó; el cliente completa la diferencia o pide la devolución por WhatsApp',
+      });
 
       return res.status(400).json({
         status: "error",
@@ -230,29 +235,24 @@ export async function recargar(req, res) {
     // ==========================================
     const offerIdFinal = CODIGOS_FAZER[numeroOro];
     if (!offerIdFinal) {
-      const liberado = await marcarReferencia("marcar_verificado", referenciaCompleta);
-      await registrarEnHoja(informe({
-        fase: FASES.apiBloodStrike, motivo: `El paquete "${paquete}" (${numeroOro} de oro) no tiene un offer_id de FazerCards configurado en CODIGOS_FAZER (api/_lib/juegos/bloodstrike.js). No se llamó a la API.`,
-        referenciaCompleta,
-        estadoPago: liberado ? 'LIBERADO (vuelve a "Verificado"): el cliente puede reintentar o elegir otro paquete' : `SIN CONFIRMAR: la referencia ${referenciaCompleta} puede seguir "En proceso"`,
-      }));
-      return res.status(400).json({ status: "error", message: "El paquete solicitado no existe en el catálogo del proveedor." });
+      await bloquearPago(referenciaCompleta, {
+        fase: FASES.apiBloodStrike, noAplica: true,
+        motivo: `El paquete "${paquete}" (${numeroOro} de oro) no tiene un offer_id de FazerCards configurado en CODIGOS_FAZER (api/_lib/juegos/bloodstrike.js). No se llamó a la API.`,
+        queHacer: 'la recarga NO se hizo; hacerla a mano o devolver el pago',
+      });
+      return res.status(202).json({ status: "error", message: "Fallo técnico con el proveedor. Tu pago está verificado y la recarga quedó en revisión." });
     }
 
     const orden = await crearOrdenFazer({ apiKey: FAZER_API_KEY, offerId: offerIdFinal, idJugador: id });
 
     if (orden.tipo === 'incierto') {
       console.error(`⚠️ [${FASES.apiBloodStrike}] ${orden.motivo} | REF: ${referenciaCompleta}`);
-      // Registrar el incidente y LUEGO bloquear el pago (nadie puede reutilizarlo mientras se revisa).
-      // EN ORDEN, no en paralelo: el Apps Script puede devolver el pago a "Verificado" al registrar
-      // el error; marcar_usado debe ser SIEMPRE la última escritura.
-      await registrarEnHoja(informe({
+      // Registrar el incidente y LUEGO bloquear el pago (en orden, dentro de bloquearPago)
+      await bloquearPago(referenciaCompleta, {
         fase: FASES.apiBloodStrike,
         motivo: `${orden.motivo} Oferta ${offerIdFinal}. ANTES DE REPETIR: buscar en el panel de FazerCards si existe una orden para el jugador ${id}.`,
-        referenciaCompleta,
-        estadoPago: 'BLOQUEADO (se marca "Usado" justo después de este registro) mientras se confirma la orden en FazerCards',
-      }));
-      await marcarReferencia("marcar_usado", referenciaCompleta);
+        queHacer: 'confirmar la orden en FazerCards antes de repetir la recarga',
+      });
 
       // El frontend reconoce "fallo técnico" y muestra el modal de "recarga en proceso"
       return res.status(202).json({
@@ -263,24 +263,26 @@ export async function recargar(req, res) {
 
     if (orden.tipo === 'rechazo') {
       console.error(`❌ [${FASES.apiBloodStrike}] ${orden.motivo}`);
-      // FazerCards confirmó que NO hizo la recarga: el pago se libera para que el cliente corrija su ID
-      await registrarEnHoja(informe({
-        fase: FASES.apiBloodStrike, motivo: `${orden.motivo} Oferta ${offerIdFinal}.`, referenciaCompleta,
-        estadoPago: 'LIBERADO (se devuelve a "Verificado" justo después de este registro): no se cobró nada en FazerCards',
-      }));
-      await marcarReferencia("marcar_verificado", referenciaCompleta);
+      // FazerCards confirmó que NO hizo la recarga (p. ej. ID incorrecto). El pago igual se bloquea:
+      // la recarga se rehace a mano con el ID correcto que el cliente envíe por WhatsApp.
+      await bloquearPago(referenciaCompleta, {
+        fase: FASES.apiBloodStrike, motivo: `${orden.motivo} Oferta ${offerIdFinal}.`,
+        queHacer: 'no se cobró nada en FazerCards; hacer la recarga a mano con el ID correcto o devolver el pago',
+      });
 
       return res.status(400).json({
         status: "error",
-        message: "El proveedor rechazó la recarga: " + orden.errorCliente + ". Tu pago no se descontó, verifica tu ID."
+        message: "El proveedor rechazó la recarga: " + orden.errorCliente + ". Tu pago quedó guardado: escríbenos por WhatsApp con tu referencia y tu ID correcto."
       });
     }
 
     // ==========================================
-    // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS (en paralelo)
+    // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS
     // ==========================================
-    const [pagoMarcado, finalizadoGuardado, usoDescuentoGuardado] = await Promise.all([
-      marcarReferencia("marcar_usado", referenciaCompleta),
+    // Primero el pago (no compite por el candado con registrar_finalizado); después, en paralelo,
+    // finalizados (hoja de Blood Strike) y el uso del código (hoja de Free Fire).
+    const pagoMarcado = await marcarReferencia("marcar_usado", referenciaCompleta);
+    const [finalizadoGuardado, usoDescuentoGuardado] = await Promise.all([
       registrarEnHoja({
         accion: "registrar_finalizado",
         idJugador: id,

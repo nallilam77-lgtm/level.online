@@ -15,6 +15,16 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 **Síntoma**: tras un fallo del bot, el pago queda en "Verificado" y la referencia se puede reutilizar.
 **Regla**: las llamadas que cambian el estado del pago van **en orden** (`await` una tras otra), nunca con `Promise.all`.
 
+## 2b. Tomar `{status:"error"}` de Apps Script como éxito
+
+**Síntoma**: recargas en "finalizados" cuyo pago sigue "En proceso"/"Verificado" y sin aviso en "errores".
+**Causa**: `marcar_usado` y `registrar_finalizado` iban en paralelo y compiten por el candado de recargas.gs (8 s); el perdedor recibía `{status:"error", ocupado:true}` con HTTP 200 y `marcarReferencia` lo daba por bueno.
+**Regla**: `marcarReferencia`/`registrarEnHoja` (`_lib/recarga-comun.js`) solo cuentan como éxito lo que no trae `status:"error"` y repiten si viene `ocupado`. Las llamadas a recargas.gs del cierre van en orden. Reparar los ya afectados: menú "🖐️ Recargas Free Fire" → 🧹 Marcar como Usado los pagos ya finalizados.
+
+## 2c. Devolver un pago a "Verificado"
+
+**Regla** (desde 2026-10-13): ningún error lo libera, ni pago insuficiente ni rechazo del proveedor. Siempre `bloquearPago` (anota en "errores" y marca "Usado"); el cliente sigue por WhatsApp. No volver a añadir `marcar_verificado`/`liberar_pedido`.
+
 ## 3. 401 del bot de Railway
 
 **Síntoma**: `El bot rechazó la autenticación (HTTP 401)`.

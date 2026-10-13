@@ -54,9 +54,9 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 1. Valida entrada y límite de fallos (`limitador.js`).
 2. `obtener_precios` (caché) → precio real del paquete (nunca el del cliente).
 3. `verificar_pago` (referencia + monto + `idPedido`) — idempotente.
-4. `obtener_codigo` → pines del inventario — idempotente. Si no hay pines del paquete (o no existe su columna), con `manualSiNoHay` recargas.gs anota el pedido en la pestaña **"sin_codigo"** (recarga manual, casilla "¿hecha?") y responde `{manual:true}`: Vercel salta el bot, marca el pago "Usado", lo anota en finalizados y al cliente le responde éxito. Si Vercel no recibe esa respuesta, `devolver_codigos` anula la fila (salvo que ya esté marcada como hecha) y el pago se libera. Interruptor en el menú de la hoja "🖐️ Recargas Free Fire" (propiedad `MODO_RECARGA_FF`): "manual" (o sin elegir) manda TODOS los pedidos a "sin_codigo" aunque haya pines; "automatico" usa los pines.
+4. `obtener_codigo` → pines del inventario — idempotente. Si no hay pines del paquete (o no existe su columna), con `manualSiNoHay` recargas.gs anota el pedido en la pestaña **"sin_codigo"** (recarga manual, casilla "¿hecha?") y responde `{manual:true}`: Vercel salta el bot, marca el pago "Usado", lo anota en finalizados y al cliente le responde éxito. Si Vercel no recibe esa respuesta, la fila se queda en "sin_codigo" y el pago se bloquea ("Usado"). Interruptor en el menú de la hoja "🖐️ Recargas Free Fire" (propiedad `MODO_RECARGA_FF`): "manual" (o sin elegir) manda TODOS los pedidos a "sin_codigo" aunque haya pines; "automatico" usa los pines.
 5. POST al bot de Railway `/canjear` (`x-secret-token`). Resultado: ok / fallo_bot / no_procesado / incierto.
-6. Si falla: `devolver_codigos` cuando es seguro, `registrar_error` con informe, y en orden `marcar_usado`/`marcar_verificado`.
+6. Si falla (cualquier error con el pago ya encontrado, también pago insuficiente): `devolver_codigos` cuando es seguro, y `bloquearPago` (`_lib/recarga-comun.js`): `registrar_error` y después `marcar_usado`. **Un pago nunca vuelve a "Verificado"** (recargas.gs ya no tiene `liberar_pedido` ni `marcar_verificado`; si `verificar_pago` no responde se usa `bloquear_pedido`). Un pedido de "sin_codigo" no se borra: se hace a mano.
 7. Éxito: `registrar_finalizado`.
 
 ## Servicios externos y variables

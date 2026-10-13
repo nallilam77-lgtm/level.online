@@ -28,6 +28,9 @@
 // la compra, el pedido se anota en la pestaña "sin_codigo" (id del jugador, paquete, referencia...)
 // para hacer la recarga a mano, y al cliente se le responde como una recarga exitosa.
 // Menú "🖐️ Recargas Free Fire" > "Todas manuales": TODOS los pedidos van a "sin_codigo" aunque haya pines.
+// Un pago encontrado NUNCA vuelve a "Verificado" desde Vercel: ante cualquier error queda "Usado"
+// y el pedido se anota en "errores" (por eso ya no existen liberar_pedido ni marcar_verificado).
+// Mismo menú > "🧹 Marcar como Usado...": repara pagos con recarga en "finalizados" que no quedaron "Usado".
 // =====================================================================
 
 const PROJECT_ID = "levelupstore-87d4d";
@@ -139,9 +142,8 @@ function doPost(e) {
       case "verificar_pago":       return conCandado(function () { return verificarPago(datos); });
       case "obtener_codigo":       return conCandado(function () { return obtenerCodigo(datos); });
       case "devolver_codigos":     return conCandado(function () { return devolverCodigos(datos); });
-      case "liberar_pedido":       return conCandado(function () { return liberarPedido(datos); });
+      case "bloquear_pedido":      return conCandado(function () { return bloquearPedido(datos); });
       case "marcar_usado":         return conCandado(function () { return marcarUsado(datos); });
-      case "marcar_verificado":    return conCandado(function () { return marcarVerificado(datos); });
       case "registrar_finalizado": return conCandado(function () { return registrarFinalizado(datos); });
       case "registrar_error":      return conCandado(function () { return registrarError(datos); });
       case "registrar_uso_descuento": return conCandado(function () { return registrarUsoDescuento(datos); });
@@ -382,26 +384,6 @@ function hojaSinCodigo() {
   return hoja;
 }
 
-// Vercel no recibió la respuesta de obtener_codigo y la anula: el pedido sale de "sin_codigo"
-// y el pago se libera para que el cliente reintente (si no, se haría dos veces).
-function anularSinCodigo(asignacion, idPedido, motivo) {
-  var hoja = obtenerHoja(HOJA_SIN_CODIGO, true);
-  if (hoja && hoja.getLastRow() > 1) {
-    var celdas = hoja.getRange(2, 8, hoja.getLastRow() - 1, 1).createTextFinder(idPedido).matchEntireCell(true).findAll();
-    // Si ya la hiciste a mano (casilla marcada) no se anula: el pago no debe liberarse
-    for (var j = 0; j < celdas.length; j++) {
-      if (hoja.getRange(celdas[j].getRow(), COLUMNAS_SIN_CODIGO.length).getValue() === true) {
-        return responder({ status: "error", message: "La recarga manual de este pedido ya está marcada como hecha" });
-      }
-    }
-    for (var i = celdas.length - 1; i >= 0; i--) hoja.deleteRow(celdas[i].getRow());
-  }
-  var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
-  hojaAsignaciones().getRange(asignacion.fila, 7).setValue(textoSeguro("ANULADO " + fechaHora + " - " + String(motivo || "sin motivo")));
-  SpreadsheetApp.flush();
-  return responder({ status: "success", pines: [] });
-}
-
 // ==========================================
 // 2b: DEVOLVER AL INVENTARIO LOS PINES DE UN PEDIDO (el bot nunca los recibió o no los procesó)
 // ==========================================
@@ -414,8 +396,9 @@ function devolverCodigos(datos) {
     // obtener_codigo nunca llegó a sacar pines para este pedido
     return responder({ status: "success", pines: [], sinAsignacion: true });
   }
-  if (asignacion.estado.indexOf(ESTADO_SIN_CODIGO) === 0) return anularSinCodigo(asignacion, idPedido, datos.motivo);
-  if (asignacion.estado.indexOf("ANULADO") === 0) return responder({ status: "success", pines: [] }); // idempotente
+  // Pedido en "sin_codigo": la fila se queda (el pago se bloquea, así que hay que hacerla a mano)
+  if (asignacion.estado.indexOf(ESTADO_SIN_CODIGO) === 0) return responder({ status: "success", pines: [], manual: true });
+  if (asignacion.estado.indexOf("ANULADO") === 0) return responder({ status: "success", pines: [] }); // idempotente (pedidos viejos)
   if (asignacion.estado.indexOf("DEVUELTOS") === 0) {
     return responder({ status: "success", pines: asignacion.pines, yaDevueltos: true }); // idempotente
   }
@@ -443,19 +426,18 @@ function devolverCodigos(datos) {
 }
 
 // ==========================================
-// 2c: LIBERAR EL PAGO DE UN PEDIDO QUE NO PUDO CONTINUAR (solo si este pedido lo bloqueó)
+// 2c: BLOQUEAR EL PAGO DE UN PEDIDO QUE NO PUDO CONTINUAR (solo si este pedido lo tomó)
+// Vercel no recibió la respuesta de verificar_pago: el pago que tomó este pedido pasa a "Usado"
+// y la recarga se hace a mano desde la pestaña "errores". Un pago NUNCA vuelve a "Verificado".
 // ==========================================
-function liberarPedido(datos) {
+function bloquearPedido(datos) {
   var idPedido = String(datos.idPedido || "");
   if (!idPedido) return responder({ status: "error", message: "Falta idPedido" });
   var props = PropertiesService.getScriptProperties();
   var referencia = props.getProperty("pedido_" + idPedido);
-  if (!referencia) return responder({ status: "success", liberado: false }); // nunca llegó a bloquear un pago
-  var liberado = false;
-  if (props.getProperty("proc_" + referencia) === idPedido) {
-    liberado = cambiarEstadoPago(referencia, "Verificado", "en proceso");
-  }
-  return responder({ status: "success", liberado: liberado, referencia: referencia });
+  if (!referencia) return responder({ status: "success", referencia: "" }); // nunca llegó a tomar un pago
+  if (props.getProperty("proc_" + referencia) === idPedido) cambiarEstadoPago(referencia, "Usado", "en proceso");
+  return responder({ status: "success", referencia: referencia });
 }
 
 // ==========================================
@@ -463,21 +445,6 @@ function liberarPedido(datos) {
 // ==========================================
 function marcarUsado(datos) {
   var cambiado = cambiarEstadoPago(datos.referencia, "Usado", null);
-  return responder({ status: "success", cambiado: cambiado });
-}
-
-// ==========================================
-// 4: DEVOLVER A VERIFICADO (error sin códigos, pago insuficiente...)
-// ==========================================
-function marcarVerificado(datos) {
-  // Solo libera pagos que estaban "En proceso": nunca revive un pago "Usado".
-  // Si otro pedido es quien lo tiene bloqueado, tampoco lo libera.
-  var referencia = String(datos.referencia || "").replace(/\s+/g, "");
-  var duenio = PropertiesService.getScriptProperties().getProperty("proc_" + referencia);
-  if (datos.idPedido && duenio && duenio !== String(datos.idPedido)) {
-    return responder({ status: "success", cambiado: false, message: "El pago lo procesa otro pedido" });
-  }
-  var cambiado = cambiarEstadoPago(referencia, "Verificado", "en proceso");
   return responder({ status: "success", cambiado: cambiado });
 }
 
@@ -585,7 +552,7 @@ function registrarError(datos) {
   // YA NO cambia el estado del pago. Antes lo devolvía a "Verificado", y si Vercel marcaba
   // "Usado" al mismo tiempo, el pago podía quedar libre para usarse otra vez tras un fallo
   // del bot (con pines quizá ya canjeados). Vercel decide el estado final después de
-  // registrar el error: marcar_usado (bloquear para revisión) o marcar_verificado (liberar).
+  // registrar el error: siempre marcar_usado (un pago nunca vuelve a "Verificado").
   return responder({ status: "success", message: "Error guardado correctamente y códigos respaldados" });
 }
 
@@ -1028,6 +995,7 @@ function onOpen() {
     .addItem("⚡ Automáticas con los pines", "activarModoAutomatico")
     .addSeparator()
     .addItem("❓ Ver modo actual", "verModoRecarga")
+    .addItem("🧹 Marcar como Usado los pagos ya finalizados", "marcarUsadosLosFinalizados")
     .addToUi();
   SpreadsheetApp.getUi().createMenu("⭐ Creadores")
     .addItem("💵 Registrar pago del creador seleccionado", "registrarPagoCreador")
@@ -1378,9 +1346,9 @@ function limpiarMontoVES(valor) {
   return parseFloat(m) || 0;
 }
 
-// Ejecutar a mano desde el editor si quedaron pagos trabados en "En proceso".
-// Toma el candado para no liberar un pago que se está procesando justo ahora.
-function liberarPagosAtascados() {
+// Ejecutar a mano desde el editor si quedaron pagos trabados en "En proceso": pasan a "Usado"
+// (nunca a "Verificado", para que nadie los gaste dos veces). Revisa "errores" para entregar esas recargas.
+function bloquearPagosAtascados() {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -1389,15 +1357,71 @@ function liberarPagosAtascados() {
     for (var i = 1; i < rows.length; i++) {
       if (String(rows[i][4]).trim().toLowerCase() === "en proceso") {
         var ref = String(rows[i][2]).replace(/\s+/g, "");
-        hoja.getRange(i + 1, 5).setValue("Verificado");
+        hoja.getRange(i + 1, 5).setValue("Usado");
         olvidarPedidoDePago(ref);
-        actualizarEstadoFirebase(ref, "Verificado");
+        actualizarEstadoFirebase(ref, "Usado");
       }
     }
     SpreadsheetApp.flush();
   } finally {
     lock.releaseLock();
   }
+}
+
+// Menú "🖐️ Recargas Free Fire" > "🧹 Marcar como Usado...": repara los pagos cuya recarga está en
+// "finalizados" pero que siguen "En proceso" o "Verificado" (antes Vercel podía no marcarlos si el
+// candado estaba ocupado). Pide confirmación con la lista y toma el candado.
+function marcarUsadosLosFinalizados() {
+  var ui = SpreadsheetApp.getUi();
+  var hojaFin = obtenerHoja("finalizados", true);
+  if (!hojaFin || hojaFin.getLastRow() < 2) { ui.alert("La pestaña 'finalizados' está vacía."); return; }
+  var finalizadas = {};
+  hojaFin.getRange(2, 4, hojaFin.getLastRow() - 1, 1).getValues().forEach(function (f) {
+    var ref = String(f[0]).replace(/\s+/g, "");
+    if (ref) finalizadas[ref] = true;
+  });
+
+  var hoja = obtenerHoja("pagos");
+  // Fila de "pagos" (1, 2...) -> referencia, si su recarga está en "finalizados" y el pago no está "Usado"
+  var sinMarcar = function () {
+    var rows = hoja.getDataRange().getValues();
+    var lista = [];
+    for (var i = 1; i < rows.length; i++) {
+      var ref = String(rows[i][2]).replace(/\s+/g, "");
+      var estado = String(rows[i][4]).trim().toLowerCase();
+      if (ref && finalizadas[ref] && (estado === "en proceso" || estado === "verificado" || estado === "")) {
+        lista.push({ fila: i + 1, ref: ref, estado: String(rows[i][4]).trim() || "(vacío)" });
+      }
+    }
+    return lista;
+  };
+
+  // La confirmación se pide SIN el candado: mientras decides, las recargas siguen funcionando
+  var pendientes = sinMarcar();
+  if (!pendientes.length) { ui.alert("Todo en orden: no hay pagos finalizados sin marcar como Usado."); return; }
+  var lista = pendientes.map(function (p) { return "Fila " + p.fila + ": " + p.ref + " (" + p.estado + ")"; });
+  var respuesta = ui.alert("Pagos finalizados sin marcar", "Se marcarán como \"Usado\":\n\n" +
+    lista.slice(0, 40).join("\n") + (lista.length > 40 ? "\n... y " + (lista.length - 40) + " más" : "") +
+    "\n\n¿Continuar?", ui.ButtonSet.YES_NO);
+  if (respuesta !== ui.Button.YES) return;
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { ui.alert("El sistema está procesando una recarga. Intenta de nuevo en unos segundos."); return; }
+  var reparadas = [];
+  try {
+    // Se vuelve a leer dentro del candado: una fila pudo cambiar o moverse mientras confirmabas
+    sinMarcar().forEach(function (p) {
+      hoja.getRange(p.fila, 5).setValue("Usado");
+      olvidarPedidoDePago(p.ref);
+      actualizarEstadoFirebase(p.ref, "Usado");
+      reparadas.push(p.ref);
+    });
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  console.log("Pagos finalizados marcados como Usado: " + reparadas.join(", "));
+  ui.alert("Listo: " + reparadas.length + " pago(s) marcados como \"Usado\".");
 }
 
 function forzarPermisos() {

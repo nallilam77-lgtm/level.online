@@ -10,6 +10,7 @@ import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con fallo del bot:
 // precios 8 + verificar 32 + códigos 32 + bot 45 + devolver pines 15 + registrar 12 + marcar 12 = 156 s
+// Peor caso con éxito: precios 12 + verificar 32 + códigos 32 + bot 45 + marcar 12 + finalizado 12 + aviso 12 = 157 s
 const TIEMPOS = {
   // verificar_pago y obtener_codigo: hasta 3 intentos de 15 s dentro de 32 s
   idempotente: { tiempoMs: 32000, intentoMs: 15000, reintentos: 2, reintentarTrasTimeout: true },
@@ -219,7 +220,7 @@ export async function recargar(req, res) {
     const idPedido = randomUUID();
     const comprobante = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
 
-    const { marcarReferencia, registrarEnHoja, informe } = crearUtilidadesPedido({
+    const { marcarReferencia, registrarEnHoja, informe, bloquearPago } = crearUtilidadesPedido({
       urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
       datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante },
     });
@@ -272,22 +273,25 @@ export async function recargar(req, res) {
       dataVerificacion = await llamarScript(URL_GOOGLE_SCRIPT,
         { accion: "verificar_pago", referencia: referencia, monto: precioReal, idPedido }, opcionesCriticas);
     } catch (error) {
-      // El pago pudo quedar "En proceso" en la hoja: con v2 se libera solo este pedido
-      const liberacion = scriptV2
-        ? await llamarScript(URL_GOOGLE_SCRIPT, { accion: "liberar_pedido", idPedido }, { reintentos: 2, tiempoMs: TIEMPOS.incidente, reintentarTrasTimeout: true }).catch(() => null)
+      // El pago pudo quedar "En proceso" en la hoja: NUNCA se libera, se marca "Usado" (bloquear_pedido
+      // solo toca el pago que bloqueó ESTE pedido) y la recarga pasa a revisión manual.
+      const bloqueo = scriptV2
+        ? await llamarScript(URL_GOOGLE_SCRIPT, { accion: "bloquear_pedido", idPedido }, { reintentos: 2, tiempoMs: TIEMPOS.incidente, reintentarTrasTimeout: true }).catch(() => null)
         : null;
-      let estadoPago = `SIN CONFIRMAR: si la fila del pago (referencia terminada en ${referencia}) quedó "En proceso", cámbiala a "Verificado" o ejecuta liberarPagosAtascados`;
-      if (liberacion?.status === 'success') {
-        estadoPago = liberacion.liberado
-          ? `LIBERADO (vuelve a "Verificado", referencia ${liberacion.referencia}): el cliente puede reintentar con la misma referencia`
-          : 'SIN CAMBIOS: este pedido no llegó a bloquear ningún pago; el cliente puede reintentar';
+      const sinBloquearNada = bloqueo?.status === 'success' && !bloqueo.referencia;
+      let estadoPago = `SIN CONFIRMAR: si la fila del pago (referencia terminada en ${referencia}) quedó "En proceso", márcala "Usado" y haz la recarga a mano`;
+      if (bloqueo?.status === 'success') {
+        estadoPago = sinBloquearNada
+          ? 'SIN CAMBIOS: este pedido no llegó a tomar ningún pago; el cliente puede reintentar'
+          : `BLOQUEADO ("Usado", referencia ${bloqueo.referencia}): la recarga NO se entregó; hacerla a mano`;
       }
       console.error(`❌ [${FASES.verificacion}] ${error.message}`);
       await registrarEnHoja(informe({ fase: FASES.verificacion, motivo: `Apps Script no respondió a verificar_pago: ${error.message}`, sinPines: true, estadoPago }));
-      if (error instanceof ErrorExterno) {
-        return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si te dice que ya fue utilizado, escríbenos por WhatsApp." });
+      if (sinBloquearNada) {
+        return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo." });
       }
-      throw error;
+      // "fallo técnico": la página muestra el modal de "recarga en revisión"
+      return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Si tu pago es válido, quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tu referencia." });
     }
 
     if (!dataVerificacion || !dataVerificacion.encontrado) {
@@ -298,10 +302,14 @@ export async function recargar(req, res) {
 
     if (dataVerificacion.insuficiente) {
       await registrarFallo(clavesLimite);
-      await marcarReferencia("marcar_verificado", referenciaCompleta);
-
       const pagado = Number(dataVerificacion.montoPagado) || 0;
       const faltante = precioReal - pagado;
+      // El pago queda "Usado": el cliente completa la diferencia o pide la devolución por WhatsApp
+      await bloquearPago(referenciaCompleta, {
+        fase: FASES.verificacion, sinPines: true,
+        motivo: `Pago insuficiente: pagó ${formatearVES(pagado)} Bs y el paquete cuesta ${formatearVES(precioReal)} Bs (faltan ${formatearVES(faltante)} Bs)`,
+        queHacer: 'NO se recargó; el cliente completa la diferencia o pide la devolución por WhatsApp',
+      });
 
       return res.status(400).json({
         status: "error",
@@ -330,16 +338,17 @@ export async function recargar(req, res) {
       // Con v2 sabemos exactamente qué pines se asignaron a este pedido: como el bot nunca los
       // recibió, se devuelven al inventario. Sin v2 no hay forma de saberlo.
       let detallePines;
-      let devolucionConfirmada = false;
+      let queHacer = 'la recarga NO se entregó; hacerla a mano';
       if (scriptV2) {
         const devolucion = await llamarScript(URL_GOOGLE_SCRIPT,
           { accion: "devolver_codigos", idPedido, motivo: `obtener_codigo sin respuesta: ${error.message}` }, TIEMPOS.devolver)
           .catch((e) => ({ status: 'error', message: e.message }));
         if (devolucion?.status === 'success') {
-          devolucionConfirmada = true;
           detallePines = devolucion.pines?.length
             ? { pinesNoUsados: devolucion.pines, estadoNoUsados: ESTADO_PINES.devueltos }
             : { sinPines: true };
+          // El pedido se quedó en "sin_codigo": hacerlo desde ahí
+          if (devolucion.manual) queHacer = 'el pedido está en la pestaña "sin_codigo": hacer la recarga a mano desde ahí';
         } else {
           detallePines = { pinesNoUsados: [`consultar la pestaña "asignaciones_pines", pedido ${idPedido}`], estadoNoUsados: `${ESTADO_PINES.noDevueltos} (Apps Script tampoco respondió a la devolución: ${devolucion?.message})` };
         }
@@ -347,24 +356,8 @@ export async function recargar(req, res) {
         detallePines = { pinesNoUsados: ['desconocidos'], estadoNoUsados: 'NO SE PUEDE SABER: el Apps Script instalado no registra asignaciones de pines; actualiza a recargas.gs v2' };
       }
 
-      if (devolucionConfirmada) {
-        // Nada se entregó y ningún pin quedó fuera del inventario: el cliente puede reintentar
-        const liberado = await marcarReferencia("marcar_verificado", referenciaCompleta);
-        await registrarEnHoja(informe({
-          fase: FASES.codigos, motivo: `Apps Script no respondió a obtener_codigo: ${error.message}`, referenciaCompleta, ...detallePines,
-          estadoPago: liberado ? 'LIBERADO (vuelve a "Verificado"): el cliente puede reintentar con la misma referencia' : `SIN CONFIRMAR: no se pudo devolver a "Verificado"; la referencia ${referenciaCompleta} puede seguir "En proceso"`,
-        }));
-        return res.status(503).json({ status: "error", message: "No pudimos completar tu recarga en este momento. Tu pago NO se usó: intenta de nuevo en unos minutos." });
-      }
-
-      // No se sabe si salieron pines: se bloquea el pago y pasa a revisión manual.
-      // EN ORDEN: registrar_error primero (los Apps Script anteriores devuelven el pago a
-      // "Verificado" al registrar) y marcar_usado al final para que el pago quede bloqueado.
-      await registrarEnHoja(informe({
-        fase: FASES.codigos, motivo: `Apps Script no respondió a obtener_codigo: ${error.message}`, referenciaCompleta, ...detallePines,
-        estadoPago: 'BLOQUEADO (se marca "Usado" justo después de este registro): la recarga NO se entregó; completarla manualmente',
-      }));
-      await marcarReferencia("marcar_usado", referenciaCompleta);
+      // El pago NUNCA se libera: se bloquea y la recarga pasa a revisión manual
+      await bloquearPago(referenciaCompleta, { fase: FASES.codigos, motivo: `Apps Script no respondió a obtener_codigo: ${error.message}`, ...detallePines, queHacer });
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago está verificado y la recarga quedó en revisión." });
     }
 
@@ -373,14 +366,13 @@ export async function recargar(req, res) {
     if (manual) console.info(`📝 Sin pines de ${numeroDiamantes}: pedido ${idPedido} (ID ${id}) anotado en "sin_codigo" para recarga manual`);
 
     if (!manual && (!dataCodigos || dataCodigos.status !== "success" || !Array.isArray(dataCodigos.pines) || !dataCodigos.pines.length)) {
-      // Apps Script anterior (sin "sin_codigo") o error: no salió ningún pin, el pago se libera
-      const motivo = `Apps Script no entregó códigos: ${dataCodigos?.message || 'respuesta sin pines'}`;
-      const liberado = await marcarReferencia("marcar_verificado", referenciaCompleta);
-      await registrarEnHoja(informe({
-        fase: FASES.codigos, motivo, referenciaCompleta, sinPines: true,
-        estadoPago: liberado ? 'LIBERADO (vuelve a "Verificado"): el cliente puede reintentar cuando haya stock' : `SIN CONFIRMAR: no se pudo devolver a "Verificado"; la referencia ${referenciaCompleta} puede seguir "En proceso"`,
-      }));
-      return res.status(400).json({ status: "error", message: dataCodigos?.message || "No hay códigos disponibles para este paquete." });
+      // Apps Script anterior (sin "sin_codigo") o error: no salió ningún pin; el pago se bloquea igual
+      await bloquearPago(referenciaCompleta, {
+        fase: FASES.codigos, sinPines: true,
+        motivo: `Apps Script no entregó códigos: ${dataCodigos?.message || 'respuesta sin pines'}`,
+        queHacer: 'la recarga NO se entregó; hacerla a mano',
+      });
+      return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago está verificado y la recarga quedó en revisión." });
     }
 
     const pinesExtraidos = manual ? [] : dataCodigos.pines;
@@ -410,14 +402,11 @@ export async function recargar(req, res) {
         detallePines = { pinesNoUsados: pinesExtraidos, estadoNoUsados: ESTADO_PINES.inciertos };
       }
 
-      // 📝 ANOTAR EL INCIDENTE Y LUEGO 🔥 QUEMAR EL PAGO.
-      // EN ORDEN, no en paralelo: los Apps Script anteriores devuelven el pago a "Verificado" al
-      // registrar el error; marcar_usado debe ser SIEMPRE la última escritura.
-      await registrarEnHoja(informe({
-        fase: FASES.botFreeFire, motivo: bot.motivo, referenciaCompleta, ...detallePines,
-        estadoPago: 'BLOQUEADO (se marca "Usado" justo después de este registro): la recarga NO se completó; entregarla manualmente al jugador',
-      }));
-      await marcarReferencia("marcar_usado", referenciaCompleta);
+      // 📝 ANOTAR EL INCIDENTE Y LUEGO 🔥 QUEMAR EL PAGO (en orden, dentro de bloquearPago)
+      await bloquearPago(referenciaCompleta, {
+        fase: FASES.botFreeFire, motivo: bot.motivo, ...detallePines,
+        queHacer: 'la recarga NO se completó; entregarla manualmente al jugador',
+      });
 
       // El mensaje contiene "fallo técnico": la página muestra el modal de "recarga en proceso"
       return res.status(400).json({
@@ -427,23 +416,24 @@ export async function recargar(req, res) {
     }
 
     // ==========================================
-    // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS (en paralelo)
+    // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS (en orden)
     // ==========================================
     // La recarga YA se hizo: aunque Apps Script falle aquí, al cliente se le responde éxito.
-    const [pagoMarcado, finalizadoGuardado] = await Promise.all([
-      marcarReferencia("marcar_usado", referenciaCompleta),
-      registrarEnHoja({
-        accion: "registrar_finalizado",
-        idJugador: id,
-        paquete: paquete,
-        referencias: referenciaCompleta,
-        codigosUsados: manual ? 'SIN CÓDIGO: recarga manual pendiente (pestaña "sin_codigo")' : pinesExtraidos.join(" | "),
-        urlImagen: comprobante,
-        idPedido,
-        // recargas.gs suma +1 uso y el monto cobrado al código en la pestaña "Descuentos"
-        ...(desc && { codigoDescuento: desc.codigo, montoCobrado: precioReal })
-      })
-    ]);
+    // Una tras otra, NO en paralelo: las dos esperan el mismo candado de recargas.gs y, cuando
+    // registrar_finalizado (con código de descuento) lo retenía, marcar_usado se quedaba "ocupado"
+    // y el pago no pasaba a "Usado" aunque la recarga quedara en finalizados.
+    const pagoMarcado = await marcarReferencia("marcar_usado", referenciaCompleta);
+    const finalizadoGuardado = await registrarEnHoja({
+      accion: "registrar_finalizado",
+      idJugador: id,
+      paquete: paquete,
+      referencias: referenciaCompleta,
+      codigosUsados: manual ? 'SIN CÓDIGO: recarga manual pendiente (pestaña "sin_codigo")' : pinesExtraidos.join(" | "),
+      urlImagen: comprobante,
+      idPedido,
+      // recargas.gs suma +1 uso y el monto cobrado al código en la pestaña "Descuentos"
+      ...(desc && { codigoDescuento: desc.codigo, montoCobrado: precioReal })
+    });
     if (!pagoMarcado || !finalizadoGuardado) {
       const pendiente = [
         !pagoMarcado && 'marcar el pago como "Usado"',
