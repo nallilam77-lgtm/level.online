@@ -54,7 +54,7 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 1. Valida entrada y límite de fallos (`limitador.js`).
 2. `obtener_precios` (caché) → precio real del paquete (nunca el del cliente).
 3. `verificar_pago` (referencia + monto + `idPedido`) — idempotente.
-4. `obtener_codigo` → pines del inventario — idempotente.
+4. `obtener_codigo` → pines del inventario — idempotente. Si no hay pines del paquete (o no existe su columna), con `manualSiNoHay` recargas.gs anota el pedido en la pestaña **"sin_codigo"** (recarga manual, casilla "¿hecha?") y responde `{manual:true}`: Vercel salta el bot, marca el pago "Usado", lo anota en finalizados y al cliente le responde éxito. Si Vercel no recibe esa respuesta, `devolver_codigos` anula la fila (salvo que ya esté marcada como hecha) y el pago se libera.
 5. POST al bot de Railway `/canjear` (`x-secret-token`). Resultado: ok / fallo_bot / no_procesado / incierto.
 6. Si falla: `devolver_codigos` cuando es seguro, `registrar_error` con informe, y en orden `marcar_usado`/`marcar_verificado`.
 7. Éxito: `registrar_finalizado`.

@@ -23,6 +23,10 @@
 // Vercel consulta el código (validar_descuento), calcula el precio con descuento y, al terminar la
 // recarga, suma +1 uso y el monto cobrado a ese código (y la comisión de esa venta a H y J del creador):
 // Free Fire dentro de registrar_finalizado; Blood Strike con registrar_uso_descuento.
+//
+// Sin pines de un paquete: la tienda pide obtener_codigo con manualSiNoHay. En vez de rechazar
+// la compra, el pedido se anota en la pestaña "sin_codigo" (id del jugador, paquete, referencia...)
+// para hacer la recarga a mano, y al cliente se le responde como una recarga exitosa.
 // =====================================================================
 
 const PROJECT_ID = "levelupstore-87d4d";
@@ -40,6 +44,12 @@ const ESPERA_CANDADO_MS = 8000;
 // Pestaña de auditoría: qué pines se entregaron a cada pedido y qué pasó con ellos
 const HOJA_ASIGNACIONES = "asignaciones_pines";
 const COLUMNAS_ASIGNACIONES = ["fecha", "id pedido", "referencia", "columna", "n.º columna", "pines", "estado"];
+// Estado en "asignaciones_pines" de un pedido que pasó a "sin_codigo" (no salió ningún pin)
+const ESTADO_SIN_CODIGO = "SIN CÓDIGO";
+
+// Recargas pagadas que no tenían pines: se hacen a mano. Marca la casilla "¿hecha?" al terminar.
+const HOJA_SIN_CODIGO = "sin_codigo";
+const COLUMNAS_SIN_CODIGO = ["fecha-hora", "id jugador", "paquete", "referencia", "cobrado (Bs)", "comprobante", "código descuento", "id pedido", "¿hecha?"];
 
 // Ruleta: pestaña donde se anotan los ganadores (para entregar el premio) y máximo de pagos
 // con los mismos últimos 5 dígitos que se devuelven a Vercel
@@ -250,6 +260,9 @@ function obtenerCodigo(datos) {
   if (idPedido) {
     var previa = buscarAsignacion(idPedido);
     if (previa) {
+      if (previa.estado.indexOf(ESTADO_SIN_CODIGO) === 0) {
+        return responder({ status: "success", pines: [], manual: true, repetido: true });
+      }
       if (previa.estado.indexOf("ASIGNADOS") !== 0) {
         return responder({ status: "error", message: "Los pines de este pedido ya no están asignados (" + previa.estado + ")." });
       }
@@ -268,6 +281,7 @@ function obtenerCodigo(datos) {
     if (String(headers[h]).replace(/[^0-9]/g, "") === columnaBuscar) { colIndex = h + 1; break; }
   }
   if (!columnaBuscar || colIndex === -1) {
+    if (puedeIrASinCodigo(datos, idPedido)) return pasarASinCodigo(datos, idPedido, "no hay columna " + columnaBuscar + " en codigos");
     return responder({ status: "error", message: "Columna de códigos no configurada para " + columnaBuscar });
   }
 
@@ -282,6 +296,8 @@ function obtenerCodigo(datos) {
   }
 
   if (codigosAsignados.length < cantidadNecesaria) {
+    // No se saca ningún pin (con 220 y un solo pin de 110, ese pin se queda en el inventario)
+    if (puedeIrASinCodigo(datos, idPedido)) return pasarASinCodigo(datos, idPedido, "sin pines de " + columnaBuscar);
     return responder({ status: "error", message: "⚠️ ¡Nos quedamos sin stock! Faltan pines de " + columnaBuscar + " diamantes." });
   }
 
@@ -302,6 +318,66 @@ function obtenerCodigo(datos) {
   return responder({ status: "success", pines: pines });
 }
 
+// La tienda lo pide (manualSiNoHay) y el pedido trae su id: sin id no se podría evitar
+// anotarlo dos veces si Vercel repite la petición.
+function puedeIrASinCodigo(datos, idPedido) {
+  return datos.manualSiNoHay === true && /^[A-Za-z0-9-]{8,64}$/.test(idPedido) && /^\d{5,15}$/.test(String(datos.idJugador || ""));
+}
+
+// Anota el pedido en "sin_codigo" para hacerlo a mano y lo marca en "asignaciones_pines"
+// (así un reintento del mismo pedido no lo anota otra vez). Corre dentro del candado.
+function pasarASinCodigo(datos, idPedido, motivo) {
+  var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
+  var hoja = hojaSinCodigo();
+  hoja.appendRow([
+    fechaHora,
+    textoSeguro(datos.idJugador),
+    textoSeguro(datos.paquete || (String(datos.diamantes || "") + " diamantes")),
+    textoSeguro(datos.referencia || ""),
+    limpiarMontoVES(datos.montoCobrado),
+    textoSeguro(datos.comprobante || "Sin comprobante"),
+    textoSeguro(datos.codigoDescuento || ""),
+    idPedido,
+    false
+  ]);
+  hoja.getRange(hoja.getLastRow(), COLUMNAS_SIN_CODIGO.length).insertCheckboxes();
+  hojaAsignaciones().appendRow([fechaHora, idPedido, textoSeguro(datos.referencia || ""),
+    textoSeguro(motivo), "", "", ESTADO_SIN_CODIGO + " (recarga manual en la pestaña " + HOJA_SIN_CODIGO + ")"]);
+  SpreadsheetApp.flush();
+  return responder({ status: "success", pines: [], manual: true });
+}
+
+function hojaSinCodigo() {
+  var hoja = obtenerHoja(HOJA_SIN_CODIGO, true);
+  if (!hoja) {
+    hoja = SpreadsheetApp.getActiveSpreadsheet().insertSheet(HOJA_SIN_CODIGO, 0);
+    hoja.appendRow(COLUMNAS_SIN_CODIGO);
+    hoja.getRange(1, 1, 1, COLUMNAS_SIN_CODIGO.length).setFontWeight("bold");
+    hoja.setFrozenRows(1);
+  }
+  return hoja;
+}
+
+// Vercel no recibió la respuesta de obtener_codigo y la anula: el pedido sale de "sin_codigo"
+// y el pago se libera para que el cliente reintente (si no, se haría dos veces).
+function anularSinCodigo(asignacion, idPedido, motivo) {
+  var hoja = obtenerHoja(HOJA_SIN_CODIGO, true);
+  if (hoja && hoja.getLastRow() > 1) {
+    var celdas = hoja.getRange(2, 8, hoja.getLastRow() - 1, 1).createTextFinder(idPedido).matchEntireCell(true).findAll();
+    // Si ya la hiciste a mano (casilla marcada) no se anula: el pago no debe liberarse
+    for (var j = 0; j < celdas.length; j++) {
+      if (hoja.getRange(celdas[j].getRow(), COLUMNAS_SIN_CODIGO.length).getValue() === true) {
+        return responder({ status: "error", message: "La recarga manual de este pedido ya está marcada como hecha" });
+      }
+    }
+    for (var i = celdas.length - 1; i >= 0; i--) hoja.deleteRow(celdas[i].getRow());
+  }
+  var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
+  hojaAsignaciones().getRange(asignacion.fila, 7).setValue(textoSeguro("ANULADO " + fechaHora + " - " + String(motivo || "sin motivo")));
+  SpreadsheetApp.flush();
+  return responder({ status: "success", pines: [] });
+}
+
 // ==========================================
 // 2b: DEVOLVER AL INVENTARIO LOS PINES DE UN PEDIDO (el bot nunca los recibió o no los procesó)
 // ==========================================
@@ -314,6 +390,8 @@ function devolverCodigos(datos) {
     // obtener_codigo nunca llegó a sacar pines para este pedido
     return responder({ status: "success", pines: [], sinAsignacion: true });
   }
+  if (asignacion.estado.indexOf(ESTADO_SIN_CODIGO) === 0) return anularSinCodigo(asignacion, idPedido, datos.motivo);
+  if (asignacion.estado.indexOf("ANULADO") === 0) return responder({ status: "success", pines: [] }); // idempotente
   if (asignacion.estado.indexOf("DEVUELTOS") === 0) {
     return responder({ status: "success", pines: asignacion.pines, yaDevueltos: true }); // idempotente
   }

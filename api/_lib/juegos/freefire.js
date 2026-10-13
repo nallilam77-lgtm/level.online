@@ -318,8 +318,13 @@ export async function recargar(req, res) {
     // ==========================================
     let dataCodigos;
     try {
-      dataCodigos = await llamarScript(URL_GOOGLE_SCRIPT,
-        { accion: "obtener_codigo", diamantes: numeroDiamantes, idPedido, referencia: referenciaCompleta }, opcionesCriticas);
+      // manualSiNoHay: si no hay pines del paquete, recargas.gs anota el pedido en la pestaña
+      // "sin_codigo" para hacerlo a mano y responde { manual: true } (al cliente: recarga exitosa)
+      dataCodigos = await llamarScript(URL_GOOGLE_SCRIPT, {
+        accion: "obtener_codigo", diamantes: numeroDiamantes, idPedido, referencia: referenciaCompleta,
+        manualSiNoHay: true, idJugador: String(id), paquete: textoParaHoja(String(paquete)), montoCobrado: precioReal, comprobante,
+        ...(desc && { codigoDescuento: desc.codigo }),
+      }, opcionesCriticas);
     } catch (error) {
       console.error(`⚠️ [${FASES.codigos}] ${error.message} | REF: ${referenciaCompleta}`);
       // Con v2 sabemos exactamente qué pines se asignaron a este pedido: como el bot nunca los
@@ -363,8 +368,12 @@ export async function recargar(req, res) {
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago está verificado y la recarga quedó en revisión." });
     }
 
-    if (!dataCodigos || dataCodigos.status !== "success" || !Array.isArray(dataCodigos.pines) || !dataCodigos.pines.length) {
-      // Sin stock o columna sin configurar: no salió ningún pin, el pago se libera
+    // Sin pines: el pedido quedó en "sin_codigo" para hacerlo a mano; se cierra igual que una recarga
+    const manual = dataCodigos?.status === "success" && dataCodigos.manual === true;
+    if (manual) console.info(`📝 Sin pines de ${numeroDiamantes}: pedido ${idPedido} (ID ${id}) anotado en "sin_codigo" para recarga manual`);
+
+    if (!manual && (!dataCodigos || dataCodigos.status !== "success" || !Array.isArray(dataCodigos.pines) || !dataCodigos.pines.length)) {
+      // Apps Script anterior (sin "sin_codigo") o error: no salió ningún pin, el pago se libera
       const motivo = `Apps Script no entregó códigos: ${dataCodigos?.message || 'respuesta sin pines'}`;
       const liberado = await marcarReferencia("marcar_verificado", referenciaCompleta);
       await registrarEnHoja(informe({
@@ -374,12 +383,14 @@ export async function recargar(req, res) {
       return res.status(400).json({ status: "error", message: dataCodigos?.message || "No hay códigos disponibles para este paquete." });
     }
 
-    const pinesExtraidos = dataCodigos.pines;
+    const pinesExtraidos = manual ? [] : dataCodigos.pines;
 
     // ==========================================
-    // FASE 4: CANJE EN EL BOT DE RAILWAY
+    // FASE 4: CANJE EN EL BOT DE RAILWAY (no aplica a una recarga manual)
     // ==========================================
-    const bot = await canjearEnBot({ pines: pinesExtraidos, idJugador: id, secreto: RAILWAY_SECRET });
+    const bot = manual
+      ? { tipo: 'ok', usados: [] }
+      : await canjearEnBot({ pines: pinesExtraidos, idJugador: id, secreto: RAILWAY_SECRET });
 
     if (bot.tipo !== 'ok') {
       console.error(`❌ [${FASES.botFreeFire}] ${bot.motivo} | REF: ${referenciaCompleta}`);
@@ -426,7 +437,7 @@ export async function recargar(req, res) {
         idJugador: id,
         paquete: paquete,
         referencias: referenciaCompleta,
-        codigosUsados: pinesExtraidos.join(" | "),
+        codigosUsados: manual ? 'SIN CÓDIGO: recarga manual pendiente (pestaña "sin_codigo")' : pinesExtraidos.join(" | "),
         urlImagen: comprobante,
         idPedido,
         // recargas.gs suma +1 uso y el monto cobrado al código en la pestaña "Descuentos"
@@ -442,7 +453,9 @@ export async function recargar(req, res) {
       ].filter(Boolean).join(' y ');
       await registrarEnHoja(informe({
         fase: FASES.cierre,
-        motivo: `La recarga SÍ se entregó, pero Apps Script no respondió al cierre: falta ${pendiente}`,
+        motivo: manual
+          ? `Recarga MANUAL (anotada en "sin_codigo"), pero Apps Script no respondió al cierre: falta ${pendiente}`
+          : `La recarga SÍ se entregó, pero Apps Script no respondió al cierre: falta ${pendiente}`,
         referenciaCompleta, pinesUsados: bot.usados,
         estadoPago: pagoMarcado ? 'USADO (correcto)' : `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}`,
       }));
