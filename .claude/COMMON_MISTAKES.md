@@ -47,5 +47,5 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 
 ## 9. Recalcular la comisión de los creadores desde D
 
-**Síntoma**: al bajar de nivel (meta semanal) o al cambiar la tasa, el pendiente de un creador cambia sobre ventas ya hechas.
+**Síntoma**: al cambiar el % de comisión o la tasa, el pendiente de un creador cambia sobre ventas ya hechas.
 **Regla**: H (total) y J (pendiente) de "Descuentos" son saldos: solo los suma `sumarComisionCreador` en cada venta y los baja Registrar pago. Nunca volver a calcularlos como D × % ÷ tasa.

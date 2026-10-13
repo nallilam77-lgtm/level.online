@@ -22,7 +22,7 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 │   └── validacion.js     PAQUETE_VALIDO, textoParaHoja(), faltaConfiguracion()
 ├── juego.js              GET/POST ?juego=<freefire|bloodstrike|roblox>&accion=<precios|verificar|descuento> (30 s)
 ├── recargar.js           POST ?juego=<freefire|bloodstrike|roblox> (maxDuration 180)
-├── creadores.js          POST { codigo, pin } -> panel del creador (nivel, ventas, comisión, movimientos)
+├── creadores.js          POST { codigo, pin } -> panel del creador (ventas, comisión, movimientos)
 ├── subir-imagen.js       Comprobante de pago → Drive (límite 4 MB)
 ├── consultar-ordenes.js  Consulta de pedidos (página de inicio)
 ├── ruleta.js             Ruleta de la suerte (apps-script/ruleta.gs; reintenta: el giro es idempotente)
@@ -30,7 +30,7 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 apps-script/recargas.gs   Copia del Apps Script de recargas Free Fire (v2, con idPedido)
 public/                   Frontend estático; cada página lleva su CSS/JS en línea
 ├── index.html            Inicio + consultar órdenes + acceso al Panel de Creadores
-├── creadores.html + css/creadores.css   Panel de Creadores (niveles, reglas y consulta con código + PIN)
+├── creadores.html + css/creadores.css   Panel de Creadores (cómo ganas, reglas y consulta con código + PIN)
 ├── freefire.html / bloodstrike.html / roblox.html   Tiendas por juego
 ├── admin.html            Panel (lee Firestore)
 ├── js/lector-referencia.js   Lee la referencia del comprobante (Tesseract)
@@ -75,7 +75,7 @@ Detalle de cada variable: `.env.example`.
 
 ## Códigos de descuento y Panel de Creadores (hoja de Free Fire)
 
-- **Descuentos**: A código · B descuento en % (vacío en creadores = según nivel) · C usos · D dinero movido (Bs) · E creador (vacío = promo normal) · F PIN · G % actual (= descuento del cliente) · H comisión total (USD) · I liquidado (Bs, referencia) · J pendiente (USD) · K niveles bajados por meta semanal incumplida (0 = perdonar) · L comisión por convertir (Bs, ventas sin tasa). **Comisión por venta**: cada venta guarda su comisión (% del nivel y tasa de ese día) en "movimientos_descuentos" y la SUMA a H y J; H y J son saldos, no se recalculan (cambiar de nivel o de tasa no toca lo ganado). Registrar pago (menú ⭐ Creadores) deja J en 0; pagos en "pagos_creadores". Arranque: `iniciarSaldosPorVenta` fija una vez H/J con el cálculo anterior (propiedad `saldos_por_venta`).
+- **Descuentos**: A código · B descuento en % (solo promos; los de creador dan siempre `PORCENTAJE_CREADOR`) · C usos · D dinero movido (Bs) · E creador (vacío = promo normal) · F PIN · G % actual (= descuento del cliente) · H comisión total (USD) · I liquidado (Bs, referencia) · J pendiente (USD) · K sin uso (eran los niveles bajados) · L comisión por convertir (Bs, ventas sin tasa). **Comisión por venta**: cada venta guarda su comisión (% y tasa de ese día) en "movimientos_descuentos" y la SUMA a H y J; H y J son saldos, no se recalculan (cambiar el % o la tasa no toca lo ganado). Registrar pago (menú ⭐ Creadores) deja J en 0; pagos en "pagos_creadores". Arranque: `iniciarSaldosPorVenta` fija una vez H/J con el cálculo anterior (propiedad `saldos_por_venta`).
 - **movimientos_descuentos** (se crea sola): cada venta con código; historial de cada venta (el panel calcula la comisión con el % y la tasa actuales).
 - **config!B1**: tasa Bs por 1 USD (actualizarla a mano).
-- Niveles (`NIVELES_CREADOR` en `recargas.gs`): Aliado 0-99 usos 0,65 % (meta 5/semana) · Pro 100-249 1 % (15/semana) · Diamante 250+ 1,5 % (30/semana). El descuento del cliente = la comisión del creador. La meta semanal (lunes-domingo, Caracas) se cuenta en "movimientos_descuentos" y el panel la muestra (`semana`). Cada lunes `revisarMetasSemanales` (activador del menú ⭐ Creadores) revisa la semana anterior: no cumplió → K "Niveles bajados" +1; cumplió estando castigado → K −1. Nivel real = nivel por usos − K (mínimo Aliado); resultados en "revisiones_creadores". Solo se revisan semanas desde `INICIO_METAS_SEMANALES` (lunes 12/10/2026). "movimientos_descuentos": D = id del jugador, I = id del pedido (filas viejas: pedido en D). `sumarUsoDescuento` ignora un idPedido ya anotado (un reintento no duplica uso ni comisión); si el uso del código no se pudo anotar, el cierre de Free Fire/Blood Strike lo deja en la pestaña "errores" para hacerlo a mano. Si se cambian, actualizar también el texto de `creadores.html`.
+- Creadores (desde 2026-10-13): sin niveles, sin metas semanales y sin límite de creadores. `PORCENTAJE_CREADOR` = 1,5 % (descuento del cliente = comisión del creador) y `RETIRO_MINIMO_USD` = 1 en `recargas.gs`. `revisarMetasSemanales` quedó solo para borrar el activador viejo de los lunes. "movimientos_descuentos": D = id del jugador, I = id del pedido (filas viejas: pedido en D). `sumarUsoDescuento` ignora un idPedido ya anotado (un reintento no duplica uso ni comisión); si el uso del código no se pudo anotar, el cierre de Free Fire/Blood Strike lo deja en la pestaña "errores" para hacerlo a mano. Si se cambian, actualizar también el texto de `creadores.html`.

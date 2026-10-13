@@ -3,7 +3,7 @@ import { llamarScript, LECTURA_APPS_SCRIPT } from './_lib/externo.js';
 import { faltaConfiguracion } from './_lib/validacion.js';
 import { CODIGO_DESCUENTO_VALIDO, normalizarCodigoDescuento } from './_lib/descuentos.js';
 
-// Panel de creadores: POST { codigo, pin } -> nivel, ventas, comisión y últimos movimientos.
+// Panel de creadores: POST { codigo, pin } -> ventas, comisión y últimos movimientos.
 // Los datos viven en la hoja de Free Fire (pestañas "Descuentos" y "movimientos_descuentos",
 // acción consultar_creador de recargas.gs). El PIN protege las ganancias de cada creador:
 // los intentos fallidos se limitan por IP y por código (frena que se adivine el PIN).
@@ -53,12 +53,6 @@ export default async function handler(req, res) {
       status: "success",
       encontrado: true,
       codigo: String(datos.codigo),
-      nivel: { nombre: String(datos.nivel?.nombre || ''), descuento: numero(datos.nivel?.descuento), metaSemanal: numero(datos.nivel?.metaSemanal) },
-      siguienteNivel: datos.siguienteNivel
-        ? { nombre: String(datos.siguienteNivel.nombre), descuento: numero(datos.siguienteNivel.descuento), faltanUsos: numero(datos.siguienteNivel.faltanUsos) }
-        : null,
-      // Niveles perdidos por no cumplir la meta semanal (se recuperan cumpliéndola)
-      nivelesBajados: numero(datos.nivelesBajados),
       descuentoSeguidores: numero(datos.descuentoSeguidores),
       usos: numero(datos.usos),
       ventasBs: numero(datos.ventasBs),
@@ -68,10 +62,6 @@ export default async function handler(req, res) {
       retiroMinimoUsd: numero(datos.retiroMinimoUsd),
       faltaParaRetiroUsd: numeroONulo(datos.faltaParaRetiroUsd),
       tasa: datos.tasa ? numero(datos.tasa) : null,
-      // Meta semanal del nivel (null si el Apps Script aún no la envía: la página oculta el bloque)
-      semana: datos.semana && numero(datos.semana.meta) > 0
-        ? { meta: numero(datos.semana.meta), usos: numero(datos.semana.usos), cumplida: Boolean(datos.semana.cumplida) }
-        : null,
       movimientos: movimientos.map((m) => ({
         fecha: String(m.fecha || '').slice(0, 20),
         juego: String(m.juego || '').slice(0, 20),

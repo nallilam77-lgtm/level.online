@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Panel de Creadores de Level Up: el descuento de tus seguidores es tu ganancia. Niveles, metas semanales y consulta de tus comisiones.">
+  <meta name="description" content="Panel de Creadores de Level Up: tus seguidores ahorran 1,5 % en cada recarga y tú ganas otro 1,5 %. Retiro desde $1 y sin límite de creadores.">
   <meta name="theme-color" content="#0f172a">
   <title>Panel de Creadores - Level Up</title>
 
@@ -47,13 +47,13 @@
   <main>
     <header class="animate-up">
       <h1 class="titulo-principal">⭐ Panel de Creadores</h1>
-      <p class="subtitulo">Comparte tu código: el mismo porcentaje que ahorra tu seguidor en cada recarga es la ganancia que te llevas tú.</p>
-      <p class="chip-cupos"><span class="punto-vivo" aria-hidden="true"></span>Cupos limitados: solo 8 creadores</p>
+      <p class="subtitulo">Comparte tu código: tu seguidor ahorra 1,5 % en cada recarga y tú ganas otro 1,5 % de lo que pagó.</p>
+      <p class="chip-cupos"><span class="punto-vivo" aria-hidden="true"></span>Inscripciones abiertas: sin límite de creadores</p>
     </header>
 
     <div class="creadores-container">
 
-      <!-- CONSULTA: código + PIN -> nivel, ventas, comisión y últimos movimientos -->
+      <!-- CONSULTA: código + PIN -> ventas, comisión y últimos movimientos -->
       <section class="panel-caja animate-up" aria-labelledby="tituloConsulta">
         <h2 id="tituloConsulta">📊 Consulta tu panel</h2>
         <p>Escribe tu código de creador y el PIN que te dimos por WhatsApp.</p>
@@ -74,25 +74,14 @@
         <div class="panel-mensaje" id="panelMensaje" role="status" aria-live="polite"></div>
 
         <div class="panel-resultado" id="panelResultado">
-          <div class="nivel-actual">
+          <div class="resumen-creador">
             <span class="insignia" id="resInsignia"></span>
-            <p>Tus seguidores ahorran <strong id="resDescuento"></strong> en cada recarga y tú ganas ese mismo porcentaje.</p>
+            <p>Tus seguidores ahorran <strong id="resDescuento"></strong> en cada recarga y tú ganas <strong id="resGanancia"></strong> de lo que pagan.</p>
           </div>
 
           <div class="compartir">
             <button type="button" class="btn-compartir" id="btnCompartir">📣 Compartir mi código</button>
             <button type="button" class="btn-copiar" id="btnCopiar">📋 Copiar código</button>
-          </div>
-
-          <div>
-            <div class="barra"><div class="barra-relleno" id="resBarraNivel"></div></div>
-            <p class="barra-texto" id="resTextoNivel"></p>
-          </div>
-
-          <div class="meta-semanal" id="resMeta">
-            <h3>🎯 Meta semanal de tu nivel: <span id="resMetaTotal"></span></h3>
-            <div class="barra"><div class="barra-relleno" id="resBarraMeta"></div></div>
-            <p class="barra-texto" id="resTextoMeta"></p>
           </div>
 
           <div class="estadisticas">
@@ -123,32 +112,26 @@
         </div>
       </section>
 
-      <!-- NIVELES Y BENEFICIOS -->
-      <section class="panel-caja animate-up" aria-labelledby="tituloNiveles">
-        <h2 id="tituloNiveles">🏆 Niveles y beneficios</h2>
-        <p>Tu nivel sube solo con las recargas hechas con tu código, y cada nivel tiene una meta semanal que debes cumplir para mantenerlo. Cada lunes revisamos la semana anterior automáticamente.</p>
+      <!-- CÓMO GANAS -->
+      <section class="panel-caja animate-up" aria-labelledby="tituloBeneficios">
+        <h2 id="tituloBeneficios">💰 Cómo ganas</h2>
+        <p>Un solo plan para todos los creadores: sin niveles, sin metas semanales y sin límite de cupos. Cada recarga con tu código suma desde la primera.</p>
         <div class="formula">
-          <strong>Descuento de tu seguidor = tu ganancia</strong>
-          <p>El porcentaje que se descuenta al cliente es exactamente la comisión que te llevas tú. Mientras más alto tu nivel, más ahorran ellos y más ganas tú. Cada venta guarda su ganancia: si cambias de nivel, lo que ya ganaste no cambia.</p>
+          <strong>1,5 % para tu seguidor + 1,5 % para ti</strong>
+          <p>Tu seguidor paga 1,5 % menos en cada recarga y tú ganas el 1,5 % de lo que pagó. Cada venta guarda su ganancia en dólares a la tasa de ese día.</p>
         </div>
-        <div class="niveles">
-          <article class="nivel-tarjeta">
-            <span class="insignia aliado">🤝 Aliado</span>
-            <p class="nivel-usos">De 1 a 99 usos</p>
-            <div class="nivel-dato">Descuento del cliente = tu ganancia <strong>0,65 %</strong></div>
-            <div class="nivel-dato">Meta semanal <strong>5 recargas</strong></div>
+        <div class="beneficios">
+          <article class="beneficio-tarjeta">
+            <p class="beneficio-titulo">🎁 Tu seguidor</p>
+            <div class="beneficio-dato">Ahorra en cada recarga <strong>1,5 %</strong></div>
           </article>
-          <article class="nivel-tarjeta">
-            <span class="insignia pro">⚡ Pro</span>
-            <p class="nivel-usos">De 100 a 249 usos</p>
-            <div class="nivel-dato">Descuento del cliente = tu ganancia <strong>1 %</strong></div>
-            <div class="nivel-dato">Meta semanal <strong>15 recargas</strong></div>
+          <article class="beneficio-tarjeta">
+            <p class="beneficio-titulo">💸 Tú</p>
+            <div class="beneficio-dato">Ganas de cada recarga <strong>1,5 %</strong></div>
           </article>
-          <article class="nivel-tarjeta">
-            <span class="insignia diamante">💎 Diamante</span>
-            <p class="nivel-usos">250 usos o más</p>
-            <div class="nivel-dato">Descuento del cliente = tu ganancia <strong>1,5 %</strong></div>
-            <div class="nivel-dato">Meta semanal <strong>30 recargas</strong></div>
+          <article class="beneficio-tarjeta">
+            <p class="beneficio-titulo">🏦 Tu pago</p>
+            <div class="beneficio-dato">Retiro mínimo <strong>$1</strong></div>
           </article>
         </div>
       </section>
@@ -164,19 +147,23 @@
           </details>
           <details>
             <summary>¿Cuánto gano por cada recarga?</summary>
-            <p>Exactamente el mismo porcentaje que ahorra tu seguidor: 0,65 % en Aliado, 1 % en Pro y 1,5 % en Diamante, sobre lo que pagó. Se suma en dólares a la tasa del día de cada venta.</p>
+            <p>El 1,5 % de lo que pagó tu seguidor, en todas las recargas y en todos los juegos. Se suma en dólares a la tasa del día de cada venta.</p>
           </details>
           <details>
             <summary>¿Cómo y cuándo me pagan?</summary>
-            <p>Cuando lo que tienes por cobrar llega a $10, en tu panel aparece el botón "Solicitar mi pago por WhatsApp". Nos escribes y coordinamos el pago contigo; al pagarte, tu saldo pendiente vuelve a $0.</p>
+            <p>Cuando lo que tienes por cobrar llega a $1, en tu panel aparece el botón "Solicitar mi pago por WhatsApp". Nos escribes y coordinamos el pago contigo; al pagarte, tu saldo pendiente vuelve a $0.</p>
           </details>
           <details>
-            <summary>¿Qué pasa si no cumplo la meta semanal?</summary>
-            <p>Cada lunes revisamos la semana anterior (de lunes a domingo). Si no llegaste a la meta de tu nivel, bajas un nivel; si la cumples la semana siguiente, lo recuperas. En tu panel ves cuántas recargas llevas esta semana.</p>
+            <summary>¿Tengo que cumplir alguna meta?</summary>
+            <p>No. Ya no hay niveles ni metas semanales: ganas el 1,5 % de cada recarga con tu código, sean muchas o pocas.</p>
           </details>
           <details>
-            <summary>Si bajo de nivel, ¿pierdo lo que ya gané?</summary>
-            <p>No. Cada venta guarda su ganancia en el momento en que se hace. Bajar de nivel solo cambia el porcentaje de tus próximas ventas.</p>
+            <summary>Ya era creador, ¿qué pasa con lo que había ganado?</summary>
+            <p>Se queda igual: tus recargas, tus ventas y tu saldo por cobrar no cambian. Desde ahora, cada nueva recarga con tu código suma el 1,5 %.</p>
+          </details>
+          <details>
+            <summary>¿Hay cupos limitados?</summary>
+            <p>No. Cualquier creador puede pedir su código por WhatsApp; no hay límite de creadores ni lista de espera.</p>
           </details>
           <details>
             <summary>¿Cada cuánto se actualiza mi panel?</summary>
@@ -184,7 +171,7 @@
           </details>
           <details>
             <summary>¿Puedo usar mi propio código?</summary>
-            <p>No. Las autocompras, recargas falsas o cualquier abuso anulan la comisión y pueden costarte el código y tu cupo.</p>
+            <p>No. Las autocompras, recargas falsas o cualquier abuso anulan la comisión y pueden costarte el código.</p>
           </details>
           <details>
             <summary>Olvidé mi PIN, ¿qué hago?</summary>
@@ -198,14 +185,13 @@
         <h2 id="tituloReglas">📜 Reglas de oro</h2>
         <p>Para que el programa sea justo para todos:</p>
         <ul class="reglas">
-          <li><span aria-hidden="true">💵</span><p><strong>Retiro mínimo de $10 USD</strong>Cada venta suma tu ganancia en dólares a la tasa del día en que se hizo; al llegar a $10 puedes pedir tu pago por WhatsApp.</p></li>
-          <li><span aria-hidden="true">🎯</span><p><strong>Meta semanal obligatoria</strong>Cada nivel exige un mínimo de recargas con tu código por semana (de lunes a domingo). Si no la cumples, el lunes bajas un nivel automáticamente; si la cumples la semana siguiente, lo recuperas.</p></li>
+          <li><span aria-hidden="true">💵</span><p><strong>Retiro mínimo de $1 USD</strong>Cada venta suma tu ganancia en dólares a la tasa del día en que se hizo; al llegar a $1 puedes pedir tu pago por WhatsApp.</p></li>
           <li><span aria-hidden="true">✍️</span><p><strong>Códigos 100 % manuales</strong>Cada código lo creamos nosotros por WhatsApp. No hay registro automático ni códigos autogestionados.</p></li>
           <li><span aria-hidden="true">🛡️</span><p><strong>Supervisión antifraude estricta</strong>Revisamos cada venta. Las recargas falsas, autocompras o abusos anulan la comisión y el código.</p></li>
         </ul>
         <div class="aviso-cupos">
-          <strong>🔥 Solo 8 cupos de creador</strong>
-          <p>Trabajamos con pocos creadores para darle a cada uno atención directa y un código que de verdad destaque. Si los cupos están llenos, te anotamos en la lista de espera y te avisamos cuando se libere uno.</p>
+          <strong>🔥 Sin límite de creadores</strong>
+          <p>No hay cupos ni lista de espera: escríbenos por WhatsApp, creamos tu código y empiezas a ganar desde la primera recarga.</p>
         </div>
         <a class="btn-whatsapp-creador" href="https://wa.me/584141916377?text=Hola%2C%20quiero%20ser%20creador%20de%20Level%20Up%20y%20tener%20mi%20c%C3%B3digo" target="_blank" rel="noopener noreferrer">💬 Quiero mi código de creador</a>
       </section>
@@ -252,8 +238,6 @@
     // Todo lo que llega del servidor se pinta con textContent (nunca como HTML).
     // =========================================================================
     const WHATSAPP = '584141916377';
-    const CLASE_NIVEL = { Aliado: 'aliado', Pro: 'pro', Diamante: 'diamante' };
-    const ICONO_NIVEL = { Aliado: '🤝', Pro: '⚡', Diamante: '💎' };
     const $ = (id) => document.getElementById(id);
 
     const formatoBs = (n) => `${Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs`;
@@ -300,35 +284,9 @@
 
     function pintarPanel(d) {
       creadorActual = { codigo: d.codigo, descuentoSeguidores: d.descuentoSeguidores };
-      const insignia = $('resInsignia');
-      insignia.className = `insignia ${CLASE_NIVEL[d.nivel.nombre] || 'aliado'}`;
-      insignia.textContent = `${ICONO_NIVEL[d.nivel.nombre] || '⭐'} ${d.nivel.nombre} · ${d.codigo}`;
+      $('resInsignia').textContent = `⭐ Creador · ${d.codigo}`;
       $('resDescuento').textContent = formatoPorcentaje(d.descuentoSeguidores);
-
-      // Progreso hacia el siguiente nivel (o aviso de castigo: se recupera cumpliendo la meta semanal)
-      if (d.nivelesBajados > 0 && d.siguienteNivel && d.semana) {
-        $('resBarraNivel').style.width = `${Math.min(100, (d.semana.usos / d.semana.meta) * 100)}%`;
-        $('resTextoNivel').textContent = `Bajaste de nivel por no cumplir la meta semanal. Cumple tu meta de esta semana (${d.semana.meta} recargas) y el lunes vuelves a ${d.siguienteNivel.nombre}.`;
-      } else if (d.siguienteNivel) {
-        const desdeActual = d.usos + d.siguienteNivel.faltanUsos;
-        $('resBarraNivel').style.width = `${Math.min(100, (d.usos / desdeActual) * 100)}%`;
-        $('resTextoNivel').textContent = `Te faltan ${d.siguienteNivel.faltanUsos} recargas para subir a ${d.siguienteNivel.nombre} (tus seguidores ahorrarán ${formatoPorcentaje(d.siguienteNivel.descuento)}).`;
-      } else {
-        $('resBarraNivel').style.width = '100%';
-        $('resTextoNivel').textContent = '¡Estás en el nivel máximo! Tus seguidores tienen el mejor descuento.';
-      }
-
-      // Meta semanal (oculta si el servidor todavía no la envía)
-      $('resMeta').hidden = !d.semana;
-      if (d.semana) {
-        const { meta, usos, cumplida } = d.semana;
-        $('resMeta').classList.toggle('cumplida', cumplida);
-        $('resMetaTotal').textContent = `${meta} recargas`;
-        $('resBarraMeta').style.width = `${Math.min(100, (usos / meta) * 100)}%`;
-        $('resTextoMeta').textContent = cumplida
-          ? `¡Meta cumplida! Llevas ${usos} recargas esta semana: ${d.nivelesBajados > 0 ? 'el lunes recuperas un nivel' : `mantienes tu nivel ${d.nivel.nombre}`}.`
-          : `Llevas ${usos} de ${meta} recargas esta semana. Te faltan ${meta - usos} antes del domingo para ${d.nivelesBajados > 0 ? 'recuperar tu nivel' : 'no bajar de nivel el lunes'}.`;
-      }
+      $('resGanancia').textContent = formatoPorcentaje(d.comisionPorcentaje);
 
       $('resUsos').textContent = d.usos.toLocaleString('es-VE');
       $('resVentas').textContent = formatoBs(d.ventasBs);
@@ -368,8 +326,8 @@
         });
       }
       $('resNotaTasa').textContent = d.tasa
-        ? `Hoy ganas el mismo ${formatoPorcentaje(d.comisionPorcentaje)} que se descuenta a tus seguidores. Cada venta guarda su ganancia con el porcentaje de tu nivel y la tasa de ese día (hoy: ${Number(d.tasa).toLocaleString('es-VE')} Bs por USD). Lo que ya te pagamos no vuelve a contar.`
-        : `Hoy ganas el mismo ${formatoPorcentaje(d.comisionPorcentaje)} que se descuenta a tus seguidores. Cada venta guarda su ganancia con el porcentaje de tu nivel y la tasa de ese día.`;
+        ? `Ganas el ${formatoPorcentaje(d.comisionPorcentaje)} de cada recarga con tu código. Cada venta guarda su ganancia con la tasa de ese día (hoy: ${Number(d.tasa).toLocaleString('es-VE')} Bs por USD). Lo que ya te pagamos no vuelve a contar.`
+        : `Ganas el ${formatoPorcentaje(d.comisionPorcentaje)} de cada recarga con tu código. Cada venta guarda su ganancia con la tasa de ese día.`;
 
       $('panelResultado').classList.add('visible');
     }

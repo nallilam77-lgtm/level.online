@@ -19,7 +19,7 @@
 //
 // Códigos de descuento: pestaña "Descuentos" (A: código, B: descuento, C: usos, D: dinero total
 // movido, E: creador, F: PIN, G: % de comisión, H: comisión total USD, I: liquidado Bs, J: pendiente USD,
-// K: niveles bajados por no cumplir la meta semanal, L: comisión por convertir Bs), común a Free Fire y Blood Strike.
+// K: sin uso (eran los niveles bajados), L: comisión por convertir Bs), común a Free Fire y Blood Strike.
 // Vercel consulta el código (validar_descuento), calcula el precio con descuento y, al terminar la
 // recarga, suma +1 uso y el monto cobrado a ese código (y la comisión de esa venta a H y J del creador):
 // Free Fire dentro de registrar_finalizado; Blood Strike con registrar_uso_descuento.
@@ -52,32 +52,16 @@ const MAX_CANDIDATOS_RULETA = 5;
 const HOJA_DESCUENTOS = "descuentos";
 
 // Panel de creadores (códigos con la columna E "creador" llena):
-//   - Nivel según los usos del código: el descuento de sus seguidores sube con el nivel.
-//   - Comisión del creador = el MISMO % de descuento que recibe el cliente (columna B o su nivel).
-//   - Cada venta guarda SU comisión: el % del nivel en ese momento y la tasa de ese día (pestaña
-//     "config", B1 = Bs por 1 USD). Se anota en "movimientos_descuentos" y se SUMA a H (total
-//     ganado) y J (pendiente de pago). Cambiar de nivel o de tasa ya no toca lo ganado.
+//   - Todos los códigos de creador dan PORCENTAJE_CREADOR de descuento al cliente y el creador
+//     gana ese MISMO % de cada venta. Sin niveles, sin metas semanales y sin límite de creadores.
+//   - Cada venta guarda SU comisión: el % de ese momento y la tasa de ese día (pestaña "config",
+//     B1 = Bs por 1 USD). Se anota en "movimientos_descuentos" y se SUMA a H (total ganado) y
+//     J (pendiente de pago). Cambiar el % o la tasa no toca lo ya ganado.
 //     G muestra el % actual. Registrar pago deja J en 0. Mínimo para retirar: RETIRO_MINIMO_USD (sobre J).
-//   - metaSemanal: recargas con el código que el creador debe lograr cada semana (lunes a domingo,
-//     hora de Caracas) para mantener su nivel. Se cuentan en "movimientos_descuentos".
-//     Cada lunes revisarMetasSemanales revisa la semana anterior: quien no cumplió la meta de su
-//     nivel baja uno (columna K "Niveles bajados" +1); quien la cumple estando castigado recupera
-//     uno (K -1). Nivel real = nivel por usos - K (nunca por debajo de Aliado).
-const NIVELES_CREADOR = [
-  { nombre: "Aliado", desde: 0, descuento: 0.65, metaSemanal: 5 },
-  { nombre: "Pro", desde: 100, descuento: 1.0, metaSemanal: 15 },
-  { nombre: "Diamante", desde: 250, descuento: 1.5, metaSemanal: 30 }
-];
-const RETIRO_MINIMO_USD = 10;
-// Columna K de "Descuentos" y pestaña con el resultado de cada revisión semanal
-const COLUMNA_NIVELES_BAJADOS = 11;
+const PORCENTAJE_CREADOR = 1.5;
+const RETIRO_MINIMO_USD = 1;
 // Columna L: comisión en Bs de ventas hechas sin ninguna tasa conocida (se pasa a H y J al haber tasa)
 const COLUMNA_POR_CONVERTIR = 12;
-// Primera semana (su lunes, "yyyyMMdd") que cuenta para las metas: las anteriores no se revisan,
-// porque la regla aún no se había anunciado. "" = revisar desde ya.
-const INICIO_METAS_SEMANALES = "20261012";
-const HOJA_REVISIONES_CREADORES = "revisiones_creadores";
-const COLUMNAS_REVISIONES_CREADORES = ["fecha-hora", "código", "creador", "semana", "recargas", "meta", "nivel antes", "nivel después", "resultado"];
 const HOJA_CONFIG = "config";
 // Historial de ventas con código (para los últimos movimientos y la comisión de cada creador).
 // D = id del jugador que recargó (para ver quién compra con cada código); I = id del pedido
@@ -568,16 +552,16 @@ function registrarPremioRuleta(datos) {
 
 // ==========================================
 // 🎟️ 11: CÓDIGOS DE DESCUENTO (pestaña "Descuentos")
-// A: Codigos | B: descuento en % ("10%" o "10"; vacío en creadores = según su nivel) | C: Usos
+// A: Codigos | B: descuento en % ("10%" o "10"; solo códigos promocionales: los de creador dan siempre
+//    PORCENTAJE_CREADOR) | C: Usos
 // D: Dinero Total Movido (Bs) | E: Creador (vacío = código promocional normal) | F: PIN
-// G: Comision (%) = el % actual del creador (columna B o su nivel)                  -> la escribe el script
+// G: Comision (%) = el % actual del creador (PORCENTAJE_CREADOR)                    -> la escribe el script
 // H: usd = comisión total ganada: suma de la comisión de cada venta (% y tasa de ese día)
 // I: Liquidado (Bs) = ventas ya pagadas (referencia; la anota Registrar pago)
 // J: Pendiente (USD) = suma de comisiones aún no pagadas: lo que le debes hoy
 //    H y J son SALDOS: cada venta les suma y Registrar pago deja J en 0. No se recalculan;
 //    si corriges uno a mano, ese valor queda como nuevo saldo.
-// K: Niveles bajados = castigos por no cumplir la meta semanal (lo escribe la revisión de cada lunes;
-//    pon 0 a mano para perdonar a un creador)
+// K: sin uso (eran los niveles bajados por metas semanales; se puede dejar o borrar)
 // L: Por convertir (Bs) = comisión de ventas sin tasa conocida; pasa a H y J cuando haya tasa
 // El precio con descuento lo calcula Vercel; aquí solo se lee el código y se anotan los usos.
 // ==========================================
@@ -623,7 +607,7 @@ function sumarUsoDescuento(codigo, montoCobrado, juego, idPedido, idJugador) {
     var tasa = leerTasaUsd() || ultimaTasaConocida();
     if (fila.creador) iniciarSaldosPorVenta(hoja, tasa);
 
-    // % que recibió el cliente en ESTA venta (con los usos antes de sumarla) = comisión del creador
+    // % que recibió el cliente en ESTA venta = comisión del creador
     var descuentoVenta = fila.creador ? descuentoDeFila(fila) : null;
 
     var celdas = hoja.getRange(fila.numero, 3, 1, 2); // C: usos, D: dinero movido
@@ -637,7 +621,7 @@ function sumarUsoDescuento(codigo, montoCobrado, juego, idPedido, idJugador) {
     var comisionUsdVenta = descuentoVenta && tasa ? redondear4(comisionBs / tasa) : "";
     if (fila.creador) {
       sumarComisionCreador(hoja, fila.numero, comisionUsdVenta, comisionUsdVenta === "" ? comisionBs || 0 : 0);
-      escribirPorcentajeCreador(hoja, fila); // G con los usos ya sumados (puede haber subido de nivel)
+      escribirPorcentajeCreador(hoja, fila); // G = % actual del creador
     }
 
     // Historial de la venta (también para los códigos promocionales, sin comisión)
@@ -719,10 +703,9 @@ function asegurarColumnas(hoja, cantidad) {
   if (hoja.getMaxColumns() < cantidad) hoja.insertColumnsAfter(hoja.getMaxColumns(), cantidad - hoja.getMaxColumns());
 }
 
-// % de comisión del creador = su % de descuento (columna B o nivel)
+// % de comisión del creador = el % de descuento de su código
 function porcentajeCreador(fila) {
-  var descuento = descuentoDeFila(fila);
-  return descuento ? descuento.valor : nivelCreador(fila).descuento;
+  return PORCENTAJE_CREADOR;
 }
 
 // Ventas que todavía no se le han pagado al creador: D - I (nunca negativo)
@@ -770,19 +753,17 @@ function leerFilasDescuentos(hoja) {
       comisionTotalUsd: limpiarMontoVES(crudos[i][7]),
       liquidadoBs: limpiarMontoVES(filas[i][8]),
       pendienteUsd: limpiarMontoVES(crudos[i][9]),
-      porConvertirBs: limpiarMontoVES(crudos[i][COLUMNA_POR_CONVERTIR - 1]),
-      nivelesBajados: Math.max(0, Math.floor(limpiarMontoVES(filas[i][COLUMNA_NIVELES_BAJADOS - 1])))
+      porConvertirBs: limpiarMontoVES(crudos[i][COLUMNA_POR_CONVERTIR - 1])
     });
   }
   return resultado;
 }
 
-// Descuento que se aplica con este código: el de la columna B si tiene valor; si está vacía y es
-// un código de creador, el de su nivel actual. null = código no válido.
+// Descuento que se aplica con este código: los de creador, siempre PORCENTAJE_CREADOR; los
+// promocionales, el de la columna B. null = código no válido.
 function descuentoDeFila(fila) {
-  if (fila.descuento) return interpretarDescuento(fila.descuento);
-  if (fila.creador) return { tipo: "porcentaje", valor: nivelCreador(fila).descuento };
-  return null;
+  if (fila.creador) return { tipo: "porcentaje", valor: PORCENTAJE_CREADOR };
+  return interpretarDescuento(fila.descuento);
 }
 
 // Los descuentos son SIEMPRE porcentaje: "10%", "10" o "12,5" -> 10 % / 12,5 % del precio.
@@ -828,7 +809,7 @@ function onEdit(e) {
     var nombre = r.getSheet().getName().trim().toLowerCase();
     var cubre = function (desde, hasta) { return r.getColumn() <= hasta && r.getLastColumn() >= desde; };
     var enTasa = nombre === HOJA_CONFIG && r.getRow() <= 1 && r.getLastRow() >= 1 && cubre(2, 2);
-    var enDescuentos = nombre === HOJA_DESCUENTOS && r.getLastRow() >= 2 && (cubre(2, 5) || cubre(COLUMNA_NIVELES_BAJADOS, COLUMNA_NIVELES_BAJADOS));
+    var enDescuentos = nombre === HOJA_DESCUENTOS && r.getLastRow() >= 2 && cubre(2, 5);
     if (enTasa || enDescuentos) recalcularComisiones();
   } catch (err) {
     console.error("onEdit: " + err);
@@ -841,10 +822,7 @@ function onOpen() {
     .addItem("💵 Registrar pago del creador seleccionado", "registrarPagoCreador")
     .addItem("🔄 Actualizar % de comisión", "recalcularComisiones")
     .addSeparator()
-    .addItem("🎯 Revisar metas de la semana pasada ahora", "revisarMetasDesdeMenu")
-    .addSeparator()
     .addItem("⏰ Activar recálculo automático cada hora", "activarRecalculoHorario")
-    .addItem("📅 Activar revisión automática de metas (lunes)", "activarRevisionSemanal")
     .addToUi();
 }
 
@@ -924,121 +902,12 @@ function activarRecalculoHorario() {
   SpreadsheetApp.getUi().alert("Listo: las comisiones se recalcularán solas cada hora.");
 }
 
-// ==========================================
-// 🎯 REVISIÓN SEMANAL DE METAS (cada lunes, sobre la semana lunes-domingo que acaba de terminar)
-// No cumplió la meta de su nivel -> baja un nivel (K + 1), salvo que ya esté en Aliado.
-// Cumplió estando castigado -> recupera un nivel (K - 1).
-// Cada semana se revisa una sola vez (propiedad "ultima_revision_semanal"), aunque se ejecute de más.
-// El resultado de cada creador queda en la pestaña "revisiones_creadores".
-// ==========================================
+// Las metas semanales se eliminaron. Si quedó activo el activador de los lunes, al ejecutarse
+// se borra solo (así no llegan correos de error por una función que ya no existe).
 function revisarMetasSemanales() {
-  var desde = claveInicioSemana(1);
-  var hasta = claveInicioSemana(0);
-  var props = PropertiesService.getScriptProperties();
-  if (props.getProperty("ultima_revision_semanal") === desde) {
-    return "La semana del " + textoClave(desde) + " ya estaba revisada.";
-  }
-  if (INICIO_METAS_SEMANALES && desde < INICIO_METAS_SEMANALES) {
-    return "Las metas cuentan desde la semana del " + textoClave(INICIO_METAS_SEMANALES) + ": la semana del " + textoClave(desde) + " no se revisa.";
-  }
-
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) {
-    console.error("revisarMetasSemanales: el sistema estaba ocupado; vuelve a ejecutarla en unos minutos");
-    return "El sistema está procesando una recarga. Intenta de nuevo en unos minutos.";
-  }
-  try {
-    var hoja = obtenerHoja(HOJA_DESCUENTOS, true);
-    if (!hoja) return "No existe la pestaña 'Descuentos'.";
-    var recargasPorCodigo = contarRecargasPorCodigo(desde, hasta);
-    iniciarSaldosPorVenta(hoja, leerTasaUsd()); // los saldos se fijan con el % de ANTES del castigo
-    var semana = textoClave(desde) + " al " + textoClave(claveInicioSemana(0, -1));
-    var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
-    var registro = [];
-    var bajaron = 0, recuperaron = 0;
-
-    leerFilasDescuentos(hoja).forEach(function (fila) {
-      if (!fila.codigo || !fila.creador) return;
-      var antes = nivelCreador(fila);
-      var recargas = recargasPorCodigo[fila.codigo.toUpperCase()] || 0;
-      var maximoBajados = indiceNivelPorUsos(fila.usos); // nunca por debajo de Aliado
-      var bajados = Math.min(fila.nivelesBajados, maximoBajados);
-      var resultado;
-      if (recargas >= antes.metaSemanal) {
-        if (bajados > 0) { bajados--; recuperaron++; resultado = "CUMPLIÓ: recupera un nivel"; }
-        else resultado = "CUMPLIÓ";
-      } else if (bajados < maximoBajados) {
-        bajados++; bajaron++; resultado = "NO CUMPLIÓ: baja un nivel";
-      } else {
-        resultado = "NO CUMPLIÓ: ya está en el nivel mínimo";
-      }
-
-      if (bajados !== fila.nivelesBajados) {
-        fila.nivelesBajados = bajados;
-        escribirNivelesBajados(hoja, fila.numero, bajados);
-        escribirPorcentajeCreador(hoja, fila); // G: el nuevo % vale para las próximas ventas
-      }
-      registro.push([fechaHora, textoSeguro(fila.codigo), textoSeguro(fila.creador), semana,
-        recargas, antes.metaSemanal, antes.nombre, nivelCreador(fila).nombre, resultado]);
-    });
-
-    if (registro.length) {
-      var hojaRevisiones = obtenerHoja(HOJA_REVISIONES_CREADORES, true);
-      if (!hojaRevisiones) {
-        hojaRevisiones = SpreadsheetApp.getActiveSpreadsheet().insertSheet(HOJA_REVISIONES_CREADORES);
-        hojaRevisiones.appendRow(COLUMNAS_REVISIONES_CREADORES);
-      }
-      hojaRevisiones.getRange(hojaRevisiones.getLastRow() + 1, 1, registro.length, COLUMNAS_REVISIONES_CREADORES.length).setValues(registro);
-    }
-    props.setProperty("ultima_revision_semanal", desde);
-    SpreadsheetApp.flush();
-    return "Semana del " + semana + " revisada: " + registro.length + " creadores, " +
-      bajaron + " bajaron de nivel y " + recuperaron + " recuperaron un nivel.";
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function revisarMetasDesdeMenu() {
-  SpreadsheetApp.getUi().alert(revisarMetasSemanales());
-}
-
-// Crea (una sola vez) el activador que revisa las metas cada lunes entre las 00:00 y la 01:00 de Caracas
-function activarRevisionSemanal() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === "revisarMetasSemanales") ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger("revisarMetasSemanales").timeBased()
-    .onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(0).inTimezone("America/Caracas").create();
-  SpreadsheetApp.getUi().alert("Listo: cada lunes se revisarán solas las metas de la semana anterior.");
-}
-
-// Recargas por código (en mayúsculas) con fecha entre desde (incluido) y hasta (excluido), "yyyyMMdd"
-function contarRecargasPorCodigo(desde, hasta) {
-  var conteo = {};
-  var hoja = obtenerHoja(HOJA_MOVIMIENTOS_DESCUENTOS, true);
-  if (!hoja || hoja.getLastRow() < 2) return conteo;
-  var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, 2).getValues();
-  for (var i = 0; i < filas.length; i++) {
-    var dia = claveDiaMovimiento(filas[i][0]);
-    if (!dia || dia < desde || dia >= hasta) continue;
-    var codigo = String(filas[i][1]).trim().toUpperCase();
-    conteo[codigo] = (conteo[codigo] || 0) + 1;
-  }
-  return conteo;
-}
-
-// Escribe K en la fila del creador (y el título de la columna si la pestaña aún no lo tiene)
-function escribirNivelesBajados(hoja, numeroFila, valor) {
-  asegurarColumnas(hoja, COLUMNA_NIVELES_BAJADOS);
-  var titulo = hoja.getRange(1, COLUMNA_NIVELES_BAJADOS);
-  if (!String(titulo.getValue() || "").trim()) titulo.setValue("Niveles bajados");
-  hoja.getRange(numeroFila, COLUMNA_NIVELES_BAJADOS).setValue(valor);
-}
-
-// "yyyyMMdd" -> "dd/MM/yyyy"
-function textoClave(clave) {
-  return clave.slice(6, 8) + "/" + clave.slice(4, 6) + "/" + clave.slice(0, 4);
 }
 
 // ==========================================
@@ -1054,8 +923,6 @@ function consultarCreador(datos) {
   if (String(datos.pin || "").trim() !== fila.pin) return responder({ status: "success", encontrado: false });
 
   var tasaActual = leerTasaUsd();
-  var nivel = nivelCreador(fila);
-  var siguiente = siguienteNivelCreador(fila);
   var porcentajeActual = porcentajeCreador(fila);
   // Antes de estrenar la comisión por venta, H y J pueden estar vacías: se muestra el cálculo anterior
   var saldosListos = Boolean(PropertiesService.getScriptProperties().getProperty("saldos_por_venta"));
@@ -1066,18 +933,13 @@ function consultarCreador(datos) {
 
   // Últimos movimientos: la comisión guardada en cada venta (columna H de "movimientos_descuentos";
   // las ventas viejas sin ella se estiman con la columna F y la tasa actual).
-  // En el mismo recorrido se cuentan las recargas de esta semana para la meta semanal.
   var movimientos = [];
-  var inicioSemana = claveInicioSemana();
-  var usosSemana = 0;
   var hoja = obtenerHoja(HOJA_MOVIMIENTOS_DESCUENTOS, true);
   if (hoja && hoja.getLastRow() > 1) {
     var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, COLUMNAS_MOVIMIENTOS_DESCUENTOS.length).getValues();
     for (var i = 0; i < filas.length; i++) {
       if (String(filas[i][1]).trim().toUpperCase() !== fila.codigo.toUpperCase()) continue;
       var ventaBs = limpiarMontoVES(filas[i][4]);
-      var claveDia = claveDiaMovimiento(filas[i][0]);
-      if (claveDia && claveDia >= inicioSemana) usosSemana++;
       movimientos.push({
         fecha: filas[i][0] instanceof Date ? Utilities.formatDate(filas[i][0], "America/Caracas", "dd/MM/yyyy HH:mm") : String(filas[i][0]),
         juego: String(filas[i][2]),
@@ -1090,9 +952,6 @@ function consultarCreador(datos) {
   return responder({
     status: "success", encontrado: true,
     codigo: fila.codigo,
-    nivel: { nombre: nivel.nombre, descuento: nivel.descuento, metaSemanal: nivel.metaSemanal },
-    siguienteNivel: siguiente ? { nombre: siguiente.nombre, descuento: siguiente.descuento, faltanUsos: Math.max(0, siguiente.desde - fila.usos) } : null,
-    nivelesBajados: Math.min(fila.nivelesBajados, indiceNivelPorUsos(fila.usos)),
     descuentoSeguidores: porcentajeActual,
     usos: fila.usos,
     ventasBs: fila.ventasBs,
@@ -1102,26 +961,8 @@ function consultarCreador(datos) {
     retiroMinimoUsd: RETIRO_MINIMO_USD,
     faltaParaRetiroUsd: pendienteUsd === null ? null : redondear2(Math.max(0, RETIRO_MINIMO_USD - pendienteUsd)),
     tasa: tasaActual,
-    semana: { meta: nivel.metaSemanal, usos: usosSemana, cumplida: usosSemana >= nivel.metaSemanal },
     movimientos: movimientos.slice(-10).reverse()
   });
-}
-
-// "yyyyMMdd" del lunes de esta semana en Caracas (semanasAtras = 1: el de la semana pasada).
-// masDias desplaza el resultado (-1 = el domingo anterior). Venezuela no cambia de horario: 24 h por día sirve.
-function claveInicioSemana(semanasAtras, masDias) {
-  var ahora = new Date();
-  var diaSemana = Number(Utilities.formatDate(ahora, "America/Caracas", "u")); // 1 = lunes ... 7 = domingo
-  var dias = (diaSemana - 1) + 7 * (semanasAtras || 0) - (masDias || 0);
-  return Utilities.formatDate(new Date(ahora.getTime() - dias * 86400000), "America/Caracas", "yyyyMMdd");
-}
-
-// "yyyyMMdd" de la fecha de un movimiento: Sheets la guarda como fecha o como texto "dd/MM/yyyy HH:mm:ss"
-function claveDiaMovimiento(valor) {
-  if (valor instanceof Date) return Utilities.formatDate(valor, "America/Caracas", "yyyyMMdd");
-  var m = String(valor || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (!m) return "";
-  return m[3] + ("0" + m[2]).slice(-2) + ("0" + m[1]).slice(-2);
 }
 
 // Comisión en USD guardada en una fila de "movimientos_descuentos" (F = Bs, H = USD de ese día)
@@ -1129,26 +970,6 @@ function comisionDeMovimiento(fila, tasaActual) {
   if (fila[7] !== "" && fila[7] !== null) return redondear2(limpiarMontoVES(fila[7]));
   if (fila[5] !== "" && fila[5] !== null && tasaActual) return redondear2(limpiarMontoVES(fila[5]) / tasaActual);
   return null;
-}
-
-// Posición del nivel que dan los usos: el último cuyo "desde" ya se alcanzó
-function indiceNivelPorUsos(usos) {
-  var indice = 0;
-  for (var i = 0; i < NIVELES_CREADOR.length; i++) if (usos >= NIVELES_CREADOR[i].desde) indice = i;
-  return indice;
-}
-
-// Nivel real del creador: el de sus usos menos los niveles bajados por metas incumplidas (columna K)
-function indiceNivelCreador(fila) {
-  return Math.max(0, indiceNivelPorUsos(fila.usos) - (fila.nivelesBajados || 0));
-}
-
-function nivelCreador(fila) {
-  return NIVELES_CREADOR[indiceNivelCreador(fila)];
-}
-
-function siguienteNivelCreador(fila) {
-  return NIVELES_CREADOR[indiceNivelCreador(fila) + 1] || null;
 }
 
 // Tasa Bs por USD de la pestaña "config", celda B1. null si falta o no es un número.

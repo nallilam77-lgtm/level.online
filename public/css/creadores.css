@@ -43,17 +43,14 @@
 .panel-resultado { display: none; margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--border-glass); }
 .panel-resultado.visible { display: grid; gap: 24px; animation: fadeUp 0.5s ease forwards; }
 
-.nivel-actual { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.resumen-creador { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .insignia {
   display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px;
   font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
-  border: 1px solid currentColor; background: rgba(15, 23, 42, 0.6);
+  border: 1px solid currentColor; background: rgba(15, 23, 42, 0.6); color: var(--accent-cyan);
 }
-.insignia.aliado { color: var(--accent-cyan); }
-.insignia.pro { color: var(--accent-neon); }
-.insignia.diamante { color: #c4b5fd; box-shadow: 0 0 16px rgba(196, 181, 253, 0.35); }
-.nivel-actual p { color: var(--text-muted); font-size: 13px; }
-.nivel-actual strong { color: var(--text-main); }
+.resumen-creador p { color: var(--text-muted); font-size: 13px; }
+.resumen-creador strong { color: var(--text-main); }
 
 /* Compartir y copiar el código */
 .compartir { display: grid; grid-template-columns: 1fr; gap: 12px; }
@@ -88,13 +85,6 @@
 }
 .retiro.listo .btn-retiro { display: flex; }
 
-/* Meta semanal: mismo bloque que el retiro; borde neón al cumplirla */
-.meta-semanal { padding: 20px; border-radius: 14px; background: rgba(11, 17, 32, 0.6); border: 1px solid var(--border-glass); transition: border-color 0.25s ease; }
-.meta-semanal[hidden] { display: none; }
-.meta-semanal h3 { font-size: 13px; font-weight: 800; color: var(--text-main); margin-bottom: 12px; }
-.meta-semanal.cumplida { border-color: rgba(57, 255, 20, 0.5); }
-.meta-semanal.cumplida .barra-texto { color: var(--accent-neon); font-weight: 700; }
-
 .movimientos h3 { font-size: 13px; font-weight: 800; color: var(--text-main); margin-bottom: 12px; }
 .tabla-scroll { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border-glass); }
 .movimientos table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -106,25 +96,24 @@
 .sin-movimientos { text-align: center; color: var(--text-muted); padding: 20px; font-size: 13px; }
 .nota-tasa { font-size: 11px; color: var(--text-muted); margin-top: 8px; }
 
-/* --- Niveles --- */
+/* --- Cómo ganas --- */
 .formula {
   margin-bottom: 24px; padding: 20px 24px; border-radius: 14px;
   background: rgba(11, 17, 32, 0.6); border: 1px solid rgba(34, 211, 238, 0.4); box-shadow: var(--shadow-glow);
 }
 .formula strong { display: block; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; color: var(--primary); margin-bottom: 6px; }
 .formula p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
-.niveles { display: grid; grid-template-columns: 1fr; gap: 16px; }
-.nivel-tarjeta {
+.beneficios { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.beneficio-tarjeta {
   padding: 24px; border-radius: 14px; background: rgba(30, 41, 59, 0.55); border: 1px solid var(--border-glass);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
-.nivel-tarjeta:hover { transform: translateY(-3px); box-shadow: var(--shadow-glow-hover); }
-.nivel-tarjeta .insignia { margin-bottom: 12px; }
-.nivel-usos { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
-.nivel-dato { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; border-top: 1px solid rgba(148, 163, 184, 0.1); font-size: 13px; color: var(--text-muted); }
-.nivel-dato strong { white-space: nowrap; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 16px; color: var(--text-main); }
+.beneficio-tarjeta:hover { transform: translateY(-3px); box-shadow: var(--shadow-glow-hover); }
+.beneficio-titulo { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--primary); margin-bottom: 12px; }
+.beneficio-dato { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-top: 12px; border-top: 1px solid rgba(148, 163, 184, 0.1); font-size: 13px; color: var(--text-muted); }
+.beneficio-dato strong { white-space: nowrap; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 20px; color: var(--accent-neon); }
 
-/* --- Cupos limitados --- */
+/* --- Sin límite de creadores --- */
 .chip-cupos {
   display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 8px 16px; border-radius: 999px;
   font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase;
@@ -179,5 +168,5 @@
   .consulta-campos { grid-template-columns: 2fr 1fr; }
   .estadisticas { grid-template-columns: repeat(4, 1fr); }
   .compartir { grid-template-columns: 2fr 1fr; }
-  .niveles { grid-template-columns: repeat(3, 1fr); }
+  .beneficios { grid-template-columns: repeat(3, 1fr); }
 }
