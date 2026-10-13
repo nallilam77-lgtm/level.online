@@ -111,6 +111,8 @@ export function llamarScript(url, cuerpo, opciones = {}) {
 // =========================================================================
 const cache = new Map();
 const enCurso = new Map();
+// Marca de "Apps Script tardó más de esperaConRespaldoMs" (no es un fallo: la consulta sigue)
+const LENTO = new ErrorExterno('Apps Script lento', { tiempoAgotado: true });
 
 export async function conCache(clave, obtener, { frescoMs = 60_000, respaldoMs = 6 * 60 * 60_000, esperaConRespaldoMs = 1500, esValido = () => true } = {}) {
   const guardado = cache.get(clave);
@@ -133,20 +135,23 @@ export async function conCache(clave, obtener, { frescoMs = 60_000, respaldoMs =
     enCurso.set(clave, promesa);
   }
 
+  const consulta = enCurso.get(clave);
   try {
-    const consulta = enCurso.get(clave);
     // Con copia guardada no se hace esperar al cliente: si Apps Script tarda más de 1,5 s
     // se responde con la copia y la consulta sigue renovando la caché en segundo plano.
     const datos = hayRespaldo
-      ? await Promise.race([consulta, esperar(esperaConRespaldoMs).then(() => { throw new ErrorExterno('Apps Script lento', { tiempoAgotado: true }); })])
+      ? await Promise.race([consulta, esperar(esperaConRespaldoMs).then(() => { throw LENTO; })])
       : await consulta;
     return { datos, origen: 'fresco' };
   } catch (error) {
-    if (hayRespaldo) {
+    if (!hayRespaldo) throw error;
+    if (error === LENTO) {
+      // Solo tardó: es lo normal en Apps Script, no un fallo. Solo se avisa si la renovación falla.
+      consulta.catch((e) => console.error(`⚠️ ${clave}: no se pudo renovar (${e.message}). Se sigue usando la copia anterior.`));
+    } else {
       console.error(`⚠️ ${clave}: Apps Script falló (${error.message}). Usando copia de hace ${Math.round(edad / 1000)} s.`);
-      return { datos: guardado.datos, origen: 'respaldo' };
     }
-    throw error;
+    return { datos: guardado.datos, origen: 'respaldo' };
   }
 }
 
