@@ -44,6 +44,9 @@ const VERSION_SCRIPT = 2;
 // Vercel espera hasta 15 s por intento: si el candado tarda más que esto en liberarse,
 // es mejor responder "ocupado" (Vercel reintenta) que trabajar para una petición que ya nadie espera.
 const ESPERA_CANDADO_MS = 8000;
+// MacroDroid espera 30 s: un pago nuevo puede esperar más que Vercel a que termine una recarga
+// (con 8 s, si había una recarga en curso, el pago se rechazaba como "ocupado" y NO se guardaba).
+const ESPERA_CANDADO_MACRODROID_MS = 20000;
 
 // Pestaña de auditoría: qué pines se entregaron a cada pedido y qué pasó con ellos
 const HOJA_ASIGNACIONES = "asignaciones_pines";
@@ -117,7 +120,7 @@ function doPost(e) {
     if (claveMacro && String(datos.clave || "") !== claveMacro) {
       return responder({ status: "error", message: "No autorizado" });
     }
-    return conCandado(function () { return guardarPagoMacroDroid(datos); });
+    return conCandado(function () { return guardarPagoMacroDroid(datos); }, ESPERA_CANDADO_MACRODROID_MS);
   }
 
   // Todas las demás acciones solo las puede pedir Vercel
@@ -156,9 +159,9 @@ function doPost(e) {
 }
 
 // 🛡️ Candado: una sola operación sobre pagos/pines a la vez
-function conCandado(operacion) {
+function conCandado(operacion, esperaMs) {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(ESPERA_CANDADO_MS)) {
+  if (!lock.tryLock(esperaMs || ESPERA_CANDADO_MS)) {
     return responder({ status: "error", ocupado: true, message: "⚠️ Sistema ocupado procesando otra transacción. Por favor, intenta de nuevo en unos segundos." });
   }
   try {

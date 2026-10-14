@@ -25,6 +25,11 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 
 **Regla** (desde 2026-10-13): ningún error lo libera, ni pago insuficiente ni rechazo del proveedor. Siempre `bloquearPago` (anota en "errores" y marca "Usado"); el cliente sigue por WhatsApp. No volver a añadir `marcar_verificado`/`liberar_pedido`.
 
+## 2d. Pagos de MacroDroid que no llegan a "pagos"
+
+**Síntoma**: MacroDroid recibe HTTP 200 pero la fila no aparece.
+**Causas vistas**: (1) la URL de MacroDroid era de otro Apps Script; la respuesta ahora trae `libro`, `hoja` y `fila`, y si no los trae, es otro script. (2) El candado: con 8 s de espera, si había una recarga en curso respondía `ocupado` (también HTTP 200) sin guardar; MacroDroid ahora espera `ESPERA_CANDADO_MACRODROID_MS` (20 s). (3) `SocketTimeoutException` hacia `script.googleusercontent.com`: red del teléfono. En MacroDroid hay que reintentar si `respuesta` no contiene `success`; es seguro porque el script detecta la referencia repetida.
+
 ## 3. 401 del bot de Railway
 
 **Síntoma**: `El bot rechazó la autenticación (HTTP 401)`.
