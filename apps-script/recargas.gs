@@ -194,7 +194,10 @@ function guardarPagoMacroDroid(datos) {
   var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
   hoja.appendRow([fechaHora, textoSeguro(datos.telefono), ref, textoSeguro(datos.monto || "0"), "Verificado"]);
   SpreadsheetApp.flush();
-  return responder({ status: "success", message: "Pago guardado automáticamente" });
+  // Dónde quedó (se ve en la variable de respuesta de MacroDroid): si una columna tiene fórmulas o
+  // datos sueltos muy abajo, appendRow escribe después de ellos y la fila "no aparece" arriba.
+  return responder({ status: "success", message: "Pago guardado automáticamente",
+    libro: SpreadsheetApp.getActiveSpreadsheet().getName(), hoja: hoja.getName(), fila: hoja.getLastRow() });
 }
 
 // ==========================================
