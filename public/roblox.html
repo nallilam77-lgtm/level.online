@@ -301,6 +301,10 @@
     .whatsapp-theme .modal-nota { background: rgba(29, 185, 84, 0.08); border-left: 4px solid var(--whatsapp); color: #a5f3c3; }
     
     .monto-detalle { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; margin: 12px 0; text-align: left; }
+    /* Completar un pago insuficiente: mismos datos de pago + referencia del pago de la diferencia */
+    .completar-pago { display: none; text-align: left; }
+    .completar-pago .input-field { margin-bottom: 10px; }
+    .completar-pago .btn-confirmar { width: 100%; margin-bottom: 10px; }
     .monto-item { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
     .monto-item span { color: var(--text-main); }
     .monto-item strong { color: var(--whatsapp); font-size: 14px; }
@@ -516,8 +520,17 @@
         <div class="monto-item"><span>Monto Encontrado:</span> <strong id="waMontoEncontrado"></strong></div>
         <div class="monto-item red"><span>Falta por pagar:</span> <strong id="waMontoFaltante"></strong></div>
       </div>
-      
-      <div class="modal-nota">
+
+      <!-- Completar: paga la diferencia a los mismos datos y escribe la nueva referencia -->
+      <div id="bloqueCompletar" class="completar-pago">
+        <p class="modal-texto">Paga <strong id="completarFaltante"></strong> a estos mismos datos y escribe la referencia del nuevo pago. La recarga irá al mismo ID y paquete.</p>
+        <div class="monto-detalle" id="completarDatosBanco"></div>
+        <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputRefCompletar" class="input-field" placeholder="Últimos 5 dígitos del nuevo pago" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+        <button type="button" class="btn-confirmar" id="btnCompletarPago" onclick="completarPagoInsuficiente()">COMPLETAR PAGO</button>
+        <div class="modal-nota" id="completarNota"></div>
+      </div>
+
+      <div class="modal-nota" id="notaWhatsAppInsuficiente">
         Para resolver esto rápidamente, haz clic en el botón de abajo y envíanos un mensaje a nuestro WhatsApp oficial <strong>0422-8887089</strong>.
       </div>
       
@@ -793,8 +806,10 @@
 
     let paqueteSeleccionado = null; 
     let usuarioVerificado = false;
-    let datosBancoGlobal = { banco: "", telefono: "", cedula: "" }; 
+    let datosBancoGlobal = { banco: "", telefono: "", cedula: "" };
     let isProcessing = false;
+    // Pago insuficiente que se puede completar: { token, faltante } (la clave solo vive en esta pestaña)
+    let complementoPendiente = null;
     let globalTxnCode = "";
     
     const API_PRECIOS_ROBLOX = '/api/juego?juego=roblox&accion=precios';
@@ -1120,10 +1135,12 @@
 
     // Copia un solo dato (para pegarlo campo por campo en la app del banco)
     window.copiarCampo = function(campo, boton) {
-      const nombres = { banco: 'Banco', telefono: 'Teléfono', cedula: 'Cédula', monto: 'Monto' };
+      const nombres = { banco: 'Banco', telefono: 'Teléfono', cedula: 'Cédula', monto: 'Monto', faltante: 'Monto que falta' };
       const valor = campo === 'monto'
         ? (paqueteSeleccionado ? String(paqueteSeleccionado.precio) : '')
-        : datosBancoGlobal[campo];
+        : campo === 'faltante'
+          ? (complementoPendiente ? complementoPendiente.faltante.toFixed(2).replace('.', ',') : '')
+          : datosBancoGlobal[campo];
       if (!valor) return;
 
       navigator.clipboard.writeText(valor).then(() => {
@@ -1175,6 +1192,40 @@
     window.cerrarModalNoEncontrado = function() { document.getElementById('modalPagoNoEncontrado').style.display = 'none'; };
     window.cerrarModalWhatsApp = function() { document.getElementById('modalWhatsApp').style.display = 'none'; };
 
+    // Pago insuficiente: muestra (o esconde) el bloque para pagar la diferencia con otra referencia.
+    // complemento = { token, faltante, horas } o null si el servidor no permite completarlo.
+    function mostrarCompletarPago(complemento) {
+      complementoPendiente = complemento;
+      const bloque = document.getElementById('bloqueCompletar');
+      const notaWhatsApp = document.getElementById('notaWhatsAppInsuficiente');
+      if (!complemento) {
+        bloque.style.display = 'none';
+        notaWhatsApp.innerHTML = 'Para resolver esto rápidamente, haz clic en el botón de abajo y envíanos un mensaje a nuestro WhatsApp oficial <strong>0422-8887089</strong>.';
+        return;
+      }
+      const dato = (etiqueta, valor, campo) => `<div class="bank-row">${etiqueta}: <span class="bank-value">${escaparHtml(valor)}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('${campo}', this)" aria-label="Copiar ${etiqueta.toLowerCase()}">📋</button></div>`;
+      document.getElementById('completarFaltante').textContent = `${complemento.faltante.toFixed(2)} Bs`;
+      document.getElementById('completarDatosBanco').innerHTML =
+        dato('Banco', datosBancoGlobal.banco, 'banco') + dato('Teléfono', datosBancoGlobal.telefono, 'telefono') +
+        dato('Cédula', datosBancoGlobal.cedula, 'cedula') + dato('Monto', `${complemento.faltante.toFixed(2)} Bs`, 'faltante');
+      document.getElementById('completarNota').textContent =
+        `Tienes ${complemento.horas || 48} horas. Si el nuevo pago tampoco alcanza, podrás completar otra vez (hasta 4 pagos en total).`;
+      document.getElementById('inputRefCompletar').value = '';
+      notaWhatsApp.innerHTML = '¿Necesitas ayuda? Escríbenos a nuestro WhatsApp oficial <strong>0422-8887089</strong>.';
+      bloque.style.display = 'block';
+    }
+
+    window.completarPagoInsuficiente = function() {
+      const referencia = document.getElementById('inputRefCompletar').value.trim();
+      if (!complementoPendiente) return;
+      if (!/^\d{5}$/.test(referencia)) {
+        mostrarBurbuja("Escribe los últimos 5 dígitos de la referencia del nuevo pago.", "var(--danger)");
+        return;
+      }
+      cerrarModalWhatsApp();
+      iniciarCargaConTiemposAleatorios({ token: complementoPendiente.token, referencia });
+    };
+
     // FUNCIÓN DE SUBIDA DE COMPROBANTE AL SERVIDOR (De Free Fire)
     async function subirComprobanteDrive(file) {
       return new Promise((resolve) => {
@@ -1215,7 +1266,9 @@
         document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
     }
 
-    window.iniciarCargaConTiemposAleatorios = async function() {
+    // complemento = { token, referencia } al completar un pago insuficiente (botón "COMPLETAR PAGO")
+    window.iniciarCargaConTiemposAleatorios = async function(complemento) {
+      const datosComplemento = complemento && complemento.token ? complemento : null;
       const btnConfirmar = document.getElementById('btnConfirmar');
       if (isProcessing) return; 
 
@@ -1228,7 +1281,7 @@
 
       isProcessing = true; btnConfirmar.disabled = true; btnConfirmar.textContent = 'PROCESANDO...';
 
-      const referenciaUsuario = document.getElementById('inputReferencia').value.trim();
+      const referenciaUsuario = datosComplemento ? datosComplemento.referencia : document.getElementById('inputReferencia').value.trim();
       const usuarioRoblox = document.getElementById('inputPlayerId').value.trim();
       const fileInput = document.getElementById('inputComprobante');
       
@@ -1243,7 +1296,8 @@
       try {
           let captureUrl = "Sin comprobante";
           
-          if (fileInput.files[0]) {
+          // Al completar un pago no se vuelve a subir el comprobante (ya quedó con el primer pago)
+          if (fileInput.files[0] && !datosComplemento) {
               textoElem.innerHTML = "📄 Adjuntando comprobante en servidor...";
               barraFill.style.width = '20%';
               captureUrl = await subirComprobanteDrive(fileInput.files[0]);
@@ -1255,7 +1309,9 @@
           let respuestaServidor = await fetch(API_COMPRA_ROBLOX, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+            // Al completar solo van la clave y la nueva referencia: el usuario, el paquete y el precio
+            // los toma el servidor de la compra original
+            body: JSON.stringify(datosComplemento ? { tokenComplemento: datosComplemento.token, referencia: referenciaUsuario } : {
                 referencia: referenciaUsuario,
                 user: usuarioRoblox,
                 producto: paqueteSeleccionado.producto,
@@ -1286,7 +1342,17 @@
 
              let msg = resultado.message || "";
              let msgLower = msg.toLowerCase();
-             
+
+             // Al completar: si el pago nuevo no se encontró, se vuelve a la ventana para corregir la referencia
+             if (datosComplemento && complementoPendiente && !resultado.insuficiente && !resultado.complementoInvalido) {
+                 document.getElementById('pantallaProcesando').style.display = 'none';
+                 mostrarBurbuja(`⚠️ ${msg || 'No encontramos ese pago.'}`, "var(--danger)");
+                 document.getElementById('modalWhatsApp').style.display = 'flex';
+                 isProcessing = false; btnConfirmar.disabled = false;
+                 return;
+             }
+             if (resultado.complementoInvalido) complementoPendiente = null;
+
              if (msgLower.includes("insuficiente") || resultado.insuficiente) {
                  document.getElementById('pantallaProcesando').style.display = 'none';
                  let pagado = parseFloat(resultado.montoPagado || 0);
@@ -1299,6 +1365,7 @@
 
                  let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* para Roblox ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Paquete:* ${paqueteSeleccionado.producto} (${formatoBs(paqueteSeleccionado.precio)})%0A*Monto Encontrado:* ${pagado} Bs%0A*Falta:* ${faltante} Bs%0A*Usuario Roblox:* ${usuarioRoblox}`;
                  document.getElementById('btnWhatsAppLink').href = `https://wa.me/584228887089?text=${msgWa}`;
+                 mostrarCompletarPago(resultado.tokenComplemento ? { token: resultado.tokenComplemento, faltante: Number(resultado.faltante) || Number(faltante), horas: resultado.horasParaCompletar } : null);
                  document.getElementById('modalWhatsApp').style.display = 'flex';
              } 
              else if(msgLower.includes("gastado") || msgLower.includes("usado")) {

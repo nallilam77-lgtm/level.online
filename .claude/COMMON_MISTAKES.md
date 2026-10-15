@@ -67,7 +67,7 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 
 ## 8b. Orden de la compra de Roblox (`apps-script/roblox.gs`)
 
-**Regla**: buscar pago y código sin tocar nada → marcar pago "Usado" → marcar el código `USADO-…` → anotar en "Exitosas" y compactar. Lo que va después de gastar el pago (registro, compactar) va en try/catch y nunca impide devolver el código al cliente. El stock que ve el cliente es solo disponible/pocos/agotado.
+**Regla**: buscar pago y código sin tocar nada → marcar pago "Usado" → marcar el código `USADO-…` → anotar en "Exitosas" y compactar. Lo que va después de gastar el pago (registro, compactar) va en try/catch y nunca impide devolver el código al cliente. El stock que ve el cliente es solo disponible/pocos/agotado. Pago insuficiente: con la huella de la clave (`claveHash`) el pago queda "Por completar" y la compra en "por_completar"; `tipo: "completar"` (`completarCompra`) busca el código ANTES de gastar el pago nuevo y al entregar marca TODOS los pagos "Usado". Tampoco se reintenta.
 
 ## 9. Recalcular la comisión de los creadores desde D
 

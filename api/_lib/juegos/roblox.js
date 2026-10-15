@@ -1,6 +1,6 @@
 // Roblox: precios, códigos de descuento y compra (el Apps Script de GAS_URL, apps-script/roblox.gs,
 // verifica el pago y entrega). Lo usan api/juego.js (precios, descuento) y api/recargar.js (recargar).
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
@@ -13,6 +13,9 @@ const TIEMPO_COMPRA_MS = 45000;
 const MENSAJE_SIN_CONFIGURAR = 'La tienda de Roblox no está disponible en este momento. Intenta más tarde.';
 // Con esta cantidad de códigos o menos, el paquete se muestra como "¡Últimos!"
 const POCOS_CODIGOS = 3;
+// Completar un pago insuficiente: la clave que recibe el cliente (la hoja solo guarda su huella SHA-256)
+const CLAVE_COMPLEMENTO = /^[A-Za-z0-9_-]{32,64}$/;
+const huella = (texto) => createHash('sha256').update(String(texto)).digest('hex');
 
 // CORS: solo tu dominio (igual que vercel.json)
 function cabecerasCors(res) {
@@ -83,8 +86,9 @@ async function precios(req, res) {
 
 export const acciones = { precios, descuento: crearAccionDescuento('Roblox', catalogoRoblox) };
 
-// Solo los campos que usa la página, nunca la respuesta cruda de Apps Script
-function respuestaCompra(data) {
+// Solo los campos que usa la página, nunca la respuesta cruda de Apps Script.
+// clave: la del pago por completar; solo se devuelve si roblox.gs guardó el pedido en "por_completar".
+function respuestaCompra(data, clave) {
   if (data?.status === 'success') {
     return { status: 'success', code: String(data.code ?? ''), message: String(data.message || '¡Código canjeado con éxito!') };
   }
@@ -92,7 +96,11 @@ function respuestaCompra(data) {
     status: 'error',
     message: String(data?.message || 'No pudimos completar la compra. Intenta de nuevo.'),
     ...(data?.insuficiente && { insuficiente: true, montoPagado: Number(data.montoPagado) || 0, precioOficial: Number(data.precioOficial) || 0 }),
+    ...(data?.insuficiente && data.porCompletar && clave && {
+      tokenComplemento: clave, faltante: Number(data.falta) || 0, horasParaCompletar: Number(data.horas) || 48,
+    }),
     ...(data?.agotado && { agotado: true }),
+    ...(data?.complementoInvalido && { complementoInvalido: true }),
   };
 }
 
@@ -106,6 +114,9 @@ export async function recargar(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ status: 'error', message: 'Método no permitido. Usa POST.' });
   }
+
+  // Segunda (o tercera...) referencia de un pago que no alcanzó
+  if (req.body?.tokenComplemento !== undefined) return completarCompra(req, res);
 
   const { tipo, referencia, user, producto, url_capture } = req.body || {};
   // COMPATIBILIDAD TEMPORAL: la página anterior pedía los precios con POST /api/roblox
@@ -157,9 +168,12 @@ export async function recargar(req, res) {
 
     // Identifica la venta en "movimientos_descuentos" (evita anotar dos veces el mismo uso)
     const idPedido = `rbx-${randomUUID()}`;
+    // Si el pago no alcanza, roblox.gs guarda el pedido "por completar" con la huella de esta clave
+    // (la clave solo la recibe el cliente, y solo si se guardó)
+    const clave = randomBytes(24).toString('base64url');
     const payload = conToken({
       tipo: 'compra', referencia: String(referencia), user: usuario, producto: String(producto),
-      url_capture: textoParaHoja(url_capture || 'Sin comprobante'), idPedido,
+      url_capture: textoParaHoja(url_capture || 'Sin comprobante'), idPedido, claveHash: huella(clave),
       ...(desc && { montoACobrar, codigoDescuento: desc.codigo }),
     });
 
@@ -187,10 +201,63 @@ export async function recargar(req, res) {
       await registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: montoACobrar, idPedido, idJugador: usuario, juego: 'Roblox' });
     }
 
-    return res.status(200).json(respuestaCompra(data));
+    return res.status(200).json(respuestaCompra(data, clave));
 
   } catch (error) {
     console.error('Error en la compra de Roblox:', error.message);
+    return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
+  }
+}
+
+/**
+ * Completar un pago insuficiente: POST { tokenComplemento, referencia (últimos 5 del nuevo pago) }.
+ * Todo ocurre en roblox.gs con su candado (tipo "completar"): el usuario, el paquete y el precio
+ * salen de la pestaña "por_completar" (el navegador no puede cambiarlos), y si ya alcanza, el código
+ * se reserva ANTES de gastar el pago nuevo. Igual que la compra, nunca se reintenta.
+ */
+async function completarCompra(req, res) {
+  try {
+    const clave = String(req.body?.tokenComplemento ?? '');
+    const referencia = String(req.body?.referencia ?? '');
+    if (!CLAVE_COMPLEMENTO.test(clave) || !/^\d{5}$/.test(referencia)) {
+      return res.status(400).json({ status: 'error', message: 'Escribe los últimos 5 dígitos de la referencia del pago que hiciste para completar.' });
+    }
+    const scriptUrl = process.env.GAS_URL;
+    if (!scriptUrl) {
+      return faltaConfiguracion(res, ['GAS_URL'], { status: 'error', message: MENSAJE_SIN_CONFIGURAR });
+    }
+
+    const claveHash = huella(clave);
+    // Intentos fallidos por IP y por clave (frena probar referencias al azar)
+    const clavesLimite = [`ip:${obtenerIp(req)}`, `completar:roblox:${claveHash.slice(0, 24)}`];
+    const minutosEspera = await minutosBloqueado(clavesLimite);
+    if (minutosEspera > 0) {
+      return res.status(429).json({ status: 'error', message: `Demasiados intentos fallidos. Espera ${minutosEspera} minutos para volver a intentar.` });
+    }
+
+    const idPedido = `rbx-${randomUUID()}`;
+    let data;
+    try {
+      data = await llamarScript(scriptUrl, conToken({ tipo: 'completar', claveHash, referencia, idPedido }), { tiempoMs: TIEMPO_COMPRA_MS });
+    } catch (error) {
+      if (!error.tiempoAgotado) throw error;
+      console.error(`⚠️ Completar pago de Roblox sin respuesta a tiempo | REF: ${referencia} | pedido ${idPedido} | clave ${claveHash.slice(0, 12)}…: revisar "por_completar" y "Exitosas"`);
+      return res.status(202).json({ status: 'error', message: 'Fallo técnico momentáneo: tu compra quedó en proceso. Si en 5 minutos no la recibes, escríbenos por WhatsApp con tus referencias.' });
+    }
+
+    if (data?.status !== 'success' && !data?.insuficiente) await registrarFallo(clavesLimite);
+
+    // Entregado con código de descuento: +1 uso y la comisión del creador (pestaña "Descuentos")
+    if (data?.status === 'success' && data.codigoDescuento) {
+      await registrarUsoDescuento({
+        codigo: String(data.codigoDescuento), montoCobrado: limpiarMontoVES(data.precio), idPedido,
+        idJugador: String(data.usuario || ''), juego: 'Roblox',
+      });
+    }
+
+    return res.status(200).json(respuestaCompra(data, clave));
+  } catch (error) {
+    console.error('Error al completar un pago de Roblox:', error.message);
     return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
   }
 }
