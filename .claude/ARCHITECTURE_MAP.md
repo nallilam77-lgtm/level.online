@@ -85,6 +85,7 @@ Detalle de cada variable: `.env.example`.
 ## Blood Strike
 
 - Paquetes por `clavePaquete` de bloodstrike.js: el oro por su número; los pases y bolsas por una palabra de su nombre en PreciosBlood, en español o inglés (`PALABRAS_PASES`: élite, premium, bolsa/lucky, temporada/season, nivel/level), p. ej. "Pase de Temporada" → `season_pass`. En bloodstrike.html, una columna sin números es un "Pase" y va al final.
+- Pago insuficiente: igual que Free Fire (`pago_por_completar` / `usar_complemento` en bloodstrike.gs, pestaña "por_completar" de la hoja de Blood Strike; `completarPago` → `entregarRecarga` en bloodstrike.js). bloodstrike.gs también tiene `bloquear_pedido` (usado si `usar_complemento` no responde). El estado "Por completar" vive en la hoja CENTRAL de pagos: ningún juego lo toma.
 - Éxito: `registrar_finalizado` lleva `ordenFazer`, `estadoFazer`, `ofertaFazer` y `montoCobrado`; bloodstrike.gs anota la fila en "fazer_card" (columna J = estado).
 
 ## Códigos de descuento y Panel de Creadores (hoja de Free Fire)
