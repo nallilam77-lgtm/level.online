@@ -17,6 +17,7 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 │   ├── recarga-comun.js  limpiarMontoVES, formatearVES, crearUtilidadesPedido (Free Fire y Blood Strike)
 │   ├── descuentos.js     Códigos de descuento (tabla común en la pestaña "Descuentos" de la hoja de Free Fire)
 │   ├── externo.js        pedirJSON/llamarScript: timeouts, reintentos, caché en memoria (conCache)
+│   ├── fazer.js          crearOrdenFazer (POST /topups/order con Idempotency-Key = idPedido; Blood Strike y Free Fire) y firmaFazerValida (webhook)
 │   ├── limitador.js      Límite de intentos fallidos (Firestore o memoria)
 │   ├── reporte.js        informeError(), FASES, ESTADO_PINES → pestaña "errores"
 │   └── validacion.js     PAQUETE_VALIDO, textoParaHoja(), faltaConfiguracion()
@@ -26,8 +27,10 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 ├── subir-imagen.js       Comprobante de pago → Drive (límite 4 MB)
 ├── consultar-ordenes.js  Consulta de pedidos (página de inicio)
 ├── ruleta.js             Ruleta de la suerte (apps-script/ruleta.gs; reintenta: el giro es idempotente)
+├── fazer-webhook.js      Webhook de FazerCards (firma X-Webhook-Signature) → estado_fazer de recargas.gs → pestaña "fazer_card"
 └── ia-soporte.js         Chat de soporte con Gemini (rota GEMINI_KEYS)
-apps-script/recargas.gs   Copia del Apps Script de recargas Free Fire (v2, con idPedido)
+scripts/ofertas-fazer.mjs Lista categorías y offer_id de FazerCards para rellenar OFERTAS_FAZER (solo lee)
+apps-script/recargas.gs   Copia del Apps Script de recargas Free Fire (v2, con idPedido). 8 secciones: configuración, doPost, pagos, pines, ruleta, descuentos/creadores, menús, utilidades
 public/                   Frontend estático; cada página lleva su CSS/JS en línea
 ├── index.html            Inicio + consultar órdenes + acceso al Panel de Creadores
 ├── creadores.html + css/creadores.css   Panel de Creadores (cómo ganas, reglas y consulta con código + PIN)
@@ -52,12 +55,13 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 ## Flujo de una recarga Free Fire (`api/_lib/juegos/freefire.js` → `recargar`)
 
 1. Valida entrada y límite de fallos (`limitador.js`).
-2. `obtener_precios` (caché) → precio real del paquete (nunca el del cliente).
+2. `obtener_precios` (caché) → precio real del paquete (nunca el del cliente). Cada paquete se reconoce por `clavePaquete` (igual en freefire.js y recargas.gs): los números ("110 💎" → "110") o, para las tarjetas, el nombre de su columna en "precios"/"codigos" ("Tarjeta semanal" → "semanal", "Semanal Lite" → "semanal_lite", "Tarjeta mensual" → "mensual"). freefire.html las muestra como "Membresía" al final del catálogo.
 3. `verificar_pago` (referencia + monto + `idPedido`) — idempotente.
-4. `obtener_codigo` → pines del inventario — idempotente. Si no hay pines del paquete (o no existe su columna), con `manualSiNoHay` recargas.gs anota el pedido en la pestaña **"sin_codigo"** (recarga manual, casilla "¿hecha?") y responde `{manual:true}`: Vercel salta el bot, marca el pago "Usado", lo anota en finalizados y al cliente le responde éxito. Si Vercel no recibe esa respuesta, la fila se queda en "sin_codigo" y el pago se bloquea ("Usado"). Interruptor en el menú de la hoja "🖐️ Recargas Free Fire" (propiedad `MODO_RECARGA_FF`): "manual" (o sin elegir) manda TODOS los pedidos a "sin_codigo" aunque haya pines; "automatico" usa los pines.
+4. `obtener_codigo` → pines del inventario — idempotente. Si no hay pines del paquete (o no existe su columna), con `manualSiNoHay` recargas.gs anota el pedido en la pestaña **"sin_codigo"** (recarga manual, casilla "¿hecha?") y responde `{manual:true}`: Vercel salta el bot, marca el pago "Usado", lo anota en finalizados y al cliente le responde éxito. Si Vercel no recibe esa respuesta, la fila se queda en "sin_codigo" y el pago se bloquea ("Usado"). Interruptor en el menú de la hoja "🖐️ Recargas Free Fire" (propiedad `MODO_RECARGA_FF`): "manual" (o sin elegir) manda TODOS los pedidos a "sin_codigo" aunque haya pines; "automatico" (bot) usa los pines; "api" anota el pedido en la pestaña **"fazer_card"** ("📤 POR ENVIAR") y responde `{api:true}` si Vercel mandó `ofertaFazer` (paquete en `OFERTAS_FAZER` de freefire.js y `FAZER_API_KEY`); si no, va a "sin_codigo".
 5. POST al bot de Railway `/canjear` (`x-secret-token`). Resultado: ok / fallo_bot / no_procesado / incierto.
+   Modo API (`{api:true}`): en vez del bot, `crearOrdenFazer` (categoría `free_fire`, sin reintentos). ok → el cliente ve éxito aunque la orden siga "processing"; rechazo/incierto → `bloquearPago` (fase `apiFreeFire`) y la fila de "fazer_card" queda "❌ ERROR". Después, `api/fazer-webhook.js` actualiza la columna K (estado) en tiempo real; "failed"/"refund" anota UNA fila en "errores" para hacerla a mano. Si el aviso llega antes que `registrar_finalizado`, recargas.gs lo guarda 6 h en CacheService y lo aplica al anotar la orden.
 6. Si falla (cualquier error con el pago ya encontrado, también pago insuficiente): `devolver_codigos` cuando es seguro, y `bloquearPago` (`_lib/recarga-comun.js`): `registrar_error` y después `marcar_usado`. **Un pago nunca vuelve a "Verificado"** (recargas.gs ya no tiene `liberar_pedido` ni `marcar_verificado`; si `verificar_pago` no responde se usa `bloquear_pedido`). Un pedido de "sin_codigo" no se borra: se hace a mano.
-7. Éxito: `registrar_finalizado`.
+7. Éxito: `registrar_finalizado` (en modo API también lleva `ordenFazer` y `estadoFazer`, que se anotan en "fazer_card").
 
 ## Servicios externos y variables
 
@@ -68,7 +72,8 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 | Apps Script validador | `SCRIPT_VALIDADOR_URL` | juegos/freefire (verificar) |
 | Apps Script ruleta (`apps-script/ruleta.gs`) | `SCRIPT_RULETA_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | ruleta |
 | Apps Script Roblox (`apps-script/roblox.gs`) | `GAS_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | juegos/roblox |
-| Apps Script + FazerCards | `SCRIPT_BLOOD`, `FAZER_API_KEY` | juegos/bloodstrike |
+| Apps Script + FazerCards | `SCRIPT_BLOOD`, `FAZER_API_KEY` | juegos/bloodstrike, juegos/freefire (modo API) |
+| Webhook FazerCards | `FAZER_WEBHOOK_SECRET` (+ `SCRIPT_RECARGAS_URL`) | fazer-webhook |
 | Bot Railway | `RAILWAY_SECRET` | juegos/freefire (recarga) |
 | Firestore | `FIREBASE_SERVICE_ACCOUNT` | _lib/limitador |
 | Gemini | `GEMINI_KEYS` / `GEMINI_API_KEY`, `GEMINI_MODEL` | ia-soporte |

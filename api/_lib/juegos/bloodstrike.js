@@ -7,6 +7,7 @@ import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido } from '../recarga-comun.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
+import { crearOrdenFazer } from '../fazer.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con respuesta incierta:
 // precios 12 + verificar 32 + FazerCards 40 + registrar 12 + marcar 12 = 108 s
@@ -71,46 +72,6 @@ export const acciones = { precios, descuento: crearAccionDescuento('Blood Strike
 // =========================================================================
 // RECARGA (api/recargar.js)
 // =========================================================================
-
-/**
- * Crea la orden en FazerCards y clasifica el resultado:
- *  - ok:       FazerCards confirmó la recarga.
- *  - rechazo:  FazerCards respondió claramente que NO hizo la recarga.
- *  - incierto: red caída, tiempo agotado, error 5xx o respuesta ilegible: la orden PUDO crearse.
- */
-async function crearOrdenFazer({ apiKey, offerId, idJugador }) {
-  const controlador = new AbortController();
-  const temporizador = setTimeout(() => controlador.abort(), TIEMPOS.fazer);
-  try {
-    const respuesta = await fetch("https://api.fzr.cards/api/v2/topups/order", {
-      method: "POST",
-      headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        "category_id": "blood_strike",
-        "offer_id": offerId,
-        "fields": { "player_id": idJugador }
-      }),
-      signal: controlador.signal
-    });
-    const texto = await respuesta.text();
-    if (respuesta.status >= 500) {
-      return { tipo: 'incierto', motivo: `FazerCards respondió HTTP ${respuesta.status}: ${texto.slice(0, 200) || 'sin cuerpo'}. La orden pudo haberse creado.` };
-    }
-    let datos;
-    try { datos = JSON.parse(texto); } catch (e) {
-      return { tipo: 'incierto', motivo: `FazerCards devolvió una respuesta ilegible (HTTP ${respuesta.status}): ${texto.slice(0, 200) || 'vacía'}. La orden pudo haberse creado.` };
-    }
-    if (datos && datos.ok === true) return { tipo: 'ok', datos };
-    return { tipo: 'rechazo', motivo: `FazerCards rechazó la recarga (HTTP ${respuesta.status}): ${String(datos?.error || 'ID de jugador incorrecto o mantenimiento.')}`, errorCliente: String(datos?.error || "ID de jugador incorrecto o mantenimiento.") };
-  } catch (error) {
-    const motivo = error.name === 'AbortError'
-      ? `FazerCards no respondió en ${Math.round(TIEMPOS.fazer / 1000)} s (tiempo agotado). La orden pudo haberse creado.`
-      : `Error de red con FazerCards (${error.cause?.code || error.message}). La orden pudo haberse creado.`;
-    return { tipo: 'incierto', motivo };
-  } finally {
-    clearTimeout(temporizador);
-  }
-}
 
 export async function recargar(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
@@ -243,7 +204,10 @@ export async function recargar(req, res) {
       return res.status(202).json({ status: "error", message: "Fallo técnico con el proveedor. Tu pago está verificado y la recarga quedó en revisión." });
     }
 
-    const orden = await crearOrdenFazer({ apiKey: FAZER_API_KEY, offerId: offerIdFinal, idJugador: id });
+    const orden = await crearOrdenFazer({
+      apiKey: FAZER_API_KEY, categoria: "blood_strike", offerId: offerIdFinal, campos: { "player_id": id },
+      idempotencia: idPedido, tiempoMs: TIEMPOS.fazer,
+    });
 
     if (orden.tipo === 'incierto') {
       console.error(`⚠️ [${FASES.apiBloodStrike}] ${orden.motivo} | REF: ${referenciaCompleta}`);

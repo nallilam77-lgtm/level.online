@@ -74,6 +74,11 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 **Síntoma**: al cambiar el % de comisión o la tasa, el pendiente de un creador cambia sobre ventas ya hechas.
 **Regla**: H (total) y J (pendiente) de "Descuentos" son saldos: solo los suma `sumarComisionCreador` en cada venta y los baja Registrar pago. Nunca volver a calcularlos como D × % ÷ tasa. Si se cambia el % y hay que aplicarlo a ventas pasadas, usar `pasarVentasAnterioresAlPorcentaje` (venta por venta, cada una con su tasa).
 
+## 9b. Webhook de FazerCards (`api/fazer-webhook.js`)
+
+**Regla**: FazerCards espera un 200 en menos de 10 s; con otra respuesta reintenta (1, 5 y 30 min) y tras 50 fallos seguidos **desactiva el webhook** (reactivarlo en su panel). Por eso solo se responde 401 (firma mala) o 503 (la hoja no respondió); lo demás, incluidas las órdenes de Blood Strike (misma cuenta), es 200. La firma se calcula sobre el cuerpo **crudo**: no leer `req.body` antes de `leerCuerpoCrudo`. Si el log muestra siempre "firma inválida", `FAZER_WEBHOOK_SECRET` no coincide con el del panel. `estado_fazer` espera el candado solo 4 s (`ESPERA_CANDADO_WEBHOOK_MS`).
+**Orden de despliegue del modo API**: primero Vercel (freefire.js con `OFERTAS_FAZER`), después recargas.gs, y solo entonces elegir "🛒 API de FazerCards" en el menú. Con un Vercel anterior, `{api:true}` se trataría como "sin pines" y el pago quedaría bloqueado.
+
 ## 10. Bot de Railway: `BlockingIOError: [Errno 11] Resource temporarily unavailable`
 
 **Síntoma**: todas las recargas de Free Fire caen en "errores"; el log del bot muestra ese error al abrir Playwright (`async_playwright()`).

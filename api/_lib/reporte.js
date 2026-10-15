@@ -9,6 +9,7 @@ export const FASES = {
   codigos: '3. OBTENCIÓN DE CÓDIGOS (inventario en Google Sheets)',
   botFreeFire: '4. CANJE EN FREE FIRE (bot de Railway)',
   apiBloodStrike: '4. RECARGA EN LA API DEL PROVEEDOR (FazerCards)',
+  apiFreeFire: '4. RECARGA DE FREE FIRE EN LA API DEL PROVEEDOR (FazerCards)',
   cierre: '5. CIERRE DEL PEDIDO (marcar pago usado / registrar finalizado)',
 };
 

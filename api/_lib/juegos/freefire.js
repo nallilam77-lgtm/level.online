@@ -1,4 +1,6 @@
-// Free Fire: precios, verificación de ID y recarga (pines del inventario + bot de Railway).
+// Free Fire: precios, verificación de ID y recarga. Cómo se entrega lo decide el modo del menú
+// "🖐️ Recargas Free Fire" de la hoja (recargas.gs): manual ("sin_codigo"), pines + bot de Railway,
+// o API de FazerCards (pestaña "fazer_card", con el estado en tiempo real vía api/fazer-webhook.js).
 // Lo usan api/juego.js (acciones precios y verificar) y api/recargar.js (recargar).
 import { randomUUID } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
@@ -7,20 +9,52 @@ import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion
 import { FASES, ESTADO_PINES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido } from '../recarga-comun.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
+import { crearOrdenFazer } from '../fazer.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con fallo del bot:
 // precios 8 + verificar 32 + códigos 32 + bot 45 + devolver pines 15 + registrar 12 + marcar 12 = 156 s
 // Peor caso con éxito: precios 12 + verificar 32 + códigos 32 + bot 45 + marcar 12 + finalizado 12 + aviso 12 = 157 s
+// Peor caso por FazerCards: precios 12 + verificar 32 + códigos 32 + fazer 40 + marcar 12 + finalizado 12 + aviso 12 = 152 s
 const TIEMPOS = {
   // verificar_pago y obtener_codigo: hasta 3 intentos de 15 s dentro de 32 s
   idempotente: { tiempoMs: 32000, intentoMs: 15000, reintentos: 2, reintentarTrasTimeout: true },
   // Apps Script anterior (sin idPedido): un solo intento largo, nunca se repite
   sinIdempotencia: { tiempoMs: 20000 },
   bot: 45000,
+  // La orden de FazerCards NUNCA se reintenta: repetirla podría recargar dos veces
+  fazer: 40000,
   devolver: { tiempoMs: 15000, intentoMs: 10000, reintentos: 1, reintentarTrasTimeout: true },
   incidente: 12000,
 };
 const RAILWAY_URL = "https://bot-levelup-production.up.railway.app/canjear";
+
+// Modo API (FazerCards): categoría y offer_id de cada paquete (clave del paquete -> offer_id).
+// Un paquete sin offer_id aquí NO se envía a la API: va a "sin_codigo" para hacerlo a mano.
+// Para ver los valores reales: node scripts/ofertas-fazer.mjs (con FAZER_API_KEY).
+const CATEGORIA_FAZER = "free_fire_latam";
+const OFERTAS_FAZER = {
+  "110": "110_diamonds",
+  "341": "341_diamonds",
+  "572": "572_diamonds",
+  "1166": "1166_diamonds",
+  "2398": "2398_diamonds",
+  "6160": "6160_diamonds",
+  "semanal_lite": "weekly_lite",
+  "semanal": "weekly_membership",
+  "mensual": "monthly_membership",
+};
+
+// Clave de un paquete, igual que clavePaquete() de recargas.gs: "110 Diamantes" -> "110";
+// las tarjetas se reconocen por el nombre de su columna en "precios" ("Tarjeta semanal",
+// "Semanal Lite", "Tarjeta mensual"; también en inglés) -> "semanal", "semanal_lite", "mensual".
+function clavePaquete(texto) {
+  const t = String(texto ?? '').toLowerCase();
+  if (/semanal|weekly/.test(t)) return /lite/.test(t) ? 'semanal_lite' : 'semanal';
+  if (/mensual|monthly/.test(t)) return 'mensual';
+  return t.replace(/[^0-9]/g, '');
+}
+// Clave del ID del jugador en "fields" (la que muestra el script de ofertas para Free Fire)
+const CAMPO_JUGADOR_FAZER = "player_id";
 // Errores de conexión en los que la petición NUNCA llegó al bot: es seguro reintentar
 const CONEXION_NO_ESTABLECIDA = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -207,6 +241,8 @@ export async function recargar(req, res) {
     // trim(): al pegar el valor en Vercel es fácil que se cuele un espacio o salto de línea,
     // y el bot lo rechaza con 401 aunque la clave "se vea" igual
     const RAILWAY_SECRET = (process.env.RAILWAY_SECRET || "").trim();
+    // Opcional: sin ella, en modo API los pedidos van a "sin_codigo" (recarga manual)
+    const FAZER_API_KEY = (process.env.FAZER_API_KEY || "").trim();
 
     // Sin secreto no se puede autenticar con el bot: se aborta antes de tocar pagos o códigos
     if (!URL_GOOGLE_SCRIPT || !RAILWAY_SECRET) {
@@ -252,8 +288,8 @@ export async function recargar(req, res) {
     const scriptV2 = Number(dataPrecios.version) >= 2;
     const opcionesCriticas = scriptV2 ? TIEMPOS.idempotente : TIEMPOS.sinIdempotencia;
 
-    const numeroDiamantes = String(paquete).replace(/[^0-9]/g, '');
-    const paqueteGsheet = dataPrecios.catalogo.find(p => String(p.diamantes).replace(/[^0-9]/g, '') === numeroDiamantes);
+    const numeroDiamantes = clavePaquete(paquete);
+    const paqueteGsheet = numeroDiamantes && dataPrecios.catalogo.find(p => clavePaquete(p.diamantes) === numeroDiamantes);
     if (!paqueteGsheet) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado." });
@@ -331,6 +367,8 @@ export async function recargar(req, res) {
       dataCodigos = await llamarScript(URL_GOOGLE_SCRIPT, {
         accion: "obtener_codigo", diamantes: numeroDiamantes, idPedido, referencia: referenciaCompleta,
         manualSiNoHay: true, idJugador: String(id), paquete: textoParaHoja(String(paquete)), montoCobrado: precioReal, comprobante,
+        // Modo API: con qué oferta se pediría a FazerCards (vacía = no se puede, va a "sin_codigo")
+        ofertaFazer: FAZER_API_KEY ? (OFERTAS_FAZER[numeroDiamantes] || "") : "",
         ...(desc && { codigoDescuento: desc.codigo }),
       }, opcionesCriticas);
     } catch (error) {
@@ -349,6 +387,8 @@ export async function recargar(req, res) {
             : { sinPines: true };
           // El pedido se quedó en "sin_codigo": hacerlo desde ahí
           if (devolucion.manual) queHacer = 'el pedido está en la pestaña "sin_codigo": hacer la recarga a mano desde ahí';
+          // Modo API: la orden NO se envió a FazerCards (quedó "NO ENVIADO" en "fazer_card")
+          if (devolucion.api) queHacer = 'la orden NO se envió a FazerCards (pestaña "fazer_card"): hacer la recarga a mano';
         } else {
           detallePines = { pinesNoUsados: [`consultar la pestaña "asignaciones_pines", pedido ${idPedido}`], estadoNoUsados: `${ESTADO_PINES.noDevueltos} (Apps Script tampoco respondió a la devolución: ${devolucion?.message})` };
         }
@@ -364,8 +404,10 @@ export async function recargar(req, res) {
     // Sin pines: el pedido quedó en "sin_codigo" para hacerlo a mano; se cierra igual que una recarga
     const manual = dataCodigos?.status === "success" && dataCodigos.manual === true;
     if (manual) console.info(`📝 Sin pines de ${numeroDiamantes}: pedido ${idPedido} (ID ${id}) anotado en "sin_codigo" para recarga manual`);
+    // Modo API: el pedido quedó en "fazer_card" y la recarga la hace FazerCards
+    const porApi = dataCodigos?.status === "success" && dataCodigos.api === true;
 
-    if (!manual && (!dataCodigos || dataCodigos.status !== "success" || !Array.isArray(dataCodigos.pines) || !dataCodigos.pines.length)) {
+    if (!manual && !porApi && (!dataCodigos || dataCodigos.status !== "success" || !Array.isArray(dataCodigos.pines) || !dataCodigos.pines.length)) {
       // Apps Script anterior (sin "sin_codigo") o error: no salió ningún pin; el pago se bloquea igual
       await bloquearPago(referenciaCompleta, {
         fase: FASES.codigos, sinPines: true,
@@ -375,12 +417,45 @@ export async function recargar(req, res) {
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago está verificado y la recarga quedó en revisión." });
     }
 
-    const pinesExtraidos = manual ? [] : dataCodigos.pines;
+    const pinesExtraidos = manual || porApi ? [] : dataCodigos.pines;
+
+    // ==========================================
+    // FASE 4 (modo API): ORDEN EN FAZERCARDS
+    // ==========================================
+    let ordenFazer = null;
+    if (porApi) {
+      const offerId = OFERTAS_FAZER[numeroDiamantes];
+      const orden = offerId && FAZER_API_KEY
+        ? await crearOrdenFazer({
+          apiKey: FAZER_API_KEY, categoria: CATEGORIA_FAZER, offerId, campos: { [CAMPO_JUGADOR_FAZER]: String(id) },
+          idempotencia: idPedido, tiempoMs: TIEMPOS.fazer,
+        })
+        // No debería pasar (sin oferta recargas.gs lo manda a "sin_codigo"); por si acaso, no se llama a la API
+        : { tipo: 'rechazo', motivo: `El paquete ${numeroDiamantes} no tiene offer_id en OFERTAS_FAZER o falta FAZER_API_KEY. No se llamó a la API.` };
+
+      if (orden.tipo !== 'ok') {
+        console.error(`❌ [${FASES.apiFreeFire}] ${orden.motivo} | REF: ${referenciaCompleta}`);
+        // Registrar el incidente y LUEGO bloquear el pago (en orden, dentro de bloquearPago)
+        await bloquearPago(referenciaCompleta, {
+          fase: FASES.apiFreeFire, noAplica: true,
+          motivo: orden.tipo === 'incierto'
+            ? `${orden.motivo} Oferta ${offerId}. ANTES DE REPETIR: buscar en el panel de FazerCards si existe una orden para el jugador ${id}.`
+            : `${orden.motivo} Oferta ${offerId}.`,
+          queHacer: orden.tipo === 'incierto'
+            ? 'confirmar la orden en FazerCards antes de repetir la recarga'
+            : 'no se cobró nada en FazerCards; hacer la recarga a mano con el ID correcto o devolver el pago',
+        });
+        // "fallo técnico": la página muestra el modal de "recarga en revisión"
+        return res.status(202).json({ status: "error", message: "Fallo técnico con el proveedor. Tu pago está verificado y la recarga quedó en revisión." });
+      }
+      ordenFazer = orden.orden;
+      console.info(`🛒 FazerCards: orden ${ordenFazer.id} (${ordenFazer.status}) para el pedido ${idPedido} (ID ${id})`);
+    }
 
     // ==========================================
     // FASE 4: CANJE EN EL BOT DE RAILWAY (no aplica a una recarga manual)
     // ==========================================
-    const bot = manual
+    const bot = manual || porApi
       ? { tipo: 'ok', usados: [] }
       : await canjearEnBot({ pines: pinesExtraidos, idJugador: id, secreto: RAILWAY_SECRET });
 
@@ -428,7 +503,10 @@ export async function recargar(req, res) {
       idJugador: id,
       paquete: paquete,
       referencias: referenciaCompleta,
-      codigosUsados: manual ? 'SIN CÓDIGO: recarga manual pendiente (pestaña "sin_codigo")' : pinesExtraidos.join(" | "),
+      codigosUsados: manual ? 'SIN CÓDIGO: recarga manual pendiente (pestaña "sin_codigo")'
+        : porApi ? `API FazerCards (orden ${ordenFazer.id || 'sin id'})` : pinesExtraidos.join(" | "),
+      // recargas.gs guarda la orden y su estado en la pestaña "fazer_card"
+      ...(porApi && { ordenFazer: ordenFazer.id, estadoFazer: ordenFazer.status }),
       urlImagen: comprobante,
       idPedido,
       // recargas.gs suma +1 uso y el monto cobrado al código en la pestaña "Descuentos"
@@ -445,8 +523,10 @@ export async function recargar(req, res) {
         fase: FASES.cierre,
         motivo: manual
           ? `Recarga MANUAL (anotada en "sin_codigo"), pero Apps Script no respondió al cierre: falta ${pendiente}`
-          : `La recarga SÍ se entregó, pero Apps Script no respondió al cierre: falta ${pendiente}`,
-        referenciaCompleta, pinesUsados: bot.usados,
+          : porApi
+            ? `FazerCards aceptó la orden ${ordenFazer.id}, pero Apps Script no respondió al cierre: falta ${pendiente} (y anotar la orden en "fazer_card")`
+            : `La recarga SÍ se entregó, pero Apps Script no respondió al cierre: falta ${pendiente}`,
+        referenciaCompleta, pinesUsados: bot.usados, noAplica: porApi,
         estadoPago: pagoMarcado ? 'USADO (correcto)' : `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}`,
       }));
     }

@@ -8,7 +8,7 @@ No hay `scripts` en `package.json`, ni tests ni build: los endpoints se desplieg
 
 ```bash
 # Sintaxis de todos los endpoints (Node 24, ESM)
-for f in api/*.js api/_lib/*.js; do node --check "$f" || echo "FALLA $f"; done
+for f in api/*.js api/_lib/*.js api/_lib/juegos/*.js; do node --check "$f" || echo "FALLA $f"; done
 ```
 
 ## Local

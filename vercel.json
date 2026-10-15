@@ -5,7 +5,8 @@
     "api/creadores.js": { "maxDuration": 30 },
     "api/consultar-ordenes.js": { "maxDuration": 30 },
     "api/subir-imagen.js": { "maxDuration": 30 },
-    "api/ruleta.js": { "maxDuration": 30 }
+    "api/ruleta.js": { "maxDuration": 30 },
+    "api/fazer-webhook.js": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/api/precios", "destination": "/api/juego?juego=freefire&accion=precios" },
