@@ -168,6 +168,7 @@
     .product-card.full-width { grid-column: span 2; }
     
     .diamonds-count { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 22px; color: #ffffff; line-height: 1.1; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .diamonds-count--texto { font-size: 16px; text-align: center; }
     .price-box { display: inline-block; background: rgba(var(--game-accent-rgb), 0.08); border-radius: 50px; padding: 5px 10px; border: 1px solid rgba(var(--game-accent-rgb), 0.25); }
     .price-text { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--game-text); letter-spacing: 0.5px; white-space: nowrap; }
 
@@ -868,11 +869,20 @@
       }
     }
 
+    // Pases y bolsas (columna de precios sin números, p. ej. "Strike Pass Elite"): se muestran y
+    // se piden por su nombre; el oro, por su cantidad
+    const esPase = (texto) => !/\d/.test(String(texto));
+    const nombrePaquete = (item) => {
+      const texto = String(item.diamantes).trim();
+      return esPase(texto) ? texto : `${texto.replace(/diamantes|oro|monedas/gi, '').trim()} Oro`;
+    };
+
     // Dibuja el catálogo. Con descuento, cada paquete trae "precioOriginal" (tachado) y "precio"
     // ya descontado por el servidor. Si había un paquete elegido, se vuelve a elegir con el precio nuevo.
     function renderizarCatalogo(lista) {
       const container = document.getElementById('catalogContainer');
-      const paquetes = [...lista].sort((a, b) => window.formatearMontoVES(a.diamantes) - window.formatearMontoVES(b.diamantes));
+      // Oro de menor a mayor y los pases al final
+      const paquetes = [...lista].sort((a, b) => (esPase(a.diamantes) - esPase(b.diamantes)) || (window.formatearMontoVES(a.diamantes) - window.formatearMontoVES(b.diamantes)));
       window.catalogoGlobal = paquetes;
       const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.diamantes) : null;
 
@@ -887,7 +897,7 @@
           card.setAttribute('tabindex', '0');
           const cantidad = String(item.diamantes).replace(/diamantes|oro|monedas/gi, '').trim();
           // "etiqueta" es opcional en el catálogo (ej: "🔥 Más popular"); si no viene, no se muestra badge
-          card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}<div class="diamonds-count">${cantidad} 🪙</div><div class="product-label">Oro</div>${item.precioOriginal !== undefined ? `<div class="price-original">${item.precioOriginal} Bs</div>` : ''}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
+          card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}${esPase(item.diamantes) ? `<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="product-label">Pase</div>` : `<div class="diamonds-count">${cantidad} 🪙</div><div class="product-label">Oro</div>`}${item.precioOriginal !== undefined ? `<div class="price-original">${item.precioOriginal} Bs</div>` : ''}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
           card.addEventListener('click', () => seleccionarProducto(card, item));
           card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, item); } });
           container.appendChild(card);
@@ -971,7 +981,7 @@
         const cantidad = String(paqueteSeleccionado.diamantes).replace(/diamantes|oro|monedas/gi, '').trim();
         label.textContent = estado.pago ? 'Listo para confirmar' : 'Paso 3 de 4 · Tu pedido';
         value.innerHTML = '';
-        value.append(`🪙 ${cantidad} · `);
+        value.append(esPase(paqueteSeleccionado.diamantes) ? `${nombrePaquete(paqueteSeleccionado)} · ` : `🪙 ${cantidad} · `);
         const precio = document.createElement('span');
         precio.className = 'precio';
         precio.textContent = `${paqueteSeleccionado.precio} Bs`;
@@ -1153,11 +1163,10 @@
         return; 
       }
       
-      let diamantesClean = String(paqueteSeleccionado.diamantes).replace(/diamantes|oro|monedas/gi, '').trim();
       
       document.getElementById('resumenId').textContent = id; 
       document.getElementById('resumenNombreJugador').textContent = nombreJugadorVerificado;
-      document.getElementById('resumenPaquete').textContent = `${diamantesClean} Oro (Blood Strike)`; 
+      document.getElementById('resumenPaquete').textContent = `${nombrePaquete(paqueteSeleccionado)} (Blood Strike)`;
       document.getElementById('resumenMonto').textContent = `${paqueteSeleccionado.precio} Bs`;
       
       // =======================================================
@@ -1260,13 +1269,13 @@
           textoElem.innerHTML = "🔍 Verificando pago y bloqueando referencia...";
           barraFill.style.width = '45%';
            
-          let diamantesClean = String(paqueteSeleccionado.diamantes).replace(/diamantes|oro|monedas/gi, '').trim();
+          const nombreDelPaquete = nombrePaquete(paqueteSeleccionado);
 
           const respuestaServidor = await fetch(SCRIPT_RECARGAS_URL, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 id: playerId, 
-                paquete: `${diamantesClean} Oro Blood Strike`, 
+                paquete: `${nombreDelPaquete} Blood Strike`,
                 referencia: referenciaUsuario, 
                 urlImagen: captureUrl,
                 // Solo el código: el servidor recalcula el descuento y el precio a cobrar
@@ -1303,11 +1312,11 @@
                  let precioReal = parseFloat(resultado.precioRequerido || 0);
                  let faltante = parseFloat(resultado.faltante || 0);
                  
-                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (<strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${diamantesClean} Oro</strong>.`;
+                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (<strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${nombreDelPaquete}</strong>.`;
                  document.getElementById('waMontoEncontrado').innerText = pagado > 0 ? pagado.toFixed(2) + " Bs" : "Monto no detectado";
                  document.getElementById('waMontoFaltante').innerText = pagado > 0 ? faltante.toFixed(2) + " Bs" : "Diferencia desconocida";
 
-                 let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Monto que pagué:* ${pagado.toFixed(2)} Bs%0A*Paquete deseado:* ${diamantesClean} Oro (${precioReal.toFixed(2)} Bs)%0A*Me faltan:* ${faltante.toFixed(2)} Bs%0A%0A¿Cómo hago para completarlo?`;
+                 let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Monto que pagué:* ${pagado.toFixed(2)} Bs%0A*Paquete deseado:* ${nombreDelPaquete} (${precioReal.toFixed(2)} Bs)%0A*Me faltan:* ${faltante.toFixed(2)} Bs%0A%0A¿Cómo hago para completarlo?`;
                  document.getElementById('btnWhatsAppLink').href = `https://wa.me/584228887089?text=${msgWa}`;
                  document.getElementById('modalWhatsApp').style.display = 'flex';
              } 

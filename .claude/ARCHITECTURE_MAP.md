@@ -27,8 +27,9 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 ├── subir-imagen.js       Comprobante de pago → Drive (límite 4 MB)
 ├── consultar-ordenes.js  Consulta de pedidos (página de inicio)
 ├── ruleta.js             Ruleta de la suerte (apps-script/ruleta.gs; reintenta: el giro es idempotente)
-├── fazer-webhook.js      Webhook de FazerCards (firma X-Webhook-Signature) → estado_fazer de recargas.gs → pestaña "fazer_card"
+├── fazer-webhook.js      Webhook de FazerCards (firma X-Webhook-Signature) → estado_fazer de recargas.gs Y de bloodstrike.gs a la vez → pestaña "fazer_card" de la hoja que tenga la orden
 └── ia-soporte.js         Chat de soporte con Gemini (rota GEMINI_KEYS)
+apps-script/bloodstrike.gs Copia del Apps Script de Blood Strike (SCRIPT_BLOOD): precios (PreciosBlood), pagos en la hoja CENTRAL, finalizados (F = orden), errores y "fazer_card". Sin marcar_verificado.
 scripts/ofertas-fazer.mjs Lista categorías y offer_id de FazerCards para rellenar OFERTAS_FAZER (solo lee)
 apps-script/recargas.gs   Copia del Apps Script de recargas Free Fire (v2, con idPedido). 8 secciones: configuración, doPost, pagos, pines, ruleta, descuentos/creadores, menús, utilidades
 public/                   Frontend estático; cada página lleva su CSS/JS en línea
@@ -72,13 +73,18 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 | Apps Script validador | `SCRIPT_VALIDADOR_URL` | juegos/freefire (verificar) |
 | Apps Script ruleta (`apps-script/ruleta.gs`) | `SCRIPT_RULETA_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | ruleta |
 | Apps Script Roblox (`apps-script/roblox.gs`) | `GAS_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | juegos/roblox |
-| Apps Script + FazerCards | `SCRIPT_BLOOD`, `FAZER_API_KEY` | juegos/bloodstrike, juegos/freefire (modo API) |
+| Apps Script + FazerCards | `SCRIPT_BLOOD` (+ `SCRIPT_RECARGAS_TOKEN`, que llamarScript también le envía), `FAZER_API_KEY` | juegos/bloodstrike, juegos/freefire (modo API) |
 | Webhook FazerCards | `FAZER_WEBHOOK_SECRET` (+ `SCRIPT_RECARGAS_URL`) | fazer-webhook |
 | Bot Railway | `RAILWAY_SECRET` | juegos/freefire (recarga) |
 | Firestore | `FIREBASE_SERVICE_ACCOUNT` | _lib/limitador |
 | Gemini | `GEMINI_KEYS` / `GEMINI_API_KEY`, `GEMINI_MODEL` | ia-soporte |
 
 Detalle de cada variable: `.env.example`.
+
+## Blood Strike
+
+- Paquetes por `clavePaquete` de bloodstrike.js: el oro por su número; los pases y bolsas por una palabra de su nombre en PreciosBlood, en español o inglés (`PALABRAS_PASES`: élite, premium, bolsa/lucky, temporada/season, nivel/level), p. ej. "Pase de Temporada" → `season_pass`. En bloodstrike.html, una columna sin números es un "Pase" y va al final.
+- Éxito: `registrar_finalizado` lleva `ordenFazer`, `estadoFazer`, `ofertaFazer` y `montoCobrado`; bloodstrike.gs anota la fila en "fazer_card" (columna J = estado).
 
 ## Códigos de descuento y Panel de Creadores (hoja de Free Fire)
 

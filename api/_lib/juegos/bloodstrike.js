@@ -21,6 +21,8 @@ const TIEMPOS = {
   incidente: 12000,
 };
 
+// Clave del paquete (ver clavePaquete) -> offer_id de FazerCards (categoría blood_strike).
+// Un paquete que no esté aquí NO se envía a la API: queda en "errores" para hacerlo a mano.
 const CODIGOS_FAZER = {
   "51": "51_bc",
   "105": "105_bc",
@@ -28,8 +30,33 @@ const CODIGOS_FAZER = {
   "540": "540_bc",
   "1100": "1100_bc",
   "2260": "2260_bc",
-  "5800": "5800_bc"
+  "5800": "5800_bc",
+  "lucky_bag_week": "lucky_bag_week",
+  "season_pass": "season_pass",
+  "level_up_pass": "level_up_pass",
+  "strike_pass_elite": "strike_pass_elite",
+  "strike_pass_premium": "strike_pass_premium"
 };
+
+// Pases y bolsas por una palabra de su nombre en la pestaña de precios (en español o en inglés,
+// con o sin tildes): "Pase de Temporada" y "Season Pass" -> "season_pass". Gana la primera que coincida.
+const PALABRAS_PASES = [
+  [/elite/, "strike_pass_elite"],
+  [/premium/, "strike_pass_premium"],
+  [/bolsa|lucky/, "lucky_bag_week"],
+  [/temporada|season/, "season_pass"],
+  [/nivel|level/, "level_up_pass"],
+];
+
+// Clave de un paquete: el oro por su número ("105 Oro 🪙" -> "105"); los pases y bolsas por su
+// nombre (ver PALABRAS_PASES; otro nombre queda como texto: "Mi Pase" -> "mi_pase", sin oferta).
+function clavePaquete(texto) {
+  const t = String(texto ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const nombre = t.replace(/oro|gold|monedas|diamantes|blood strike|\bbc\b/g, ' ').replace(/[^a-z]+/g, ' ').trim();
+  if (!nombre) return t.replace(/[^0-9]/g, '');
+  const pase = PALABRAS_PASES.find(([palabra]) => palabra.test(nombre));
+  return pase ? pase[1] : nombre.replace(/ /g, '_');
+}
 
 // =========================================================================
 // ACCIONES DE api/juego.js
@@ -129,8 +156,8 @@ export async function recargar(req, res) {
     }
     const scriptV2 = Number(dataPrecios.version) >= 2;
 
-    const numeroOro = String(paquete).replace(/[^0-9]/g, '');
-    const paqueteGsheet = dataPrecios.catalogo.find(p => String(p.diamantes || p.paquete).replace(/[^0-9]/g, '') === numeroOro);
+    const numeroOro = clavePaquete(paquete);
+    const paqueteGsheet = numeroOro && dataPrecios.catalogo.find(p => clavePaquete(p.diamantes || p.paquete) === numeroOro);
     if (!paqueteGsheet) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado." });
@@ -198,7 +225,7 @@ export async function recargar(req, res) {
     if (!offerIdFinal) {
       await bloquearPago(referenciaCompleta, {
         fase: FASES.apiBloodStrike, noAplica: true,
-        motivo: `El paquete "${paquete}" (${numeroOro} de oro) no tiene un offer_id de FazerCards configurado en CODIGOS_FAZER (api/_lib/juegos/bloodstrike.js). No se llamó a la API.`,
+        motivo: `El paquete "${paquete}" (clave ${numeroOro}) no tiene un offer_id de FazerCards configurado en CODIGOS_FAZER (api/_lib/juegos/bloodstrike.js). No se llamó a la API.`,
         queHacer: 'la recarga NO se hizo; hacerla a mano o devolver el pago',
       });
       return res.status(202).json({ status: "error", message: "Fallo técnico con el proveedor. Tu pago está verificado y la recarga quedó en revisión." });
@@ -252,9 +279,12 @@ export async function recargar(req, res) {
         idJugador: id,
         paquete: paquete,
         referencia: referenciaCompleta,
-        codigosUsados: "API Directa (FazerCards)",
+        codigosUsados: `API Directa (FazerCards, orden ${orden.orden?.id || 'sin id'})`,
         urlImagen: comprobante,
-        idPedido
+        idPedido,
+        // La hoja de Blood Strike anota la orden en "fazer_card"; el webhook actualiza su estado
+        ordenFazer: orden.orden?.id || '', estadoFazer: orden.orden?.status || 'processing',
+        ofertaFazer: offerIdFinal, montoCobrado: precioReal,
       }),
       // +1 uso y el monto cobrado del código, en la pestaña "Descuentos" (hoja de Free Fire).
       // Si falla, la recarga ya está hecha: va al informe de "errores" para anotarlo a mano
