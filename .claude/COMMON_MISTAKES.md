@@ -23,7 +23,7 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 
 ## 2c. Devolver un pago a "Verificado"
 
-**Regla** (desde 2026-10-13): ningún error lo libera, ni pago insuficiente ni rechazo del proveedor. Siempre `bloquearPago` (anota en "errores" y marca "Usado"); el cliente sigue por WhatsApp. No volver a añadir `marcar_verificado`/`liberar_pedido`.
+**Regla** (desde 2026-10-13): ningún error lo libera, ni pago insuficiente ni rechazo del proveedor. Siempre `bloquearPago` (anota en "errores" y marca "Usado"); el cliente sigue por WhatsApp. No volver a añadir `marcar_verificado`/`liberar_pedido`. Excepción controlada: en Free Fire el pago insuficiente queda "Por completar" (tampoco es reutilizable) hasta que el cliente complete la diferencia o venza el plazo; nunca pasa a "Verificado".
 
 ## 2d. Pagos de MacroDroid que no llegan a "pagos"
 

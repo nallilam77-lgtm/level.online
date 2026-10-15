@@ -24,6 +24,9 @@
 //     BOT (pines de "codigos" + bot de Railway) y API (FazerCards: pestaña "fazer_card", con el
 //     estado que avisa FazerCards en tiempo real). Sin pines o sin oferta de FazerCards, el pedido
 //     va a "sin_codigo" para hacerlo a mano. En los tres, al cliente se le responde recarga exitosa.
+//   - Pago insuficiente: el pago queda "Por completar" (nadie más puede usarlo) y el pedido en la
+//     pestaña "por_completar". El cliente paga la diferencia con su clave (Vercel solo manda la huella);
+//     el jugador, el paquete y el precio salen de esa fila, nunca del navegador.
 // =====================================================================
 
 
@@ -49,6 +52,16 @@ const ESPERA_CANDADO_MACRODROID_MS = 20000;
 // Webhook de FazerCards: solo espera 10 s (si no, lo reintenta en 1 minuto)
 const ESPERA_CANDADO_WEBHOOK_MS = 4000;
 const MENSAJE_ERROR_INTERNO = "Error interno en el sistema de recargas. Intenta de nuevo en unos segundos.";
+
+// --- Pagos por completar (el cliente pagó menos y paga la diferencia con otro pago) ---
+// Una fila por pedido. N = huella SHA-256 de la clave del cliente (la clave nunca llega a la hoja).
+const HOJA_POR_COMPLETAR = "por_completar";
+const COLUMNAS_POR_COMPLETAR = ["fecha-hora", "id pedido", "id jugador", "paquete", "precio (Bs)", "pagado (Bs)", "falta (Bs)",
+  "referencias", "código descuento", "comprobante", "estado", "pedido que completó", "actualizado", "clave (huella)", "vence"];
+// Estado de "pagos" de un pago que no alcanzó: no es "Verificado", así que ningún otro pedido lo toma
+const ESTADO_PAGO_POR_COMPLETAR = "Por completar";
+const HORAS_PARA_COMPLETAR = 48;
+const MAX_PAGOS_POR_PEDIDO = 4;
 
 // --- Pines y recargas manuales ---
 // Pestaña de auditoría: qué pines se entregaron a cada pedido y qué pasó con ellos
@@ -163,7 +176,9 @@ function doPost(e) {
     marcar_usado: marcarUsado,
     registrar_finalizado: registrarFinalizado,
     registrar_error: registrarError,
-    registrar_uso_descuento: registrarUsoDescuento
+    registrar_uso_descuento: registrarUsoDescuento,
+    pago_por_completar: guardarPorCompletar,
+    usar_complemento: usarComplemento
   };
 
   try {
@@ -237,24 +252,32 @@ function verificarPago(datos) {
     return responder({ status: "success", encontrado: false, message: "🔍 La referencia debe tener exactamente 5 dígitos." });
   }
   var precioRequerido = limpiarMontoVES(datos.monto);
-  var rows = hoja.getDataRange().getValues();
+  var pago = tomarPago(hoja, ultimos5, String(datos.idPedido || ""));
+  if (!pago.encontrado) return responder({ status: "success", encontrado: false, message: pago.message });
+  return responder({
+    status: "success", encontrado: true, fila: pago.fila, telefono: pago.telefono,
+    referencia: pago.referencia, montoPagado: pago.montoPagado,
+    insuficiente: pago.montoPagado < (precioRequerido - 0.50), repetido: pago.repetido
+  });
+}
 
-  // Solo coincidencia EXACTA de los últimos 5 dígitos (se eliminó la búsqueda "contiene":
-  // multiplicaba las posibilidades de acertar el pago de otro cliente probando números).
-  // De abajo hacia arriba, se elige el pago disponible más reciente y se saltan los ya usados,
-  // así un pago viejo "Usado" con los mismos 5 dígitos no bloquea uno nuevo.
-  var idPedido = String(datos.idPedido || "");
+// Busca el pago con esos últimos 5 dígitos y lo bloquea ("En proceso") para este pedido.
+// Devuelve { encontrado, fila, telefono, referencia, montoPagado, repetido } o { encontrado: false, message }.
+// Solo coincidencia EXACTA de los últimos 5 dígitos (se eliminó la búsqueda "contiene":
+// multiplicaba las posibilidades de acertar el pago de otro cliente probando números).
+// De abajo hacia arriba, se elige el pago disponible más reciente y se saltan los ya usados,
+// así un pago viejo "Usado" con los mismos 5 dígitos no bloquea uno nuevo.
+function tomarPago(hoja, ultimos5, idPedido) {
+  var rows = hoja.getDataRange().getValues();
   var props = PropertiesService.getScriptProperties();
   var respuestaEncontrado = function (i, repetido) {
-    var montoPago = limpiarMontoVES(rows[i][3]);
-    return responder({
-      status: "success", encontrado: true, fila: i + 1, telefono: String(rows[i][1]).trim(),
-      referencia: String(rows[i][2]).replace(/\s+/g, ""), montoPagado: montoPago,
-      insuficiente: montoPago < (precioRequerido - 0.50), repetido: repetido
-    });
+    return {
+      encontrado: true, fila: i + 1, telefono: String(rows[i][1]).trim(),
+      referencia: String(rows[i][2]).replace(/\s+/g, ""), montoPagado: limpiarMontoVES(rows[i][3]), repetido: repetido
+    };
   };
 
-  var hayUsado = false, hayEnProceso = false;
+  var hayUsado = false, hayEnProceso = false, hayPorCompletar = false;
   for (var i = rows.length - 1; i >= 1; i--) {
     var referenciaCompleta = String(rows[i][2]).replace(/\s+/g, "");
     if (!referenciaCompleta || referenciaCompleta.slice(-5) !== ultimos5) continue;
@@ -266,6 +289,7 @@ function verificarPago(datos) {
       if (idPedido && props.getProperty("proc_" + referenciaCompleta) === idPedido) return respuestaEncontrado(i, true);
       hayEnProceso = true; continue;
     }
+    if (estadoActual === ESTADO_PAGO_POR_COMPLETAR.toLowerCase()) { hayPorCompletar = true; continue; }
     if (estadoActual !== "verificado" && estadoActual !== "") continue;
 
     // Bloquear al instante y recordar qué pedido lo bloqueó
@@ -279,13 +303,134 @@ function verificarPago(datos) {
     return respuestaEncontrado(i, false);
   }
 
-  if (hayEnProceso) {
-    return responder({ status: "success", encontrado: false, message: "⚠️ Otro cliente está procesando esta referencia en este momento." });
+  if (hayEnProceso) return { encontrado: false, message: "⚠️ Otro cliente está procesando esta referencia en este momento." };
+  if (hayPorCompletar) return { encontrado: false, message: "⏳ Este pago no alcanzó y está esperando que completes la diferencia: usa el botón \"Completar pago\" de la tienda o escríbenos por WhatsApp." };
+  if (hayUsado) return { encontrado: false, message: "❌ Este pago ya fue validado y gastado en otra recarga." };
+  return { encontrado: false, message: "🔍 Referencia no encontrada en el sistema." };
+}
+
+// Pago insuficiente (Vercel, con candado): el pago que tomó ESTE pedido pasa a "Por completar" y el
+// pedido queda en "por_completar" con la huella de la clave del cliente. Se puede repetir (mismo idPedido).
+function guardarPorCompletar(datos) {
+  var idPedido = String(datos.idPedido || "");
+  var referencia = String(datos.referencia || "").replace(/\s+/g, "");
+  var claveHash = String(datos.claveHash || "");
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(idPedido) || !/^[a-f0-9]{64}$/.test(claveHash) || !referencia || !/^\d{5,15}$/.test(String(datos.idJugador || ""))) {
+    return responder({ status: "error", message: "Datos inválidos para guardar el pago por completar" });
   }
-  if (hayUsado) {
-    return responder({ status: "success", encontrado: false, message: "❌ Este pago ya fue validado y gastado en otra recarga." });
+  if (buscarFilaPorCompletar(2, idPedido)) return responder({ status: "success", repetido: true, horas: HORAS_PARA_COMPLETAR });
+  // Solo el pago que este mismo pedido acaba de bloquear
+  if (PropertiesService.getScriptProperties().getProperty("proc_" + referencia) !== idPedido) {
+    return responder({ status: "error", message: "Ese pago no lo tiene este pedido" });
   }
-  return responder({ status: "success", encontrado: false, message: "🔍 Referencia no encontrada en el sistema." });
+  if (!cambiarEstadoPago(referencia, ESTADO_PAGO_POR_COMPLETAR, "en proceso")) {
+    return responder({ status: "error", message: "El pago ya no está en proceso" });
+  }
+  var precio = limpiarMontoVES(datos.precio);
+  var pagado = limpiarMontoVES(datos.pagado);
+  var falta = redondear2(Math.max(0, precio - pagado));
+  var fechaHora = ahora();
+  hojaPorCompletar().appendRow([
+    fechaHora, idPedido, textoSeguro(datos.idJugador), textoSeguro(datos.paquete), precio, pagado, falta,
+    referencia, textoSeguro(datos.codigoDescuento || ""), textoSeguro(datos.comprobante || "Sin comprobante"),
+    "PENDIENTE: faltan " + formatoBs(falta) + " Bs", "", fechaHora, claveHash,
+    new Date(Date.now() + HORAS_PARA_COMPLETAR * 3600 * 1000)
+  ]);
+  SpreadsheetApp.flush();
+  return responder({ status: "success", horas: HORAS_PARA_COMPLETAR });
+}
+
+// Completar (Vercel, con candado): el cliente manda su clave (Vercel envía la huella) y los últimos 5
+// del pago nuevo. Se puede repetir: la respuesta de cada idPedido se guarda 6 h.
+function usarComplemento(datos) {
+  var idPedido = String(datos.idPedido || "");
+  var claveHash = String(datos.claveHash || "");
+  var ultimos5 = String(datos.referencia || "").replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(idPedido) || !/^[a-f0-9]{64}$/.test(claveHash) || !/^\d{5}$/.test(ultimos5)) {
+    return responder({ status: "success", valido: false, message: "Datos inválidos para completar el pago." });
+  }
+  var cache = CacheService.getScriptCache();
+  var previa = cache.get("comp_" + idPedido);
+  if (previa) return responder(JSON.parse(previa));
+
+  var respuesta = completarConPago(buscarFilaPorCompletar(14, claveHash), ultimos5, idPedido);
+  if (respuesta.valido && respuesta.encontrado) cache.put("comp_" + idPedido, JSON.stringify(respuesta), 21600);
+  SpreadsheetApp.flush();
+  return responder(respuesta);
+}
+
+function completarConPago(fila, ultimos5, idPedido) {
+  var noValido = function (mensaje) { return { status: "success", valido: false, message: mensaje }; };
+  if (!fila) return noValido("No encontramos este pago por completar. Escríbenos por WhatsApp con tus referencias.");
+  var hoja = hojaPorCompletar();
+  var v = hoja.getRange(fila, 1, 1, COLUMNAS_POR_COMPLETAR.length).getValues()[0];
+  if (String(v[10]).indexOf("PENDIENTE") !== 0) {
+    return noValido("Este pago ya se completó o está en revisión. Si no recibiste tu recarga, escríbenos por WhatsApp.");
+  }
+  var vence = v[14] instanceof Date ? v[14].getTime() : new Date(v[14]).getTime();
+  if (vence && Date.now() > vence) {
+    hoja.getRange(fila, 11).setValue("⌛ VENCIDO: resolver por WhatsApp");
+    hoja.getRange(fila, 13).setValue(ahora());
+    return noValido("Pasaron más de " + HORAS_PARA_COMPLETAR + " horas: escríbenos por WhatsApp con tus referencias para completar tu recarga.");
+  }
+  var referencias = String(v[7]).split(" + ").filter(function (r) { return r; });
+  if (referencias.length >= MAX_PAGOS_POR_PEDIDO) {
+    return noValido("Ya usaste el máximo de " + MAX_PAGOS_POR_PEDIDO + " pagos para este pedido: escríbenos por WhatsApp.");
+  }
+
+  var pago = tomarPago(obtenerHoja("pagos"), ultimos5, idPedido);
+  if (!pago.encontrado) return { status: "success", valido: true, encontrado: false, message: pago.message };
+
+  var precio = limpiarMontoVES(v[4]);
+  var pagado = redondear2(limpiarMontoVES(v[5]) + pago.montoPagado);
+  var falta = redondear2(Math.max(0, precio - pagado));
+  referencias.push(pago.referencia);
+  hoja.getRange(fila, 6, 1, 3).setValues([[pagado, falta, referencias.join(" + ")]]);
+  hoja.getRange(fila, 13).setValue(ahora());
+
+  if (pagado < precio - 0.50) {
+    // Tampoco alcanza: este pago también queda "Por completar" y el pedido sigue pendiente
+    cambiarEstadoPago(pago.referencia, ESTADO_PAGO_POR_COMPLETAR, "en proceso");
+    hoja.getRange(fila, 11).setValue("PENDIENTE: faltan " + formatoBs(falta) + " Bs");
+    return { status: "success", valido: true, encontrado: true, completo: false, precio: precio, pagadoTotal: pagado, falta: falta };
+  }
+  // Completo: el último pago queda "En proceso" para este pedido; Vercel marca TODOS "Usado" al cerrar
+  hoja.getRange(fila, 11, 1, 2).setValues([["⏳ COMPLETO: entregando la recarga", idPedido]]);
+  return {
+    status: "success", valido: true, encontrado: true, completo: true,
+    idPedidoOriginal: String(v[1]), idJugador: String(v[2]), paquete: String(v[3]), precio: precio, pagadoTotal: pagado,
+    referencias: referencias, codigoDescuento: String(v[8] || ""), comprobante: String(v[9] || "")
+  };
+}
+
+// registrar_finalizado / registrar_error del pedido que completó el pago: estado final de su fila
+function cerrarComplemento(idPedido, estado) {
+  var fila = buscarFilaPorCompletar(12, idPedido);
+  if (!fila) return;
+  var hoja = hojaPorCompletar();
+  hoja.getRange(fila, 11).setValue(estado);
+  hoja.getRange(fila, 13).setValue(ahora());
+}
+
+function hojaPorCompletar() {
+  var hoja = obtenerHoja(HOJA_POR_COMPLETAR, true);
+  if (!hoja) {
+    hoja = SpreadsheetApp.getActiveSpreadsheet().insertSheet(HOJA_POR_COMPLETAR, 0);
+    hoja.appendRow(COLUMNAS_POR_COMPLETAR);
+    hoja.getRange(1, 1, 1, COLUMNAS_POR_COMPLETAR.length).setFontWeight("bold");
+    hoja.setFrozenRows(1);
+  }
+  return hoja;
+}
+
+// Fila (la más reciente) de "por_completar" con ese valor exacto en esa columna
+// (2 = id pedido, 12 = pedido que completó, 14 = huella de la clave)
+function buscarFilaPorCompletar(columna, valor) {
+  var hoja = obtenerHoja(HOJA_POR_COMPLETAR, true);
+  if (!valor || !hoja || hoja.getLastRow() < 2) return 0;
+  var celdas = hoja.getRange(2, columna, hoja.getLastRow() - 1, 1)
+    .createTextFinder(String(valor)).matchEntireCell(true).matchCase(true).findAll();
+  return celdas.length ? celdas[celdas.length - 1].getRow() : 0;
 }
 
 // Pedido que no pudo continuar (Vercel no recibió la respuesta de verificar_pago): el pago que
@@ -663,19 +808,34 @@ function textoEstadoFazer(estado) {
   return (TEXTO_ESTADO_FAZER[e] || "❔ " + e.toUpperCase()) + " (" + e + ")";
 }
 
-// registrar_finalizado de un pedido por API: la orden que aceptó FazerCards queda en su fila.
+// registrar_finalizado de un pedido por API: la orden que aceptó FazerCards queda en su fila. Si son
+// varias ("ord1,ord2": 220 = dos de 110), cada una en su propia fila para que el webhook la siga.
 // Si el webhook avisó antes de este momento, se aplica ahora ese estado.
 function anotarOrdenFazer(idPedido, orden, estado) {
   var fila = buscarFilaFazer(9, idPedido);
   if (!fila) return;
-  actualizarFilaFazer(fila, { orden: orden, estado: textoEstadoFazer(estado || "processing"), detalle: "orden aceptada por FazerCards" });
-  var cache = CacheService.getScriptCache();
-  var guardado = orden && cache.get("fazer_" + orden);
-  if (guardado) {
-    var aviso = JSON.parse(guardado);
-    aplicarEstadoFazer(fila, aviso.estado, aviso.evento);
-    cache.remove("fazer_" + orden);
+  var ordenes = String(orden || "").split(",").filter(function (o) { return o; });
+  if (!ordenes.length) ordenes = [""];
+  if (ordenes[0] && buscarFilaFazer(10, ordenes[0])) return; // reintento de registrar_finalizado: ya está
+  var hoja = hojaFazer();
+  var base = hoja.getRange(fila, 1, 1, COLUMNAS_FAZER.length).getValues()[0]
+    .map(function (x) { return typeof x === "string" ? textoSeguro(x) : x; });
+  var filas = [fila];
+  for (var n = 1; n < ordenes.length; n++) {
+    hoja.appendRow(base);
+    filas.push(hoja.getLastRow());
   }
+  var cache = CacheService.getScriptCache();
+  ordenes.forEach(function (o, i) {
+    actualizarFilaFazer(filas[i], { orden: o, estado: textoEstadoFazer(estado || "processing"),
+      detalle: ordenes.length > 1 ? "orden " + (i + 1) + " de " + ordenes.length + " aceptada por FazerCards" : "orden aceptada por FazerCards" });
+    var guardado = o && cache.get("fazer_" + o);
+    if (guardado) {
+      var aviso = JSON.parse(guardado);
+      aplicarEstadoFazer(filas[i], aviso.estado, aviso.evento);
+      cache.remove("fazer_" + o);
+    }
+  });
 }
 
 // Webhook de FazerCards (acción estado_fazer, con candado): nuevo estado de una orden.
@@ -813,6 +973,8 @@ function registrarFinalizado(datos) {
       textoSeguro(ESTADO_API + " - ENVIADA (orden " + (datos.ordenFazer || "sin id") + ", " + fechaHora + ")"));
     anotarOrdenFazer(String(datos.idPedido), String(datos.ordenFazer || ""), datos.estadoFazer);
   }
+  // Pedido que completó un pago insuficiente: su fila de "por_completar" queda cerrada
+  cerrarComplemento(String(datos.idPedido || ""), "✅ COMPLETADO Y RECARGADO");
   // Código de descuento usado en esta recarga: +1 uso y el monto cobrado en la pestaña "Descuentos"
   if (datos.codigoDescuento) sumarUsoDescuento(datos.codigoDescuento, datos.montoCobrado, "Free Fire", datos.idPedido, datos.idJugador);
   SpreadsheetApp.flush();
@@ -854,6 +1016,7 @@ function registrarError(datos) {
   // Modo API: la fila del pedido en "fazer_card" muestra que hubo un error
   var filaFazer = buscarFilaFazer(9, String(datos.idPedido || ""));
   if (filaFazer) actualizarFilaFazer(filaFazer, { estado: "❌ ERROR (ver pestaña errores)", detalle: datos.motivo || "" });
+  cerrarComplemento(String(datos.idPedido || ""), "❌ ERROR: ver pestaña errores (pagos ya \"Usado\")");
   SpreadsheetApp.flush();
 
   // YA NO cambia el estado del pago. Antes lo devolvía a "Verificado", y si Vercel marcaba
@@ -1584,6 +1747,12 @@ function limpiarMontoVES(valor) {
     m = m.replace(",", ".");
   }
   return parseFloat(m) || 0;
+}
+
+// 1.234,50 (montos en Bs como se escriben en Venezuela)
+function formatoBs(n) {
+  var partes = Number(n).toFixed(2).split(".");
+  return partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + partes[1];
 }
 
 // $2,20 (coma decimal, como se escribe en Venezuela)

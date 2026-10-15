@@ -2,7 +2,7 @@
 // "🖐️ Recargas Free Fire" de la hoja (recargas.gs): manual ("sin_codigo"), pines + bot de Railway,
 // o API de FazerCards (pestaña "fazer_card", con el estado en tiempo real vía api/fazer-webhook.js).
 // Lo usan api/juego.js (acciones precios y verificar) y api/recargar.js (recargar).
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasCachePrecios, ErrorExterno } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
@@ -32,8 +32,10 @@ const RAILWAY_URL = "https://bot-levelup-production.up.railway.app/canjear";
 // Un paquete sin offer_id aquí NO se envía a la API: va a "sin_codigo" para hacerlo a mano.
 // Para ver los valores reales: node scripts/ofertas-fazer.mjs (con FAZER_API_KEY).
 const CATEGORIA_FAZER = "free_fire_latam";
+// Una lista = varias órdenes para un mismo paquete (FazerCards no vende 220: son dos de 110).
 const OFERTAS_FAZER = {
   "110": "110_diamonds",
+  "220": ["110_diamonds", "110_diamonds"],
   "341": "341_diamonds",
   "572": "572_diamonds",
   "1166": "1166_diamonds",
@@ -55,6 +57,14 @@ function clavePaquete(texto) {
 }
 // Clave del ID del jugador en "fields" (la que muestra el script de ofertas para Free Fire)
 const CAMPO_JUGADOR_FAZER = "player_id";
+// offer_id de las órdenes de un paquete (vacía = no se puede pedir por la API) y cómo se anotan en
+// la hoja ("110_diamonds", o "2x110_diamonds" cuando son varias iguales)
+const ofertasDe = (clave) => [].concat(OFERTAS_FAZER[clave] || []);
+const textoOfertas = (lista) => (lista.length > 1 && lista.every((o) => o === lista[0]) ? `${lista.length}x${lista[0]}` : lista.join(':'));
+
+// Completar un pago insuficiente: la clave que recibe el cliente (la hoja solo guarda su huella SHA-256)
+const CLAVE_COMPLEMENTO = /^[A-Za-z0-9_-]{32,64}$/;
+const huella = (texto) => createHash('sha256').update(String(texto)).digest('hex');
 // Errores de conexión en los que la petición NUNCA llegó al bot: es seguro reintentar
 const CONEXION_NO_ESTABLECIDA = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -220,8 +230,222 @@ async function canjearEnBot({ pines, idJugador, secreto }) {
   }
 }
 
+/**
+ * Fases 3-5 de una recarga con el pago ya verificado (y bloqueado "En proceso"): pines o
+ * "sin_codigo" o API de FazerCards, canje y cierre. La usan recargar (un pago) y completarPago
+ * (varios pagos que juntos cubren el precio).
+ */
+async function entregarRecarga(res, {
+  URL_GOOGLE_SCRIPT, RAILWAY_SECRET, FAZER_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
+  comprobante, referencias, scriptV2, opcionesCriticas, utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago },
+}) {
+  // Texto para la hoja y los informes: "ref1" o "ref1 + ref2" (pago completado)
+  const referenciaCompleta = referencias.join(' + ');
+  // Ante cualquier error: TODOS los pagos de este pedido quedan "Usado" (en orden, nunca en paralelo)
+  const bloquear = async (datos) => {
+    const [primera, ...resto] = referencias;
+    const ok = await bloquearPago(primera, resto.length ? { ...datos, motivo: `${datos.motivo} (pago completado con ${referenciaCompleta})` } : datos);
+    for (const ref of resto) await marcarReferencia("marcar_usado", ref);
+    return ok;
+  };
+  const marcarPagos = async () => {
+    let todos = true;
+    for (const ref of referencias) todos = (await marcarReferencia("marcar_usado", ref)) && todos;
+    return todos;
+  };
+
+  // ==========================================
+  // FASE 3: EXTRAER LOS CÓDIGOS DE LA HOJA
+  // ==========================================
+  let dataCodigos;
+  try {
+    // manualSiNoHay: si no hay pines del paquete, recargas.gs anota el pedido en la pestaña
+    // "sin_codigo" para hacerlo a mano y responde { manual: true } (al cliente: recarga exitosa)
+    dataCodigos = await llamarScript(URL_GOOGLE_SCRIPT, {
+      accion: "obtener_codigo", diamantes: numeroDiamantes, idPedido, referencia: referenciaCompleta,
+      manualSiNoHay: true, idJugador: String(id), paquete: textoParaHoja(String(paquete)), montoCobrado: precioReal, comprobante,
+      // Modo API: con qué oferta se pediría a FazerCards (vacía = no se puede, va a "sin_codigo")
+      ofertaFazer: FAZER_API_KEY ? textoOfertas(ofertasDe(numeroDiamantes)) : "",
+      ...(desc && { codigoDescuento: desc.codigo }),
+    }, opcionesCriticas);
+  } catch (error) {
+    console.error(`⚠️ [${FASES.codigos}] ${error.message} | REF: ${referenciaCompleta}`);
+    // Con v2 sabemos exactamente qué pines se asignaron a este pedido: como el bot nunca los
+    // recibió, se devuelven al inventario. Sin v2 no hay forma de saberlo.
+    let detallePines;
+    let queHacer = 'la recarga NO se entregó; hacerla a mano';
+    if (scriptV2) {
+      const devolucion = await llamarScript(URL_GOOGLE_SCRIPT,
+        { accion: "devolver_codigos", idPedido, motivo: `obtener_codigo sin respuesta: ${error.message}` }, TIEMPOS.devolver)
+        .catch((e) => ({ status: 'error', message: e.message }));
+      if (devolucion?.status === 'success') {
+        detallePines = devolucion.pines?.length
+          ? { pinesNoUsados: devolucion.pines, estadoNoUsados: ESTADO_PINES.devueltos }
+          : { sinPines: true };
+        // El pedido se quedó en "sin_codigo": hacerlo desde ahí
+        if (devolucion.manual) queHacer = 'el pedido está en la pestaña "sin_codigo": hacer la recarga a mano desde ahí';
+        // Modo API: la orden NO se envió a FazerCards (quedó "NO ENVIADO" en "fazer_card")
+        if (devolucion.api) queHacer = 'la orden NO se envió a FazerCards (pestaña "fazer_card"): hacer la recarga a mano';
+      } else {
+        detallePines = { pinesNoUsados: [`consultar la pestaña "asignaciones_pines", pedido ${idPedido}`], estadoNoUsados: `${ESTADO_PINES.noDevueltos} (Apps Script tampoco respondió a la devolución: ${devolucion?.message})` };
+      }
+    } else {
+      detallePines = { pinesNoUsados: ['desconocidos'], estadoNoUsados: 'NO SE PUEDE SABER: el Apps Script instalado no registra asignaciones de pines; actualiza a recargas.gs v2' };
+    }
+
+    // El pago NUNCA se libera: se bloquea y la recarga pasa a revisión manual
+    await bloquear({ fase: FASES.codigos, motivo: `Apps Script no respondió a obtener_codigo: ${error.message}`, ...detallePines, queHacer });
+    return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago está verificado y la recarga quedó en revisión." });
+  }
+
+  // Sin pines: el pedido quedó en "sin_codigo" para hacerlo a mano; se cierra igual que una recarga
+  const manual = dataCodigos?.status === "success" && dataCodigos.manual === true;
+  if (manual) console.info(`📝 Sin pines de ${numeroDiamantes}: pedido ${idPedido} (ID ${id}) anotado en "sin_codigo" para recarga manual`);
+  // Modo API: el pedido quedó en "fazer_card" y la recarga la hace FazerCards
+  const porApi = dataCodigos?.status === "success" && dataCodigos.api === true;
+
+  if (!manual && !porApi && (!dataCodigos || dataCodigos.status !== "success" || !Array.isArray(dataCodigos.pines) || !dataCodigos.pines.length)) {
+    // Apps Script anterior (sin "sin_codigo") o error: no salió ningún pin; el pago se bloquea igual
+    await bloquear({
+      fase: FASES.codigos, sinPines: true,
+      motivo: `Apps Script no entregó códigos: ${dataCodigos?.message || 'respuesta sin pines'}`,
+      queHacer: 'la recarga NO se entregó; hacerla a mano',
+    });
+    return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago está verificado y la recarga quedó en revisión." });
+  }
+
+  const pinesExtraidos = manual || porApi ? [] : dataCodigos.pines;
+
+  // ==========================================
+  // FASE 4 (modo API): ORDEN EN FAZERCARDS
+  // ==========================================
+  let ordenFazer = null;
+  if (porApi) {
+    const ofertas = ofertasDe(numeroDiamantes);
+    const offerId = textoOfertas(ofertas);
+    // Una orden tras otra (220 = dos de 110), cada una con su Idempotency-Key, dentro del mismo tiempo total
+    const ordenes = [];
+    let orden = ofertas.length && FAZER_API_KEY ? null
+      // No debería pasar (sin oferta recargas.gs lo manda a "sin_codigo"); por si acaso, no se llama a la API
+      : { tipo: 'rechazo', motivo: `El paquete ${numeroDiamantes} no tiene offer_id en OFERTAS_FAZER o falta FAZER_API_KEY. No se llamó a la API.` };
+    for (let i = 0; i < ofertas.length && !orden; i++) {
+      const resultado = await crearOrdenFazer({
+        apiKey: FAZER_API_KEY, categoria: CATEGORIA_FAZER, offerId: ofertas[i], campos: { [CAMPO_JUGADOR_FAZER]: String(id) },
+        idempotencia: ofertas.length > 1 ? `${idPedido}-${i + 1}` : idPedido, tiempoMs: Math.round(TIEMPOS.fazer / ofertas.length),
+      });
+      if (resultado.tipo === 'ok') ordenes.push(resultado.orden);
+      else orden = ordenes.length
+        ? { ...resultado, motivo: `${resultado.motivo} OJO: antes ya se había creado ${ordenes.length} de ${ofertas.length} órdenes (${ordenes.map((o) => o.id).join(', ')}): esa parte SÍ se recargó; falta el resto.` }
+        : resultado;
+    }
+
+    if (orden) {
+      console.error(`❌ [${FASES.apiFreeFire}] ${orden.motivo} | REF: ${referenciaCompleta}`);
+      // Registrar el incidente y LUEGO bloquear el pago (en orden, dentro de bloquearPago)
+      await bloquear({
+        fase: FASES.apiFreeFire, noAplica: true,
+        motivo: orden.tipo === 'incierto'
+          ? `${orden.motivo} Oferta ${offerId}. ANTES DE REPETIR: buscar en el panel de FazerCards si existe una orden para el jugador ${id}.`
+          : `${orden.motivo} Oferta ${offerId}.`,
+        queHacer: orden.tipo === 'incierto'
+          ? 'confirmar la orden en FazerCards antes de repetir la recarga'
+          : 'no se cobró nada en FazerCards; hacer la recarga a mano con el ID correcto o devolver el pago',
+      });
+      // "fallo técnico": la página muestra el modal de "recarga en revisión"
+      return res.status(202).json({ status: "error", message: "Fallo técnico con el proveedor. Tu pago está verificado y la recarga quedó en revisión." });
+    }
+    // Varias órdenes: sus números separados por comas (recargas.gs pone cada una en su fila de "fazer_card")
+    ordenFazer = { id: ordenes.map((o) => o.id).join(','), status: ordenes[0].status };
+    console.info(`🛒 FazerCards: orden ${ordenFazer.id} (${ordenFazer.status}) para el pedido ${idPedido} (ID ${id})`);
+  }
+
+  // ==========================================
+  // FASE 4: CANJE EN EL BOT DE RAILWAY (no aplica a una recarga manual)
+  // ==========================================
+  const bot = manual || porApi
+    ? { tipo: 'ok', usados: [] }
+    : await canjearEnBot({ pines: pinesExtraidos, idJugador: id, secreto: RAILWAY_SECRET });
+
+  if (bot.tipo !== 'ok') {
+    console.error(`❌ [${FASES.botFreeFire}] ${bot.motivo} | REF: ${referenciaCompleta}`);
+    let detallePines;
+    if (bot.tipo === 'no_procesado') {
+      // El bot no tocó ningún pin: se devuelven al inventario (v2) para no perderlos
+      const devolucion = scriptV2
+        ? await llamarScript(URL_GOOGLE_SCRIPT, { accion: "devolver_codigos", idPedido, motivo: bot.motivo }, TIEMPOS.devolver)
+            .catch((e) => ({ status: 'error', message: e.message }))
+        : { status: 'error', message: 'el Apps Script instalado no tiene la acción devolver_codigos (actualiza a recargas.gs v2)' };
+      detallePines = devolucion?.status === 'success'
+        ? { pinesNoUsados: pinesExtraidos, estadoNoUsados: ESTADO_PINES.devueltos }
+        : { pinesNoUsados: pinesExtraidos, estadoNoUsados: `${ESTADO_PINES.noDevueltos} (${devolucion?.message})` };
+    } else if (bot.tipo === 'fallo_bot') {
+      detallePines = { pinesUsados: bot.usados, pinesNoUsados: bot.pendientes, estadoNoUsados: ESTADO_PINES.retenidos };
+    } else {
+      detallePines = { pinesNoUsados: pinesExtraidos, estadoNoUsados: ESTADO_PINES.inciertos };
+    }
+
+    // 📝 ANOTAR EL INCIDENTE Y LUEGO 🔥 QUEMAR EL PAGO (en orden, dentro de bloquearPago)
+    await bloquear({
+      fase: FASES.botFreeFire, motivo: bot.motivo, ...detallePines,
+      queHacer: 'la recarga NO se completó; entregarla manualmente al jugador',
+    });
+
+    // El mensaje contiene "fallo técnico": la página muestra el modal de "recarga en proceso"
+    return res.status(400).json({
+      status: "error",
+      message: "Fallo técnico del bot. Pines respaldados correctamente en hoja de errores."
+    });
+  }
+
+  // ==========================================
+  // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS (en orden)
+  // ==========================================
+  // La recarga YA se hizo: aunque Apps Script falle aquí, al cliente se le responde éxito.
+  // Una tras otra, NO en paralelo: las dos esperan el mismo candado de recargas.gs y, cuando
+  // registrar_finalizado (con código de descuento) lo retenía, marcar_usado se quedaba "ocupado"
+  // y el pago no pasaba a "Usado" aunque la recarga quedara en finalizados.
+  const pagoMarcado = await marcarPagos();
+  const finalizadoGuardado = await registrarEnHoja({
+    accion: "registrar_finalizado",
+    idJugador: id,
+    paquete: paquete,
+    referencias: referenciaCompleta,
+    codigosUsados: manual ? 'SIN CÓDIGO: recarga manual pendiente (pestaña "sin_codigo")'
+      : porApi ? `API FazerCards (orden ${ordenFazer.id || 'sin id'})` : pinesExtraidos.join(" | "),
+    // recargas.gs guarda la orden y su estado en la pestaña "fazer_card"
+    ...(porApi && { ordenFazer: ordenFazer.id, estadoFazer: ordenFazer.status }),
+    urlImagen: comprobante,
+    idPedido,
+    // recargas.gs suma +1 uso y el monto cobrado al código en la pestaña "Descuentos"
+    ...(desc && { codigoDescuento: desc.codigo, montoCobrado: precioReal })
+  });
+  if (!pagoMarcado || !finalizadoGuardado) {
+    const pendiente = [
+      !pagoMarcado && 'marcar el pago como "Usado"',
+      !finalizadoGuardado && 'anotar la recarga en "finalizados"',
+      // registrar_finalizado es quien suma el uso del código: sin él, el creador pierde esa comisión
+      !finalizadoGuardado && desc && `anotar el uso del código ${desc.codigo} (${precioReal} Bs, pedido ${idPedido}) en "Descuentos"`,
+    ].filter(Boolean).join(' y ');
+    await registrarEnHoja(informe({
+      fase: FASES.cierre,
+      motivo: manual
+        ? `Recarga MANUAL (anotada en "sin_codigo"), pero Apps Script no respondió al cierre: falta ${pendiente}`
+        : porApi
+          ? `FazerCards aceptó la orden ${ordenFazer.id}, pero Apps Script no respondió al cierre: falta ${pendiente} (y anotar la orden en "fazer_card")`
+          : `La recarga SÍ se entregó, pero Apps Script no respondió al cierre: falta ${pendiente}`,
+      referenciaCompleta, pinesUsados: bot.usados, noAplica: porApi,
+      estadoPago: pagoMarcado ? 'USADO (correcto)' : `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}`,
+    }));
+  }
+
+  return res.status(200).json({ status: "success", message: "Recarga procesada exitosamente con Level Up Bot." });
+
+}
+
 export async function recargar(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
+  // Segunda (o tercera...) referencia de un pago que no alcanzó
+  if (req.body?.tokenComplemento !== undefined) return completarPago(req, res);
 
   try {
     const { id, paquete, referencia } = req.body || {};
@@ -340,7 +564,31 @@ export async function recargar(req, res) {
       await registrarFallo(clavesLimite);
       const pagado = Number(dataVerificacion.montoPagado) || 0;
       const faltante = precioReal - pagado;
-      // El pago queda "Usado": el cliente completa la diferencia o pide la devolución por WhatsApp
+
+      // El pago queda "Por completar" (nadie más puede usarlo) y el cliente recibe una clave para pagar
+      // la diferencia. El jugador, el paquete y el precio quedan en la hoja: al completar se usan esos,
+      // nunca los que mande el navegador. Se puede repetir: recargas.gs reconoce el idPedido.
+      const clave = randomBytes(24).toString('base64url');
+      const porCompletar = await llamarScript(URL_GOOGLE_SCRIPT, {
+        accion: "pago_por_completar", idPedido, referencia: referenciaCompleta, idJugador: String(id),
+        paquete: textoParaHoja(String(paquete)), precio: precioReal, pagado, comprobante,
+        codigoDescuento: desc?.codigo || "", claveHash: huella(clave),
+      }, { reintentos: 2, tiempoMs: TIEMPOS.incidente, reintentarTrasTimeout: true }).catch((e) => ({ status: 'error', message: e.message }));
+      if (porCompletar?.status === 'success') {
+        return res.status(400).json({
+          status: "error",
+          insuficiente: true,
+          montoPagado: pagado,
+          precioRequerido: precioReal,
+          faltante: faltante,
+          tokenComplemento: clave,
+          horasParaCompletar: Number(porCompletar.horas) || 48,
+          message: `Pago insuficiente: Encontramos ${formatearVES(pagado)} Bs, pero el paquete cuesta ${formatearVES(precioReal)} Bs. Faltan ${formatearVES(faltante)} Bs: paga la diferencia y escribe la nueva referencia para completar tu recarga.`
+        });
+      }
+      console.error(`⚠️ pago_por_completar falló para REF ${referenciaCompleta}: ${porCompletar?.message}. Se bloquea el pago como antes.`);
+
+      // Sin "completar" (Apps Script anterior o sin respuesta): el pago queda "Usado" y se resuelve por WhatsApp
       await bloquearPago(referenciaCompleta, {
         fase: FASES.verificacion, sinPines: true,
         motivo: `Pago insuficiente: pagó ${formatearVES(pagado)} Bs y el paquete cuesta ${formatearVES(precioReal)} Bs (faltan ${formatearVES(faltante)} Bs)`,
@@ -357,186 +605,115 @@ export async function recargar(req, res) {
       });
     }
 
-    // ==========================================
-    // FASE 3: EXTRAER LOS CÓDIGOS DE LA HOJA
-    // ==========================================
-    let dataCodigos;
-    try {
-      // manualSiNoHay: si no hay pines del paquete, recargas.gs anota el pedido en la pestaña
-      // "sin_codigo" para hacerlo a mano y responde { manual: true } (al cliente: recarga exitosa)
-      dataCodigos = await llamarScript(URL_GOOGLE_SCRIPT, {
-        accion: "obtener_codigo", diamantes: numeroDiamantes, idPedido, referencia: referenciaCompleta,
-        manualSiNoHay: true, idJugador: String(id), paquete: textoParaHoja(String(paquete)), montoCobrado: precioReal, comprobante,
-        // Modo API: con qué oferta se pediría a FazerCards (vacía = no se puede, va a "sin_codigo")
-        ofertaFazer: FAZER_API_KEY ? (OFERTAS_FAZER[numeroDiamantes] || "") : "",
-        ...(desc && { codigoDescuento: desc.codigo }),
-      }, opcionesCriticas);
-    } catch (error) {
-      console.error(`⚠️ [${FASES.codigos}] ${error.message} | REF: ${referenciaCompleta}`);
-      // Con v2 sabemos exactamente qué pines se asignaron a este pedido: como el bot nunca los
-      // recibió, se devuelven al inventario. Sin v2 no hay forma de saberlo.
-      let detallePines;
-      let queHacer = 'la recarga NO se entregó; hacerla a mano';
-      if (scriptV2) {
-        const devolucion = await llamarScript(URL_GOOGLE_SCRIPT,
-          { accion: "devolver_codigos", idPedido, motivo: `obtener_codigo sin respuesta: ${error.message}` }, TIEMPOS.devolver)
-          .catch((e) => ({ status: 'error', message: e.message }));
-        if (devolucion?.status === 'success') {
-          detallePines = devolucion.pines?.length
-            ? { pinesNoUsados: devolucion.pines, estadoNoUsados: ESTADO_PINES.devueltos }
-            : { sinPines: true };
-          // El pedido se quedó en "sin_codigo": hacerlo desde ahí
-          if (devolucion.manual) queHacer = 'el pedido está en la pestaña "sin_codigo": hacer la recarga a mano desde ahí';
-          // Modo API: la orden NO se envió a FazerCards (quedó "NO ENVIADO" en "fazer_card")
-          if (devolucion.api) queHacer = 'la orden NO se envió a FazerCards (pestaña "fazer_card"): hacer la recarga a mano';
-        } else {
-          detallePines = { pinesNoUsados: [`consultar la pestaña "asignaciones_pines", pedido ${idPedido}`], estadoNoUsados: `${ESTADO_PINES.noDevueltos} (Apps Script tampoco respondió a la devolución: ${devolucion?.message})` };
-        }
-      } else {
-        detallePines = { pinesNoUsados: ['desconocidos'], estadoNoUsados: 'NO SE PUEDE SABER: el Apps Script instalado no registra asignaciones de pines; actualiza a recargas.gs v2' };
-      }
-
-      // El pago NUNCA se libera: se bloquea y la recarga pasa a revisión manual
-      await bloquearPago(referenciaCompleta, { fase: FASES.codigos, motivo: `Apps Script no respondió a obtener_codigo: ${error.message}`, ...detallePines, queHacer });
-      return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago está verificado y la recarga quedó en revisión." });
-    }
-
-    // Sin pines: el pedido quedó en "sin_codigo" para hacerlo a mano; se cierra igual que una recarga
-    const manual = dataCodigos?.status === "success" && dataCodigos.manual === true;
-    if (manual) console.info(`📝 Sin pines de ${numeroDiamantes}: pedido ${idPedido} (ID ${id}) anotado en "sin_codigo" para recarga manual`);
-    // Modo API: el pedido quedó en "fazer_card" y la recarga la hace FazerCards
-    const porApi = dataCodigos?.status === "success" && dataCodigos.api === true;
-
-    if (!manual && !porApi && (!dataCodigos || dataCodigos.status !== "success" || !Array.isArray(dataCodigos.pines) || !dataCodigos.pines.length)) {
-      // Apps Script anterior (sin "sin_codigo") o error: no salió ningún pin; el pago se bloquea igual
-      await bloquearPago(referenciaCompleta, {
-        fase: FASES.codigos, sinPines: true,
-        motivo: `Apps Script no entregó códigos: ${dataCodigos?.message || 'respuesta sin pines'}`,
-        queHacer: 'la recarga NO se entregó; hacerla a mano',
-      });
-      return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago está verificado y la recarga quedó en revisión." });
-    }
-
-    const pinesExtraidos = manual || porApi ? [] : dataCodigos.pines;
-
-    // ==========================================
-    // FASE 4 (modo API): ORDEN EN FAZERCARDS
-    // ==========================================
-    let ordenFazer = null;
-    if (porApi) {
-      const offerId = OFERTAS_FAZER[numeroDiamantes];
-      const orden = offerId && FAZER_API_KEY
-        ? await crearOrdenFazer({
-          apiKey: FAZER_API_KEY, categoria: CATEGORIA_FAZER, offerId, campos: { [CAMPO_JUGADOR_FAZER]: String(id) },
-          idempotencia: idPedido, tiempoMs: TIEMPOS.fazer,
-        })
-        // No debería pasar (sin oferta recargas.gs lo manda a "sin_codigo"); por si acaso, no se llama a la API
-        : { tipo: 'rechazo', motivo: `El paquete ${numeroDiamantes} no tiene offer_id en OFERTAS_FAZER o falta FAZER_API_KEY. No se llamó a la API.` };
-
-      if (orden.tipo !== 'ok') {
-        console.error(`❌ [${FASES.apiFreeFire}] ${orden.motivo} | REF: ${referenciaCompleta}`);
-        // Registrar el incidente y LUEGO bloquear el pago (en orden, dentro de bloquearPago)
-        await bloquearPago(referenciaCompleta, {
-          fase: FASES.apiFreeFire, noAplica: true,
-          motivo: orden.tipo === 'incierto'
-            ? `${orden.motivo} Oferta ${offerId}. ANTES DE REPETIR: buscar en el panel de FazerCards si existe una orden para el jugador ${id}.`
-            : `${orden.motivo} Oferta ${offerId}.`,
-          queHacer: orden.tipo === 'incierto'
-            ? 'confirmar la orden en FazerCards antes de repetir la recarga'
-            : 'no se cobró nada en FazerCards; hacer la recarga a mano con el ID correcto o devolver el pago',
-        });
-        // "fallo técnico": la página muestra el modal de "recarga en revisión"
-        return res.status(202).json({ status: "error", message: "Fallo técnico con el proveedor. Tu pago está verificado y la recarga quedó en revisión." });
-      }
-      ordenFazer = orden.orden;
-      console.info(`🛒 FazerCards: orden ${ordenFazer.id} (${ordenFazer.status}) para el pedido ${idPedido} (ID ${id})`);
-    }
-
-    // ==========================================
-    // FASE 4: CANJE EN EL BOT DE RAILWAY (no aplica a una recarga manual)
-    // ==========================================
-    const bot = manual || porApi
-      ? { tipo: 'ok', usados: [] }
-      : await canjearEnBot({ pines: pinesExtraidos, idJugador: id, secreto: RAILWAY_SECRET });
-
-    if (bot.tipo !== 'ok') {
-      console.error(`❌ [${FASES.botFreeFire}] ${bot.motivo} | REF: ${referenciaCompleta}`);
-      let detallePines;
-      if (bot.tipo === 'no_procesado') {
-        // El bot no tocó ningún pin: se devuelven al inventario (v2) para no perderlos
-        const devolucion = scriptV2
-          ? await llamarScript(URL_GOOGLE_SCRIPT, { accion: "devolver_codigos", idPedido, motivo: bot.motivo }, TIEMPOS.devolver)
-              .catch((e) => ({ status: 'error', message: e.message }))
-          : { status: 'error', message: 'el Apps Script instalado no tiene la acción devolver_codigos (actualiza a recargas.gs v2)' };
-        detallePines = devolucion?.status === 'success'
-          ? { pinesNoUsados: pinesExtraidos, estadoNoUsados: ESTADO_PINES.devueltos }
-          : { pinesNoUsados: pinesExtraidos, estadoNoUsados: `${ESTADO_PINES.noDevueltos} (${devolucion?.message})` };
-      } else if (bot.tipo === 'fallo_bot') {
-        detallePines = { pinesUsados: bot.usados, pinesNoUsados: bot.pendientes, estadoNoUsados: ESTADO_PINES.retenidos };
-      } else {
-        detallePines = { pinesNoUsados: pinesExtraidos, estadoNoUsados: ESTADO_PINES.inciertos };
-      }
-
-      // 📝 ANOTAR EL INCIDENTE Y LUEGO 🔥 QUEMAR EL PAGO (en orden, dentro de bloquearPago)
-      await bloquearPago(referenciaCompleta, {
-        fase: FASES.botFreeFire, motivo: bot.motivo, ...detallePines,
-        queHacer: 'la recarga NO se completó; entregarla manualmente al jugador',
-      });
-
-      // El mensaje contiene "fallo técnico": la página muestra el modal de "recarga en proceso"
-      return res.status(400).json({
-        status: "error",
-        message: "Fallo técnico del bot. Pines respaldados correctamente en hoja de errores."
-      });
-    }
-
-    // ==========================================
-    // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS (en orden)
-    // ==========================================
-    // La recarga YA se hizo: aunque Apps Script falle aquí, al cliente se le responde éxito.
-    // Una tras otra, NO en paralelo: las dos esperan el mismo candado de recargas.gs y, cuando
-    // registrar_finalizado (con código de descuento) lo retenía, marcar_usado se quedaba "ocupado"
-    // y el pago no pasaba a "Usado" aunque la recarga quedara en finalizados.
-    const pagoMarcado = await marcarReferencia("marcar_usado", referenciaCompleta);
-    const finalizadoGuardado = await registrarEnHoja({
-      accion: "registrar_finalizado",
-      idJugador: id,
-      paquete: paquete,
-      referencias: referenciaCompleta,
-      codigosUsados: manual ? 'SIN CÓDIGO: recarga manual pendiente (pestaña "sin_codigo")'
-        : porApi ? `API FazerCards (orden ${ordenFazer.id || 'sin id'})` : pinesExtraidos.join(" | "),
-      // recargas.gs guarda la orden y su estado en la pestaña "fazer_card"
-      ...(porApi && { ordenFazer: ordenFazer.id, estadoFazer: ordenFazer.status }),
-      urlImagen: comprobante,
-      idPedido,
-      // recargas.gs suma +1 uso y el monto cobrado al código en la pestaña "Descuentos"
-      ...(desc && { codigoDescuento: desc.codigo, montoCobrado: precioReal })
+    return await entregarRecarga(res, {
+      URL_GOOGLE_SCRIPT, RAILWAY_SECRET, FAZER_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
+      comprobante, referencias: [referenciaCompleta], scriptV2, opcionesCriticas,
+      utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago },
     });
-    if (!pagoMarcado || !finalizadoGuardado) {
-      const pendiente = [
-        !pagoMarcado && 'marcar el pago como "Usado"',
-        !finalizadoGuardado && 'anotar la recarga en "finalizados"',
-        // registrar_finalizado es quien suma el uso del código: sin él, el creador pierde esa comisión
-        !finalizadoGuardado && desc && `anotar el uso del código ${desc.codigo} (${precioReal} Bs, pedido ${idPedido}) en "Descuentos"`,
-      ].filter(Boolean).join(' y ');
-      await registrarEnHoja(informe({
-        fase: FASES.cierre,
-        motivo: manual
-          ? `Recarga MANUAL (anotada en "sin_codigo"), pero Apps Script no respondió al cierre: falta ${pendiente}`
-          : porApi
-            ? `FazerCards aceptó la orden ${ordenFazer.id}, pero Apps Script no respondió al cierre: falta ${pendiente} (y anotar la orden en "fazer_card")`
-            : `La recarga SÍ se entregó, pero Apps Script no respondió al cierre: falta ${pendiente}`,
-        referenciaCompleta, pinesUsados: bot.usados, noAplica: porApi,
-        estadoPago: pagoMarcado ? 'USADO (correcto)' : `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}`,
-      }));
-    }
-
-    return res.status(200).json({ status: "success", message: "Recarga procesada exitosamente con Level Up Bot." });
-
   } catch (error) {
     console.error("Error crítico en la recarga de Free Fire:", error.message);
     if (error instanceof ErrorExterno) {
       return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si te dice que ya fue utilizado, escríbenos por WhatsApp." });
+    }
+    return res.status(500).json({ status: "error", message: "Falla interna del servidor." });
+  }
+}
+
+/**
+ * Completar un pago insuficiente: POST { tokenComplemento, referencia (últimos 5 del nuevo pago) }.
+ * La clave solo sirve para el pedido que la generó: el jugador, el paquete y el precio salen de la
+ * pestaña "por_completar" (el navegador no puede cambiarlos). usar_complemento corre con el candado
+ * de recargas.gs: si dos dispositivos lo intentan a la vez, solo uno avanza; el pago nuevo queda
+ * "En proceso" o "Por completar" y nunca vuelve a "Verificado".
+ */
+async function completarPago(req, res) {
+  try {
+    const clave = String(req.body?.tokenComplemento ?? '');
+    const referencia = String(req.body?.referencia ?? '');
+    if (!CLAVE_COMPLEMENTO.test(clave) || !/^\d{5}$/.test(referencia)) {
+      return res.status(400).json({ status: "error", message: "Escribe los últimos 5 dígitos de la referencia del pago que hiciste para completar." });
+    }
+
+    const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
+    const RAILWAY_SECRET = (process.env.RAILWAY_SECRET || "").trim();
+    const FAZER_API_KEY = (process.env.FAZER_API_KEY || "").trim();
+    if (!URL_GOOGLE_SCRIPT || !RAILWAY_SECRET) {
+      return faltaConfiguracion(res, ["SCRIPT_RECARGAS_URL", "RAILWAY_SECRET"].filter((v) => !(process.env[v] || "").trim()),
+        { status: "error", message: "No podemos completar tu pago en este momento. Escríbenos por WhatsApp con tus referencias." });
+    }
+
+    const claveHash = huella(clave);
+    // Intentos fallidos por IP y por clave (frena probar referencias al azar)
+    const clavesLimite = [`ip:${obtenerIp(req)}`, `completar:ff:${claveHash.slice(0, 24)}`];
+    const minutosEspera = await minutosBloqueado(clavesLimite);
+    if (minutosEspera > 0) {
+      return res.status(429).json({ status: "error", message: `Demasiados intentos fallidos. Espera ${minutosEspera} minutos para volver a intentar.` });
+    }
+
+    const idPedido = randomUUID();
+    let datos;
+    try {
+      // Se puede repetir: recargas.gs guarda la respuesta de este idPedido
+      datos = await llamarScript(URL_GOOGLE_SCRIPT, { accion: "usar_complemento", claveHash, referencia, idPedido }, TIEMPOS.idempotente);
+    } catch (error) {
+      // El pago nuevo pudo quedar "En proceso": se bloquea (solo el que tomó ESTE pedido) y va a revisión
+      const bloqueo = await llamarScript(URL_GOOGLE_SCRIPT, { accion: "bloquear_pedido", idPedido }, { reintentos: 2, tiempoMs: TIEMPOS.incidente, reintentarTrasTimeout: true }).catch(() => null);
+      console.error(`❌ [${FASES.verificacion}] usar_complemento sin respuesta: ${error.message}`);
+      const { registrarEnHoja, informe } = crearUtilidadesPedido({
+        urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
+        datosInforme: { idPedido, idJugador: 'ver pestaña "por_completar"', paquete: 'pago por completar', referenciaCliente: referencia, comprobante: 'Sin comprobante' },
+      });
+      await registrarEnHoja(informe({
+        fase: FASES.verificacion, sinPines: true,
+        motivo: `Apps Script no respondió al completar un pago (usar_complemento): ${error.message}. Revisar la pestaña "por_completar" (clave ${claveHash.slice(0, 12)}…)`,
+        estadoPago: bloqueo?.referencia ? `BLOQUEADO ("Usado", referencia ${bloqueo.referencia}): completar la recarga a mano` : 'SIN CONFIRMAR: revisar la pestaña "por_completar"',
+      }));
+      return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tus referencias." });
+    }
+
+    if (datos?.status !== 'success' || !datos.valido) {
+      await registrarFallo(clavesLimite);
+      return res.status(400).json({ status: "error", complementoInvalido: true, message: datos?.message || "No pudimos completar este pago. Escríbenos por WhatsApp con tus referencias." });
+    }
+    if (!datos.encontrado) {
+      await registrarFallo(clavesLimite);
+      return res.status(400).json({ status: "error", message: datos.message || "Pago no encontrado o ya utilizado." });
+    }
+    if (!datos.completo) {
+      const falta = Number(datos.falta) || 0;
+      return res.status(400).json({
+        status: "error", insuficiente: true, tokenComplemento: clave,
+        montoPagado: Number(datos.pagadoTotal) || 0, precioRequerido: Number(datos.precio) || 0, faltante: falta,
+        message: `Pago insuficiente: con este pago llevas ${formatearVES(Number(datos.pagadoTotal) || 0)} Bs y faltan ${formatearVES(falta)} Bs. Paga la diferencia y escribe la nueva referencia.`,
+      });
+    }
+
+    // Pago completo: los datos del pedido salen de la hoja (se validan igual que en recargar)
+    const id = String(datos.idJugador || '');
+    const paquete = String(datos.paquete || '');
+    const referencias = Array.isArray(datos.referencias) ? datos.referencias.map(String).filter((r) => /^\d{5,30}$/.test(r)) : [];
+    const precioReal = limpiarMontoVES(datos.precio);
+    const numeroDiamantes = clavePaquete(paquete);
+    if (!/^\d{5,15}$/.test(id) || !PAQUETE_VALIDO.test(paquete) || !numeroDiamantes || !referencias.length || !(precioReal > 0)) {
+      console.error(`❌ usar_complemento devolvió datos inválidos para el pedido ${idPedido}: ${JSON.stringify(datos).slice(0, 300)}`);
+      return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tus referencias." });
+    }
+    const comprobante = textoParaHoja(datos.comprobante || "Sin comprobante");
+    const utilidades = crearUtilidadesPedido({
+      urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
+      datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante },
+    });
+    console.info(`🧩 Pago completado (${referencias.join(' + ')}) para el pedido ${datos.idPedidoOriginal} -> ${idPedido} (ID ${id})`);
+
+    return await entregarRecarga(res, {
+      URL_GOOGLE_SCRIPT, RAILWAY_SECRET, FAZER_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal,
+      desc: datos.codigoDescuento ? { codigo: String(datos.codigoDescuento) } : null,
+      comprobante, referencias, scriptV2: true, opcionesCriticas: TIEMPOS.idempotente, utilidades,
+    });
+  } catch (error) {
+    console.error("Error crítico al completar un pago de Free Fire:", error.message);
+    if (error instanceof ErrorExterno) {
+      return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si persiste, escríbenos por WhatsApp." });
     }
     return res.status(500).json({ status: "error", message: "Falla interna del servidor." });
   }
