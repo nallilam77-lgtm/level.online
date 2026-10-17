@@ -429,8 +429,8 @@ async function entregarRecarga(res, {
   cerrarEnSegundoPlano([
     { nombre: 'marcar el pago como "Usado"', repetible: true, ejecutar: marcarPagos },
     { nombre: nombreFinalizado, repetible: cierreIdempotente, ejecutar: guardarFinalizado },
-  ], (faltan, rondas) => {
-    const pendiente = faltan.join(' y ');
+  ], (faltan, rondas, motivoFallo) => {
+    const pendiente = faltan.join(' y ') + (motivoFallo ? `. Motivo: ${motivoFallo}` : '');
     const reintentos = rondas ? ` (ni tras ${rondas} reintento(s) en segundo plano)` : '';
     return registrarEnHoja(informe({
       fase: FASES.cierre,

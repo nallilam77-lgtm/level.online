@@ -51,6 +51,8 @@ export function crearUtilidadesPedido({ urlScript, idPedido, tiempoIncidenteMs, 
   // Apps Script responde HTTP 200 también cuando falla ({ status: "error" }), p. ej. "ocupado" si
   // otra operación tiene el candado: eso NO es éxito (el pago quedaba sin marcar y sin aviso).
   // "Ocupado" significa que no se ejecutó nada, así que se repite mientras quede tiempo.
+  // Motivo del último fallo (el aviso del cierre en segundo plano lo copia a "errores")
+  let ultimoMotivo = '';
   const llamarSinOcupado = async (cuerpo, opciones) => {
     const limite = Date.now() + tiempoIncidenteMs;
     let motivo = 'tiempo agotado';
@@ -58,7 +60,7 @@ export function crearUtilidadesPedido({ urlScript, idPedido, tiempoIncidenteMs, 
       try {
         const datos = await llamarScript(urlScript, cuerpo, { ...opciones, tiempoMs: limite - Date.now() });
         if (datos?.status !== 'error') return { ok: true, datos };
-        motivo = datos.message || 'Apps Script respondió status "error"';
+        motivo = (datos.message || 'Apps Script respondió status "error"') + (datos.detalle ? ` (${datos.detalle})` : '');
         if (!datos.ocupado) break;
       } catch (e) {
         motivo = e.message;
@@ -66,6 +68,7 @@ export function crearUtilidadesPedido({ urlScript, idPedido, tiempoIncidenteMs, 
       }
       await esperar(1000);
     }
+    ultimoMotivo = `${cuerpo.accion}: ${motivo}`;
     return { ok: false, motivo };
   };
 
@@ -147,7 +150,7 @@ export function crearUtilidadesPedido({ urlScript, idPedido, tiempoIncidenteMs, 
   // sin esperar a Apps Script: los pasos corren en segundo plano (waitUntil; sin él Vercel congela la
   // función al responder), EN ORDEN y uno tras otro (comparten el candado del script). Lo que no se
   // confirme se repite tras 10, 20 y 40 s, y solo si al final sigue sin confirmarse se anota el aviso en
-  // "errores" con alFallar(nombres, rondas).
+  // "errores" con alFallar(nombres, rondas, motivo del último fallo).
   // pasos = [{ nombre, repetible, ejecutar: async () => bool }]. Todos se ejecutan una vez; se repiten
   // solo los repetibles (repetir no duplica nada): marcar_usado y registrar_uso_descuento siempre;
   // registrar_finalizado con el script v3 (ignora un idPedido ya anotado). Una ronda de reintentos solo
@@ -177,7 +180,7 @@ export function crearUtilidadesPedido({ urlScript, idPedido, tiempoIncidenteMs, 
         if (rondas) console.info(`✅ Cierre del pedido ${idPedido} completado en segundo plano (tras ${rondas} reintento(s))`);
         return;
       }
-      await alFallar(pendientes.map((p) => p.nombre), rondas);
+      await alFallar(pendientes.map((p) => p.nombre), rondas, ultimoMotivo);
     } catch (e) {
       console.error(`❌ Cierre en segundo plano del pedido ${idPedido} falló:`, e.message);
     }

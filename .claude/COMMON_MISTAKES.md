@@ -11,6 +11,11 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 **Dónde**: comentario de cabecera de `api/_lib/externo.js` (`reintentarTrasTimeout`).
 **Cierre de una recarga ya entregada** (desde 2026-10-16): al cliente se le responde éxito en cuanto FazerCards/el bot confirma; `marcar_usado`, `registrar_finalizado` y `registrar_uso_descuento` corren DESPUÉS de responder con `cerrarEnSegundoPlano` (`_lib/recarga-comun.js`, con `waitUntil`), EN ORDEN, y lo que no se confirme se repite tras 10, 20 y 40 s dentro de los 180 s de la función; solo si sigue fallando se anota el aviso "CIERRE" en "errores". Efecto conocido: si el cliente abre la ruleta en el primer segundo, su pago puede no estar aún "Usado" y la ruleta no lo encuentra. `registrar_finalizado` solo se repite con el script v3 (`VERSION_SCRIPT = 3` en recargas.gs y bloodstrike.gs: ignora un `idPedido` ya anotado, marca `fin_<idPedido>` 6 h en CacheService); con v2 no, porque duplicaría la fila. Al subir un `.gs`, no bajar `VERSION_SCRIPT`.
 
+## 1b. `registrar_finalizado` que falla en todas las recargas
+
+**Síntoma** (2026-10-17): en "errores", "FazerCards aceptó la orden …, pero Apps Script no respondió al cierre (ni tras 3 reintento(s)…): falta anotar la recarga en \"finalizados\"", en cada recarga.
+**Regla**: en recargas.gs, `registrarFinalizado` anota la fila, hace `flush` y marca `fin_<idPedido>` ANTES de los pasos secundarios (asignaciones, fazer_card, por_completar, descuentos); cada uno va en su try/catch y lo que falle se anota en "errores" sin tumbar el cierre. La pestaña "finalizados" se crea si falta. `conCandado` devuelve `detalle` (mensaje de la excepción) y Vercel lo copia al aviso del cierre ("Motivo: …"); nunca se reenvía al cliente.
+
 ## 2. Ejecutar en paralelo `registrar_error` y `marcar_usado`
 
 **Síntoma**: tras un fallo del bot, el pago queda en "Verificado" y la referencia se puede reutilizar.

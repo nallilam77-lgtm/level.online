@@ -202,9 +202,9 @@ async function entregarRecarga(res, {
       nombre: `anotar el uso del código ${desc.codigo} (${precioReal} Bs, pedido ${idPedido}) en "Descuentos"`, repetible: true,
       ejecutar: () => registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: precioReal, idPedido, idJugador: id, juego: 'Blood Strike' }),
     },
-  ].filter(Boolean), (faltan, rondas) => registrarEnHoja(informe({
+  ].filter(Boolean), (faltan, rondas, motivoFallo) => registrarEnHoja(informe({
     fase: FASES.cierre,
-    motivo: `La recarga SÍ se entregó (FazerCards confirmó la orden), pero Apps Script no respondió al cierre${rondas ? ` (ni tras ${rondas} reintento(s) en segundo plano)` : ''}: falta ${faltan.join(' y ')}`,
+    motivo: `La recarga SÍ se entregó (FazerCards confirmó la orden), pero Apps Script no respondió al cierre${rondas ? ` (ni tras ${rondas} reintento(s) en segundo plano)` : ''}: falta ${faltan.join(' y ')}${motivoFallo ? `. Motivo: ${motivoFallo}` : ''}`,
     referenciaCompleta,
     estadoPago: faltan.includes('marcar el pago como "Usado"')
       ? `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}` : 'USADO (correcto)',

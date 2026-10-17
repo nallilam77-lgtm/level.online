@@ -94,6 +94,8 @@ const ESPERA_AVISO_FAZER_S = 21600;
 // Columnas de la pestaña "errores" (A-E son las de siempre; F-L agregan el detalle)
 const COLUMNAS_ERRORES = ["fecha-hora", "id", "estado de los pines", "producto", "informe completo",
   "fase del fallo", "referencia", "estado del pago", "motivo técnico", "comprobante", "id pedido", "pines asignados al pedido"];
+// Columnas de "finalizados" (solo se usan si hay que crear la pestaña)
+const COLUMNAS_FINALIZADOS = ["fecha-hora", "id jugador", "paquete", "referencia", "códigos / orden", "comprobante"];
 // Los comprobantes muestran nombre/cédula del cliente: por defecto solo los ve el dueño de la carpeta.
 const COMPARTIR_COMPROBANTES_CON_ENLACE = false;
 
@@ -206,7 +208,8 @@ function conCandado(operacion, esperaMs) {
     return operacion();
   } catch (error) {
     console.error("Error dentro del candado: " + (error && error.stack || error));
-    return responder({ status: "error", message: MENSAJE_ERROR_INTERNO });
+    // detalle: solo lo lee Vercel para la pestaña "errores" (nunca llega al cliente)
+    return responder({ status: "error", message: MENSAJE_ERROR_INTERNO, detalle: String(error && error.message || error).slice(0, 200) });
   } finally {
     lock.releaseLock();
   }
@@ -977,7 +980,8 @@ function registrarFinalizado(datos) {
   if (idPedido && CacheService.getScriptCache().get("fin_" + idPedido)) {
     return responder({ status: "success", repetido: true, message: "Este pedido ya estaba en finalizados" });
   }
-  var hojaFinalizados = obtenerHoja("finalizados");
+  // Si falta la pestaña se crea (antes un error aquí hacía fallar el cierre de TODAS las recargas)
+  var hojaFinalizados = hojaConTitulos("finalizados", COLUMNAS_FINALIZADOS);
   var fechaHora = ahora();
   hojaFinalizados.appendRow([
     fechaHora,                                           // A
@@ -987,26 +991,59 @@ function registrarFinalizado(datos) {
     textoSeguro(datos.codigosUsados || "No especificado"), // E
     textoSeguro(datos.urlImagen || "Sin comprobante")    // F
   ]);
-  // Auditoría: los pines de este pedido quedan como usados
-  var asignacion = buscarAsignacion(String(datos.idPedido || ""));
-  if (asignacion && asignacion.estado.indexOf("ASIGNADOS") === 0) {
-    hojaAsignaciones().getRange(asignacion.fila, 7).setValue("USADOS (recarga finalizada " + fechaHora + ")");
-  }
+  SpreadsheetApp.flush();
+  // La fila ya está: desde aquí un reintento de Vercel NO la vuelve a anotar, aunque falle un paso de abajo
+  if (idPedido) CacheService.getScriptCache().put("fin_" + idPedido, "1", 21600);
+
+  // Pasos secundarios: cada uno por separado; si uno falla se anota el motivo y la recarga sigue en "finalizados"
+  var fallos = [];
+  var paso = function (nombre, funcion) {
+    try {
+      funcion();
+    } catch (err) {
+      console.error("registrar_finalizado (" + idPedido + "): falló " + nombre + ": " + (err && err.stack || err));
+      fallos.push(nombre + ": " + String(err && err.message || err).slice(0, 120));
+    }
+  };
+  var asignacion = null;
+  paso("asignaciones_pines", function () {
+    asignacion = buscarAsignacion(idPedido);
+    // Auditoría: los pines de este pedido quedan como usados
+    if (asignacion && asignacion.estado.indexOf("ASIGNADOS") === 0) {
+      hojaAsignaciones().getRange(asignacion.fila, 7).setValue("USADOS (recarga finalizada " + fechaHora + ")");
+    }
+    if (asignacion && asignacion.estado.indexOf(ESTADO_API) === 0) {
+      hojaAsignaciones().getRange(asignacion.fila, 7).setValue(
+        textoSeguro(ESTADO_API + " - ENVIADA (orden " + (datos.ordenFazer || "sin id") + ", " + fechaHora + ")"));
+    }
+  });
   // Modo API: la orden de FazerCards y su estado quedan en "fazer_card"
-  if (asignacion && asignacion.estado.indexOf(ESTADO_API) === 0) {
-    hojaAsignaciones().getRange(asignacion.fila, 7).setValue(
-      textoSeguro(ESTADO_API + " - ENVIADA (orden " + (datos.ordenFazer || "sin id") + ", " + fechaHora + ")"));
-    anotarOrdenFazer(String(datos.idPedido), String(datos.ordenFazer || ""), datos.estadoFazer);
+  if (datos.ordenFazer) {
+    paso("fazer_card", function () { anotarOrdenFazer(idPedido, String(datos.ordenFazer), datos.estadoFazer); });
   }
   // Pedido que completó un pago insuficiente: su fila de "por_completar" queda cerrada
-  cerrarComplemento(String(datos.idPedido || ""), "✅ COMPLETADO Y RECARGADO");
+  paso("por_completar", function () { cerrarComplemento(idPedido, "✅ COMPLETADO Y RECARGADO"); });
   // Código de descuento usado en esta recarga: +1 uso y el monto cobrado en la pestaña "Descuentos"
-  if (datos.codigoDescuento) sumarUsoDescuento(datos.codigoDescuento, datos.montoCobrado, "Free Fire", datos.idPedido, datos.idJugador);
+  if (datos.codigoDescuento) {
+    paso("descuentos", function () { sumarUsoDescuento(datos.codigoDescuento, datos.montoCobrado, "Free Fire", idPedido, datos.idJugador); });
+  }
+  // Lo que falló queda a la vista en "errores" (la recarga sí está en "finalizados")
+  if (fallos.length) {
+    paso("aviso en errores", function () {
+      registrarError({
+        idJugador: datos.idJugador, paquete: datos.paquete, referencia: datos.referencias || datos.referencia,
+        idPedido: idPedido, comprobante: datos.urlImagen,
+        fase: "5. CIERRE (registrar_finalizado): la recarga SÍ está en finalizados",
+        motivo: "Faltó completar: " + fallos.join(" | "),
+        estadoPines: "NO APLICA", estadoPago: "sin cambios",
+        urlImagen: "Revisar a mano: " + fallos.join(" | ")
+      });
+    });
+  }
   SpreadsheetApp.flush();
-  if (idPedido) CacheService.getScriptCache().put("fin_" + idPedido, "1", 21600);
   // (Se quitó la llamada a /api/sincronizar-pedidos: ese endpoint no existe en la tienda
   //  y la petición alargaba el candado en cada recarga.)
-  return responder({ status: "success", message: "Guardado en finalizados correctamente" });
+  return responder({ status: "success", message: "Guardado en finalizados correctamente", fallos: fallos });
 }
 
 // Fallo del bot o de FazerCards: fila en "errores" con los pines del pedido. NO cambia el estado del pago.
