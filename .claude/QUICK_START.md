@@ -27,4 +27,5 @@ npx vercel dev       # sirve public/ y api/ en local (necesita .env con las vari
 ## Diagnóstico
 
 - Logs de las funciones: panel de Vercel → Logs (los `console.error` llevan la fase entre corchetes, p. ej. `[2. VERIFICACIÓN DEL PAGO (Google Sheets)]`; ver `FASES` en `api/_lib/reporte.js`).
+- Hoja lenta (timeouts en todas las fases): menú "🖐️ Recargas Free Fire" → 🩺 Diagnóstico, ✂️ Quitar filas y columnas vacías y 🗄️ Archivar filas antiguas (respaldo + archivo nuevo en Drive; lo pendiente no se toca).
 - Fallos de recarga: pestaña **"errores"** de Google Sheets; pines entregados: pestaña **"asignaciones_pines"**.

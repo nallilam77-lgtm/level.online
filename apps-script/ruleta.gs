@@ -19,7 +19,7 @@
 // cliente no pierde su giro por un fallo de red.
 // =====================================================================
 
-var ID_HOJA_PAGOS = "1hYl8yGJzmlB2-O6VK9UghZFN5nI7S7Ld5uhA3Np-4X8";
+var ID_HOJA_PAGOS = "1FTjXo7sKybYVmyGO9HBlyla0T2LHBfCB8yHEV70JyOA";
 
 // Vercel espera hasta 12 s por intento: si otro giro tarda más en soltar el candado, se responde
 // "ocupado" (Vercel reintenta) en vez de trabajar para una petición que ya nadie espera.

@@ -7,7 +7,7 @@ import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasCachePrecios, ErrorExterno } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
 import { FASES, ESTADO_PINES } from '../reporte.js';
-import { formatearVES, limpiarMontoVES, crearUtilidadesPedido } from '../recarga-comun.js';
+import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
 import { crearOrdenFazer } from '../fazer.js';
 
@@ -27,6 +27,8 @@ const TIEMPOS = {
   incidente: 12000,
 };
 const RAILWAY_URL = "https://bot-levelup-production.up.railway.app/canjear";
+// Error no previsto: no se sabe si el bot llegó a canjear los pines (recargas.gs los lista en la columna L)
+const PINES_POR_REVISAR = { pinesNoUsados: ['los de la columna L ("pines asignados al pedido")'], estadoNoUsados: ESTADO_PINES.inciertos };
 
 // Modo API (FazerCards): categoría y offer_id de cada paquete (clave del paquete -> offer_id).
 // Un paquete sin offer_id aquí NO se envía a la API: va a "sin_codigo" para hacerlo a mano.
@@ -237,7 +239,8 @@ async function canjearEnBot({ pines, idJugador, secreto }) {
  */
 async function entregarRecarga(res, {
   URL_GOOGLE_SCRIPT, RAILWAY_SECRET, FAZER_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
-  comprobante, referencias, scriptV2, opcionesCriticas, utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago },
+  comprobante, referencias, scriptV2, cierreIdempotente, opcionesCriticas,
+  utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
 }) {
   // Texto para la hoja y los informes: "ref1" o "ref1 + ref2" (pago completado)
   const referenciaCompleta = referencias.join(' + ');
@@ -398,14 +401,14 @@ async function entregarRecarga(res, {
   }
 
   // ==========================================
-  // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS (en orden)
+  // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS (en orden, en segundo plano)
   // ==========================================
-  // La recarga YA se hizo: aunque Apps Script falle aquí, al cliente se le responde éxito.
-  // Una tras otra, NO en paralelo: las dos esperan el mismo candado de recargas.gs y, cuando
-  // registrar_finalizado (con código de descuento) lo retenía, marcar_usado se quedaba "ocupado"
-  // y el pago no pasaba a "Usado" aunque la recarga quedara en finalizados.
-  const pagoMarcado = await marcarPagos();
-  const finalizadoGuardado = await registrarEnHoja({
+  // La recarga YA se hizo: al cliente se le responde éxito sin esperar a Apps Script y el cierre sigue
+  // después de responder (cerrarEnSegundoPlano). Una tras otra, NO en paralelo: las dos esperan el mismo
+  // candado de recargas.gs y, cuando registrar_finalizado (con código de descuento) lo retenía,
+  // marcar_usado se quedaba "ocupado" y el pago no pasaba a "Usado" aunque la recarga quedara en finalizados.
+  // Lo que no se confirme se repite (registrar_finalizado solo con recargas.gs v3, que no lo anota dos veces).
+  const guardarFinalizado = () => registrarEnHoja({
     accion: "registrar_finalizado",
     idJugador: id,
     paquete: paquete,
@@ -419,24 +422,28 @@ async function entregarRecarga(res, {
     // recargas.gs suma +1 uso y el monto cobrado al código en la pestaña "Descuentos"
     ...(desc && { codigoDescuento: desc.codigo, montoCobrado: precioReal })
   });
-  if (!pagoMarcado || !finalizadoGuardado) {
-    const pendiente = [
-      !pagoMarcado && 'marcar el pago como "Usado"',
-      !finalizadoGuardado && 'anotar la recarga en "finalizados"',
-      // registrar_finalizado es quien suma el uso del código: sin él, el creador pierde esa comisión
-      !finalizadoGuardado && desc && `anotar el uso del código ${desc.codigo} (${precioReal} Bs, pedido ${idPedido}) en "Descuentos"`,
-    ].filter(Boolean).join(' y ');
-    await registrarEnHoja(informe({
+  const nombreFinalizado = 'anotar la recarga en "finalizados"'
+    + (porApi ? ' (y la orden en "fazer_card")' : '')
+    // registrar_finalizado es quien suma el uso del código: sin él, el creador pierde esa comisión
+    + (desc ? ` y el uso del código ${desc.codigo} (${precioReal} Bs, pedido ${idPedido}) en "Descuentos"` : '');
+  cerrarEnSegundoPlano([
+    { nombre: 'marcar el pago como "Usado"', repetible: true, ejecutar: marcarPagos },
+    { nombre: nombreFinalizado, repetible: cierreIdempotente, ejecutar: guardarFinalizado },
+  ], (faltan, rondas) => {
+    const pendiente = faltan.join(' y ');
+    const reintentos = rondas ? ` (ni tras ${rondas} reintento(s) en segundo plano)` : '';
+    return registrarEnHoja(informe({
       fase: FASES.cierre,
       motivo: manual
-        ? `Recarga MANUAL (anotada en "sin_codigo"), pero Apps Script no respondió al cierre: falta ${pendiente}`
+        ? `Recarga MANUAL (anotada en "sin_codigo"), pero Apps Script no respondió al cierre${reintentos}: falta ${pendiente}`
         : porApi
-          ? `FazerCards aceptó la orden ${ordenFazer.id}, pero Apps Script no respondió al cierre: falta ${pendiente} (y anotar la orden en "fazer_card")`
-          : `La recarga SÍ se entregó, pero Apps Script no respondió al cierre: falta ${pendiente}`,
+          ? `FazerCards aceptó la orden ${ordenFazer.id}, pero Apps Script no respondió al cierre${reintentos}: falta ${pendiente}`
+          : `La recarga SÍ se entregó, pero Apps Script no respondió al cierre${reintentos}: falta ${pendiente}`,
       referenciaCompleta, pinesUsados: bot.usados, noAplica: porApi,
-      estadoPago: pagoMarcado ? 'USADO (correcto)' : `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}`,
+      estadoPago: faltan.includes('marcar el pago como "Usado"')
+        ? `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}` : 'USADO (correcto)',
     }));
-  }
+  });
 
   return res.status(200).json({ status: "success", message: "Recarga procesada exitosamente con Level Up Bot." });
 
@@ -447,6 +454,8 @@ export async function recargar(req, res) {
   // Segunda (o tercera...) referencia de un pago que no alcanzó
   if (req.body?.tokenComplemento !== undefined) return completarPago(req, res);
 
+  // Desde verificar_pago: con quién bloquear el pago si algo falla sin estar previsto (ver el catch)
+  let pedido = null;
   try {
     const { id, paquete, referencia } = req.body || {};
     // El comprobante viaja a la hoja de cálculo: se limpia para que no pueda inyectar fórmulas
@@ -480,7 +489,7 @@ export async function recargar(req, res) {
     const idPedido = randomUUID();
     const comprobante = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
 
-    const { marcarReferencia, registrarEnHoja, informe, bloquearPago } = crearUtilidadesPedido({
+    const { marcarReferencia, registrarEnHoja, informe, bloquearPago, bloquearPorError, cerrarEnSegundoPlano } = crearUtilidadesPedido({
       urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
       datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante },
     });
@@ -510,6 +519,8 @@ export async function recargar(req, res) {
     // recargas.gs v2 anuncia "version: 2" en los precios: solo entonces es seguro reintentar
     // verificar_pago y obtener_codigo después de un timeout
     const scriptV2 = Number(dataPrecios.version) >= 2;
+    // v3: registrar_finalizado ignora un idPedido ya anotado (se puede repetir el cierre en segundo plano)
+    const cierreIdempotente = Number(dataPrecios.version) >= 3;
     const opcionesCriticas = scriptV2 ? TIEMPOS.idempotente : TIEMPOS.sinIdempotencia;
 
     const numeroDiamantes = clavePaquete(paquete);
@@ -528,37 +539,45 @@ export async function recargar(req, res) {
     // ==========================================
     // FASE 2: BUSCAR PAGO Y VERIFICAR
     // ==========================================
+    pedido = { utilidades: { registrarEnHoja, informe, bloquearPorError }, referencias: [] };
     let dataVerificacion;
     try {
       dataVerificacion = await llamarScript(URL_GOOGLE_SCRIPT,
         { accion: "verificar_pago", referencia: referencia, monto: precioReal, idPedido }, opcionesCriticas);
+      // Un error de Apps Script (salvo "ocupado", que no ejecutó nada) pudo dejar el pago "En proceso":
+      // se trata igual que si no hubiera respondido
+      if (dataVerificacion?.status === 'error' && !dataVerificacion.ocupado) {
+        throw new Error(`Apps Script respondió con error: ${dataVerificacion.message || 'sin detalle'}`);
+      }
     } catch (error) {
       // El pago pudo quedar "En proceso" en la hoja: NUNCA se libera, se marca "Usado" (bloquear_pedido
       // solo toca el pago que bloqueó ESTE pedido) y la recarga pasa a revisión manual.
-      const bloqueo = scriptV2
-        ? await llamarScript(URL_GOOGLE_SCRIPT, { accion: "bloquear_pedido", idPedido }, { reintentos: 2, tiempoMs: TIEMPOS.incidente, reintentarTrasTimeout: true }).catch(() => null)
-        : null;
-      const sinBloquearNada = bloqueo?.status === 'success' && !bloqueo.referencia;
-      let estadoPago = `SIN CONFIRMAR: si la fila del pago (referencia terminada en ${referencia}) quedó "En proceso", márcala "Usado" y haz la recarga a mano`;
-      if (bloqueo?.status === 'success') {
-        estadoPago = sinBloquearNada
-          ? 'SIN CAMBIOS: este pedido no llegó a tomar ningún pago; el cliente puede reintentar'
-          : `BLOQUEADO ("Usado", referencia ${bloqueo.referencia}): la recarga NO se entregó; hacerla a mano`;
-      }
       console.error(`❌ [${FASES.verificacion}] ${error.message}`);
-      await registrarEnHoja(informe({ fase: FASES.verificacion, motivo: `Apps Script no respondió a verificar_pago: ${error.message}`, sinPines: true, estadoPago }));
-      if (sinBloquearNada) {
+      const motivo = `Apps Script falló en verificar_pago: ${error.message}`;
+      let pagoTomado = true;
+      if (scriptV2) {
+        ({ pagoTomado } = await bloquearPorError({ fase: FASES.verificacion, motivo, sinPines: true }));
+      } else {
+        await registrarEnHoja(informe({ fase: FASES.verificacion, motivo, sinPines: true,
+          estadoPago: `SIN CONFIRMAR: si la fila del pago (referencia terminada en ${referencia}) quedó "En proceso", márcala "Usado" y haz la recarga a mano` }));
+      }
+      if (!pagoTomado) {
         return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo." });
       }
       // "fallo técnico": la página muestra el modal de "recarga en revisión"
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Si tu pago es válido, quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tu referencia." });
     }
 
+    // Ocupado: Apps Script no tocó ningún pago; no cuenta como intento fallido del cliente
+    if (dataVerificacion?.ocupado) {
+      return res.status(503).json({ status: "error", message: dataVerificacion.message || "Sistema ocupado. Intenta de nuevo en unos segundos." });
+    }
     if (!dataVerificacion || !dataVerificacion.encontrado) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", message: dataVerificacion?.message || "Pago no encontrado o ya utilizado." });
     }
     const referenciaCompleta = dataVerificacion.referencia;
+    pedido.referencias = [referenciaCompleta];
 
     if (dataVerificacion.insuficiente) {
       await registrarFallo(clavesLimite);
@@ -607,11 +626,14 @@ export async function recargar(req, res) {
 
     return await entregarRecarga(res, {
       URL_GOOGLE_SCRIPT, RAILWAY_SECRET, FAZER_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
-      comprobante, referencias: [referenciaCompleta], scriptV2, opcionesCriticas,
-      utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago },
+      comprobante, referencias: [referenciaCompleta], scriptV2, cierreIdempotente, opcionesCriticas,
+      utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
     });
   } catch (error) {
     console.error("Error crítico en la recarga de Free Fire:", error.message);
+    // Con el pago ya pedido: se bloquea y va a "errores" (los pines del pedido salen en la columna L)
+    const respuesta = await responderErrorInesperado(res, pedido, error, PINES_POR_REVISAR);
+    if (respuesta) return respuesta;
     if (error instanceof ErrorExterno) {
       return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si te dice que ya fue utilizado, escríbenos por WhatsApp." });
     }
@@ -627,6 +649,10 @@ export async function recargar(req, res) {
  * "En proceso" o "Por completar" y nunca vuelve a "Verificado".
  */
 async function completarPago(req, res) {
+  // Desde usar_complemento: con quién bloquear los pagos si algo falla sin estar previsto (ver el catch)
+  let pedido = null;
+  // Límite del cierre en segundo plano (las utilidades del pedido se crean más tarde)
+  const inicio = Date.now();
   try {
     const clave = String(req.body?.tokenComplemento ?? '');
     const referencia = String(req.body?.referencia ?? '');
@@ -651,26 +677,35 @@ async function completarPago(req, res) {
     }
 
     const idPedido = randomUUID();
+    // Hasta conocer el pedido (sale de la hoja), los informes de "errores" remiten a "por_completar"
+    pedido = {
+      utilidades: crearUtilidadesPedido({
+        urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente, inicio,
+        datosInforme: { idPedido, idJugador: 'ver pestaña "por_completar"', paquete: 'pago por completar', referenciaCliente: referencia, comprobante: 'Sin comprobante' },
+      }),
+      referencias: [],
+    };
+    const revisarPorCompletar = `Revisar la pestaña "por_completar" (clave ${claveHash.slice(0, 12)}…)`;
     let datos;
     try {
       // Se puede repetir: recargas.gs guarda la respuesta de este idPedido
       datos = await llamarScript(URL_GOOGLE_SCRIPT, { accion: "usar_complemento", claveHash, referencia, idPedido }, TIEMPOS.idempotente);
+      // Un error de Apps Script (salvo "ocupado") pudo dejar el pago nuevo "En proceso"
+      if (datos?.status === 'error' && !datos.ocupado) throw new Error(`Apps Script respondió con error: ${datos.message || 'sin detalle'}`);
     } catch (error) {
       // El pago nuevo pudo quedar "En proceso": se bloquea (solo el que tomó ESTE pedido) y va a revisión
-      const bloqueo = await llamarScript(URL_GOOGLE_SCRIPT, { accion: "bloquear_pedido", idPedido }, { reintentos: 2, tiempoMs: TIEMPOS.incidente, reintentarTrasTimeout: true }).catch(() => null);
-      console.error(`❌ [${FASES.verificacion}] usar_complemento sin respuesta: ${error.message}`);
-      const { registrarEnHoja, informe } = crearUtilidadesPedido({
-        urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
-        datosInforme: { idPedido, idJugador: 'ver pestaña "por_completar"', paquete: 'pago por completar', referenciaCliente: referencia, comprobante: 'Sin comprobante' },
-      });
-      await registrarEnHoja(informe({
+      console.error(`❌ [${FASES.verificacion}] usar_complemento falló: ${error.message}`);
+      await pedido.utilidades.bloquearPorError({
         fase: FASES.verificacion, sinPines: true,
-        motivo: `Apps Script no respondió al completar un pago (usar_complemento): ${error.message}. Revisar la pestaña "por_completar" (clave ${claveHash.slice(0, 12)}…)`,
-        estadoPago: bloqueo?.referencia ? `BLOQUEADO ("Usado", referencia ${bloqueo.referencia}): completar la recarga a mano` : 'SIN CONFIRMAR: revisar la pestaña "por_completar"',
-      }));
+        motivo: `Apps Script falló al completar un pago (usar_complemento): ${error.message}. ${revisarPorCompletar}`,
+      });
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tus referencias." });
     }
 
+    // Ocupado: Apps Script no tocó ningún pago; la clave sigue sirviendo
+    if (datos?.ocupado) {
+      return res.status(503).json({ status: "error", message: datos.message || "Sistema ocupado. Intenta de nuevo en unos segundos." });
+    }
     if (datos?.status !== 'success' || !datos.valido) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", complementoInvalido: true, message: datos?.message || "No pudimos completar este pago. Escríbenos por WhatsApp con tus referencias." });
@@ -696,22 +731,32 @@ async function completarPago(req, res) {
     const numeroDiamantes = clavePaquete(paquete);
     if (!/^\d{5,15}$/.test(id) || !PAQUETE_VALIDO.test(paquete) || !numeroDiamantes || !referencias.length || !(precioReal > 0)) {
       console.error(`❌ usar_complemento devolvió datos inválidos para el pedido ${idPedido}: ${JSON.stringify(datos).slice(0, 300)}`);
+      // Los pagos de este pedido quedan "Usado" (si no se pueden leer las referencias, el que tomó este pedido)
+      await pedido.utilidades.bloquearPorError({
+        fase: FASES.inesperado, sinPines: true, referencias,
+        motivo: `usar_complemento devolvió datos inválidos (jugador "${id}", paquete "${paquete}", precio ${datos.precio}, referencias ${JSON.stringify(datos.referencias)}). ${revisarPorCompletar}`,
+      });
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tus referencias." });
     }
     const comprobante = textoParaHoja(datos.comprobante || "Sin comprobante");
     const utilidades = crearUtilidadesPedido({
-      urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
+      urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente, inicio,
       datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante },
     });
+    pedido = { utilidades, referencias };
     console.info(`🧩 Pago completado (${referencias.join(' + ')}) para el pedido ${datos.idPedidoOriginal} -> ${idPedido} (ID ${id})`);
 
     return await entregarRecarga(res, {
       URL_GOOGLE_SCRIPT, RAILWAY_SECRET, FAZER_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal,
       desc: datos.codigoDescuento ? { codigo: String(datos.codigoDescuento) } : null,
       comprobante, referencias, scriptV2: true, opcionesCriticas: TIEMPOS.idempotente, utilidades,
+      // usar_complemento de recargas.gs v3 anuncia su versión
+      cierreIdempotente: Number(datos.version) >= 3,
     });
   } catch (error) {
     console.error("Error crítico al completar un pago de Free Fire:", error.message);
+    const respuesta = await responderErrorInesperado(res, pedido, error, PINES_POR_REVISAR);
+    if (respuesta) return respuesta;
     if (error instanceof ErrorExterno) {
       return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si persiste, escríbenos por WhatsApp." });
     }

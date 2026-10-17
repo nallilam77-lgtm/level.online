@@ -11,6 +11,7 @@ export const FASES = {
   apiBloodStrike: '4. RECARGA EN LA API DEL PROVEEDOR (FazerCards)',
   apiFreeFire: '4. RECARGA DE FREE FIRE EN LA API DEL PROVEEDOR (FazerCards)',
   cierre: '5. CIERRE DEL PEDIDO (marcar pago usado / registrar finalizado)',
+  inesperado: 'ERROR INESPERADO (excepción o respuesta no prevista en Vercel)',
 };
 
 // Estados posibles de los pines. Siempre van acompañados de los códigos exactos.

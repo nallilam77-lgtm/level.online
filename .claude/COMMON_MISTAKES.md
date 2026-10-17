@@ -9,6 +9,7 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 **Síntoma**: pines entregados dos veces, compras de Roblox/Blood Strike duplicadas, filas repetidas en la hoja.
 **Regla**: solo se reintenta lo idempotente (leer precios, validar ID, `marcar_usado`, y `verificar_pago`/`obtener_codigo` porque llevan `idPedido`; la ruleta, porque `apps-script/ruleta.gs` devuelve el premio ya anotado si la misma referencia y el mismo jugador repiten). Nunca se reintenta tras un timeout: compras (`api/_lib/juegos/roblox.js`, FazerCards en `api/_lib/juegos/bloodstrike.js`), `registrar_*`, `subir_imagen`.
 **Dónde**: comentario de cabecera de `api/_lib/externo.js` (`reintentarTrasTimeout`).
+**Cierre de una recarga ya entregada** (desde 2026-10-16): al cliente se le responde éxito en cuanto FazerCards/el bot confirma; `marcar_usado`, `registrar_finalizado` y `registrar_uso_descuento` corren DESPUÉS de responder con `cerrarEnSegundoPlano` (`_lib/recarga-comun.js`, con `waitUntil`), EN ORDEN, y lo que no se confirme se repite tras 10, 20 y 40 s dentro de los 180 s de la función; solo si sigue fallando se anota el aviso "CIERRE" en "errores". Efecto conocido: si el cliente abre la ruleta en el primer segundo, su pago puede no estar aún "Usado" y la ruleta no lo encuentra. `registrar_finalizado` solo se repite con el script v3 (`VERSION_SCRIPT = 3` en recargas.gs y bloodstrike.gs: ignora un `idPedido` ya anotado, marca `fin_<idPedido>` 6 h en CacheService); con v2 no, porque duplicaría la fila. Al subir un `.gs`, no bajar `VERSION_SCRIPT`.
 
 ## 2. Ejecutar en paralelo `registrar_error` y `marcar_usado`
 
@@ -23,7 +24,8 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 
 ## 2c. Devolver un pago a "Verificado"
 
-**Regla** (desde 2026-10-13): ningún error lo libera, ni pago insuficiente ni rechazo del proveedor. Siempre `bloquearPago` (anota en "errores" y marca "Usado"); el cliente sigue por WhatsApp. No volver a añadir `marcar_verificado`/`liberar_pedido`. Excepción controlada: en Free Fire el pago insuficiente queda "Por completar" (tampoco es reutilizable) hasta que el cliente complete la diferencia o venza el plazo; nunca pasa a "Verificado".
+**Regla** (desde 2026-10-13): ningún error lo libera, ni pago insuficiente ni rechazo del proveedor. Siempre `bloquearPago` (anota en "errores" y marca "Usado"); el cliente sigue por WhatsApp.
+**Errores no previstos** (desde 2026-10-15): en Free Fire y Blood Strike, desde que se pide `verificar_pago`/`usar_complemento` el pedido queda en la variable `pedido`; cualquier excepción llega al `catch` general y `responderErrorInesperado` (`_lib/recarga-comun.js`) lo bloquea con `bloquearPorError` (fase "ERROR INESPERADO"). Un `{status:"error"}` de Apps Script (salvo `ocupado`, que no ejecutó nada) se trata como falta de respuesta: `bloquear_pedido` + fila en "errores". Al añadir un paso nuevo, no atrapar la excepción en silencio: si no hay un `bloquear(...)` propio, déjala subir al `catch`. No volver a añadir `marcar_verificado`/`liberar_pedido`. Excepción controlada: en Free Fire el pago insuficiente queda "Por completar" (tampoco es reutilizable) hasta que el cliente complete la diferencia o venza el plazo; nunca pasa a "Verificado".
 
 ## 2d. Pagos de MacroDroid que no llegan a "pagos"
 
@@ -54,6 +56,10 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 **Síntoma**: la tienda deja de funcionar porque la URL `/exec` cambió.
 **Regla**: Implementar → Gestionar implementaciones → editar la existente → "Nueva versión". Y para el token: primero `SCRIPT_RECARGAS_TOKEN` en Vercel (y redesplegar), **después** la propiedad `TOKEN_VERCEL` en Apps Script.
 
+## 7b. Mudarse a una hoja nueva
+
+**Regla**: la hoja nueva es otro proyecto de Apps Script: URL `/exec` nueva y propiedades vacías. `ID_HOJA_PAGOS` de bloodstrike.gs, roblox.gs y ruleta.gs apunta a la pestaña "pagos" de la hoja de Free Fire: cambiarlo en los tres EL MISMO DÍA, con la tienda cerrada, junto con `SCRIPT_RECARGAS_URL` (Vercel) y la URL de MacroDroid; si no, un pago puede gastarse en las dos hojas. Copiar con el menú 🚚 de recargas.gs (fija `saldos_por_venta` y `retroactivo_<%>` para que los saldos de los creadores no se recalculen), crear TOKEN_VERCEL/MACRODROID_CLAVE y copiar `appsscript.json` (permisos de Firestore).
+
 ## 8. Otros
 
 - Log `⚠️ precios:…: Apps Script falló (Apps Script lento)`: ya no sale cuando Apps Script solo tarda más de 1,5 s (`conCache` responde con la copia y renueva en segundo plano). Si aparece "falló" o "no se pudo renovar", Apps Script sí respondió con error.
@@ -64,6 +70,11 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 - Modelos `gemini-1.5-*` retirados (404). Por defecto `gemini-2.5-flash` vía `GEMINI_MODEL`.
 - `firebase-admin` se importa de forma perezosa en `_lib/limitador.js` para no alargar el cold start: no moverlo a un `import` estático.
 - Variable nueva → documentarla en `.env.example`. Nunca leer ni editar `.env`.
+
+## 8a. `obtener_codigo` lento en modo API
+
+**Síntoma**: `[3. OBTENCIÓN DE CÓDIGOS] Tiempo agotado (15 s)` aunque el modo sea API (FazerCards). No es un choque: en modo API `obtener_codigo` no toca los pines, pero es quien lee el modo y anota la fila de "fazer_card", así que Vercel no puede saltárselo.
+**Causa**: `buscarAsignacion` leía toda la pestaña "asignaciones_pines" dentro del candado. **Regla**: las búsquedas por id dentro del candado van con TextFinder sobre una columna (`buscarAsignacion`, `filaDePago`, `buscarFilaFazer`), nunca con `getDataRange()` de una pestaña que crece.
 
 ## 8b. Orden de la compra de Roblox (`apps-script/roblox.gs`)
 

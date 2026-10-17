@@ -32,11 +32,12 @@
 const PROJECT_ID = "levelupstore-87d4d";
 const COLLECTION_NAME = "Pagos";
 const FOLDER_ID = "12-YApHdXIFtbIk9qzNCiUY0SVsimCecO"; // Carpeta de comprobantes
-const ID_HOJA_PAGOS = "1hYl8yGJzmlB2-O6VK9UghZFN5nI7S7Ld5uhA3Np-4X8"; // Hoja central de pagos
+const ID_HOJA_PAGOS = "1FTjXo7sKybYVmyGO9HBlyla0T2LHBfCB8yHEV70JyOA"; // Hoja central de pagos
 
-// Versión que la tienda lee en obtener_precios: con 2 o más, Vercel sabe que verificar_pago es
-// idempotente (idPedido) y que puede reintentarlo tras un timeout sin bloquear otro pago.
-const VERSION_SCRIPT = 2;
+// Versión que la tienda lee en obtener_precios (y usar_complemento): con 2 o más, Vercel sabe que
+// verificar_pago es idempotente (idPedido) y que puede reintentarlo tras un timeout sin bloquear otro
+// pago; con 3 o más, que registrar_finalizado ignora un idPedido ya anotado (repite el cierre en segundo plano).
+const VERSION_SCRIPT = 3;
 
 // Vercel espera hasta 15 s por intento: si el candado tarda más que esto, es mejor responder
 // "ocupado" (Vercel reintenta) que trabajar para una petición que ya nadie espera.
@@ -198,13 +199,14 @@ function tomarPago(ultimos5, idPedido) {
     if (estadoActual === ESTADO_PAGO_POR_COMPLETAR.toLowerCase()) { hayPorCompletar = true; continue; }
     if (estadoActual !== "verificado" && estadoActual !== "") continue;
 
-    hojaPagos.getRange(i + 1, 5).setValue("En proceso");
-    SpreadsheetApp.flush();
-    // Recordar qué pedido lo bloqueó (reintentos y bloquear_pedido)
+    // Primero se recuerda qué pedido lo toma (reintentos y bloquear_pedido) y después se bloquea:
+    // si algo falla a mitad, bloquear_pedido igual encuentra el pago y lo deja "Usado"
     if (idPedido) {
       props.setProperty("proc_" + referenciaCompleta, idPedido);
       props.setProperty("pedido_" + idPedido, referenciaCompleta);
     }
+    hojaPagos.getRange(i + 1, 5).setValue("En proceso");
+    SpreadsheetApp.flush();
     actualizarEstadoFirebase(referenciaCompleta, "En proceso");
     return respuestaEncontrado(i, false);
   }
@@ -269,12 +271,13 @@ function usarComplemento(datos) {
   }
   var cache = CacheService.getScriptCache();
   var previa = cache.get("comp_" + idPedido);
-  if (previa) return responder(JSON.parse(previa));
+  // version: con 3 o más, Vercel sabe que puede repetir registrar_finalizado de este pedido
+  if (previa) return responder(Object.assign(JSON.parse(previa), { version: VERSION_SCRIPT }));
 
   var respuesta = completarConPago(buscarFilaPorCompletar(14, claveHash), ultimos5, idPedido);
   if (respuesta.valido && respuesta.encontrado) cache.put("comp_" + idPedido, JSON.stringify(respuesta), 21600);
   SpreadsheetApp.flush();
-  return responder(respuesta);
+  return responder(Object.assign(respuesta, { version: VERSION_SCRIPT }));
 }
 
 function completarConPago(fila, ultimos5, idPedido) {
@@ -363,17 +366,32 @@ function cambiarEstadoPago(referencia, nuevoEstado, soloSiEstado) {
   var refBuscada = String(referencia || "").replace(/\s+/g, "");
   if (!refBuscada) return false;
   var hoja = hojaCentralPagos();
-  var rows = hoja.getDataRange().getValues();
-  for (var r = rows.length - 1; r >= 1; r--) {
-    if (String(rows[r][2]).replace(/\s+/g, "") !== refBuscada) continue;
-    if (soloSiEstado && String(rows[r][4]).trim().toLowerCase() !== soloSiEstado) return false;
-    hoja.getRange(r + 1, 5).setValue(nuevoEstado);
-    SpreadsheetApp.flush();
-    olvidarPedidoDePago(refBuscada);
-    actualizarEstadoFirebase(refBuscada, nuevoEstado);
-    return true;
+  var fila = filaDePago(hoja, refBuscada);
+  if (!fila) return false;
+  if (soloSiEstado && String(hoja.getRange(fila, 5).getValue()).trim().toLowerCase() !== soloSiEstado) return false;
+  hoja.getRange(fila, 5).setValue(nuevoEstado);
+  SpreadsheetApp.flush();
+  olvidarPedidoDePago(refBuscada);
+  actualizarEstadoFirebase(refBuscada, nuevoEstado);
+  return true;
+}
+
+// Fila (la más reciente) de "pagos" con esa referencia completa, o 0. Primero con TextFinder sobre la
+// columna C (la hoja central la comparten todos los juegos y no para de crecer) y, si no la encuentra
+// (p. ej. una referencia que la hoja muestra con otro formato), leyendo la columna entera como antes.
+function filaDePago(hoja, refBuscada) {
+  var ultima = hoja.getLastRow();
+  if (ultima < 2) return 0;
+  var columna = hoja.getRange(2, 3, ultima - 1, 1);
+  var celdas = columna.createTextFinder(refBuscada).matchEntireCell(true).findAll();
+  for (var i = celdas.length - 1; i >= 0; i--) {
+    if (String(celdas[i].getValue()).replace(/\s+/g, "") === refBuscada) return celdas[i].getRow();
   }
-  return false;
+  var valores = columna.getValues();
+  for (var r = valores.length - 1; r >= 0; r--) {
+    if (String(valores[r][0]).replace(/\s+/g, "") === refBuscada) return r + 2;
+  }
+  return 0;
 }
 
 function olvidarPedidoDePago(referencia) {
@@ -429,6 +447,11 @@ function obtenerPrecios() {
 
 // Recarga exitosa: fila en "finalizados" y, si vino por la API, fila en "fazer_card"
 function registrarFinalizado(datos) {
+  // Vercel repite el cierre en segundo plano si no recibió la respuesta: el mismo pedido no se anota dos veces
+  var idPedido = String(datos.idPedido || "");
+  if (idPedido && CacheService.getScriptCache().get("fin_" + idPedido)) {
+    return responder({ status: "success", repetido: true, message: "Este pedido ya estaba en finalizados" });
+  }
   var hojaFinalizados = obtenerHojaLocal("finalizados");
   if (!hojaFinalizados) return responder({ status: "error", message: "Falta la pestaña finalizados" });
   var fechaHora = ahora();
@@ -448,6 +471,7 @@ function registrarFinalizado(datos) {
   // Pedido que completó un pago insuficiente: su fila de "por_completar" queda cerrada
   cerrarComplemento(String(datos.idPedido || ""), "✅ COMPLETADO Y RECARGADO");
   SpreadsheetApp.flush();
+  if (idPedido) CacheService.getScriptCache().put("fin_" + idPedido, "1", 21600);
   return responder({ status: "success", message: "Guardado correctamente" });
 }
 

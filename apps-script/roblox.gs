@@ -37,7 +37,7 @@
 // ANTES de gastar el pago nuevo. Al entregar, TODOS los pagos quedan "Usado".
 // =====================================================================
 
-const ID_HOJA_PAGOS = "1hYl8yGJzmlB2-O6VK9UghZFN5nI7S7Ld5uhA3Np-4X8";
+const ID_HOJA_PAGOS = "1FTjXo7sKybYVmyGO9HBlyla0T2LHBfCB8yHEV70JyOA";
 const sheetNameCodigos = "Codigos";
 const sheetNameExitosas = "Exitosas";
 const sheetNamePreciosRoblox = "PreciosRoblox";

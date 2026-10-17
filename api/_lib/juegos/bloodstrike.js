@@ -5,7 +5,7 @@ import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { pedirJSON, llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasCachePrecios, ErrorExterno } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
 import { FASES } from '../reporte.js';
-import { formatearVES, limpiarMontoVES, crearUtilidadesPedido } from '../recarga-comun.js';
+import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 import { crearOrdenFazer } from '../fazer.js';
 
@@ -109,8 +109,8 @@ export const acciones = { precios, descuento: crearAccionDescuento('Blood Strike
  * La usan recargar (un pago) y completarPago (varios pagos que juntos cubren el precio).
  */
 async function entregarRecarga(res, {
-  FAZER_API_KEY, idPedido, id, paquete, numeroOro, precioReal, desc, comprobante, referencias,
-  utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago },
+  FAZER_API_KEY, idPedido, id, paquete, numeroOro, precioReal, desc, comprobante, referencias, cierreIdempotente,
+  utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
 }) {
   // Texto para la hoja y los informes: "ref1" o "ref1 + ref2" (pago completado)
   const referenciaCompleta = referencias.join(' + ');
@@ -179,40 +179,36 @@ async function entregarRecarga(res, {
   // ==========================================
   // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS
   // ==========================================
-  // Primero el pago (no compite por el candado con registrar_finalizado); después, en paralelo,
-  // finalizados (hoja de Blood Strike) y el uso del código (hoja de Free Fire).
-  const pagoMarcado = await marcarPagos();
-  const [finalizadoGuardado, usoDescuentoGuardado] = await Promise.all([
-    registrarEnHoja({
-      accion: "registrar_finalizado",
-      idJugador: id,
-      paquete: paquete,
-      referencia: referenciaCompleta,
-      codigosUsados: `API Directa (FazerCards, orden ${orden.orden?.id || 'sin id'})`,
-      urlImagen: comprobante,
-      idPedido,
-      // La hoja de Blood Strike anota la orden en "fazer_card"; el webhook actualiza su estado
-      ordenFazer: orden.orden?.id || '', estadoFazer: orden.orden?.status || 'processing',
-      ofertaFazer: offerIdFinal, montoCobrado: precioReal,
-    }),
-    // +1 uso y el monto cobrado del código, en la pestaña "Descuentos" (hoja de Free Fire).
-    // Si falla, la recarga ya está hecha: va al informe de "errores" para anotarlo a mano
-    // (sin él, el creador pierde la comisión y la recarga no cuenta para su meta semanal).
-    desc ? registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: precioReal, idPedido, idJugador: id, juego: 'Blood Strike' }) : true,
-  ]);
-  if (!pagoMarcado || !finalizadoGuardado || !usoDescuentoGuardado) {
-    const pendiente = [
-      !pagoMarcado && 'marcar el pago como "Usado"',
-      !finalizadoGuardado && 'anotar la recarga en "finalizados"',
-      !usoDescuentoGuardado && `anotar el uso del código ${desc.codigo} (${precioReal} Bs, pedido ${idPedido}) en "Descuentos"`,
-    ].filter(Boolean).join(' y ');
-    await registrarEnHoja(informe({
-      fase: FASES.cierre,
-      motivo: `La recarga SÍ se entregó (FazerCards confirmó la orden), pero Apps Script no respondió al cierre: falta ${pendiente}`,
-      referenciaCompleta,
-      estadoPago: pagoMarcado ? 'USADO (correcto)' : `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}`,
-    }));
-  }
+  // La recarga YA se hizo: al cliente se le responde éxito sin esperar a Apps Script y el cierre sigue
+  // después de responder (cerrarEnSegundoPlano), en orden: el pago, finalizados (hoja de Blood Strike) y
+  // el uso del código (hoja de Free Fire; sin él, el creador pierde la comisión). Lo que no se confirme se
+  // repite (registrar_finalizado solo con bloodstrike.gs v3; recargas.gs ignora un uso ya anotado).
+  const guardarFinalizado = () => registrarEnHoja({
+    accion: "registrar_finalizado",
+    idJugador: id,
+    paquete: paquete,
+    referencia: referenciaCompleta,
+    codigosUsados: `API Directa (FazerCards, orden ${orden.orden?.id || 'sin id'})`,
+    urlImagen: comprobante,
+    idPedido,
+    // La hoja de Blood Strike anota la orden en "fazer_card"; el webhook actualiza su estado
+    ordenFazer: orden.orden?.id || '', estadoFazer: orden.orden?.status || 'processing',
+    ofertaFazer: offerIdFinal, montoCobrado: precioReal,
+  });
+  cerrarEnSegundoPlano([
+    { nombre: 'marcar el pago como "Usado"', repetible: true, ejecutar: marcarPagos },
+    { nombre: 'anotar la recarga en "finalizados" (y la orden en "fazer_card")', repetible: cierreIdempotente, ejecutar: guardarFinalizado },
+    desc && {
+      nombre: `anotar el uso del código ${desc.codigo} (${precioReal} Bs, pedido ${idPedido}) en "Descuentos"`, repetible: true,
+      ejecutar: () => registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: precioReal, idPedido, idJugador: id, juego: 'Blood Strike' }),
+    },
+  ].filter(Boolean), (faltan, rondas) => registrarEnHoja(informe({
+    fase: FASES.cierre,
+    motivo: `La recarga SÍ se entregó (FazerCards confirmó la orden), pero Apps Script no respondió al cierre${rondas ? ` (ni tras ${rondas} reintento(s) en segundo plano)` : ''}: falta ${faltan.join(' y ')}`,
+    referenciaCompleta,
+    estadoPago: faltan.includes('marcar el pago como "Usado"')
+      ? `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}` : 'USADO (correcto)',
+  })));
 
   return res.status(200).json({ status: "success", message: "Recarga de Blood Strike procesada exitosamente." });
 
@@ -223,6 +219,8 @@ export async function recargar(req, res) {
   // Segunda (o tercera...) referencia de un pago que no alcanzó
   if (req.body?.tokenComplemento !== undefined) return completarPago(req, res);
 
+  // Desde verificar_pago: con quién bloquear el pago si algo falla sin estar previsto (ver el catch)
+  let pedido = null;
   try {
     const { id, paquete, referencia } = req.body || {};
     // El comprobante viaja a la hoja de cálculo: se limpia para que no pueda inyectar fórmulas
@@ -248,7 +246,7 @@ export async function recargar(req, res) {
     const idPedido = randomUUID();
     const comprobante = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
 
-    const { marcarReferencia, registrarEnHoja, informe, bloquearPago } = crearUtilidadesPedido({
+    const { marcarReferencia, registrarEnHoja, informe, bloquearPago, bloquearPorError, cerrarEnSegundoPlano } = crearUtilidadesPedido({
       urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
       datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, noAplica: true },
     });
@@ -275,6 +273,8 @@ export async function recargar(req, res) {
       return res.status(503).json({ status: "error", message: "Error al leer la base de datos de precios. Intenta de nuevo en un momento." });
     }
     const scriptV2 = Number(dataPrecios.version) >= 2;
+    // v3: registrar_finalizado ignora un idPedido ya anotado (se puede repetir el cierre en segundo plano)
+    const cierreIdempotente = Number(dataPrecios.version) >= 3;
 
     const numeroOro = clavePaquete(paquete);
     const paqueteGsheet = numeroOro && dataPrecios.catalogo.find(p => clavePaquete(p.diamantes || p.paquete) === numeroOro);
@@ -293,29 +293,45 @@ export async function recargar(req, res) {
     // ==========================================
     // FASE 2: BUSCAR PAGO Y VERIFICAR
     // ==========================================
+    pedido = { utilidades: { registrarEnHoja, informe, bloquearPorError }, referencias: [] };
     let dataVerificacion;
     try {
       dataVerificacion = await llamarScript(URL_GOOGLE_SCRIPT,
         { accion: "verificar_pago", referencia: referencia, monto: precioReal, idPedido },
         scriptV2 ? TIEMPOS.idempotente : TIEMPOS.sinIdempotencia);
-    } catch (error) {
-      console.error(`❌ [${FASES.verificacion}] ${error.message}`);
-      await registrarEnHoja(informe({
-        fase: FASES.verificacion, motivo: `Apps Script de Blood Strike no respondió a verificar_pago: ${error.message}`,
-        // "En proceso" ya impide reutilizarlo: NUNCA se devuelve a "Verificado"
-        estadoPago: `SIN CONFIRMAR: si la fila del pago (referencia terminada en ${referencia}) quedó "En proceso", márcala "Usado" y haz la recarga a mano`,
-      }));
-      if (error instanceof ErrorExterno) {
-        return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si te dice que ya fue utilizado, escríbenos por WhatsApp." });
+      // Un error de Apps Script (salvo "ocupado", que no ejecutó nada) pudo dejar el pago "En proceso":
+      // se trata igual que si no hubiera respondido
+      if (dataVerificacion?.status === 'error' && !dataVerificacion.ocupado) {
+        throw new Error(`Apps Script respondió con error: ${dataVerificacion.message || 'sin detalle'}`);
       }
-      throw error;
+    } catch (error) {
+      // El pago pudo quedar "En proceso": NUNCA se libera, se marca "Usado" (bloquear_pedido solo toca
+      // el pago que bloqueó ESTE pedido) y la recarga pasa a revisión manual
+      console.error(`❌ [${FASES.verificacion}] ${error.message}`);
+      const motivo = `Apps Script de Blood Strike falló en verificar_pago: ${error.message}`;
+      let pagoTomado = true;
+      if (scriptV2) {
+        ({ pagoTomado } = await bloquearPorError({ fase: FASES.verificacion, motivo }));
+      } else {
+        await registrarEnHoja(informe({ fase: FASES.verificacion, motivo,
+          estadoPago: `SIN CONFIRMAR: si la fila del pago (referencia terminada en ${referencia}) quedó "En proceso", márcala "Usado" y haz la recarga a mano` }));
+      }
+      if (!pagoTomado) {
+        return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo." });
+      }
+      return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Si tu pago es válido, quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tu referencia." });
     }
 
+    // Ocupado: Apps Script no tocó ningún pago; no cuenta como intento fallido del cliente
+    if (dataVerificacion?.ocupado) {
+      return res.status(503).json({ status: "error", message: dataVerificacion.message || "Sistema ocupado. Intenta de nuevo en unos segundos." });
+    }
     if (!dataVerificacion || !dataVerificacion.encontrado) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", message: dataVerificacion?.message || "Pago no encontrado o ya utilizado." });
     }
     const referenciaCompleta = dataVerificacion.referencia;
+    pedido.referencias = [referenciaCompleta];
 
     if (dataVerificacion.insuficiente) {
       await registrarFallo(clavesLimite);
@@ -364,10 +380,14 @@ export async function recargar(req, res) {
 
     return await entregarRecarga(res, {
       FAZER_API_KEY, idPedido, id, paquete, numeroOro, precioReal, desc, comprobante,
-      referencias: [referenciaCompleta], utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago },
+      referencias: [referenciaCompleta], cierreIdempotente,
+      utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
     });
   } catch (error) {
     console.error("Error crítico en la recarga de Blood Strike:", error.message);
+    // Con el pago ya pedido: se bloquea y va a "errores"
+    const respuesta = await responderErrorInesperado(res, pedido, error);
+    if (respuesta) return respuesta;
     if (error instanceof ErrorExterno) {
       return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si te dice que ya fue utilizado, escríbenos por WhatsApp." });
     }
@@ -383,6 +403,10 @@ export async function recargar(req, res) {
  * solo uno avanza; el pago nuevo queda "En proceso" o "Por completar" y nunca vuelve a "Verificado".
  */
 async function completarPago(req, res) {
+  // Desde usar_complemento: con quién bloquear los pagos si algo falla sin estar previsto (ver el catch)
+  let pedido = null;
+  // Límite del cierre en segundo plano (las utilidades del pedido se crean más tarde)
+  const inicio = Date.now();
   try {
     const clave = String(req.body?.tokenComplemento ?? '');
     const referencia = String(req.body?.referencia ?? '');
@@ -406,26 +430,35 @@ async function completarPago(req, res) {
     }
 
     const idPedido = randomUUID();
+    // Hasta conocer el pedido (sale de la hoja), los informes de "errores" remiten a "por_completar"
+    pedido = {
+      utilidades: crearUtilidadesPedido({
+        urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente, inicio,
+        datosInforme: { idPedido, idJugador: 'ver pestaña "por_completar"', paquete: 'pago por completar', referenciaCliente: referencia, comprobante: 'Sin comprobante', noAplica: true },
+      }),
+      referencias: [],
+    };
+    const revisarPorCompletar = `Revisar la pestaña "por_completar" (clave ${claveHash.slice(0, 12)}…)`;
     let datos;
     try {
       // Se puede repetir: bloodstrike.gs guarda la respuesta de este idPedido
       datos = await llamarScript(URL_GOOGLE_SCRIPT, { accion: "usar_complemento", claveHash, referencia, idPedido }, TIEMPOS.idempotente);
+      // Un error de Apps Script (salvo "ocupado") pudo dejar el pago nuevo "En proceso"
+      if (datos?.status === 'error' && !datos.ocupado) throw new Error(`Apps Script respondió con error: ${datos.message || 'sin detalle'}`);
     } catch (error) {
       // El pago nuevo pudo quedar "En proceso": se bloquea (solo el que tomó ESTE pedido) y va a revisión
-      const bloqueo = await llamarScript(URL_GOOGLE_SCRIPT, { accion: "bloquear_pedido", idPedido }, { reintentos: 2, tiempoMs: TIEMPOS.incidente, reintentarTrasTimeout: true }).catch(() => null);
-      console.error(`❌ [${FASES.verificacion}] usar_complemento de Blood Strike sin respuesta: ${error.message}`);
-      const { registrarEnHoja, informe } = crearUtilidadesPedido({
-        urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
-        datosInforme: { idPedido, idJugador: 'ver pestaña "por_completar"', paquete: 'pago por completar', referenciaCliente: referencia, comprobante: 'Sin comprobante', noAplica: true },
-      });
-      await registrarEnHoja(informe({
+      console.error(`❌ [${FASES.verificacion}] usar_complemento de Blood Strike falló: ${error.message}`);
+      await pedido.utilidades.bloquearPorError({
         fase: FASES.verificacion,
-        motivo: `Apps Script de Blood Strike no respondió al completar un pago (usar_complemento): ${error.message}. Revisar la pestaña "por_completar" (clave ${claveHash.slice(0, 12)}…)`,
-        estadoPago: bloqueo?.referencia ? `BLOQUEADO ("Usado", referencia ${bloqueo.referencia}): completar la recarga a mano` : 'SIN CONFIRMAR: revisar la pestaña "por_completar"',
-      }));
+        motivo: `Apps Script de Blood Strike falló al completar un pago (usar_complemento): ${error.message}. ${revisarPorCompletar}`,
+      });
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tus referencias." });
     }
 
+    // Ocupado: Apps Script no tocó ningún pago; la clave sigue sirviendo
+    if (datos?.ocupado) {
+      return res.status(503).json({ status: "error", message: datos.message || "Sistema ocupado. Intenta de nuevo en unos segundos." });
+    }
     if (datos?.status !== 'success' || !datos.valido) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", complementoInvalido: true, message: datos?.message || "No pudimos completar este pago. Escríbenos por WhatsApp con tus referencias." });
@@ -451,22 +484,32 @@ async function completarPago(req, res) {
     const numeroOro = clavePaquete(paquete);
     if (!/^\d{5,15}$/.test(id) || !PAQUETE_VALIDO.test(paquete) || !numeroOro || !referencias.length || !(precioReal > 0)) {
       console.error(`❌ usar_complemento de Blood Strike devolvió datos inválidos para el pedido ${idPedido}: ${JSON.stringify(datos).slice(0, 300)}`);
+      // Los pagos de este pedido quedan "Usado" (si no se pueden leer las referencias, el que tomó este pedido)
+      await pedido.utilidades.bloquearPorError({
+        fase: FASES.inesperado, referencias,
+        motivo: `usar_complemento devolvió datos inválidos (jugador "${id}", paquete "${paquete}", precio ${datos.precio}, referencias ${JSON.stringify(datos.referencias)}). ${revisarPorCompletar}`,
+      });
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tus referencias." });
     }
     const comprobante = textoParaHoja(datos.comprobante || "Sin comprobante");
     const utilidades = crearUtilidadesPedido({
-      urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
+      urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente, inicio,
       datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, noAplica: true },
     });
+    pedido = { utilidades, referencias };
     console.info(`🧩 Pago de Blood Strike completado (${referencias.join(' + ')}) para el pedido ${datos.idPedidoOriginal} -> ${idPedido} (ID ${id})`);
 
     return await entregarRecarga(res, {
       FAZER_API_KEY, idPedido, id, paquete, numeroOro, precioReal,
       desc: datos.codigoDescuento ? { codigo: String(datos.codigoDescuento) } : null,
       comprobante, referencias, utilidades,
+      // usar_complemento de bloodstrike.gs v3 anuncia su versión
+      cierreIdempotente: Number(datos.version) >= 3,
     });
   } catch (error) {
     console.error("Error crítico al completar un pago de Blood Strike:", error.message);
+    const respuesta = await responderErrorInesperado(res, pedido, error);
+    if (respuesta) return respuesta;
     if (error instanceof ErrorExterno) {
       return res.status(503).json({ status: "error", message: "No pudimos confirmar tu pago a tiempo. Espera un minuto e intenta de nuevo; si persiste, escríbenos por WhatsApp." });
     }

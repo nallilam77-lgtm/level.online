@@ -38,9 +38,10 @@ const PROJECT_ID = "levelupstore-87d4d";
 const COLLECTION_NAME = "Pagos";
 const FOLDER_ID = "12-YApHdXIFtbIk9qzNCiUY0SVsimCecO";
 
-// Versión que la tienda lee en obtener_precios: con 2 o más, Vercel sabe que verificar_pago y
-// obtener_codigo son idempotentes (idPedido) y que puede reintentarlos tras un timeout.
-const VERSION_SCRIPT = 2;
+// Versión que la tienda lee en obtener_precios (y usar_complemento): con 2 o más, Vercel sabe que
+// verificar_pago y obtener_codigo son idempotentes (idPedido) y que puede reintentarlos tras un timeout;
+// con 3 o más, que registrar_finalizado ignora un idPedido ya anotado (repite el cierre en segundo plano).
+const VERSION_SCRIPT = 3;
 
 // --- Candado (una sola operación sobre pagos/pines a la vez) ---
 // Vercel espera hasta 15 s por intento: si el candado tarda más que esto en liberarse,
@@ -292,13 +293,14 @@ function tomarPago(hoja, ultimos5, idPedido) {
     if (estadoActual === ESTADO_PAGO_POR_COMPLETAR.toLowerCase()) { hayPorCompletar = true; continue; }
     if (estadoActual !== "verificado" && estadoActual !== "") continue;
 
-    // Bloquear al instante y recordar qué pedido lo bloqueó
-    hoja.getRange(i + 1, 5).setValue("En proceso");
-    SpreadsheetApp.flush();
+    // Primero se recuerda qué pedido lo toma (reintentos y bloquear_pedido) y después se bloquea:
+    // si algo falla a mitad, bloquear_pedido igual encuentra el pago y lo deja "Usado"
     if (idPedido) {
       props.setProperty("proc_" + referenciaCompleta, idPedido);
       props.setProperty("pedido_" + idPedido, referenciaCompleta);
     }
+    hoja.getRange(i + 1, 5).setValue("En proceso");
+    SpreadsheetApp.flush();
     actualizarEstadoFirebase(referenciaCompleta, "En proceso");
     return respuestaEncontrado(i, false);
   }
@@ -351,12 +353,13 @@ function usarComplemento(datos) {
   }
   var cache = CacheService.getScriptCache();
   var previa = cache.get("comp_" + idPedido);
-  if (previa) return responder(JSON.parse(previa));
+  // version: con 3 o más, Vercel sabe que puede repetir registrar_finalizado de este pedido
+  if (previa) return responder(Object.assign(JSON.parse(previa), { version: VERSION_SCRIPT }));
 
   var respuesta = completarConPago(buscarFilaPorCompletar(14, claveHash), ultimos5, idPedido);
   if (respuesta.valido && respuesta.encontrado) cache.put("comp_" + idPedido, JSON.stringify(respuesta), 21600);
   SpreadsheetApp.flush();
-  return responder(respuesta);
+  return responder(Object.assign(respuesta, { version: VERSION_SCRIPT }));
 }
 
 function completarConPago(fila, ultimos5, idPedido) {
@@ -458,17 +461,32 @@ function cambiarEstadoPago(referencia, nuevoEstado, soloSiEstado) {
   var refBuscada = String(referencia || "").replace(/\s+/g, "");
   if (!refBuscada) return false;
   var hoja = obtenerHoja("pagos");
-  var rows = hoja.getDataRange().getValues();
-  for (var r = rows.length - 1; r >= 1; r--) {
-    if (String(rows[r][2]).replace(/\s+/g, "") !== refBuscada) continue;
-    if (soloSiEstado && String(rows[r][4]).trim().toLowerCase() !== soloSiEstado) return false;
-    hoja.getRange(r + 1, 5).setValue(nuevoEstado);
-    SpreadsheetApp.flush();
-    olvidarPedidoDePago(refBuscada);
-    actualizarEstadoFirebase(refBuscada, nuevoEstado);
-    return true;
+  var fila = filaDePago(hoja, refBuscada);
+  if (!fila) return false;
+  if (soloSiEstado && String(hoja.getRange(fila, 5).getValue()).trim().toLowerCase() !== soloSiEstado) return false;
+  hoja.getRange(fila, 5).setValue(nuevoEstado);
+  SpreadsheetApp.flush();
+  olvidarPedidoDePago(refBuscada);
+  actualizarEstadoFirebase(refBuscada, nuevoEstado);
+  return true;
+}
+
+// Fila (la más reciente) de "pagos" con esa referencia completa, o 0. Primero con TextFinder sobre la
+// columna C (marcar_usado corre en cada recarga, dentro del candado) y, si no la encuentra (p. ej. una
+// referencia que la hoja muestra con otro formato), leyendo la columna entera como antes.
+function filaDePago(hoja, refBuscada) {
+  var ultima = hoja.getLastRow();
+  if (ultima < 2) return 0;
+  var columna = hoja.getRange(2, 3, ultima - 1, 1);
+  var celdas = columna.createTextFinder(refBuscada).matchEntireCell(true).findAll();
+  for (var i = celdas.length - 1; i >= 0; i--) {
+    if (String(celdas[i].getValue()).replace(/\s+/g, "") === refBuscada) return celdas[i].getRow();
   }
-  return false;
+  var valores = columna.getValues();
+  for (var r = valores.length - 1; r >= 0; r--) {
+    if (String(valores[r][0]).replace(/\s+/g, "") === refBuscada) return r + 2;
+  }
+  return 0;
 }
 
 function olvidarPedidoDePago(referencia) {
@@ -933,25 +951,32 @@ function hojaAsignaciones() {
   return hojaConTitulos(HOJA_ASIGNACIONES, COLUMNAS_ASIGNACIONES);
 }
 
-// Busca (de la más reciente a la más antigua) la asignación de pines de un pedido
+// Busca la asignación de pines (la más reciente) de un pedido. TextFinder sobre la columna B: corre
+// dentro del candado en obtener_codigo, registrar_finalizado y registrar_error, y la pestaña no para de
+// crecer (antes se leía entera en cada pedido; en modo API eso hacía que obtener_codigo pasara de 15 s).
 function buscarAsignacion(idPedido) {
   var hoja = obtenerHoja(HOJA_ASIGNACIONES, true);
-  if (!idPedido || !hoja) return null;
-  var rows = hoja.getDataRange().getValues();
-  for (var i = rows.length - 1; i >= 1; i--) {
-    if (String(rows[i][1]) !== idPedido) continue;
-    return {
-      fila: i + 1,
-      columna: Number(rows[i][4]),
-      pines: String(rows[i][5] || "").split(" | ").filter(function (p) { return p; }),
-      estado: String(rows[i][6] || "")
-    };
-  }
-  return null;
+  if (!idPedido || !hoja || hoja.getLastRow() < 2) return null;
+  var celdas = hoja.getRange(2, 2, hoja.getLastRow() - 1, 1)
+    .createTextFinder(idPedido).matchEntireCell(true).matchCase(true).findAll();
+  if (!celdas.length) return null;
+  var fila = celdas[celdas.length - 1].getRow();
+  var v = hoja.getRange(fila, 1, 1, COLUMNAS_ASIGNACIONES.length).getValues()[0];
+  return {
+    fila: fila,
+    columna: Number(v[4]),
+    pines: String(v[5] || "").split(" | ").filter(function (p) { return p; }),
+    estado: String(v[6] || "")
+  };
 }
 
 // Recarga exitosa: fila en "finalizados", pines como USADOS y uso del código de descuento
 function registrarFinalizado(datos) {
+  // Vercel repite el cierre en segundo plano si no recibió la respuesta: el mismo pedido no se anota dos veces
+  var idPedido = String(datos.idPedido || "");
+  if (idPedido && CacheService.getScriptCache().get("fin_" + idPedido)) {
+    return responder({ status: "success", repetido: true, message: "Este pedido ya estaba en finalizados" });
+  }
   var hojaFinalizados = obtenerHoja("finalizados");
   var fechaHora = ahora();
   hojaFinalizados.appendRow([
@@ -978,6 +1003,7 @@ function registrarFinalizado(datos) {
   // Código de descuento usado en esta recarga: +1 uso y el monto cobrado en la pestaña "Descuentos"
   if (datos.codigoDescuento) sumarUsoDescuento(datos.codigoDescuento, datos.montoCobrado, "Free Fire", datos.idPedido, datos.idJugador);
   SpreadsheetApp.flush();
+  if (idPedido) CacheService.getScriptCache().put("fin_" + idPedido, "1", 21600);
   // (Se quitó la llamada a /api/sincronizar-pedidos: ese endpoint no existe en la tienda
   //  y la petición alargaba el candado en cada recarga.)
   return responder({ status: "success", message: "Guardado en finalizados correctamente" });
@@ -1655,6 +1681,11 @@ function onOpen() {
     .addSeparator()
     .addItem("❓ Ver modo actual", "verModoRecarga")
     .addItem("🧹 Marcar como Usado los pagos ya finalizados", "marcarUsadosLosFinalizados")
+    .addSeparator()
+    .addItem("🩺 Diagnóstico de la hoja (qué la hace lenta)", "diagnosticarHoja")
+    .addItem("✂️ Quitar filas y columnas vacías", "quitarFilasYColumnasVacias")
+    .addItem("🗄️ Archivar filas antiguas (" + DIAS_PARA_ARCHIVAR + " días)", "archivarFilasAntiguas")
+    .addItem("🚚 Copiar datos desde la hoja vieja (mudanza)", "copiarDesdeHojaVieja")
     .addToUi();
   SpreadsheetApp.getUi().createMenu("⭐ Creadores")
     .addItem("💵 Registrar pago del creador seleccionado", "registrarPagoCreador")
@@ -1678,6 +1709,273 @@ function onEdit(e) {
   } catch (err) {
     console.error("onEdit: " + err);
   }
+}
+
+
+// --- Mantenimiento (menú "🖐️ Recargas Free Fire"): la hoja se vuelve lenta al crecer ---
+// Cada operación de Vercel corre con el candado: si la hoja tarda, todas las demás esperan y agotan
+// su tiempo. Estas tres acciones la aligeran sin tocar pagos ni pedidos pendientes.
+
+// Qué se archiva: filas con más de DIAS_PARA_ARCHIVAR días (columna A) que ya están cerradas.
+// Lo pendiente (pagos sin usar, pines asignados, órdenes en proceso, recargas manuales sin hacer,
+// premios sin entregar, pagos por completar) se queda siempre.
+const DIAS_PARA_ARCHIVAR = 30;
+const REGLAS_ARCHIVO = {
+  pagos: function (f) { return String(f[4]).trim().toLowerCase() === "usado"; },
+  asignaciones_pines: function (f) { return !/^ASIGNADOS|POR ENVIAR/.test(String(f[6])); },
+  finalizados: function () { return true; },
+  errores: function () { return true; },
+  fazer_card: function (f) { return !/EN PROCESO|POR ENVIAR/.test(String(f[10])); },
+  sin_codigo: function (f) { return f[8] === true; },
+  ruleta: function (f) { return String(f[5]).trim().toUpperCase() !== "PENDIENTE"; },
+  por_completar: function (f) { return !/^PENDIENTE|COMPLETO: entregando/.test(String(f[10])); },
+  movimientos_descuentos: function () { return true; }
+};
+
+// Muestra el tamaño de cada pestaña, el total de celdas (límite de Google: 10 millones) y los activadores
+function diagnosticarHoja() {
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var total = 0;
+  var pestanas = libro.getSheets().map(function (h) {
+    var celdas = h.getMaxRows() * h.getMaxColumns();
+    total += celdas;
+    return { celdas: celdas, texto: h.getName() + ": " + Math.max(0, h.getLastRow() - 1) + " filas con datos, " +
+      celdas + " celdas, " + h.getConditionalFormatRules().length + " reglas de formato condicional" };
+  }).sort(function (a, b) { return b.celdas - a.celdas; });
+  var activadores = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + " (" + t.getEventType() + ")"; });
+  var texto = "Total: " + total + " celdas de 10.000.000 permitidas.\n\n" +
+    pestanas.map(function (p) { return p.texto; }).join("\n") +
+    "\n\nActivadores: " + (activadores.length ? activadores.join(", ") : "ninguno") +
+    "\n\nMás de 5.000 filas en pagos, asignaciones_pines o finalizados: usa 🗄️ Archivar. Muchas celdas y pocas filas: usa ✂️ Quitar vacías. Activadores repetidos: bórralos en Apps Script > Activadores.";
+  console.log(texto);
+  SpreadsheetApp.getUi().alert("Diagnóstico de la hoja", texto, SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+// Borra las filas vacías del final de cada pestaña (deja 50 de reserva) y las columnas vacías
+// de la derecha (deja 2). Las celdas vacías también pesan y cuentan para el límite.
+function quitarFilasYColumnasVacias() {
+  var ui = SpreadsheetApp.getUi();
+  if (ui.alert("Quitar filas y columnas vacías", "Se borran solo filas y columnas SIN datos al final de cada pestaña. ¿Continuar?", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { ui.alert("El sistema está procesando una recarga. Intenta de nuevo en unos segundos."); return; }
+  var antes = 0, despues = 0;
+  try {
+    SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function (h) {
+      antes += h.getMaxRows() * h.getMaxColumns();
+      var ultimaFila = Math.max(h.getLastRow(), h.getFrozenRows() + 1);
+      var filasDeMas = h.getMaxRows() - ultimaFila - 50;
+      if (filasDeMas > 0) h.deleteRows(ultimaFila + 51, filasDeMas);
+      var ultimaColumna = Math.max(h.getLastColumn(), h.getFrozenColumns() + 1);
+      var columnasDeMas = h.getMaxColumns() - ultimaColumna - 2;
+      if (columnasDeMas > 0) h.deleteColumns(ultimaColumna + 3, columnasDeMas);
+      despues += h.getMaxRows() * h.getMaxColumns();
+    });
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  ui.alert("Listo: de " + antes + " a " + despues + " celdas.");
+}
+
+// Copia el archivo como respaldo y mueve a un archivo NUEVO de tu Drive las filas cerradas con más
+// de DIAS_PARA_ARCHIVAR días (ver REGLAS_ARCHIVO). Con el candado: las recargas esperan mientras corre,
+// así que úsalo cuando haya pocas ventas. Las filas se borran por bloques (no se reescribe la pestaña:
+// las fórmulas, formatos y casillas de las filas que se quedan no cambian).
+function archivarFilasAntiguas() {
+  var ui = SpreadsheetApp.getUi();
+  var aviso = "1) Se guarda una copia completa de este archivo como respaldo.\n" +
+    "2) Las filas con más de " + DIAS_PARA_ARCHIVAR + " días ya cerradas (pagos Usado, finalizados, errores, órdenes terminadas...) " +
+    "pasan a un archivo nuevo en tu Drive.\n\nLo pendiente NO se toca. Las recargas esperan mientras corre: hazlo cuando haya pocas ventas.\n\n¿Continuar?";
+  if (ui.alert("Archivar filas antiguas", aviso, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var fecha = Utilities.formatDate(new Date(), "America/Caracas", "yyyy-MM-dd HH.mm");
+  DriveApp.getFileById(libro.getId()).makeCopy("RESPALDO " + libro.getName() + " " + fecha);
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { ui.alert("El sistema está procesando una recarga. Intenta de nuevo en unos segundos."); return; }
+  var limite = Date.now() - DIAS_PARA_ARCHIVAR * 24 * 3600 * 1000;
+  var archivo = null;
+  var resumen = [];
+  try {
+    Object.keys(REGLAS_ARCHIVO).forEach(function (nombre) {
+      var hoja = obtenerHoja(nombre, true);
+      if (!hoja || hoja.getLastRow() < 2) return;
+      var columnas = hoja.getLastColumn();
+      var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, columnas).getValues();
+      var mover = [];
+      for (var i = 0; i < filas.length; i++) {
+        var momento = momentoDeFila(filas[i][0]);
+        if (momento && momento < limite && REGLAS_ARCHIVO[nombre](filas[i])) mover.push(i);
+      }
+      if (!mover.length) return;
+
+      if (!archivo) archivo = SpreadsheetApp.create("ARCHIVO " + libro.getName() + " hasta " + fecha);
+      var destino = archivo.insertSheet(hoja.getName());
+      destino.getRange(1, 1, 1, columnas).setValues(hoja.getRange(1, 1, 1, columnas).getValues());
+      destino.getRange(2, 1, mover.length, columnas).setValues(mover.map(function (i) {
+        return filas[i].map(function (v) { return typeof v === "string" ? textoSeguro(v) : v; });
+      }));
+      SpreadsheetApp.flush();
+
+      // Google no deja borrar todas las filas sin inmovilizar: si se vacía la pestaña, queda una fila en blanco
+      if (hoja.getMaxRows() - Math.max(hoja.getFrozenRows(), 1) <= mover.length) hoja.insertRowsAfter(hoja.getMaxRows(), 1);
+      // De abajo hacia arriba, un bloque de filas seguidas a la vez
+      for (var k = mover.length - 1; k >= 0; k--) {
+        var fin = mover[k], inicio = fin;
+        while (k > 0 && mover[k - 1] === inicio - 1) { k--; inicio--; }
+        hoja.deleteRows(inicio + 2, fin - inicio + 1);
+      }
+      resumen.push(hoja.getName() + ": " + mover.length + " filas");
+    });
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  if (!archivo) { ui.alert("No hay filas cerradas con más de " + DIAS_PARA_ARCHIVAR + " días."); return; }
+  var vacia = archivo.getSheets()[0];
+  if (archivo.getSheets().length > 1 && vacia.getLastRow() === 0) archivo.deleteSheet(vacia);
+  console.log("Archivado en " + archivo.getUrl() + ": " + resumen.join(", "));
+  ui.alert("Listo", "Movidas al archivo \"" + archivo.getName() + "\" (en tu Drive):\n\n" + resumen.join("\n") +
+    "\n\nRespaldo completo: \"RESPALDO " + libro.getName() + " " + fecha + "\".", ui.ButtonSet.OK);
+}
+
+// Momento (ms) de la columna A: fecha de la hoja o texto "dd/MM/yyyy HH:mm:ss". 0 si no se entiende
+// (esa fila no se archiva).
+function momentoDeFila(valor) {
+  if (valor instanceof Date) return valor.getTime();
+  var m = String(valor || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime() : 0;
+}
+
+
+// --- Mudanza a una hoja nueva (menú "🖐️ Recargas Free Fire" > 🚚, se ejecuta EN LA HOJA NUEVA) ---
+// Copia desde la hoja vieja solo valores y formatos (sin fórmulas, formato condicional ni filas vacías):
+// completas las pestañas de PESTANAS_COMPLETAS y las que el script no conoce; de las de REGLAS_ARCHIVO,
+// lo pendiente y lo de los últimos DIAS_PARA_ARCHIVAR días. Se puede repetir: una pestaña que ya tiene
+// datos no se toca, salvo "pagos", que solo recibe los pagos nuevos y el estado que avanzó en la vieja.
+const PESTANAS_COMPLETAS = ["precios", "codigos", "descuentos", "config", "pagos_creadores", "movimientos_descuentos"];
+
+function copiarDesdeHojaVieja() {
+  var ui = SpreadsheetApp.getUi();
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var pedido = ui.prompt("Copiar desde la hoja vieja",
+    "Pega el enlace (o el ID) de la hoja VIEJA.\n\nSe copian completos: precios, códigos, descuentos, config y creadores. " +
+    "De pagos, pedidos y registros: lo pendiente y lo de los últimos " + DIAS_PARA_ARCHIVAR + " días.\n" +
+    "Se puede repetir: la segunda vez solo trae los pagos nuevos y actualiza su estado.", ui.ButtonSet.OK_CANCEL);
+  if (pedido.getSelectedButton() !== ui.Button.OK) return;
+  var texto = pedido.getResponseText().trim();
+  var enlace = texto.match(/\/d\/([A-Za-z0-9_-]{20,})/);
+  var id = enlace ? enlace[1] : texto;
+  if (!/^[A-Za-z0-9_-]{20,}$/.test(id) || id === libro.getId()) { ui.alert("Ese no es el enlace de la hoja vieja."); return; }
+  var vieja;
+  try {
+    vieja = SpreadsheetApp.openById(id);
+  } catch (err) {
+    ui.alert("No se pudo abrir la hoja vieja: " + err.message);
+    return;
+  }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { ui.alert("El sistema está procesando una recarga. Intenta de nuevo en unos segundos."); return; }
+  var limite = Date.now() - DIAS_PARA_ARCHIVAR * 24 * 3600 * 1000;
+  var resumen = [];
+  try {
+    vieja.getSheets().forEach(function (origen) {
+      var nombre = origen.getName();
+      var clave = nombre.trim().toLowerCase();
+      var columnas = origen.getLastColumn();
+      var ultima = origen.getLastRow();
+      if (!columnas || !ultima) return;
+      var rango = origen.getRange(1, 1, ultima, columnas);
+      var valores = rango.getValues();
+      var formatos = rango.getNumberFormats();
+      var regla = PESTANAS_COMPLETAS.indexOf(clave) === -1 ? REGLAS_ARCHIVO[clave] : null;
+      var elegidas = [];
+      for (var i = 1; i < valores.length; i++) {
+        if (regla) {
+          var momento = momentoDeFila(valores[i][0]);
+          if (momento && momento < limite && regla(valores[i])) continue; // cerrada y vieja: se queda en la hoja vieja
+        }
+        elegidas.push(i);
+      }
+
+      var destino = libro.getSheetByName(nombre);
+      if (destino && destino.getLastRow() > 1) {
+        resumen.push(nombre + ": " + (clave === "pagos" ? sincronizarPagos(destino, valores, formatos, elegidas) : "ya tenía datos, no se tocó"));
+        return;
+      }
+      if (!destino) destino = libro.insertSheet(nombre);
+      var filas = [0].concat(elegidas); // 0 = títulos
+      escribirFilasCopiadas(destino, 1, filas, valores, formatos);
+      destino.setFrozenRows(1);
+      destino.getRange(1, 1, 1, columnas).setFontWeight("bold");
+      if (clave === HOJA_SIN_CODIGO && filas.length > 1) {
+        destino.getRange(2, COLUMNAS_SIN_CODIGO.length, filas.length - 1, 1)
+          .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+      }
+      resumen.push(nombre + ": " + elegidas.length + " filas");
+    });
+
+    // Los saldos H y J de los creadores vienen copiados: que nunca se vuelvan a calcular desde cero
+    var props = PropertiesService.getScriptProperties();
+    if (!props.getProperty("saldos_por_venta")) props.setProperty("saldos_por_venta", "copiado de la hoja vieja " + ahora());
+    var claveRetroactivo = "retroactivo_" + PORCENTAJE_CREADOR;
+    if (!props.getProperty(claveRetroactivo)) props.setProperty(claveRetroactivo, "copiado de la hoja vieja " + ahora());
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  leerTasaUsd();
+  // La pestaña vacía que trae un archivo nuevo ("Hoja 1")
+  libro.getSheets().forEach(function (h) {
+    if (!vieja.getSheetByName(h.getName()) && h.getLastRow() === 0 && libro.getSheets().length > 1) libro.deleteSheet(h);
+  });
+  ui.alert("Copia terminada", resumen.join("\n") +
+    "\n\nAhora: elige el modo en este menú, crea TOKEN_VERCEL y MACRODROID_CLAVE en las propiedades del script y cambia las URL e ID (ver los pasos).",
+    ui.ButtonSet.OK);
+}
+
+// Escribe las filas `filas` (índices de valores) desde la fila `desde` del destino, con sus formatos
+function escribirFilasCopiadas(destino, desde, filas, valores, formatos) {
+  var columnas = valores[0].length;
+  asegurarColumnas(destino, columnas);
+  var hasta = desde + filas.length - 1;
+  if (destino.getMaxRows() < hasta) destino.insertRowsAfter(destino.getMaxRows(), hasta - destino.getMaxRows());
+  var celdas = destino.getRange(desde, 1, filas.length, columnas);
+  celdas.setNumberFormats(filas.map(function (i) { return formatos[i]; }));
+  celdas.setValues(filas.map(function (i) {
+    return valores[i].map(function (v) { return typeof v === "string" ? textoSeguro(v) : v; });
+  }));
+}
+
+// Segunda copia de "pagos": agrega los que no están y pasa al estado de la hoja vieja los que avanzaron
+// allí. Un pago nunca retrocede: "Usado" en la hoja nueva no se toca.
+function sincronizarPagos(destino, valores, formatos, elegidas) {
+  var ultima = destino.getLastRow();
+  var actuales = destino.getRange(2, 3, ultima - 1, 3).getValues(); // C referencia .. E estado
+  var filaDe = {};
+  actuales.forEach(function (f, i) {
+    var ref = String(f[0]).replace(/\s+/g, "");
+    if (ref) filaDe[ref] = i + 2;
+  });
+  var nuevas = [];
+  var cambiados = 0;
+  elegidas.forEach(function (i) {
+    var ref = String(valores[i][2]).replace(/\s+/g, "");
+    if (!ref) return;
+    var fila = filaDe[ref];
+    if (!fila) { nuevas.push(i); return; }
+    var estadoViejo = String(valores[i][4]).trim();
+    var estadoNuevo = String(actuales[fila - 2][2]).trim().toLowerCase();
+    if (estadoViejo.toLowerCase() === estadoNuevo || estadoNuevo === "usado") return;
+    if (estadoViejo.toLowerCase() === "usado" || estadoNuevo === "" || estadoNuevo === "verificado") {
+      destino.getRange(fila, 5).setValue(estadoViejo);
+      cambiados++;
+    }
+  });
+  if (nuevas.length) escribirFilasCopiadas(destino, ultima + 1, nuevas, valores, formatos);
+  return nuevas.length + " pagos nuevos, " + cambiados + " estados actualizados";
 }
 
 
