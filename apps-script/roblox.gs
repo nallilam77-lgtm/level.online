@@ -76,7 +76,8 @@ const MAX_PAGOS_POR_PEDIDO = 4;
 const URL_CENTRALONE = "https://portal.centraloneglobal.com/api/v1";
 // Llave SOLO con catalog:read, para el menú 🔄 (la que compra vive en Vercel, variable roblox_nuevo)
 const PROPIEDAD_LLAVE_CENTRALONE = "CENTRALONE_API_KEY";
-// Regiones de las tarjetas que se traen (solo GLOBAL: sirven en cualquier país)
+// Regiones de las tarjetas que se traen (solo GLOBAL: sirven en cualquier país). Solo tarjetas de Robux:
+// las de saldo en USD no se traen y el 🔄 las quita de PreciosRoblox
 const REGIONES_ROBLOX = ["GLOBAL"];
 const FILA_PRODUCTO = 3;
 const FILA_COSTO = 4;
@@ -921,14 +922,16 @@ function traerProductosCentralOne() {
     return;
   }
   var regionDe = function (p) { return String(p.region || "").trim().toUpperCase(); };
+  // Solo las de Robux (el monto en Robux en el nombre): las tarjetas de saldo en USD no se venden
   var productos = deRoblox.filter(function (p) {
-    return REGIONES_ROBLOX.indexOf(regionDe(p)) !== -1 && numeroDePaquete(nombreCortoRoblox(p.name));
+    return REGIONES_ROBLOX.indexOf(regionDe(p)) !== -1 && esDeRobux(p.name);
   });
   if (!productos.length) {
     var regiones = deRoblox.map(function (p) { return regionDe(p) || "sin región"; })
       .filter(function (r, i, lista) { return lista.indexOf(r) === i; });
-    ui.alert("Hay " + deRoblox.length + " tarjeta(s) de Roblox, pero ninguna de las regiones " + REGIONES_ROBLOX.join(", ") +
-      " con un monto en el nombre (regiones que hay: " + regiones.join(", ") + "). No se cambió nada.");
+    ui.alert("Hay " + deRoblox.length + " tarjeta(s) de Roblox, pero ninguna de Robux de las regiones " + REGIONES_ROBLOX.join(", ") +
+      " (regiones que hay: " + regiones.join(", ") + "; ejemplos: " + deRoblox.slice(0, 5).map(function (p) { return p.name; }).join(" | ") +
+      "). No se cambió nada.");
     return;
   }
   productos.sort(function (a, b) { return Number(a.reseller_price) - Number(b.reseller_price); });
@@ -958,14 +961,16 @@ function traerProductosCentralOne() {
     };
   };
 
-  // Columnas que ya están: se actualizan las de Central One y las demás quedan como estaban
+  // Columnas que ya están: se actualizan las de Central One, se quitan las de saldo en USD y las demás
+  // quedan como estaban
   var ultimaColumna = hoja.getLastColumn();
   var actuales = ultimaColumna > 0 ? hoja.getRange(1, 1, 5, ultimaColumna).getValues() : [[], [], [], [], []];
   var formulasActuales = ultimaColumna > 0 ? hoja.getRange(2, 1, 1, ultimaColumna).getFormulasR1C1()[0] : [];
-  var columnas = [], usados = {}, actualizados = 0, sinCentralOne = [];
+  var columnas = [], usados = {}, actualizados = 0, sinCentralOne = [], eliminados = [];
   for (var c = 0; c < ultimaColumna; c++) {
     var nombre = String(actuales[0][c]).trim();
     if (!nombre) continue;
+    if (esDeUsd(nombre)) { eliminados.push(nombre); continue; }
     var n = numeroDePaquete(nombre);
     if (n && elegido[n] && !usados[n]) {
       usados[n] = true;
@@ -989,6 +994,7 @@ function traerProductosCentralOne() {
   var seguir = ui.alert("Traer productos de Central One",
     "En \"" + sheetNamePreciosRoblox + "\": se actualizan " + actualizados + " paquete(s) y se agregan " + nuevos.length + " nuevo(s)" +
     (repetidos.length ? " (se quitaron " + repetidos.length + " repetido(s))" : "") + ". Los paquetes que no están en Central One quedan igual.\n\n" +
+    (eliminados.length ? "Se ELIMINAN los paquetes en USD: " + eliminados.join(", ") + " (solo se venden Robux).\n\n" : "") +
     "El precio en Bs se calcula solo: costo en USD × dólar (pestaña \"" + HOJA_TASA + "\", B1) + la ganancia (B2).\n\n" +
     "Primero se venden los códigos guardados en \"" + sheetNameCodigos + "\"; cuando se acaban, la tienda compra el código en Central One. " +
     "El número del paquete (fila 1) debe ser el mismo que el de su columna en \"" + sheetNameCodigos + "\".\n\n¿Seguir?",
@@ -1022,6 +1028,7 @@ function traerProductosCentralOne() {
     "La fila 1 se puede renombrar, pero con el mismo número (es el que une el paquete con su columna de \"" + sheetNameCodigos + "\").");
   SpreadsheetApp.flush();
   ui.alert("✅ Listo: " + actualizados + " actualizado(s) y " + nuevos.length + " nuevo(s)." +
+    (eliminados.length ? " Eliminados (USD): " + eliminados.join(", ") + "." : "") +
     (repetidos.length ? " Se quitaron " + repetidos.length + " repetido(s): " + repetidos.slice(0, 8).map(function (p) {
       return nombreCortoRoblox(p.name) + " (" + p.reseller_price + " " + p.currency + (p.region ? ", " + p.region : "") + ")";
     }).join(", ") + (repetidos.length > 8 ? "…" : "") + "." : "") +
@@ -1061,6 +1068,17 @@ function nombreCortoRoblox(nombre) {
   var usd = t.match(/(?:\$|usd)\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*(?:\$|usd|dollars?|d[oó]lares)/i);
   if (usd) return String(Number(String(usd[1] || usd[2]).replace(",", "."))) + " USD";
   return t.trim().slice(0, 60);
+}
+
+// Tarjeta de Robux (el monto en Robux en el nombre)
+function esDeRobux(nombre) {
+  return /\d[\d.,]*\s*robux/i.test(String(nombre || ""));
+}
+
+// Paquete de saldo en USD ("10 USD", "$25"), no de Robux: el 🔄 lo quita de PreciosRoblox
+function esDeUsd(nombre) {
+  var t = String(nombre || "");
+  return !esDeRobux(t) && /\busd\b|\$|d[oó]lar/i.test(t);
 }
 
 // Clave de un paquete: los números de su nombre ("1.000 Robux" -> "1000"), igual que en "Codigos"
