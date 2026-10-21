@@ -1,4 +1,4 @@
-import { llamarScript } from './_lib/externo.js';
+import { llamarScript, leerCuerpoCrudo } from './_lib/externo.js';
 import { firmaFazerValida } from './_lib/fazer.js';
 
 // Webhook de FazerCards: POST https://levelupstore.online/api/fazer-webhook
@@ -17,24 +17,6 @@ export const config = { api: { bodyParser: false } };
 const EVENTOS_DE_ORDEN = new Set(['order.created', 'order.status_changed']);
 const ORDEN_VALIDA = /^[A-Za-z0-9_.:-]{1,80}$/;
 const ESTADO_VALIDO = /^[a-z_]{1,30}$/;
-const MAX_CUERPO = 64 * 1024;
-
-// Primero el flujo crudo (sin tocar req.body: leerlo haría que Vercel lo convierta a JSON)
-async function leerCuerpoCrudo(req) {
-  const partes = [];
-  let total = 0;
-  for await (const parte of req) {
-    total += parte.length;
-    if (total > MAX_CUERPO) throw new Error('cuerpo demasiado grande');
-    partes.push(Buffer.from(parte));
-  }
-  if (total > 0) return Buffer.concat(partes);
-  if (Buffer.isBuffer(req.body)) return req.body;
-  if (typeof req.body === 'string') return Buffer.from(req.body);
-  // Vercel ya lo convirtió a objeto: se vuelve a JSON compacto, que es como lo envía FazerCards
-  if (req.body && typeof req.body === 'object') return Buffer.from(JSON.stringify(req.body));
-  return Buffer.alloc(0);
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false });

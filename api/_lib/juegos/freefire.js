@@ -125,7 +125,7 @@ async function verificar(req, res) {
   }
 
   try {
-    const data = await llamarScript(URL_VALIDADOR, { id: String(id) }, LECTURA_APPS_SCRIPT);
+    const data = await llamarScript(URL_VALIDADOR, { id: String(id), juego: 'freefire' }, LECTURA_APPS_SCRIPT);
     if (data?.valid === true) {
       validados.delete(String(id));
       validados.set(String(id), { player_name: data.player_name ? String(data.player_name).slice(0, 60) : undefined, momento: Date.now() });

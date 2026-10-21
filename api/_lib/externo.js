@@ -171,3 +171,26 @@ export const catalogoValido = (datos) => datos?.status === 'success' && Array.is
 export function cabecerasCachePrecios(res) {
   res.setHeader('Cache-Control', 'public, max-age=20, s-maxage=20');
 }
+
+// =========================================================================
+// WEBHOOKS (api/fazer-webhook.js, api/centralone-webhook.js): la firma se calcula sobre el cuerpo
+// CRUDO, así que el endpoint exporta config.api.bodyParser = false y NO lee req.body antes de esto.
+// =========================================================================
+const MAX_CUERPO_WEBHOOK = 64 * 1024;
+
+export async function leerCuerpoCrudo(req) {
+  const partes = [];
+  let total = 0;
+  for await (const parte of req) {
+    total += parte.length;
+    if (total > MAX_CUERPO_WEBHOOK) throw new Error('cuerpo demasiado grande');
+    partes.push(Buffer.from(parte));
+  }
+  if (total > 0) return Buffer.concat(partes);
+  if (Buffer.isBuffer(req.body)) return req.body;
+  if (typeof req.body === 'string') return Buffer.from(req.body);
+  // Vercel ya lo convirtió a objeto: se vuelve a JSON compacto (la firma solo coincide si el
+  // proveedor lo envió así)
+  if (req.body && typeof req.body === 'object') return Buffer.from(JSON.stringify(req.body));
+  return Buffer.alloc(0);
+}

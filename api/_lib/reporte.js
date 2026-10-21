@@ -8,7 +8,7 @@ export const FASES = {
   verificacion: '2. VERIFICACIÓN DEL PAGO (Google Sheets)',
   codigos: '3. OBTENCIÓN DE CÓDIGOS (inventario en Google Sheets)',
   botFreeFire: '4. CANJE EN FREE FIRE (bot de Railway)',
-  apiBloodStrike: '4. RECARGA EN LA API DEL PROVEEDOR (FazerCards)',
+  apiBloodStrike: '4. RECARGA EN LA API DEL PROVEEDOR (Central One)',
   apiFreeFire: '4. RECARGA DE FREE FIRE EN LA API DEL PROVEEDOR (FazerCards)',
   cierre: '5. CIERRE DEL PEDIDO (marcar pago usado / registrar finalizado)',
   inesperado: 'ERROR INESPERADO (excepción o respuesta no prevista en Vercel)',

@@ -2,7 +2,7 @@ import { cargarJuego } from './_lib/juegos/index.js';
 
 // Consultas por juego: /api/juego?juego=<freefire|bloodstrike|roblox>&accion=<precios|verificar>
 //   - precios   (GET):  catálogo del juego, con caché.
-//   - verificar (POST): { id } -> valida el ID del jugador (solo Free Fire).
+//   - verificar (POST): { id } -> valida el ID del jugador (Free Fire y Blood Strike).
 // El juego y la acción van siempre en la URL; el cuerpo solo lleva datos. Cada módulo de
 // api/_lib/juegos/ declara sus acciones, valida sus datos y responde como los endpoints anteriores.
 export default async function handler(req, res) {

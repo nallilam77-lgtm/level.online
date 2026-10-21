@@ -1,4 +1,4 @@
-// Blood Strike: precios y recarga directa por la API de FazerCards.
+// Blood Strike: precios y recarga directa por la API de Central One.
 // Lo usan api/juego.js (acción precios) y api/recargar.js (recargar).
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
@@ -7,36 +7,33 @@ import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
-import { crearOrdenFazer } from '../fazer.js';
+import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con respuesta incierta:
-// precios 12 + verificar 32 + FazerCards 40 + registrar 12 + marcar 12 = 108 s
+// precios 12 + verificar 32 + catálogo Central One 8 + pedido 40 + registrar 12 + marcar 12 = 116 s
 const TIEMPOS = {
   // Solo si el Apps Script de Blood Strike anuncia "version: 2" (verificar_pago idempotente)
   idempotente: { tiempoMs: 32000, intentoMs: 15000, reintentos: 2, reintentarTrasTimeout: true },
   // Apps Script sin idPedido: un solo intento largo, nunca se repite
   sinIdempotencia: { tiempoMs: 20000 },
-  // La orden de FazerCards NUNCA se reintenta: repetirla podría recargar dos veces
-  fazer: 40000,
+  // Pedido en Central One: dos intentos de 20 s con la misma Idempotency-Key (no cobra dos veces)
+  centralOne: 40000,
   incidente: 12000,
 };
 
-// Clave del paquete (ver clavePaquete) -> offer_id de FazerCards (categoría blood_strike).
-// Un paquete que no esté aquí NO se envía a la API: queda en "errores" para hacerlo a mano.
-const CODIGOS_FAZER = {
-  "51": "51_bc",
-  "105": "105_bc",
-  "320": "320_bc",
-  "540": "540_bc",
-  "1100": "1100_bc",
-  "2260": "2260_bc",
-  "5800": "5800_bc",
-  "lucky_bag_week": "lucky_bag_week",
-  "season_pass": "season_pass",
-  "level_up_pass": "level_up_pass",
-  "strike_pass_elite": "strike_pass_elite",
-  "strike_pass_premium": "strike_pass_premium"
-};
+// El product_id de Central One de cada paquete vive en la pestaña de precios (fila 3, la llena el menú
+// "🩸 Blood Strike → 🔄 Traer productos de Central One" de bloodstrike.gs): obtener_precios lo manda
+// como "producto". Nunca se envía al navegador (ver sinProducto).
+const PRODUCTO_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const sinProducto = ({ producto, ...paquete }) => paquete;
+
+// Paquete del catálogo que corresponde a lo que pidió el cliente. Si dos columnas dan la misma clave
+// (p. ej. dos nombres que se reducen a "105") no se sabe cuál comprar: { repetido: true }.
+function buscarPaquete(catalogo, clave) {
+  const iguales = clave ? catalogo.filter((p) => clavePaquete(p.diamantes || p.paquete) === clave) : [];
+  return { paquete: iguales[0] || null, repetido: iguales.length > 1 };
+}
+const productoDe = (paquete) => (PRODUCTO_VALIDO.test(String(paquete?.producto || '')) ? String(paquete.producto) : '');
 
 // Completar un pago insuficiente: la clave que recibe el cliente (la hoja solo guarda su huella SHA-256)
 const CLAVE_COMPLEMENTO = /^[A-Za-z0-9_-]{32,64}$/;
@@ -54,6 +51,7 @@ const PALABRAS_PASES = [
 
 // Clave de un paquete: el oro por su número ("105 Oro 🪙" -> "105"); los pases y bolsas por su
 // nombre (ver PALABRAS_PASES; otro nombre queda como texto: "Mi Pase" -> "mi_pase", sin oferta).
+// Si cambia, cambiar igual clavePaqueteBlood de apps-script/bloodstrike.gs (quita los repetidos al traer productos).
 function clavePaquete(texto) {
   const t = String(texto ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const nombre = t.replace(/oro|gold|monedas|diamantes|blood strike|\bbc\b/g, ' ').replace(/[^a-z]+/g, ' ').trim();
@@ -83,10 +81,59 @@ async function precios(req, res) {
       () => pedirJSON(`${URL_GOOGLE_SCRIPT}?accion=obtener_precios`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT }),
       { esValido: catalogoValido });
     cabecerasCachePrecios(res);
-    return res.status(200).json(datos);
+    return res.status(200).json({ ...datos, catalogo: datos.catalogo.map(sinProducto) });
   } catch (error) {
     console.error("Error al obtener precios de Blood Strike:", error.message);
     return res.status(503).json({ status: "error", message: "Error interno al conectar con Google Sheets" });
+  }
+}
+
+// Verificar el ID: POST { id } -> el Apps Script validador (SCRIPT_VALIDADOR_URL, apps-script/validador.gs)
+// pregunta a Central One si la cuenta existe (no compra nada). Respuesta para la página:
+//   { valid: true, verificado: true, player_name } existe · { valid: false, verificado: true } no existe ·
+//   { valid: true, verificado: false } no se pudo comprobar (la página deja seguir, como antes).
+// El validador ya guarda cada ID 10 min; aquí solo se frena a quien prueba IDs al azar.
+const MAX_VERIFICACIONES_POR_MINUTO = 10;
+const verificacionesPorIp = new Map();
+
+async function verificar(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ valid: false, message: "Método no permitido" });
+
+  const id = String(req.body?.id ?? '');
+  // Mismo formato de ID que exige la recarga
+  if (!/^\d{5,15}$/.test(id)) {
+    return res.status(400).json({ valid: false, message: "ID con formato inválido. Debe tener entre 5 y 15 números." });
+  }
+
+  const URL_VALIDADOR = process.env.SCRIPT_VALIDADOR_URL;
+  if (!URL_VALIDADOR) {
+    return faltaConfiguracion(res, ["SCRIPT_VALIDADOR_URL"], { valid: true, verificado: false });
+  }
+
+  // Central One permite 30 validaciones por minuto para toda la cuenta: por IP, como mucho 10
+  const ip = obtenerIp(req);
+  const ahora = Date.now();
+  const recientes = (verificacionesPorIp.get(ip) || []).filter((t) => ahora - t < 60_000);
+  if (recientes.length >= MAX_VERIFICACIONES_POR_MINUTO) {
+    return res.status(429).json({ valid: false, message: "Demasiadas verificaciones. Espera un minuto e intenta de nuevo." });
+  }
+  verificacionesPorIp.set(ip, [...recientes, ahora]);
+  if (verificacionesPorIp.size > 5000) verificacionesPorIp.delete(verificacionesPorIp.keys().next().value);
+
+  try {
+    const data = await llamarScript(URL_VALIDADOR, { id, juego: 'bloodstrike' }, LECTURA_APPS_SCRIPT);
+    const verificado = data?.verificado === true;
+    // Solo un "no existe" confirmado bloquea; cualquier otra cosa deja seguir sin nombre
+    if (verificado && data.valid === false) {
+      return res.status(200).json({ valid: false, verificado: true, message: "Ese ID no existe en Blood Strike. Revísalo." });
+    }
+    return res.status(200).json({
+      valid: true, verificado,
+      player_name: verificado && data.player_name ? String(data.player_name).slice(0, 60) : undefined,
+    });
+  } catch (error) {
+    console.error("Error al verificar ID de Blood Strike:", error.message);
+    return res.status(200).json({ valid: true, verificado: false });
   }
 }
 
@@ -95,21 +142,21 @@ async function catalogoBloodStrike() {
   const { datos } = await conCache('precios:bs',
     () => pedirJSON(`${process.env.SCRIPT_BLOOD}?accion=obtener_precios`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT }),
     { esValido: catalogoValido });
-  return datos.catalogo;
+  return datos.catalogo.map(sinProducto);
 }
 
-export const acciones = { precios, descuento: crearAccionDescuento('Blood Strike', catalogoBloodStrike) };
+export const acciones = { precios, verificar, descuento: crearAccionDescuento('Blood Strike', catalogoBloodStrike) };
 
 // =========================================================================
 // RECARGA (api/recargar.js)
 // =========================================================================
 
 /**
- * Fases 4-5 con el pago ya verificado (y bloqueado "En proceso"): orden en FazerCards y cierre.
+ * Fases 4-5 con el pago ya verificado (y bloqueado "En proceso"): pedido en Central One y cierre.
  * La usan recargar (un pago) y completarPago (varios pagos que juntos cubren el precio).
  */
 async function entregarRecarga(res, {
-  FAZER_API_KEY, idPedido, id, paquete, numeroOro, precioReal, desc, comprobante, referencias, cierreIdempotente,
+  CENTRALONE_API_KEY, idPedido, id, paquete, numeroOro, productId, precioReal, desc, comprobante, referencias, cierreIdempotente,
   utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
 }) {
   // Texto para la hoja y los informes: "ref1" o "ref1 + ref2" (pago completado)
@@ -128,21 +175,25 @@ async function entregarRecarga(res, {
   };
 
   // ==========================================
-  // FASE 4: RECARGA EN LA API DE FAZERCARDS
+  // FASE 4: RECARGA EN LA API DE CENTRAL ONE
   // ==========================================
-  const offerIdFinal = CODIGOS_FAZER[numeroOro];
-  if (!offerIdFinal) {
+  // Datos del jugador según el producto (y si sigue en el catálogo y con stock), antes de gastar saldo
+  const datosJugador = productId
+    ? await datosParaPedido({ apiKey: CENTRALONE_API_KEY, productId, idJugador: String(id) })
+    : { error: `El paquete "${paquete}" (clave ${numeroOro}) no tiene un product_id de Central One válido (y único) en la fila 3 de la pestaña de precios de Blood Strike.` };
+  if (datosJugador.error) {
+    console.error(`❌ [${FASES.apiBloodStrike}] ${datosJugador.error}`);
     await bloquear({
       fase: FASES.apiBloodStrike, noAplica: true,
-      motivo: `El paquete "${paquete}" (clave ${numeroOro}) no tiene un offer_id de FazerCards configurado en CODIGOS_FAZER (api/_lib/juegos/bloodstrike.js). No se llamó a la API.`,
+      motivo: `${datosJugador.error} No se creó el pedido en Central One (no se cobró nada).`,
       queHacer: 'la recarga NO se hizo; hacerla a mano o devolver el pago',
     });
     return res.status(202).json({ status: "error", message: "Fallo técnico con el proveedor. Tu pago está verificado y la recarga quedó en revisión." });
   }
 
-  const orden = await crearOrdenFazer({
-    apiKey: FAZER_API_KEY, categoria: "blood_strike", offerId: offerIdFinal, campos: { "player_id": id },
-    idempotencia: idPedido, tiempoMs: TIEMPOS.fazer,
+  const orden = await crearPedidoCentralOne({
+    apiKey: CENTRALONE_API_KEY, productId, payload: datosJugador.payload,
+    idempotencia: idPedido, nota: `Level Up ${idPedido}`, tiempoMs: TIEMPOS.centralOne,
   });
 
   if (orden.tipo === 'incierto') {
@@ -150,8 +201,8 @@ async function entregarRecarga(res, {
     // Registrar el incidente y LUEGO bloquear el pago (en orden, dentro de bloquearPago)
     await bloquear({
       fase: FASES.apiBloodStrike,
-      motivo: `${orden.motivo} Oferta ${offerIdFinal}. ANTES DE REPETIR: buscar en el panel de FazerCards si existe una orden para el jugador ${id}.`,
-      queHacer: 'confirmar la orden en FazerCards antes de repetir la recarga',
+      motivo: `${orden.motivo} Producto ${productId}. ANTES DE REPETIR: buscar en el portal de Central One un pedido con la nota "Level Up ${idPedido}" para el jugador ${id}.`,
+      queHacer: 'confirmar el pedido en Central One antes de repetir la recarga',
     });
 
     // El frontend reconoce "fallo técnico" y muestra el modal de "recarga en proceso"
@@ -163,11 +214,13 @@ async function entregarRecarga(res, {
 
   if (orden.tipo === 'rechazo') {
     console.error(`❌ [${FASES.apiBloodStrike}] ${orden.motivo}`);
-    // FazerCards confirmó que NO hizo la recarga (p. ej. ID incorrecto). El pago igual se bloquea:
+    // Central One no creó el pedido (p. ej. datos inválidos o sin saldo). El pago igual se bloquea:
     // la recarga se rehace a mano con el ID correcto que el cliente envíe por WhatsApp.
     await bloquear({
-      fase: FASES.apiBloodStrike, motivo: `${orden.motivo} Oferta ${offerIdFinal}.`,
-      queHacer: 'no se cobró nada en FazerCards; hacer la recarga a mano con el ID correcto o devolver el pago',
+      fase: FASES.apiBloodStrike, motivo: `${orden.motivo} Producto ${productId}.`,
+      queHacer: orden.codigo === 'insufficient_balance'
+        ? 'RECARGAR SALDO en Central One; no se cobró nada. Hacer la recarga a mano o devolver el pago'
+        : 'no se cobró nada en Central One; hacer la recarga a mano con el ID correcto o devolver el pago',
     });
 
     return res.status(400).json({
@@ -179,7 +232,8 @@ async function entregarRecarga(res, {
   // ==========================================
   // FASE 5: QUEMAR EL PAGO Y GUARDAR EN FINALIZADOS
   // ==========================================
-  // La recarga YA se hizo: al cliente se le responde éxito sin esperar a Apps Script y el cierre sigue
+  console.info(`✅ Central One aceptó el pedido ${orden.orden.referencia} (${orden.orden.status}, ${orden.orden.total}) para el jugador ${id}`);
+  // Central One aceptó el pedido: al cliente se le responde éxito sin esperar a Apps Script y el cierre sigue
   // después de responder (cerrarEnSegundoPlano), en orden: el pago, finalizados (hoja de Blood Strike) y
   // el uso del código (hoja de Free Fire; sin él, el creador pierde la comisión). Lo que no se confirme se
   // repite (registrar_finalizado solo con bloodstrike.gs v3; recargas.gs ignora un uso ya anotado).
@@ -188,23 +242,24 @@ async function entregarRecarga(res, {
     idJugador: id,
     paquete: paquete,
     referencia: referenciaCompleta,
-    codigosUsados: `API Directa (FazerCards, orden ${orden.orden?.id || 'sin id'})`,
+    codigosUsados: `API Directa (Central One, pedido ${orden.orden.referencia})`,
     urlImagen: comprobante,
     idPedido,
-    // La hoja de Blood Strike anota la orden en "fazer_card"; el webhook actualiza su estado
-    ordenFazer: orden.orden?.id || '', estadoFazer: orden.orden?.status || 'processing',
-    ofertaFazer: offerIdFinal, montoCobrado: precioReal,
+    // La hoja de Blood Strike anota el pedido en "fazer_card" (columna I = reference_code, que es lo que
+    // trae el webhook); api/centralone-webhook.js actualiza su estado
+    ordenFazer: orden.orden.referencia, estadoFazer: orden.orden.status,
+    ofertaFazer: `Central One ${productId} (${orden.orden.total})`, montoCobrado: precioReal,
   });
   cerrarEnSegundoPlano([
     { nombre: 'marcar el pago como "Usado"', repetible: true, ejecutar: marcarPagos },
-    { nombre: 'anotar la recarga en "finalizados" (y la orden en "fazer_card")', repetible: cierreIdempotente, ejecutar: guardarFinalizado },
+    { nombre: 'anotar la recarga en "finalizados" (y el pedido en "fazer_card")', repetible: cierreIdempotente, ejecutar: guardarFinalizado },
     desc && {
       nombre: `anotar el uso del código ${desc.codigo} (${precioReal} Bs, pedido ${idPedido}) en "Descuentos"`, repetible: true,
       ejecutar: () => registrarUsoDescuento({ codigo: desc.codigo, montoCobrado: precioReal, idPedido, idJugador: id, juego: 'Blood Strike' }),
     },
   ].filter(Boolean), (faltan, rondas, motivoFallo) => registrarEnHoja(informe({
     fase: FASES.cierre,
-    motivo: `La recarga SÍ se entregó (FazerCards confirmó la orden), pero Apps Script no respondió al cierre${rondas ? ` (ni tras ${rondas} reintento(s) en segundo plano)` : ''}: falta ${faltan.join(' y ')}${motivoFallo ? `. Motivo: ${motivoFallo}` : ''}`,
+    motivo: `La recarga SÍ se pidió (Central One aceptó el pedido ${orden.orden.referencia}), pero Apps Script no respondió al cierre${rondas ? ` (ni tras ${rondas} reintento(s) en segundo plano)` : ''}: falta ${faltan.join(' y ')}${motivoFallo ? `. Motivo: ${motivoFallo}` : ''}`,
     referenciaCompleta,
     estadoPago: faltan.includes('marcar el pago como "Usado"')
       ? `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}` : 'USADO (correcto)',
@@ -236,10 +291,10 @@ export async function recargar(req, res) {
     }
 
     const URL_GOOGLE_SCRIPT = process.env.SCRIPT_BLOOD;
-    const FAZER_API_KEY = process.env.FAZER_API_KEY;
+    const CENTRALONE_API_KEY = (process.env.blood_nuevo || "").trim();
 
-    if (!URL_GOOGLE_SCRIPT || !FAZER_API_KEY) {
-      return faltaConfiguracion(res, ["SCRIPT_BLOOD", "FAZER_API_KEY"].filter((v) => !process.env[v]),
+    if (!URL_GOOGLE_SCRIPT || !CENTRALONE_API_KEY) {
+      return faltaConfiguracion(res, ["SCRIPT_BLOOD", "blood_nuevo"].filter((v) => !(process.env[v] || "").trim()),
         { status: "error", message: "Las recargas automáticas no están disponibles en este momento. No realices el pago todavía; escríbenos por WhatsApp." });
     }
 
@@ -277,12 +332,19 @@ export async function recargar(req, res) {
     const cierreIdempotente = Number(dataPrecios.version) >= 3;
 
     const numeroOro = clavePaquete(paquete);
-    const paqueteGsheet = numeroOro && dataPrecios.catalogo.find(p => clavePaquete(p.diamantes || p.paquete) === numeroOro);
-    if (!paqueteGsheet) {
+    const { paquete: paqueteGsheet, repetido } = buscarPaquete(dataPrecios.catalogo, numeroOro);
+    const precioLista = limpiarMontoVES(paqueteGsheet?.precio);
+    if (!paqueteGsheet || !(precioLista > 0)) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado." });
     }
-    const precioLista = limpiarMontoVES(paqueteGsheet.precio);
+    // Sin producto de Central One (o con dos columnas para el mismo paquete) no se sabe qué comprar:
+    // se avisa ANTES de tocar el pago (sigue libre)
+    const productId = repetido ? '' : productoDe(paqueteGsheet);
+    if (!productId) {
+      console.error(`❌ [${FASES.apiBloodStrike}] El paquete "${paquete}" (clave ${numeroOro}) ${repetido ? 'aparece en más de una columna' : 'no tiene product_id en la fila 3'} de la pestaña de precios. No se usó el pago.`);
+      return res.status(503).json({ status: "error", message: "Este paquete no está disponible por ahora. Tu pago no se usó: escríbenos por WhatsApp con tu referencia." });
+    }
 
     // Descuento opcional (tabla común en la hoja de Free Fire): se vuelve a consultar el código
     // (pudo desactivarse) antes de tocar el pago
@@ -379,7 +441,7 @@ export async function recargar(req, res) {
     }
 
     return await entregarRecarga(res, {
-      FAZER_API_KEY, idPedido, id, paquete, numeroOro, precioReal, desc, comprobante,
+      CENTRALONE_API_KEY, idPedido, id, paquete, numeroOro, productId, precioReal, desc, comprobante,
       referencias: [referenciaCompleta], cierreIdempotente,
       utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
     });
@@ -415,9 +477,9 @@ async function completarPago(req, res) {
     }
 
     const URL_GOOGLE_SCRIPT = process.env.SCRIPT_BLOOD;
-    const FAZER_API_KEY = process.env.FAZER_API_KEY;
-    if (!URL_GOOGLE_SCRIPT || !FAZER_API_KEY) {
-      return faltaConfiguracion(res, ["SCRIPT_BLOOD", "FAZER_API_KEY"].filter((v) => !process.env[v]),
+    const CENTRALONE_API_KEY = (process.env.blood_nuevo || "").trim();
+    if (!URL_GOOGLE_SCRIPT || !CENTRALONE_API_KEY) {
+      return faltaConfiguracion(res, ["SCRIPT_BLOOD", "blood_nuevo"].filter((v) => !(process.env[v] || "").trim()),
         { status: "error", message: "No podemos completar tu pago en este momento. Escríbenos por WhatsApp con tus referencias." });
     }
 
@@ -499,8 +561,21 @@ async function completarPago(req, res) {
     pedido = { utilidades, referencias };
     console.info(`🧩 Pago de Blood Strike completado (${referencias.join(' + ')}) para el pedido ${datos.idPedidoOriginal} -> ${idPedido} (ID ${id})`);
 
+    // Producto de Central One del paquete (pestaña de precios). Si no se puede leer o ya no está,
+    // entregarRecarga bloquea los pagos y lo deja en "errores" sin crear el pedido.
+    let productId = '';
+    try {
+      const { datos: dataPrecios } = await conCache('precios:bs',
+        () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true }),
+        { esValido: catalogoValido });
+      const { paquete: paqueteGsheet, repetido } = buscarPaquete(dataPrecios.catalogo, numeroOro);
+      productId = repetido ? '' : productoDe(paqueteGsheet);
+    } catch (error) {
+      console.error(`❌ [${FASES.precios}] No se pudo leer el producto del paquete "${paquete}": ${error.message}`);
+    }
+
     return await entregarRecarga(res, {
-      FAZER_API_KEY, idPedido, id, paquete, numeroOro, precioReal,
+      CENTRALONE_API_KEY, idPedido, id, paquete, numeroOro, productId, precioReal,
       desc: datos.codigoDescuento ? { codigo: String(datos.codigoDescuento) } : null,
       comprobante, referencias, utilidades,
       // usar_complemento de bloodstrike.gs v3 anuncia su versión

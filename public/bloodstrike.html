@@ -821,7 +821,7 @@
     let globalTxnCode = "";
     
     // RUTAS ACTUALIZADAS PARA BLOOD STRIKE
-    const SCRIPT_PRECIOS_URL = '/api/juego?juego=bloodstrike&accion=precios'; 
+    const SCRIPT_PRECIOS_URL = '/api/juego?juego=bloodstrike&accion=precios'; const SCRIPT_VALIDADOR_URL = '/api/juego?juego=bloodstrike&accion=verificar';
     const SCRIPT_RECARGAS_URL = '/api/recargar?juego=bloodstrike';
 
     window.mostrarBurbuja = function(mensaje, color = 'var(--game-text)') {
@@ -1048,25 +1048,44 @@
 
     document.getElementById('inputReferencia').addEventListener('input', actualizarProgreso);
 
-    // LÓGICA DE CONFIRMACIÓN DIRECTA DE ID (Sin API externa en Blood Strike)
-    document.getElementById('btnVerifyId').addEventListener('click', () => {
+    // VERIFICACIÓN DEL ID (Central One, por el servidor). Solo un "no existe" confirmado frena al cliente;
+    // si no se pudo comprobar (lento, sin respuesta), se acepta el ID como antes.
+    document.getElementById('btnVerifyId').addEventListener('click', async () => {
       const idInput = document.getElementById('inputPlayerId').value.trim();
-      const statusDiv = document.getElementById('idStatus'); 
+      const statusDiv = document.getElementById('idStatus'); const btnVerify = document.getElementById('btnVerifyId');
 
-      if (idInput.length < 5) {
-        mostrarBurbuja("❌ Ingresa un ID válido de Blood Strike.", "var(--danger)");
+      if (!/^\d{5,15}$/.test(idInput)) {
+        mostrarBurbuja("❌ Ingresa un ID válido de Blood Strike (solo números).", "var(--danger)");
         statusDiv.style.display = 'none';
         idVerificado = false; verificarEstadoDesbloqueo(); return;
       }
-      
-      // Se da por verificado directamente
-      idVerificado = true; 
-      nombreJugadorVerificado = "Jugador Confirmado";
-      statusDiv.style.display = 'block'; 
-      statusDiv.style.color = 'var(--game-text)'; 
-      statusDiv.innerHTML = `✔️️ <strong style="color: #fff;">ID Aceptado y Confirmado</strong>`;
-      
-      verificarEstadoDesbloqueo();
+      const aceptarSinComprobar = () => {
+        idVerificado = true; nombreJugadorVerificado = "ID Validado";
+        statusDiv.style.color = 'var(--game-text)'; statusDiv.innerHTML = `✔️ <strong style="color: #fff;">ID Validado</strong>`;
+      };
+      try {
+        btnVerify.disabled = true; btnVerify.innerText = "BUSCANDO...";
+        statusDiv.style.display = 'block'; statusDiv.style.color = 'var(--game-text)'; statusDiv.innerText = '⏳ Verificando ID...';
+
+        const response = await fetch(SCRIPT_VALIDADOR_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: idInput }) });
+        const data = await response.json().catch(() => null);
+
+        if (response.status === 429) {
+          idVerificado = false;
+          statusDiv.style.color = 'var(--danger)'; statusDiv.innerText = data?.message || 'Demasiadas verificaciones. Espera un minuto.';
+        } else if (data && data.verificado && data.valid === false) {
+          idVerificado = false; nombreJugadorVerificado = "";
+          statusDiv.style.color = 'var(--danger)'; statusDiv.innerHTML = `❌ <strong>${escaparHtml(data.message || 'Ese ID no existe en Blood Strike.')}</strong>`;
+          mostrarBurbuja("❌ Ese ID no existe en Blood Strike. Revísalo.", "var(--danger)");
+        } else if (data && data.verificado && data.player_name) {
+          idVerificado = true; nombreJugadorVerificado = data.player_name;
+          statusDiv.style.color = 'var(--game-text)'; statusDiv.innerHTML = `✔️ Jugador: <strong style="color: #fff;">${escaparHtml(nombreJugadorVerificado)}</strong>`;
+        } else {
+          aceptarSinComprobar();
+        }
+      } catch (error) {
+        aceptarSinComprobar();
+      } finally { btnVerify.disabled = false; btnVerify.innerText = "CONFIRMAR MI ID"; verificarEstadoDesbloqueo(); }
     });
 
     document.getElementById('inputPlayerId').addEventListener('input', () => { idVerificado = false; nombreJugadorVerificado = ""; document.getElementById('idStatus').style.display = 'none'; verificarEstadoDesbloqueo(); });

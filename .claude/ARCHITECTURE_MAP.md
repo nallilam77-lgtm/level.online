@@ -12,12 +12,13 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 │   ├── juegos/           Lógica de cada tienda (enrutada por api/juego.js y api/recargar.js)
 │   │   ├── index.js      Lista cerrada de juegos + carga diferida (cargarJuego)
 │   │   ├── freefire.js   acciones { precios, verificar, descuento } + recargar: pines + bot de Railway
-│   │   ├── bloodstrike.js  acciones { precios, descuento } + recargar: API de FazerCards
+│   │   ├── bloodstrike.js  acciones { precios, verificar, descuento } + recargar: API de Central One (product_id en la fila 3 de PreciosBlood)
 │   │   └── roblox.js     acciones { precios (+ stock: disponible/pocos/agotado, nunca la cantidad), descuento } + recargar: compra en apps-script/roblox.gs (sin reintentos; manda montoACobrar con código e idPedido; responde solo campos conocidos; pago insuficiente → clave para completar con `tokenComplemento` → `completarCompra`)
 │   ├── recarga-comun.js  limpiarMontoVES, formatearVES, crearUtilidadesPedido (Free Fire y Blood Strike)
 │   ├── descuentos.js     Códigos de descuento (tabla común en la pestaña "Descuentos" de la hoja de Free Fire)
 │   ├── externo.js        pedirJSON/llamarScript: timeouts, reintentos, caché en memoria (conCache)
-│   ├── fazer.js          crearOrdenFazer (POST /topups/order con Idempotency-Key = idPedido; Blood Strike y Free Fire) y firmaFazerValida (webhook)
+│   ├── fazer.js          crearOrdenFazer (POST /topups/order con Idempotency-Key = idPedido; solo Free Fire) y firmaFazerValida (webhook)
+│   ├── centralone.js     Central One (Blood Strike): datosParaPedido (catálogo 15 min; target_payload según target_schema, stock), crearPedidoCentralOne (POST /orders, Idempotency-Key = idPedido, 1 reintento si es incierto) y firmaCentralOneValida (webhook)
 │   ├── limitador.js      Límite de intentos fallidos (Firestore o memoria)
 │   ├── reporte.js        informeError(), FASES, ESTADO_PINES → pestaña "errores"
 │   └── validacion.js     PAQUETE_VALIDO, textoParaHoja(), faltaConfiguracion()
@@ -27,10 +28,13 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 ├── subir-imagen.js       Comprobante de pago → Drive (límite 4 MB)
 ├── consultar-ordenes.js  Consulta de pedidos (página de inicio)
 ├── ruleta.js             Ruleta de la suerte (apps-script/ruleta.gs; reintenta: el giro es idempotente)
-├── fazer-webhook.js      Webhook de FazerCards (firma X-Webhook-Signature) → estado_fazer de recargas.gs Y de bloodstrike.gs a la vez → pestaña "fazer_card" de la hoja que tenga la orden
+├── fazer-webhook.js      Webhook de FazerCards (firma X-Webhook-Signature) → estado_fazer de recargas.gs Y de bloodstrike.gs (órdenes de Blood Strike anteriores a Central One) → pestaña "fazer_card" de la hoja que tenga la orden
+├── centralone-webhook.js Webhook de Central One (firma X-CentralOne-Signature con timestamp ≤ 5 min) → estado_fazer de bloodstrike.gs (reference_code + sequence) → "fazer_card" de Blood Strike
 └── ia-soporte.js         Chat de soporte con Gemini (rota GEMINI_KEYS)
 apps-script/bloodstrike.gs Copia del Apps Script de Blood Strike (SCRIPT_BLOOD): precios (PreciosBlood), pagos en la hoja CENTRAL, finalizados (F = orden), errores y "fazer_card". Sin marcar_verificado.
 scripts/ofertas-fazer.mjs Lista categorías y offer_id de FazerCards para rellenar OFERTAS_FAZER (solo lee)
+scripts/productos-centralone.mjs Lista saldo y productos de Central One (diagnóstico; solo lee)
+apps-script/validador.gs  Validador de IDs (SCRIPT_VALIDADOR_URL): POST { id, juego } → freefire: FazerCards validate-id · bloodstrike: Central One /player/validate (valid/invalid/unverified → { valid, verificado, player_name }). Llaves en Propiedades del script: FAZER_API_KEY, CENTRALONE_API_KEY (catalog:read)
 apps-script/recargas.gs   Copia del Apps Script de recargas Free Fire (v2, con idPedido). 8 secciones: configuración, doPost, pagos, pines, ruleta, descuentos/creadores, menús, utilidades
 public/                   Frontend estático; cada página lleva su CSS/JS en línea
 ├── index.html            Inicio + consultar órdenes + acceso al Panel de Creadores
@@ -71,10 +75,12 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 |---|---|---|
 | Apps Script recargas | `SCRIPT_RECARGAS_URL`, `SCRIPT_RECARGAS_TOKEN` | juegos/freefire (precios, recarga), subir-imagen |
 | Apps Script órdenes | `SCRIPT_RECARGAS_VERIFICACION` | consultar-ordenes |
-| Apps Script validador | `SCRIPT_VALIDADOR_URL` | juegos/freefire (verificar) |
+| Apps Script validador (`apps-script/validador.gs`) | `SCRIPT_VALIDADOR_URL` | juegos/freefire y juegos/bloodstrike (verificar) |
 | Apps Script ruleta (`apps-script/ruleta.gs`) | `SCRIPT_RULETA_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | ruleta |
 | Apps Script Roblox (`apps-script/roblox.gs`) | `GAS_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | juegos/roblox |
-| Apps Script + FazerCards | `SCRIPT_BLOOD` (+ `SCRIPT_RECARGAS_TOKEN`, que llamarScript también le envía), `FAZER_API_KEY` | juegos/bloodstrike, juegos/freefire (modo API) |
+| Apps Script Blood Strike + Central One | `SCRIPT_BLOOD` (+ `SCRIPT_RECARGAS_TOKEN`, que llamarScript también le envía), `blood_nuevo` | juegos/bloodstrike |
+| Webhook Central One | `CENTRALONE_WEBHOOK_SECRET` (+ `SCRIPT_BLOOD`) | centralone-webhook |
+| FazerCards | `FAZER_API_KEY` | juegos/freefire (modo API) |
 | Webhook FazerCards | `FAZER_WEBHOOK_SECRET` (+ `SCRIPT_RECARGAS_URL`) | fazer-webhook |
 | Bot Railway | `RAILWAY_SECRET` | juegos/freefire (recarga) |
 | Firestore | `FIREBASE_SERVICE_ACCOUNT` | _lib/limitador |
@@ -86,7 +92,8 @@ Detalle de cada variable: `.env.example`.
 
 - Paquetes por `clavePaquete` de bloodstrike.js: el oro por su número; los pases y bolsas por una palabra de su nombre en PreciosBlood, en español o inglés (`PALABRAS_PASES`: élite, premium, bolsa/lucky, temporada/season, nivel/level), p. ej. "Pase de Temporada" → `season_pass`. En bloodstrike.html, una columna sin números es un "Pase" y va al final.
 - Pago insuficiente: igual que Free Fire (`pago_por_completar` / `usar_complemento` en bloodstrike.gs, pestaña "por_completar" de la hoja de Blood Strike; `completarPago` → `entregarRecarga` en bloodstrike.js). bloodstrike.gs también tiene `bloquear_pedido` (usado si `usar_complemento` no responde). El estado "Por completar" vive en la hoja CENTRAL de pagos: ningún juego lo toma.
-- Éxito: `registrar_finalizado` lleva `ordenFazer`, `estadoFazer`, `ofertaFazer` y `montoCobrado`; bloodstrike.gs anota la fila en "fazer_card" (columna J = estado).
+- Proveedor (desde 2026-10-20): **Central One** (antes FazerCards). Pestaña PreciosBlood: fila 1 paquete · fila 2 precio Bs (fórmula ROUND(costo × tasa_dolar!B1 × (1 + tasa_dolar!B2 / 100), 2); B2 = 4 % por defecto) · fila 3 product_id · fila 4 costo USD · fila 5 stock. obtener_precios manda los precios numéricos como "1.144,40". La llena el menú de la hoja "🩸 Blood Strike → 🔄 Traer productos de Central One" (llave en la propiedad del script CENTRALONE_API_KEY, menú 🔑; conserva el precio de los product_id que ya estaban). obtener_precios omite columnas sin precio > 0 y manda `producto`; Vercel lo quita antes de responder al navegador (`sinProducto`). Sin product_id válido o con dos columnas de la misma clave → 503 ANTES de verificar el pago (queda libre). Con el pago tomado: `datosParaPedido` (fuera de catálogo / sin stock / pide un dato que no preguntamos → bloquear, sin pedido) → `crearPedidoCentralOne` (ok → éxito al cliente aunque siga "confirmed"; rechazo 4xx o incierto → `bloquear`).
+- Éxito: `registrar_finalizado` lleva `ordenFazer` (= reference_code `CO-ORD-…`), `estadoFazer`, `ofertaFazer` (product_id y total en USD) y `montoCobrado`; bloodstrike.gs anota la fila en "fazer_card" (columna J = estado). El webhook de Central One la actualiza; failed/cancelled/partially_completed/refunded → UNA fila en "errores"; un "completed" después de "failed" anota otra fila de ATENCIÓN (no recargar a mano).
 
 ## Códigos de descuento y Panel de Creadores (hoja de Free Fire)
 

@@ -1,10 +1,11 @@
 // =====================================================================
 // LEVEL UP - Apps Script de BLOOD STRIKE (variable SCRIPT_BLOOD en Vercel)
-// Usado por: api/_lib/juegos/bloodstrike.js (precios y recarga por la API de FazerCards) y
-// api/fazer-webhook.js (estado de cada orden en tiempo real).
+// Usado por: api/_lib/juegos/bloodstrike.js (precios y recarga por la API de Central One),
+// api/centralone-webhook.js y api/fazer-webhook.js (estado de cada pedido en tiempo real; FazerCards
+// solo para las órdenes anteriores al cambio de proveedor).
 //
 // Secciones:  1 Configuración · 2 Entrada (doGet / doPost) · 3 Pagos · 4 Recargas y FazerCards
-//             5 Utilidades
+//             5 Utilidades · 6 Menú: productos de Central One en la pestaña de precios
 //
 // Cómo actualizarlo: pega este archivo en el editor de Apps Script y luego
 // Implementar > Gestionar implementaciones > editar (lápiz) > Versión: "Nueva versión" > Implementar.
@@ -17,8 +18,9 @@
 //   - Los pagos viven en la hoja CENTRAL (ID_HOJA_PAGOS), la misma de Free Fire.
 //   - Un pago encontrado NUNCA vuelve a "Verificado": ante cualquier error queda "Usado" y el
 //     pedido se anota en "errores" (por eso ya no existe marcar_verificado).
-//   - Cada recarga por la API queda en la pestaña "fazer_card"; el webhook de FazerCards
-//     actualiza su estado (⏳ en proceso → ✅ completada / ❌ fallida / ↩️ reembolsada).
+//   - Cada recarga por la API queda en la pestaña "fazer_card" (el nombre quedó de FazerCards; hoy
+//     son pedidos de Central One); el webhook actualiza su estado (⏳ en proceso → ✅ completada /
+//     ❌ fallida / ↩️ reembolsada).
 //   - Pago insuficiente: el pago queda "Por completar" (nadie más puede usarlo, tampoco desde Free
 //     Fire) y el pedido en la pestaña "por_completar". El cliente paga la diferencia con su clave
 //     (Vercel solo manda la huella); el jugador, el paquete y el precio salen de esa fila.
@@ -70,9 +72,33 @@ const HOJA_FAZER = "fazer_card";
 const COLUMNAS_FAZER = ["fecha-hora", "id jugador", "paquete", "oferta FazerCards", "referencia", "cobrado (Bs)",
   "comprobante", "id pedido", "orden FazerCards", "estado", "actualizado", "detalle"];
 const ORDEN_FAZER_VALIDA = /^[A-Za-z0-9_.:-]{1,80}$/;
-const TEXTO_ESTADO_FAZER = { processing: "⏳ EN PROCESO", completed: "✅ COMPLETADA", failed: "❌ FALLIDA", refund: "↩️ REEMBOLSADA", refunded: "↩️ REEMBOLSADA" };
+// processing/completed/failed/refund: FazerCards; confirmed/partially_completed/cancelled/refunded: Central One
+const TEXTO_ESTADO_FAZER = { processing: "⏳ EN PROCESO", confirmed: "⏳ EN PROCESO", completed: "✅ COMPLETADA", failed: "❌ FALLIDA",
+  partially_completed: "⚠️ ENTREGA PARCIAL", cancelled: "❌ CANCELADA", refund: "↩️ REEMBOLSADA", refunded: "↩️ REEMBOLSADA" };
+// Estados en los que la recarga NO llegó al jugador (se anotan en "errores")
+const ESTADOS_FALLO_FAZER = /^(failed|cancelled|partially_completed|refund)/;
+const TEXTO_FALLO_FAZER = /FALLIDA|CANCELADA|PARCIAL|REEMBOLSADA/;
 // Aviso del webhook que llegó antes de que la orden se anotara: se guarda este tiempo (máximo de CacheService)
 const ESPERA_AVISO_FAZER_S = 21600;
+
+// --- Pestaña de precios ("PreciosBlood") ---
+// Fila 1 = paquete (lo que ve el cliente; se puede renombrar) · fila 2 = precio en Bs (fórmula:
+// costo × dólar × (1 + ganancia %), con los datos de la pestaña "tasa_dolar")
+// Fila 3 = product_id de Central One (lo llena el menú; NO tocar) · fila 4 = costo en USD · fila 5 = stock
+// Una columna sin precio no se vende (no aparece en la tienda).
+const FILA_PRODUCTO = 3;
+const FILA_COSTO = 4;
+// Pestaña "tasa_dolar": B1 = precio del dólar en Bs · B2 = ganancia en % sobre el costo
+const HOJA_TASA = "tasa_dolar";
+const GANANCIA_INICIAL = 4;
+
+// --- Central One (menú 🩸 Blood Strike) ---
+const URL_CENTRALONE = "https://portal.centraloneglobal.com/api/v1";
+// Propiedad del script con la llave (menú 🔑). Basta con el permiso catalog:read.
+const PROPIEDAD_LLAVE_CENTRALONE = "CENTRALONE_API_KEY";
+const JUEGO_CENTRALONE = "bloodstrike";
+// Solo se traen los productos de esta región (los de otras regiones se ignoran)
+const REGION_CENTRALONE = "GLOBAL";
 
 
 // =====================================================================
@@ -428,10 +454,10 @@ function actualizarEstadoFirebase(referencia, nuevoEstado) {
 //    -> registrar_finalizado (éxito, con la orden) o registrar_error (fallo)
 // =====================================================================
 
-// Sin candado: pestaña "PreciosBlood" (o "precios"): fila 1 = paquetes, fila 2 = precios
+// Sin candado: pestaña "PreciosBlood" (o "precios"): fila 1 = paquetes, fila 2 = precios,
+// fila 3 = product_id de Central One (Vercel lo usa para comprar y no lo muestra al cliente)
 function obtenerPrecios() {
-  var libroLocal = SpreadsheetApp.getActiveSpreadsheet();
-  var hojaPrecios = libroLocal.getSheetByName("PreciosBlood") || libroLocal.getSheetByName("precios") || libroLocal.getSheetByName("Precios");
+  var hojaPrecios = hojaDePrecios();
   if (!hojaPrecios) return responder({ status: "error", message: "Falta pestaña de precios" });
 
   var rows = hojaPrecios.getDataRange().getValues();
@@ -439,10 +465,21 @@ function obtenerPrecios() {
   if (rows.length >= 2) {
     for (var i = 0; i < rows[0].length; i++) {
       var titulo = String(rows[0][i] || "").trim();
-      if (titulo) paquetes.push({ diamantes: titulo, precio: rows[1][i] });
+      // Sin precio no se vende: se cobraría 0
+      if (!titulo || !(limpiarMontoVES(rows[1][i]) > 0)) continue;
+      // Un precio calculado llega como número (1144.4): se manda como se escribe en Bs ("1.144,40")
+      var paquete = { diamantes: titulo, precio: typeof rows[1][i] === "number" ? formatoBs(rows[1][i]) : rows[1][i] };
+      var producto = rows.length >= FILA_PRODUCTO ? String(rows[FILA_PRODUCTO - 1][i] || "").trim() : "";
+      if (producto) paquete.producto = producto;
+      paquetes.push(paquete);
     }
   }
   return responder({ status: "success", catalogo: paquetes, version: VERSION_SCRIPT });
+}
+
+function hojaDePrecios() {
+  var libroLocal = SpreadsheetApp.getActiveSpreadsheet();
+  return libroLocal.getSheetByName("PreciosBlood") || libroLocal.getSheetByName("precios") || libroLocal.getSheetByName("Precios");
 }
 
 // Recarga exitosa: fila en "finalizados" y, si vino por la API, fila en "fazer_card"
@@ -536,7 +573,7 @@ function anotarOrdenFazer(datos, fechaHora) {
     textoSeguro(orden),
     textoEstadoFazer(datos.estadoFazer || "processing"),
     fechaHora,
-    "orden aceptada por FazerCards"
+    "orden aceptada por el proveedor"
   ]);
   var cache = CacheService.getScriptCache();
   var guardado = cache.get("fazer_" + orden);
@@ -554,6 +591,15 @@ function estadoFazer(datos) {
   var estado = String(datos.estado || "").toLowerCase();
   if (!ORDEN_FAZER_VALIDA.test(orden) || !/^[a-z_]{1,30}$/.test(estado)) {
     return responder({ status: "error", message: "Datos de FazerCards inválidos" });
+  }
+  // Central One no garantiza el orden de los avisos: uno con "sequence" menor que el último ya anotado
+  // para este pedido es viejo y no debe pisar al nuevo (FazerCards no manda secuencia: 0)
+  var secuencia = Number(datos.secuencia) || 0;
+  if (secuencia) {
+    var cacheSecuencia = CacheService.getScriptCache();
+    var ultima = Number(cacheSecuencia.get("seq_" + orden)) || 0;
+    if (secuencia < ultima) return responder({ status: "success", encontrado: true, ignorado: "aviso anterior al último anotado" });
+    cacheSecuencia.put("seq_" + orden, String(secuencia), ESPERA_AVISO_FAZER_S);
   }
   var fila = buscarFilaFazer(9, orden);
   if (!fila) {
@@ -575,20 +621,32 @@ function aplicarEstadoFazer(fila, estado, evento) {
   var anterior = String(valores[9]);
   var texto = textoEstadoFazer(estado);
   if (anterior === texto) return;
-  var fallo = estado === "failed" || estado.indexOf("refund") === 0;
-  if (fallo && !/FALLIDA|REEMBOLSADA/.test(anterior)) {
-    var motivo = "FazerCards marcó la orden " + valores[8] + " como " + estado + ": la recarga NO llegó al jugador";
+  var fallo = ESTADOS_FALLO_FAZER.test(estado);
+  if (fallo && !TEXTO_FALLO_FAZER.test(anterior)) {
+    var motivo = "El proveedor marcó la orden " + valores[8] + " como " + estado + ": la recarga NO llegó (completa) al jugador";
     registrarError({
       idJugador: valores[1], paquete: valores[2], idPedido: valores[7],
-      fase: "4. RECARGA EN LA API DEL PROVEEDOR (FazerCards) - aviso posterior del webhook",
+      fase: "4. RECARGA EN LA API DEL PROVEEDOR - aviso posterior del webhook",
       motivo: motivo,
       estadoPago: "USADO: hacer la recarga a mano o devolver el pago",
       urlImagen: motivo + " | JUGADOR: " + valores[1] + " | PAQUETE: " + valores[2] + " | REFERENCIA: " + valores[4] + " | PEDIDO: " + valores[7]
     });
   }
+  // Central One: un pedido "failed" puede entregarse después (y se cobra). Si ya estaba en "errores"
+  // para hacerla a mano, se avisa para no recargar dos veces.
+  if (estado === "completed" && /FALLIDA|CANCELADA/.test(anterior)) {
+    var aviso = "ATENCIÓN: la orden " + valores[8] + " figuraba como fallida y el proveedor la ENTREGÓ después: NO hacer la recarga a mano (si ya se hizo, el jugador recibió dos)";
+    registrarError({
+      idJugador: valores[1], paquete: valores[2], idPedido: valores[7],
+      fase: "4. RECARGA EN LA API DEL PROVEEDOR - entrega posterior a un fallo",
+      motivo: aviso,
+      estadoPago: "USADO (correcto): la recarga sí llegó",
+      urlImagen: aviso + " | JUGADOR: " + valores[1] + " | PAQUETE: " + valores[2] + " | REFERENCIA: " + valores[4] + " | PEDIDO: " + valores[7]
+    });
+  }
   hoja.getRange(fila, 10).setValue(texto);
   hoja.getRange(fila, 11).setValue(ahora());
-  hoja.getRange(fila, 12).setValue(textoSeguro("aviso " + String(evento || "de FazerCards") + (fallo ? " - anotado en errores" : "")));
+  hoja.getRange(fila, 12).setValue(textoSeguro("aviso " + String(evento || "del proveedor") + (fallo ? " - anotado en errores" : "")));
 }
 
 function hojaFazer() {
@@ -676,4 +734,240 @@ function limpiarMontoVES(valor) {
     m = m.replace(",", ".");
   }
   return parseFloat(m) || 0;
+}
+
+
+// =====================================================================
+// 6. MENÚ: PRODUCTOS DE CENTRAL ONE EN LA PESTAÑA DE PRECIOS
+//    🔑 guarda la llave (propiedad del script, nunca en la hoja) · 🔄 reemplaza la pestaña de precios
+//    con los productos de Blood Strike de tu catálogo; el precio en Bs se calcula solo con el dólar y
+//    la ganancia de la pestaña "tasa_dolar" (cambias el dólar y todos los precios cambian).
+// =====================================================================
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu("🩸 Blood Strike")
+    .addItem("🔄 Traer productos de Central One", "traerProductosCentralOne")
+    .addItem("🔑 Guardar llave de Central One", "guardarLlaveCentralOne")
+    .addToUi();
+}
+
+function guardarLlaveCentralOne() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt("Llave de Central One",
+    "Pega la llave (empieza por co_live_). Basta con el permiso catalog:read. Se guarda en las propiedades del script, no en la hoja.",
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var llave = r.getResponseText().trim();
+  if (!/^co_live_[A-Za-z0-9_-]{8,200}$/.test(llave)) {
+    ui.alert("Esa no parece una llave de Central One (empieza por co_live_). No se guardó nada.");
+    return;
+  }
+  PropertiesService.getScriptProperties().setProperty(PROPIEDAD_LLAVE_CENTRALONE, llave);
+  ui.alert("✅ Llave guardada. Ahora: menú 🩸 Blood Strike → 🔄 Traer productos de Central One.");
+}
+
+function traerProductosCentralOne() {
+  var ui = SpreadsheetApp.getUi();
+  var llave = PropertiesService.getScriptProperties().getProperty(PROPIEDAD_LLAVE_CENTRALONE);
+  if (!llave) {
+    ui.alert("Primero guarda la llave: menú 🩸 Blood Strike → 🔑 Guardar llave de Central One.");
+    return;
+  }
+  var hoja = hojaDePrecios();
+  if (!hoja) {
+    ui.alert("No encuentro la pestaña de precios (PreciosBlood). No se cambió nada.");
+    return;
+  }
+
+  var respuesta = UrlFetchApp.fetch(URL_CENTRALONE + "/catalog", {
+    headers: { Authorization: "Bearer " + llave }, muteHttpExceptions: true
+  });
+  var codigo = respuesta.getResponseCode();
+  if (codigo !== 200) {
+    var porque = codigo === 401 ? " (llave inválida, revocada o cuenta inactiva)" : codigo === 403 ? " (la llave no tiene el permiso catalog:read)" : codigo === 429 ? " (demasiadas consultas: espera un minuto)" : "";
+    ui.alert("Central One respondió HTTP " + codigo + porque + ". No se cambió nada.");
+    return;
+  }
+  var deBlood = (JSON.parse(respuesta.getContentText()).items || []).filter(function (p) {
+    return String(p.product_family_name + " " + p.name).toLowerCase().replace(/[^a-z0-9]/g, "").indexOf(JUEGO_CENTRALONE) !== -1;
+  });
+  if (!deBlood.length) {
+    ui.alert("Tu catálogo de Central One no tiene productos de Blood Strike habilitados. No se cambió nada.");
+    return;
+  }
+  var productos = deBlood.filter(function (p) { return String(p.region || "").trim().toUpperCase() === REGION_CENTRALONE; });
+  if (!productos.length) {
+    var regiones = deBlood.map(function (p) { return String(p.region || "sin región"); })
+      .filter(function (r, i, lista) { return lista.indexOf(r) === i; });
+    ui.alert("Hay " + deBlood.length + " producto(s) de Blood Strike, pero ninguno de la región " + REGION_CENTRALONE +
+      " (regiones que hay: " + regiones.join(", ") + "). No se cambió nada.");
+    return;
+  }
+  productos.sort(function (a, b) { return Number(a.reseller_price) - Number(b.reseller_price); });
+
+  // Un solo producto por paquete de la tienda (misma clave con la que Vercel reconoce el paquete): si
+  // Central One tiene varios (otra región, otro SKU), queda el que tiene stock y, entre ellos, el más
+  // barato (la lista ya va de menor a mayor precio). Con dos columnas iguales la tienda no vendería ninguna.
+  var elegido = {}, repetidos = [];
+  productos.forEach(function (p) {
+    var clave = clavePaqueteBlood(nombreCortoBlood(p.name));
+    var actual = elegido[clave];
+    if (!actual) { elegido[clave] = p; return; }
+    var mejor = (actual.in_stock === false && p.in_stock !== false) ? p : actual;
+    repetidos.push(mejor === p ? actual : p);
+    elegido[clave] = mejor;
+  });
+  productos = productos.filter(function (p) { return elegido[clavePaqueteBlood(nombreCortoBlood(p.name))] === p; });
+
+  var hojaTasa = hojaDeTasa();
+  var dolar = limpiarMontoVES(hojaTasa.getRange("B1").getValue());
+  var seguir = ui.alert("Traer productos de Central One",
+    "Se reemplaza TODA la pestaña \"" + hoja.getName() + "\" con " + productos.length + " producto(s) de Blood Strike " + REGION_CENTRALONE +
+    (repetidos.length ? " (se quitaron " + repetidos.length + " repetido(s))" : "") + ".\n\n" +
+    "El precio en Bs se calcula solo: costo en USD × dólar (pestaña \"" + HOJA_TASA + "\", B1) + la ganancia (B2). " +
+    "Los productos sin stock quedan sin precio y no se venden.\n\n¿Seguir?",
+    ui.ButtonSet.YES_NO);
+  if (seguir !== ui.Button.YES) return;
+
+  // Fila 2: fórmula en notación R1C1 (Apps Script las escribe en inglés, con comas, sea cual sea el idioma
+  // de la hoja). R[2]C = la celda del costo, 2 filas más abajo en la misma columna. Sin dólar o sin costo, vacía.
+  var tasa = "'" + HOJA_TASA + "'!R1C2", ganancia = "'" + HOJA_TASA + "'!R2C2", costo = "R[" + (FILA_COSTO - 2) + "]C";
+  var formula = "=IF(OR(" + tasa + "=\"\"," + costo + "=\"\"),\"\",ROUND(" + costo + "*" + tasa + "*(1+" + ganancia + "/100),2))";
+  var valores = [[], [], [], [], []];
+  var formulas = [];
+  productos.forEach(function (p) {
+    valores[0].push(textoSeguro(nombreCortoBlood(p.name)));
+    valores[1].push("");
+    valores[2].push(textoSeguro(p.product_id));
+    valores[3].push(Number(p.reseller_price) || "");
+    valores[4].push((p.in_stock === false ? "SIN STOCK" : "con stock") + (p.region ? " · " + textoSeguro(p.region) : ""));
+    formulas.push(p.in_stock === false ? "" : formula);
+  });
+  hoja.clearContents();
+  hoja.getRange(1, 1, 5, productos.length).setValues(valores);
+  hoja.getRange(2, 1, 1, productos.length).setFormulasR1C1([formulas]);
+  hoja.getRange(1, 1, 1, productos.length).setFontWeight("bold");
+  hoja.getRange(2, 1, 1, productos.length).setNumberFormat("#,##0.00");
+  hoja.getRange(FILA_COSTO, 1, 1, productos.length).setNumberFormat("0.0000\" USD\"");
+  hoja.getRange(FILA_PRODUCTO, 1, 3, productos.length).setFontColor("#888888");
+  hoja.getRange(2, 1).setNote("Fila 2: precio en Bs = costo (fila 4) × dólar × (1 + ganancia %). El dólar y la ganancia " +
+    "se cambian en la pestaña \"" + HOJA_TASA + "\". Si escribes un número encima, ese producto queda con precio fijo hasta el próximo 🔄.");
+  hoja.getRange(FILA_PRODUCTO, 1).setNote("Fila 3: product_id de Central One, NO la toques (con él se compra). " +
+    "Fila 4: costo en USD · fila 5: stock (del momento del 🔄). La fila 1 se puede renombrar: el oro como \"105 Oro\" y los pases sin números.");
+  SpreadsheetApp.flush();
+  ui.alert("✅ Listo: " + productos.length + " producto(s)." +
+    (repetidos.length ? " Se quitaron " + repetidos.length + " repetido(s): " + repetidos.slice(0, 8).map(function (p) {
+      return nombreCortoBlood(p.name) + " (" + p.reseller_price + " " + p.currency + (p.region ? ", " + p.region : "") + ")";
+    }).join(", ") + (repetidos.length > 8 ? "…" : "") + "." : "") + (dolar > 0
+    ? " Precios calculados con el dólar a " + formatoBs(dolar) + " Bs y " + hojaTasa.getRange("B2").getValue() + " % de ganancia."
+    : " ⚠️ Falta el precio del dólar: escríbelo en la pestaña \"" + HOJA_TASA + "\", celda B1. Hasta entonces no se vende nada.") +
+    " La tienda tarda hasta ~2 minutos en mostrar los cambios.");
+}
+
+// Pestaña "tasa_dolar" (se crea la primera vez): B1 = dólar en Bs (lo escribes tú) · B2 = ganancia en %
+function hojaDeTasa() {
+  var hoja = obtenerHojaLocal(HOJA_TASA);
+  if (!hoja) {
+    hoja = SpreadsheetApp.getActiveSpreadsheet().insertSheet(HOJA_TASA);
+    hoja.getRange("A1:B3").setValues([
+      ["Precio del dólar (Bs)", ""],
+      ["Ganancia (%)", GANANCIA_INICIAL],
+      ["Cambia B1 o B2 y todos los precios de PreciosBlood se recalculan solos.", ""]
+    ]);
+    hoja.getRange("A1:A2").setFontWeight("bold");
+    hoja.getRange("B1").setNumberFormat("#,##0.00").setBackground("#fff2cc");
+    hoja.getRange("B2").setBackground("#fff2cc");
+    hoja.getRange("A3").setFontColor("#888888");
+    hoja.setColumnWidth(1, 200);
+  }
+  return hoja;
+}
+
+// Nombres de Central One (en inglés) en español. Primero las frases completas y después palabras sueltas.
+// Las palabras temporada, nivel, élite, premium y bolsa NO se cambian: Vercel reconoce cada pase por ellas
+// (PALABRAS_PASES de api/_lib/juegos/bloodstrike.js).
+const TRADUCCIONES_BLOOD = [
+  [/strike\s*pass\s*elite|elite\s*strike\s*pass/ig, "Pase Strike Élite"],
+  [/strike\s*pass\s*premium|premium\s*strike\s*pass/ig, "Pase Strike Premium"],
+  [/lucky\s*bag\s*week(ly)?|weekly\s*lucky\s*bag/ig, "Bolsa de la Suerte Semanal"],
+  [/lucky\s*bag/ig, "Bolsa de la Suerte"],
+  [/season\s*pass/ig, "Pase de Temporada"],
+  [/level\s*up\s*pass|level\s*pass/ig, "Pase de Nivel"],
+  [/weekly\s*card/ig, "Tarjeta Semanal"],
+  [/monthly\s*card/ig, "Tarjeta Mensual"],
+  [/weekly\s*(bundle|pack)/ig, "Paquete Semanal"],
+  [/monthly\s*(bundle|pack)/ig, "Paquete Mensual"],
+  [/\bweekly\b/ig, "Semanal"],
+  [/\bmonthly\b/ig, "Mensual"],
+  [/\bweek\b/ig, "Semana"],
+  [/\bmonth\b/ig, "Mes"],
+  [/\bpass\b/ig, "Pase"],
+  [/\belite\b/ig, "Élite"],
+  [/\b(bundle|pack)\b/ig, "Paquete"],
+  [/\bcard\b/ig, "Tarjeta"],
+  [/\bmembership\b/ig, "Membresía"],
+  [/\bgift\b/ig, "Regalo"],
+  [/\bbag\b/ig, "Bolsa"],
+  // Nombres de eventos y colaboraciones (sin números: con un número la tienda lo mostraría como oro)
+  [/\b7DS\b|seven\s*deadly\s*sins/ig, "Siete Pecados Capitales"],
+  [/attack\s*on\s*titan/ig, "Ataque a los Titanes"],
+  [/golden\s*elegy/ig, "Elegía Dorada"],
+  [/eternal\s*valor/ig, "Valor Eterno"],
+  [/\bunplugged\b/ig, "Desconectado"],
+  [/\btitan\b/ig, "Titán"],
+  [/ultra\s*skin/ig, "Skin Ultra"],
+];
+
+// Formas completas de nombre (en inglés el orden es otro): [patrón, cómo se arma en español]. Las partes
+// que captura el patrón se traducen con TRADUCCIONES_BLOOD. Ninguna usa temporada/nivel/élite/premium/
+// bolsa/lucky: con esas palabras la tienda lo confundiría con un pase.
+const FORMAS_BLOOD = [
+  // "Attack on Titan Featured Titan II Stash Voucher" -> "Cupón de Botín Titán II (Ataque a los Titanes)"
+  [/^(.*?)\s*featured\s+(.*?)\s*stash\s+voucher$/i, function (a, b) { return "Cupón de Botín " + (b ? b + (a ? " (" + a + ")" : "") : a); }],
+  // "Tokyo Revengers Featured Valor Voucher II" -> "Cupón de Valor Tokyo Revengers II"
+  [/^(.*?)\s*featured\s+valor\s+voucher\s*(.*)$/i, function (a, b) { return "Cupón de Valor " + a + (b ? " " + b : ""); }],
+  // "Tokyo Revengers Upgrade Point Chest" -> "Cofre de Mejora Tokyo Revengers"
+  [/^(.*?)\s*upgrade\s+point\s+chest$/i, function (a) { return "Cofre de Mejora " + a; }],
+  // "Ultra Skin Lucky Chest" -> "Cofre de la Suerte Skin Ultra"
+  [/^(.*?)\s*lucky\s+chest$/i, function (a) { return "Cofre de la Suerte " + a; }],
+  // "Pre-order for Eternal Valor Unplugged" / "Golden Elegy Eternal Valor Pre-order" -> "Preventa …"
+  [/^pre-?order\s+(?:for\s+)?(.*)$/i, function (a) { return "Preventa " + a; }],
+  [/^(.*?)\s*pre-?order$/i, function (a) { return "Preventa " + a; }],
+  // "Enable Cornucopia" -> "Activar Cornucopia"
+  [/^enable\s+(.*)$/i, function (a) { return "Activar " + a; }],
+];
+
+function traducirPartesBlood(texto) {
+  var t = String(texto || "");
+  TRADUCCIONES_BLOOD.forEach(function (par) { t = t.replace(par[0], par[1]); });
+  return t.replace(/\s+/g, " ").trim();
+}
+
+function traducirNombreBlood(texto) {
+  for (var i = 0; i < FORMAS_BLOOD.length; i++) {
+    var partes = String(texto).match(FORMAS_BLOOD[i][0]);
+    if (partes) return FORMAS_BLOOD[i][1].apply(null, partes.slice(1).map(traducirPartesBlood)).replace(/\s+/g, " ").trim();
+  }
+  return traducirPartesBlood(texto);
+}
+
+// "Blood Strike 105 Gold" -> "105 Oro" (como espera la tienda); "Blood Strike Season Pass" -> "Pase de Temporada"
+function nombreCortoBlood(nombre) {
+  var original = String(nombre || "").trim();
+  var t = original.replace(/blood\s*strike/ig, "").replace(/^[\s\-–|:·]+|[\s\-–|:·]+$/g, "").trim();
+  var numero = t.match(/\d[\d.,]*/);
+  if (numero && /gold|oro|\bbc\b|coin|moneda/i.test(t)) return numero[0] + " Oro";
+  return traducirNombreBlood(t) || original;
+}
+
+// Clave con la que la tienda reconoce un paquete. DEBE ser igual a clavePaquete de
+// api/_lib/juegos/bloodstrike.js: el oro por su número ("105 Oro" -> "105") y los pases por una palabra.
+function clavePaqueteBlood(texto) {
+  var t = String(texto || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  var nombre = t.replace(/oro|gold|monedas|diamantes|blood strike|\bbc\b/g, " ").replace(/[^a-z]+/g, " ").trim();
+  if (!nombre) return t.replace(/[^0-9]/g, "");
+  var pases = [[/elite/, "strike_pass_elite"], [/premium/, "strike_pass_premium"], [/bolsa|lucky/, "lucky_bag_week"],
+    [/temporada|season/, "season_pass"], [/nivel|level/, "level_up_pass"]];
+  for (var i = 0; i < pases.length; i++) if (pases[i][0].test(nombre)) return pases[i][1];
+  return nombre.replace(/ /g, "_");
 }
