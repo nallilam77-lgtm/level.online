@@ -94,10 +94,11 @@ const ESTADO_API = "API CENTRAL ONE";
 const OFERTA_FAZER_VALIDA = /^[A-Za-z0-9_.:-]{1,80}$/;
 // confirmed/processing/completed/failed/partially_completed/cancelled/refunded: Central One
 // (processing/completed/failed/refund también son de FazerCards: órdenes anteriores)
-const TEXTO_ESTADO_FAZER = { processing: "⏳ EN PROCESO", confirmed: "⏳ EN PROCESO", completed: "✅ COMPLETADA", failed: "❌ FALLIDA",
-  partially_completed: "⚠️ ENTREGA PARCIAL", cancelled: "❌ CANCELADA", refund: "↩️ REEMBOLSADA", refunded: "↩️ REEMBOLSADA" };
+const TEXTO_ESTADO_FAZER = { processing: "⏳ EN PROCESO", confirmed: "⏳ EN PROCESO", completed: "✅ COMPLETADA", delivered: "✅ COMPLETADA",
+  failed: "❌ FALLIDA", partially_completed: "⚠️ ENTREGA PARCIAL", partially_delivered: "⚠️ ENTREGA PARCIAL", cancelled: "❌ CANCELADA",
+  refund: "↩️ REEMBOLSADA", refunded: "↩️ REEMBOLSADA" };
 // Estados en los que la recarga NO llegó (completa) al jugador: se anotan en "errores"
-const ESTADOS_FALLO_FAZER = /^(failed|cancelled|partially_completed|refund)/;
+const ESTADOS_FALLO_FAZER = /^(failed|cancelled|partially_|refund)/;
 const TEXTO_FALLO_FAZER = /FALLIDA|CANCELADA|PARCIAL|REEMBOLSADA/;
 // Aviso del webhook que llegó antes de que la orden se anotara: se guarda este tiempo (máximo de CacheService)
 const ESPERA_AVISO_FAZER_S = 21600;
@@ -937,7 +938,7 @@ function aplicarEstadoFazer(fila, estado, evento) {
   }
   // Central One: un pedido "failed" puede entregarse después (y se cobra). Si ya estaba en "errores"
   // para hacerla a mano, se avisa para no recargar dos veces.
-  if (estado === "completed" && /FALLIDA|CANCELADA/.test(anterior)) {
+  if ((estado === "completed" || estado === "delivered") && /FALLIDA|CANCELADA/.test(anterior)) {
     registrarError(datosError("4. RECARGA DE FREE FIRE EN LA API DEL PROVEEDOR (Central One) - entrega posterior a un fallo",
       "ATENCIÓN: el pedido " + valores[9] + " figuraba como fallido y el proveedor lo ENTREGÓ después: NO hacer la recarga a mano (si ya se hizo, el jugador recibió dos)",
       "USADO (correcto): la recarga sí llegó"));

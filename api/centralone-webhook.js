@@ -39,6 +39,10 @@ const PEDIDO_ROBLOX = /^rbx-[0-9a-f-]{36}$/;
 // Idempotency-Key de una recarga de Free Fire (api/_lib/juegos/freefire.js): "ff-<idPedido>" o, si el
 // paquete son varios pedidos (220 = dos de 110), "ff-<idPedido>-1", "-2"…
 const PEDIDO_FREEFIRE = /^ff-[0-9a-f-]{36}(-[1-9])?$/;
+// Idempotency-Key de una recarga de Blood Strike (api/_lib/juegos/bloodstrike.js): el idPedido tal cual
+const PEDIDO_BLOOD = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Estados con los que un pedido ya terminó (para eventos de pedido con otro nombre, p. ej. order.completed)
+const ESTADOS_FINALES = new Set(['completed', 'delivered', 'failed', 'cancelled', 'partially_completed', 'partially_delivered', 'refunded']);
 const AL_SCRIPT = { tiempoMs: 8500, intentoMs: 8500 };
 
 export default async function handler(req, res) {
@@ -74,44 +78,57 @@ export default async function handler(req, res) {
   }
   const evento = String(aviso?.event ?? '');
   const ordenCentralOne = String(aviso?.order?.reference_code ?? '');
-  const estado = ESTADO_POR_EVENTO[evento] || String(aviso?.order?.status ?? '').toLowerCase();
-  // webhook.test, avisos de saldo o de catálogo, order.created…: nada que anotar
-  if (!Object.hasOwn(ESTADO_POR_EVENTO, evento) || !ORDEN_VALIDA.test(ordenCentralOne) || !ESTADO_VALIDO.test(estado)) {
+  const estadoPedido = String(aviso?.order?.status ?? '').toLowerCase();
+  const estado = ESTADO_POR_EVENTO[evento] || estadoPedido;
+  const idPedido = String(aviso?.order?.idempotency_key ?? '');
+  // Qué llegó (sin datos del jugador ni códigos): para revisar en los logs de Vercel si los avisos llegan
+  console.info(`📨 centralone-webhook: ${evento || 'sin evento'} · pedido ${ordenCentralOne || '?'} · estado ${estadoPedido || '?'} · idempotency_key ${idPedido ? idPedido.slice(0, 7) + '…' : 'NO VIENE'}`);
+  // webhook.test, avisos de saldo o de catálogo, order.created…: nada que anotar. Un evento de pedido con
+  // otro nombre (p. ej. order.completed) se anota si el pedido ya terminó.
+  const eventoDeCierre = Object.hasOwn(ESTADO_POR_EVENTO, evento) || (evento.startsWith('order.') && ESTADOS_FINALES.has(estadoPedido));
+  if (!eventoDeCierre || !ORDEN_VALIDA.test(ordenCentralOne) || !ESTADO_VALIDO.test(estado)) {
     return res.status(200).json({ ok: true, ignorado: true });
   }
 
-  const idPedido = String(aviso?.order?.idempotency_key ?? '');
   if (PEDIDO_ROBLOX.test(idPedido)) return avisoRoblox(res, { aviso, evento, ordenCentralOne, idPedido });
 
-  // Free Fire o Blood Strike: las dos hojas anotan el estado igual (acción estado_fazer)
-  const freeFire = PEDIDO_FREEFIRE.test(idPedido);
-  const juego = freeFire ? 'Free Fire' : 'Blood Strike';
-  const variable = freeFire ? 'SCRIPT_RECARGAS_URL' : 'SCRIPT_BLOOD';
-  const URL_HOJA = (process.env[variable] || '').trim();
-  if (!URL_HOJA) {
-    console.error(`🚨 centralone-webhook: falta ${variable} en Vercel (aviso de un pedido de ${juego})`);
+  // Free Fire o Blood Strike: las dos hojas anotan el estado igual (acción estado_fazer) y solo la que
+  // tiene el pedido en "fazer_card" lo aplica. Con idempotency_key se sabe a cuál va; sin ella (o con
+  // una que no se reconoce) se manda a las dos, como el webhook de FazerCards.
+  const hojas = [
+    { juego: 'Free Fire', variable: 'SCRIPT_RECARGAS_URL' },
+    { juego: 'Blood Strike', variable: 'SCRIPT_BLOOD' },
+  ].filter((h) => !idPedido || !(PEDIDO_FREEFIRE.test(idPedido) || PEDIDO_BLOOD.test(idPedido))
+    || (h.juego === 'Free Fire') === PEDIDO_FREEFIRE.test(idPedido));
+  const faltan = hojas.filter((h) => !(process.env[h.variable] || '').trim());
+  if (faltan.length) {
+    console.error(`🚨 centralone-webhook: falta ${faltan.map((h) => h.variable).join(' y ')} en Vercel (aviso del pedido ${ordenCentralOne})`);
     return res.status(503).json({ ok: false });
   }
-  try {
-    const r = await llamarScript(URL_HOJA, {
-      accion: 'estado_fazer', ordenFazer: ordenCentralOne, estado, evento,
-      idEvento: String(aviso.event_id ?? '').slice(0, 80),
-      // Los avisos de la forma original no traen sequence: 0 = sin orden que comprobar
-      secuencia: Number.isInteger(aviso.sequence) ? aviso.sequence : 0,
-    }, AL_SCRIPT);
-    if (r?.status === 'success') {
-      if (!r.encontrado) console.info(`ℹ️ centralone-webhook: el pedido ${ordenCentralOne} (${estado}) aún no está en "fazer_card": guardado para cuando aparezca`);
-      return res.status(200).json({ ok: true });
-    }
-    // "ocupado": no se anotó nada, que Central One lo repita. Otro error (p. ej. un Apps Script sin
-    // estado_fazer): repetir no lo arreglaría.
-    if (r?.ocupado) throw new Error('ocupado');
-    console.error(`⚠️ centralone-webhook: ${juego} respondió "${r?.message || 'respuesta inválida'}" a estado_fazer (pedido ${ordenCentralOne}, ${estado})`);
+  const cuerpo = {
+    accion: 'estado_fazer', ordenFazer: ordenCentralOne, estado, evento,
+    idEvento: String(aviso.event_id ?? '').slice(0, 80),
+    // Los avisos de la forma original no traen sequence: 0 = sin orden que comprobar
+    secuencia: Number.isInteger(aviso.sequence) ? aviso.sequence : 0,
+  };
+  // En paralelo: Central One corta a los 10 s
+  const resultados = await Promise.all(hojas.map((h) => llamarScript(process.env[h.variable].trim(), cuerpo, AL_SCRIPT)
+    .then((r) => ({ ...h, r }), (error) => ({ ...h, fallo: error.message }))));
+  const encontrado = resultados.find((x) => x.r?.status === 'success' && x.r.encontrado);
+  if (encontrado) {
+    console.info(`✅ centralone-webhook: pedido ${ordenCentralOne} (${estado}) anotado en "fazer_card" de ${encontrado.juego}`);
     return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error(`❌ centralone-webhook: no se pudo anotar el pedido de ${juego} ${ordenCentralOne} (${estado}): ${error.message}. Central One lo reintentará.`);
+  }
+  // "ocupado" o sin respuesta: no se anotó nada, que Central One lo repita. Otro error (p. ej. un Apps
+  // Script sin estado_fazer): repetir no lo arreglaría.
+  const reintentar = resultados.filter((x) => x.fallo || x.r?.ocupado);
+  if (reintentar.length) {
+    console.error(`❌ centralone-webhook: no se pudo anotar el pedido ${ordenCentralOne} (${estado}) en ${reintentar.map((x) => `${x.juego} (${x.fallo || 'ocupado'})`).join(', ')}. Central One lo reintentará.`);
     return res.status(503).json({ ok: false });
   }
+  resultados.filter((x) => x.r?.status !== 'success').forEach((x) => console.error(`⚠️ centralone-webhook: ${x.juego} respondió "${x.r?.message || 'respuesta inválida'}" a estado_fazer (pedido ${ordenCentralOne}, ${estado})`));
+  console.info(`ℹ️ centralone-webhook: el pedido ${ordenCentralOne} (${estado}) aún no está en ninguna "fazer_card" (${hojas.map((h) => h.juego).join(' / ')}): guardado para cuando aparezca`);
+  return res.status(200).json({ ok: true });
 }
 
 // Pedido de un código de Roblox. El código nunca se escribe en los logs.
