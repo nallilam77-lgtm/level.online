@@ -1,11 +1,14 @@
 // Roblox: precios, códigos de descuento y compra (el Apps Script de GAS_URL, apps-script/roblox.gs,
 // verifica el pago y entrega). Lo usan api/juego.js (precios, descuento) y api/recargar.js (recargar).
+// Primero se entregan los códigos guardados en la pestaña "Codigos"; si no quedan y el paquete tiene
+// product_id (fila 3 de PreciosRoblox), el código se compra en Central One (ver comprarEnCentralOne).
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 import { limpiarMontoVES } from '../recarga-comun.js';
+import { catalogo as catalogoCentralOne, datosParaPedido, crearPedidoCentralOne, esperarCodigo } from '../centralone.js';
 
 // Debe ser menor que maxDuration de api/recargar.js en vercel.json (180 s).
 // La compra no se reintenta: el Apps Script de Roblox no tiene idPedido y repetirla podría duplicarla.
@@ -16,6 +19,16 @@ const POCOS_CODIGOS = 3;
 // Completar un pago insuficiente: la clave que recibe el cliente (la hoja solo guarda su huella SHA-256)
 const CLAVE_COMPLEMENTO = /^[A-Za-z0-9_-]{32,64}$/;
 const huella = (texto) => createHash('sha256').update(String(texto)).digest('hex');
+
+// Compra en Central One (variable roblox_nuevo, con codes:read; sin ella, como antes: solo los códigos
+// guardados). Todo cabe en maxDuration (180 s): la espera del código termina a los 150 s de la compra.
+const LIMITE_COMPRA_API_MS = 150000;
+const TIEMPO_PEDIDO_CENTRALONE_MS = 30000;
+// entregar_api, liberar_api y nota_api de roblox.gs miran el estado de la fila antes de tocar nada:
+// repetirlas es seguro
+const ESCRITURA_IDEMPOTENTE = { tiempoMs: 20000, intentoMs: 10000, reintentos: 1, reintentarTrasTimeout: true };
+const PRODUCTO_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const llaveRoblox = () => (process.env.roblox_nuevo || '').trim();
 
 // CORS: solo tu dominio (igual que vercel.json)
 function cabecerasCors(res) {
@@ -41,20 +54,37 @@ async function obtenerPreciosRoblox(scriptUrl) {
 
 // Stock de cada paquete para el cliente: nunca la cantidad exacta de códigos del inventario,
 // solo 'disponible', 'pocos' o 'agotado'. Sin datos de stock (Apps Script anterior) → {}.
-function estadoStock(stock) {
+// Sin códigos guardados, un paquete con product_id sigue a la venta si Central One tiene stock.
+async function estadoStock({ stock, productos } = {}) {
   if (!stock || typeof stock !== 'object') return {};
   const estados = {};
   for (const [producto, cantidad] of Object.entries(stock)) {
     const n = Number(cantidad) || 0;
     estados[producto] = n <= 0 ? 'agotado' : n <= POCOS_CODIGOS ? 'pocos' : 'disponible';
   }
+  const apiKey = llaveRoblox();
+  const deCentralOne = Object.keys(estados).filter((p) => estados[p] === 'agotado' && PRODUCTO_VALIDO.test(String(productos?.[p] || '')));
+  if (apiKey && deCentralOne.length) {
+    let items = null;
+    try {
+      items = await catalogoCentralOne(apiKey);
+    } catch (error) {
+      console.error('Roblox: no se pudo leer el catálogo de Central One para el stock:', error.message);
+    }
+    for (const p of deCentralOne) {
+      const item = items?.find((i) => i?.product_id === productos[p]);
+      // Sin catálogo no se sabe: se deja vender (la compra lo comprueba antes de pedir nada)
+      if (!items || (item && item.in_stock !== false)) estados[p] = 'disponible';
+    }
+  }
   return estados;
 }
 
 // Catálogo en lista para la acción "descuento" (misma caché que la acción precios)
 async function catalogoRoblox() {
-  const { precios, stock } = await obtenerPreciosRoblox(process.env.GAS_URL);
-  const estados = estadoStock(stock);
+  const datos = await obtenerPreciosRoblox(process.env.GAS_URL);
+  const { precios } = datos;
+  const estados = await estadoStock(datos);
   return Object.entries(precios).map(([producto, precio]) => ({ producto, precio, ...(estados[producto] && { stock: estados[producto] }) }));
 }
 
@@ -77,7 +107,8 @@ async function precios(req, res) {
   try {
     const datos = await obtenerPreciosRoblox(scriptUrl);
     cabecerasCachePrecios(res);
-    return res.status(200).json({ status: 'success', precios: datos.precios, stock: estadoStock(datos.stock) });
+    // Los product_id de Central One (datos.productos) nunca van al navegador
+    return res.status(200).json({ status: 'success', precios: datos.precios, stock: await estadoStock(datos) });
   } catch (error) {
     console.error('Error al obtener precios de Roblox:', error.message);
     return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
@@ -109,6 +140,7 @@ function respuestaCompra(data, clave) {
 // =========================================================================
 
 export async function recargar(req, res) {
+  const inicio = Date.now();
   cabecerasCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') {
@@ -116,7 +148,7 @@ export async function recargar(req, res) {
   }
 
   // Segunda (o tercera...) referencia de un pago que no alcanzó
-  if (req.body?.tokenComplemento !== undefined) return completarCompra(req, res);
+  if (req.body?.tokenComplemento !== undefined) return completarCompra(req, res, inicio);
 
   const { tipo, referencia, user, producto, url_capture } = req.body || {};
   // COMPATIBILIDAD TEMPORAL: la página anterior pedía los precios con POST /api/roblox
@@ -175,6 +207,8 @@ export async function recargar(req, res) {
       tipo: 'compra', referencia: String(referencia), user: usuario, producto: String(producto),
       url_capture: textoParaHoja(url_capture || 'Sin comprobante'), idPedido, claveHash: huella(clave),
       ...(desc && { montoACobrar, codigoDescuento: desc.codigo }),
+      // Sin códigos guardados, roblox.gs reserva el pago y responde "comprar" (solo si hay llave)
+      ...(llaveRoblox() && { api: true }),
     });
 
     // Apps Script verifica el pago y la entrega, puede tardar más. Sin reintento
@@ -188,10 +222,11 @@ export async function recargar(req, res) {
         desc ? `| código ${desc.codigo} (${montoACobrar} Bs, pedido ${idPedido}): si se entregó, anotar el uso a mano` : '');
       return res.status(202).json({ status: 'error', message: 'Fallo técnico momentáneo: tu compra quedó en proceso. Si en 5 minutos no la recibes, escríbenos por WhatsApp.' });
     }
+    if (data?.status === 'comprar') data = await comprarEnCentralOne({ scriptUrl, idPedido, productId: data.productId, usuario, inicio });
 
     // Una compra rechazada (pago no encontrado, ya usado, insuficiente...) cuenta como intento fallido.
-    // "Fallo técnico" no cuenta: el pago sí existía y quedó en proceso.
-    if (data?.status !== 'success' && !String(data?.message || '').toLowerCase().includes('fallo técnico')) {
+    // "Fallo técnico" no cuenta: el pago sí existía y quedó en proceso. Tampoco lo que falló en Central One.
+    if (data?.status !== 'success' && !data?.sinCulpa && !String(data?.message || '').toLowerCase().includes('fallo técnico')) {
       await registrarFallo(clavesLimite);
     }
 
@@ -215,7 +250,7 @@ export async function recargar(req, res) {
  * salen de la pestaña "por_completar" (el navegador no puede cambiarlos), y si ya alcanza, el código
  * se reserva ANTES de gastar el pago nuevo. Igual que la compra, nunca se reintenta.
  */
-async function completarCompra(req, res) {
+async function completarCompra(req, res, inicio) {
   try {
     const clave = String(req.body?.tokenComplemento ?? '');
     const referencia = String(req.body?.referencia ?? '');
@@ -238,14 +273,18 @@ async function completarCompra(req, res) {
     const idPedido = `rbx-${randomUUID()}`;
     let data;
     try {
-      data = await llamarScript(scriptUrl, conToken({ tipo: 'completar', claveHash, referencia, idPedido }), { tiempoMs: TIEMPO_COMPRA_MS });
+      data = await llamarScript(scriptUrl, conToken({ tipo: 'completar', claveHash, referencia, idPedido, ...(llaveRoblox() && { api: true }) }), { tiempoMs: TIEMPO_COMPRA_MS });
     } catch (error) {
       if (!error.tiempoAgotado) throw error;
       console.error(`⚠️ Completar pago de Roblox sin respuesta a tiempo | REF: ${referencia} | pedido ${idPedido} | clave ${claveHash.slice(0, 12)}…: revisar "por_completar" y "Exitosas"`);
       return res.status(202).json({ status: 'error', message: 'Fallo técnico momentáneo: tu compra quedó en proceso. Si en 5 minutos no la recibes, escríbenos por WhatsApp con tus referencias.' });
     }
 
-    if (data?.status !== 'success' && !data?.insuficiente) await registrarFallo(clavesLimite);
+    if (data?.status === 'comprar') {
+      data = await comprarEnCentralOne({ scriptUrl, idPedido, productId: data.productId, usuario: String(data.usuario || ''), inicio });
+    }
+
+    if (data?.status !== 'success' && !data?.insuficiente && !data?.sinCulpa) await registrarFallo(clavesLimite);
 
     // Entregado con código de descuento: +1 uso y la comisión del creador (pestaña "Descuentos")
     if (data?.status === 'success' && data.codigoDescuento) {
@@ -260,4 +299,74 @@ async function completarCompra(req, res) {
     console.error('Error al completar un pago de Roblox:', error.message);
     return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
   }
+}
+
+/**
+ * Sin códigos guardados: roblox.gs ya dejó el pago "En proceso" y el pedido en la pestaña "pedidos_api"
+ * (respondió status "comprar" con el product_id). Aquí se compra el código en Central One y:
+ *  - llegó el código    → entregar_api: pago(s) "Usado", venta en "Exitosas" y el código para el cliente.
+ *  - no se compró       → liberar_api: el pago vuelve a "Verificado" (el cliente puede usarlo en otro paquete).
+ *  - no se sabe o tarda → el pago sigue "En proceso"; el aviso de Central One (api/centralone-webhook.js)
+ *                         anota el código y "pedidos_api" dice que hay que enviarlo por WhatsApp.
+ * La Idempotency-Key es el idPedido: repetir el pedido nunca compra dos códigos.
+ * Devuelve lo mismo que roblox.gs para respuestaCompra (sinCulpa: no cuenta como intento fallido).
+ */
+async function comprarEnCentralOne({ scriptUrl, idPedido, productId, usuario, inicio }) {
+  const apiKey = llaveRoblox();
+  const avisar = (tipo, datos) => llamarScript(scriptUrl, conToken({ tipo, idPedido, ...datos }), ESCRITURA_IDEMPOTENTE)
+    .catch((error) => ({ status: 'error', message: error.message }));
+  const enProceso = async (nota) => {
+    const r = await avisar('nota_api', { texto: textoParaHoja(nota, 400) });
+    if (r?.status !== 'success') console.error(`⚠️ Roblox: no se pudo anotar en "pedidos_api" el pedido ${idPedido}: ${nota}`);
+    return { status: 'error', sinCulpa: true, message: 'Fallo técnico momentáneo: tu compra quedó en proceso. Si en 5 minutos no recibes tu código, escríbenos por WhatsApp.' };
+  };
+  // No se compró nada: el pago vuelve a quedar libre
+  const noComprado = async (motivo) => {
+    console.error(`❌ Roblox (Central One), pedido ${idPedido}: ${motivo} → se libera el pago.`);
+    const r = await avisar('liberar_api', { motivo: textoParaHoja(motivo, 400) });
+    if (r?.status !== 'success') {
+      console.error(`🚨 Roblox: no se pudo liberar el pago del pedido ${idPedido} (${r?.message}): sigue "En proceso". Revisar "pedidos_api".`);
+      return { status: 'error', sinCulpa: true, message: 'Fallo técnico momentáneo: no pudimos completar tu compra y tu pago quedó en revisión. Escríbenos por WhatsApp con tu referencia.' };
+    }
+    return { status: 'error', agotado: true, sinCulpa: true, message: '⚠️ Este paquete se acaba de agotar. Tu pago no se usó: elige otro paquete o escríbenos por WhatsApp.' };
+  };
+
+  if (!apiKey) return noComprado('falta la variable roblox_nuevo en Vercel');
+  if (!PRODUCTO_VALIDO.test(String(productId || ''))) return noComprado(`product_id inválido en la fila 3 de PreciosRoblox ("${String(productId).slice(0, 60)}")`);
+
+  // ¿Sigue en el catálogo y con stock? (antes de gastar saldo)
+  const datos = await datosParaPedido({ apiKey, productId, idJugador: usuario });
+  if (datos.error) return noComprado(datos.error);
+
+  const orden = await crearPedidoCentralOne({
+    apiKey, productId, payload: datos.payload, idempotencia: idPedido, nota: `Level Up ${idPedido}`, tiempoMs: TIEMPO_PEDIDO_CENTRALONE_MS,
+  });
+  if (orden.tipo === 'rechazo') {
+    if (orden.codigo === 'insufficient_balance') console.error('🚨 Central One: SIN SALDO para comprar códigos de Roblox. Recargar saldo en el portal.');
+    return noComprado(orden.motivo);
+  }
+  if (orden.tipo === 'incierto') {
+    console.error(`⚠️ Roblox (Central One), pedido ${idPedido}: ${orden.motivo}`);
+    return enProceso(`SIN CONFIRMAR: ${orden.motivo} Buscar en el portal de Central One la nota "Level Up ${idPedido}": si existe, el código llega solo por el aviso.`);
+  }
+
+  const { id: idOrden, referencia } = orden.orden;
+  console.info(`✅ Central One aceptó el pedido ${referencia} (${orden.orden.total}) de Roblox para ${usuario}`);
+  const espera = await esperarCodigo({ apiKey, idOrden, limite: inicio + LIMITE_COMPRA_API_MS });
+  if (espera.fallo) return noComprado(`${espera.fallo}, pedido ${referencia}`);
+  if (!espera.codigo) {
+    console.error(`⚠️ Roblox: pedido ${referencia} pagado en Central One pero ${espera.pendiente}`);
+    return enProceso(`PAGADO en Central One (pedido ${referencia}) pero ${espera.pendiente}: el código llega por el aviso. ENVIARLO POR WHATSAPP.`);
+  }
+
+  const entrega = await avisar('entregar_api', { codigo: espera.codigo, ordenCentralOne: referencia, enPagina: true });
+  if (entrega?.status !== 'success') {
+    // El código ya está comprado con el pago del cliente: lo recibe igual
+    console.error(`🚨 Roblox: código entregado en la página pero NO anotado (pedido ${idPedido}, Central One ${referencia}, usuario ${usuario}): ${entrega?.message}. Marcar el pago "Usado" y anotar la venta a mano.`);
+  }
+  return {
+    status: 'success', code: espera.codigo, message: '¡Código canjeado con éxito!',
+    // Para anotar el uso del código de descuento al completar un pago (no llegan al cliente)
+    usuario: entrega?.usuario, precio: entrega?.precio, codigoDescuento: entrega?.codigoDescuento,
+  };
 }

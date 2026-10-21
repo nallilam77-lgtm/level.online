@@ -5,9 +5,20 @@
 // Implementar > Gestionar implementaciones > editar (lápiz) > Versión: "Nueva versión" > Implementar.
 // Así la URL /exec NO cambia y no hay que tocar Vercel.
 //
-// Pestañas de este libro: "PreciosRoblox" (fila 1 paquetes, fila 2 precios), "Codigos" (una
-// columna por paquete) y "Exitosas" (A fecha, B usuario, C paquete, D referencia, E código,
-// F comprobante, G cobrado Bs, H código de descuento, I id del pedido).
+// Pestañas de este libro: "PreciosRoblox" (fila 1 paquetes, fila 2 precios, fila 3 product_id de
+// Central One, fila 4 costo USD, fila 5 stock: las llena el menú 🎮 Roblox → 🔄), "Codigos" (una
+// columna por paquete), "Exitosas" (A fecha, B usuario, C paquete, D referencia, E código,
+// F comprobante, G cobrado Bs, H código de descuento, I id del pedido, J origen del código),
+// "pedidos_api" (compras en Central One) y "tasa_dolar" (B1 dólar en Bs, B2 ganancia %).
+//
+// Códigos: primero se entregan los guardados en "Codigos". Si no queda ninguno y el paquete tiene
+// product_id (fila 3), con Vercel nuevo (manda api: true) se compra en Central One:
+//   1. Aquí: el pago queda "En proceso" y el pedido en "pedidos_api"; se responde status "comprar".
+//   2. Vercel compra el código (variable roblox_nuevo) y espera a que llegue.
+//   3. entregar_api: pago(s) "Usado", venta en "Exitosas" y el código para el cliente.
+//      liberar_api: no se compró nada; el pago vuelve a "Verificado".
+//      Si el código tarda, llega por el aviso de Central One (api/centralone-webhook.js) y "pedidos_api"
+//      dice "📲 ENVIAR POR WHATSAPP". Las tres acciones miran el estado de la fila: repetirlas no cambia nada.
 // Los pagos se leen de la hoja de pagos compartida (ID_HOJA_PAGOS: C referencia, D monto, E estado).
 //
 // Seguridad (Configuración del proyecto > Propiedades del script):
@@ -61,6 +72,30 @@ const ESTADO_PAGO_POR_COMPLETAR = "Por completar";
 const HORAS_PARA_COMPLETAR = 48;
 const MAX_PAGOS_POR_PEDIDO = 4;
 
+// --- Central One (cuando no quedan códigos guardados) ---
+const URL_CENTRALONE = "https://portal.centraloneglobal.com/api/v1";
+// Llave SOLO con catalog:read, para el menú 🔄 (la que compra vive en Vercel, variable roblox_nuevo)
+const PROPIEDAD_LLAVE_CENTRALONE = "CENTRALONE_API_KEY";
+// Regiones de las tarjetas que se traen (solo GLOBAL: sirven en cualquier país)
+const REGIONES_ROBLOX = ["GLOBAL"];
+const FILA_PRODUCTO = 3;
+const FILA_COSTO = 4;
+const HOJA_TASA = "tasa_dolar";
+const GANANCIA_INICIAL = 4;
+const PRODUCTO_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// idPedido que genera Vercel (api/_lib/juegos/roblox.js): es la Idempotency-Key en Central One
+const PEDIDO_API_VALIDO = /^rbx-[0-9a-f-]{36}$/;
+const HOJA_PEDIDOS_API = "pedidos_api";
+const COLUMNAS_PEDIDOS_API = ["fecha-hora", "id pedido", "usuario", "paquete", "cobrado (Bs)", "referencias", "código descuento",
+  "comprobante", "product_id", "estado", "pedido Central One", "código entregado", "actualizado", "datos internos (no tocar)"];
+// Columna J (estado). Empieza por ⏳ mientras se compra: solo entonces entregar_api y liberar_api cambian algo.
+const ESTADO_COMPRANDO = "⏳ COMPRANDO EN CENTRAL ONE";
+const ESTADO_ENTREGADO_PAGINA = "✅ ENTREGADO EN LA PÁGINA";
+const ESTADO_ENTREGADO_WHATSAPP = "📲 ENVIAR POR WHATSAPP: el código llegó cuando el cliente ya no esperaba en la página";
+const ESTADO_LIBERADO = "↩️ NO SE COMPRÓ (pago liberado): ";
+// Los avisos de Central One esperan como mucho 10 s: el candado no puede esperar más
+const ESPERA_CANDADO_AVISO_MS = 5000;
+
 function doPost(e) {
   var datos;
   try {
@@ -85,17 +120,21 @@ function doPost(e) {
   try {
     // Leer precios no toca pagos ni códigos: no espera el candado
     if (datos.tipo === "obtener_precios") return obtenerPrecios();
-    if (datos.tipo !== "compra" && datos.tipo !== "verificacion" && datos.tipo !== "completar") {
+    var acciones = {
+      compra: procesarPagoYExtraerCodigo, verificacion: procesarPagoYExtraerCodigo, completar: completarCompra,
+      entregar_api: entregarApi, liberar_api: liberarApi, nota_api: notaApi
+    };
+    if (!Object.prototype.hasOwnProperty.call(acciones, String(datos.tipo))) {
       return responder({ status: "error", message: "Tipo de solicitud no válido." });
     }
 
-    // 🛡️ Candado: una sola compra de Roblox a la vez (también al completar un pago)
+    // 🛡️ Candado: una sola compra de Roblox a la vez (también al completar un pago o anotar Central One)
     var lock = LockService.getScriptLock();
-    if (!lock.tryLock(ESPERA_CANDADO_MS)) {
-      return responder({ status: "error", message: "⚠️ El servidor está procesando otra compra en este momento. Inténtalo de nuevo en unos segundos." });
+    if (!lock.tryLock(datos.aviso === true ? ESPERA_CANDADO_AVISO_MS : ESPERA_CANDADO_MS)) {
+      return responder({ status: "error", ocupado: true, message: "⚠️ El servidor está procesando otra compra en este momento. Inténtalo de nuevo en unos segundos." });
     }
     try {
-      return responder(datos.tipo === "completar" ? completarCompra(datos) : procesarPagoYExtraerCodigo(datos));
+      return responder(acciones[datos.tipo](datos));
     } finally {
       lock.releaseLock();
     }
@@ -192,12 +231,21 @@ function procesarPagoYExtraerCodigo(datos) {
   }
 
   // ---- Buscar un código libre (todavía sin tocarlo) ----
+  // Un paquete que solo viene de Central One puede no tener columna en "Codigos"
   var col = columnaDePaquete(hojaCodigos, numeroPaquete);
-  if (col === -1) return { status: "error", message: "⚠️ Paquete no reconocido en el inventario de códigos." };
-
-  var libre = buscarCodigoLibre(hojaCodigos, col);
+  var libre = col === -1 ? { codigo: null, fila: -1 } : buscarCodigoLibre(hojaCodigos, col);
   var codigo = libre.codigo, filaCodigo = libre.fila;
-  if (!codigo) return { status: "error", agotado: true, message: "⚠️ Este paquete se acaba de agotar. Elige otro o escríbenos por WhatsApp." };
+  if (!codigo) {
+    // Sin códigos guardados: se compra en Central One (si Vercel puede y el paquete tiene product_id)
+    var productoApi = datos.api === true ? productoDePaquete(libro, numeroPaquete) : "";
+    if (!productoApi && col === -1) return { status: "error", message: "⚠️ Paquete no reconocido en el inventario de códigos." };
+    if (!productoApi) return { status: "error", agotado: true, message: "⚠️ Este paquete se acaba de agotar. Elige otro o escríbenos por WhatsApp." };
+    return reservarParaCentralOne({
+      hojaPagos: hojaPagos, filaPago: filaPago, idPedido: idPedido, usuario: usuario, paquete: paquete,
+      precio: precioACobrar, codigoDescuento: codigoDescuento, urlCapture: urlCapture, productId: productoApi,
+      pagos: [pago.referencia], porCompletar: null
+    });
+  }
 
   // ---- Gastar el pago ----
   // Justo antes, se vuelve a leer su estado: Free Fire y Blood Strike usan la misma hoja con su
@@ -236,23 +284,7 @@ function entregarCodigo(c) {
   }
 
   // ---- Registro y limpieza: un fallo aquí nunca deja al cliente sin su código ----
-  try {
-    var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
-    hojaExitosas.appendRow([
-      fechaHora,                        // A: fecha
-      textoSeguro(usuario),             // B: usuario
-      textoSeguro(paquete),             // C: paquete
-      textoSeguro(referencia),          // D: referencia
-      textoSeguro(codigo),              // E: código entregado
-      textoSeguro(urlCapture),          // F: comprobante
-      precioACobrar,                    // G: cobrado (Bs)
-      textoSeguro(codigoDescuento),     // H: código de descuento ("" si no usó)
-      textoSeguro(idPedido)             // I: id del pedido en Vercel
-    ]);
-  } catch (err) {
-    console.error("Roblox: venta entregada pero NO anotada en Exitosas | usuario " + usuario + " | " + paquete +
-      " | ref " + referencia + " | código " + codigo + " | " + precioACobrar + " Bs | " + err);
-  }
+  anotarExitosa(hojaExitosas, c, "Inventario (Codigos)");
   try {
     quitarCodigoDeLaColumna(hojaCodigos, col, filaCodigo);
   } catch (err) {
@@ -260,6 +292,30 @@ function entregarCodigo(c) {
     console.error("Roblox: no se pudo compactar la columna " + col + " de Codigos: " + err);
   }
   SpreadsheetApp.flush();
+}
+
+// Una fila de "Exitosas" por venta. Si falla, el cliente igual recibe su código: queda en el registro.
+// c: { usuario, paquete, referencia, codigo, urlCapture, precioACobrar, codigoDescuento, idPedido }
+function anotarExitosa(hojaExitosas, c, origen) {
+  try {
+    // La columna J es nueva: se le pone título la primera vez
+    if (!String(hojaExitosas.getRange(1, 10).getValue()).trim()) hojaExitosas.getRange(1, 10).setValue("origen del código");
+    hojaExitosas.appendRow([
+      ahora(),                            // A: fecha
+      textoSeguro(c.usuario),             // B: usuario
+      textoSeguro(c.paquete),             // C: paquete
+      textoSeguro(c.referencia),          // D: referencia
+      textoSeguro(c.codigo),              // E: código entregado
+      textoSeguro(c.urlCapture),          // F: comprobante
+      c.precioACobrar,                    // G: cobrado (Bs)
+      textoSeguro(c.codigoDescuento),     // H: código de descuento ("" si no usó)
+      textoSeguro(c.idPedido),            // I: id del pedido en Vercel
+      textoSeguro(origen)                 // J: de dónde salió el código
+    ]);
+  } catch (err) {
+    console.error("Roblox: venta entregada pero NO anotada en Exitosas | usuario " + c.usuario + " | " + c.paquete +
+      " | ref " + c.referencia + " | código " + c.codigo + " | " + c.precioACobrar + " Bs | " + err);
+  }
 }
 
 // Completar un pago insuficiente (tipo "completar", con candado). Vercel manda la huella de la clave
@@ -331,6 +387,24 @@ function completarCompra(datos) {
   // Alcanza: primero el código (si se agotó, el pago nuevo NO se toca y la compra sigue pendiente)
   var col = columnaDePaquete(hojaCodigos, paquete.replace(/[^0-9]/g, ""));
   var libre = col === -1 ? { codigo: null } : buscarCodigoLibre(hojaCodigos, col);
+  var productoApi = !libre.codigo && datos.api === true ? productoDePaquete(libro, paquete.replace(/[^0-9]/g, "")) : "";
+  if (productoApi) {
+    // Sin códigos guardados: se compra en Central One. La fila de "por_completar" queda "⏳" (no se puede
+    // completar dos veces) y entregar_api la cierra; si no se compra, liberar_api le devuelve su estado.
+    var todas = referencias.concat([pago.referencia]);
+    var estadoAnterior = String(v[10]);
+    var reserva = reservarParaCentralOne({
+      hojaPagos: hojaPagos, filaPago: pago.filaPago, idPedido: idPedido, usuario: usuario, paquete: paquete,
+      precio: precio, codigoDescuento: String(v[8] || ""), urlCapture: String(v[9] || "Sin comprobante"), productId: productoApi,
+      pagos: todas, porCompletar: { claveHash: claveHash, pagado: pagado, falta: falta, estadoAnterior: estadoAnterior }
+    });
+    if (reserva.status === "comprar") {
+      hojaPc.getRange(fila, 11).setValue("⏳ COMPRANDO EN CENTRAL ONE (pedido " + idPedido + ")");
+      hojaPc.getRange(fila, 13).setValue(ahora());
+      SpreadsheetApp.flush();
+    }
+    return reserva;
+  }
   if (!libre.codigo) {
     console.error("Roblox: pago completado pero sin códigos de '" + paquete + "' (fila " + fila + " de por_completar)");
     return { status: "error", agotado: true, message: "⚠️ Este paquete se agotó justo ahora. Tu pago anterior sigue guardado: escríbenos por WhatsApp y te lo entregamos." };
@@ -352,6 +426,212 @@ function completarCompra(datos) {
   });
   // usuario, precio y código de descuento: para que Vercel anote el uso del código (no llegan al cliente)
   return { status: "success", code: libre.codigo, message: "¡Código canjeado con éxito!", usuario: usuario, precio: precio, codigoDescuento: codigoDescuento };
+}
+
+// =====================================================================
+// COMPRA EN CENTRAL ONE (sin códigos guardados). Ver el orden al principio del archivo.
+// =====================================================================
+
+// Paso 1: el pago queda "En proceso" (ningún juego lo toma) y el pedido en "pedidos_api".
+// c: { hojaPagos, filaPago, idPedido, usuario, paquete, precio, codigoDescuento, urlCapture, productId,
+//      pagos (referencias completas que se gastan al entregar), porCompletar (null o datos del pago completado) }
+function reservarParaCentralOne(c) {
+  if (!PEDIDO_API_VALIDO.test(c.idPedido) || buscarFilaPedidoApi(c.idPedido)) {
+    console.error("Roblox: idPedido inválido o repetido para comprar en Central One: " + c.idPedido);
+    return { status: "error", agotado: true, message: "⚠️ Este paquete se acaba de agotar. Elige otro o escríbenos por WhatsApp." };
+  }
+  // Justo antes, se vuelve a leer el estado del pago (Free Fire y Blood Strike usan la misma hoja)
+  var celda = c.hojaPagos.getRange(c.filaPago, 5);
+  var estado = String(celda.getValue()).trim().toLowerCase();
+  if (estado !== "verificado" && estado !== "") {
+    return { status: "error", message: "⚠️ Ese pago se acaba de usar en otra recarga." };
+  }
+  var enProceso = c.pagos[c.pagos.length - 1];
+  celda.setValue("En proceso");
+  SpreadsheetApp.flush();
+  hojaPedidosApi().appendRow([
+    ahora(), textoSeguro(c.idPedido), textoSeguro(c.usuario), textoSeguro(c.paquete), c.precio, c.pagos.join(" + "),
+    textoSeguro(c.codigoDescuento), textoSeguro(c.urlCapture), textoSeguro(c.productId), ESTADO_COMPRANDO, "", "", ahora(),
+    JSON.stringify({ enProceso: enProceso, pagos: c.pagos, porCompletar: c.porCompletar })
+  ]);
+  SpreadsheetApp.flush();
+  return { status: "comprar", productId: c.productId, idPedido: c.idPedido, usuario: c.usuario };
+}
+
+// Paso 3 (Vercel con el código, o el aviso de Central One): pago(s) "Usado" y venta en "Exitosas".
+// { idPedido, codigo, ordenCentralOne, enPagina (true = el cliente lo vio en la página) }
+function entregarApi(datos) {
+  var idPedido = String(datos.idPedido || "");
+  var codigo = String(datos.codigo || "").trim();
+  var ordenCO = String(datos.ordenCentralOne || "").slice(0, 80);
+  if (!PEDIDO_API_VALIDO.test(idPedido) || !codigo || codigo.length > 200) return { status: "error", message: "Datos inválidos." };
+  var hoja = hojaPedidosApi();
+  var fila = buscarFilaPedidoApi(idPedido);
+  if (!fila) return { status: "error", message: "Pedido no encontrado en " + HOJA_PEDIDOS_API + "." };
+  var v = hoja.getRange(fila, 1, 1, COLUMNAS_PEDIDOS_API.length).getValues()[0];
+  var estado = String(v[9]);
+  var resumen = { usuario: String(v[2]), precio: limpiarMontoVES(v[4]), codigoDescuento: String(v[6] || "") };
+
+  // Ya entregado (aviso repetido, o Vercel y el aviso a la vez): no se gasta ni se anota dos veces
+  if (estado.indexOf(ESTADO_ENTREGADO_PAGINA) === 0 || estado.indexOf(ESTADO_ENTREGADO_WHATSAPP) === 0) {
+    if (datos.enPagina === true && estado.indexOf(ESTADO_ENTREGADO_WHATSAPP) === 0) {
+      hoja.getRange(fila, 10).setValue(ESTADO_ENTREGADO_PAGINA);
+      hoja.getRange(fila, 13).setValue(ahora());
+    }
+    return { status: "success", yaEntregado: true, code: String(v[11]), usuario: resumen.usuario, precio: resumen.precio, codigoDescuento: resumen.codigoDescuento };
+  }
+  if (estado.indexOf("⏳") !== 0) {
+    // El pago ya se había liberado (Central One avisó que falló) y después entregó: el pago NO se toca
+    hoja.getRange(fila, 10, 1, 4).setValues([["⚠️ CENTRAL ONE ENTREGÓ DESPUÉS DE LIBERAR EL PAGO: revisar si el cliente volvió a usar su pago; el código está en la columna L",
+      textoSeguro(ordenCO), textoSeguro(codigo), ahora()]]);
+    SpreadsheetApp.flush();
+    console.error("Roblox: Central One entregó el pedido " + idPedido + " (" + ordenCO + ") después de liberar el pago. Revisar " + HOJA_PEDIDOS_API + ".");
+    return { status: "success", yaEntregado: true, code: codigo };
+  }
+
+  var interno = leerDatosInternos(v[13]);
+  var hojaPagos = abrirHojaPagos();
+  var hojaExitosas = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetNameExitosas);
+  // Sin la hoja de pagos no se anota nada: "ocupado" para que el aviso se repita más tarde
+  if (!hojaPagos || !hojaExitosas) return { status: "error", ocupado: true, message: "No se pudo abrir la hoja de pagos o Exitosas." };
+
+  (interno.pagos || []).forEach(function (ref) { marcarPagoUsado(hojaPagos, String(ref)); });
+  SpreadsheetApp.flush();
+  hoja.getRange(fila, 10, 1, 4).setValues([[datos.enPagina === true ? ESTADO_ENTREGADO_PAGINA : ESTADO_ENTREGADO_WHATSAPP,
+    textoSeguro(ordenCO), textoSeguro(codigo), ahora()]]);
+
+  var pc = interno.porCompletar;
+  if (pc) {
+    var filaPc = buscarFilaPorCompletar(14, pc.claveHash);
+    if (filaPc) {
+      var hojaPc = hojaPorCompletar();
+      hojaPc.getRange(filaPc, 6, 1, 3).setValues([[pc.pagado, pc.falta, (interno.pagos || []).join(" + ")]]);
+      hojaPc.getRange(filaPc, 11, 1, 3).setValues([["✅ COMPLETADO Y ENTREGADO", textoSeguro(idPedido), ahora()]]);
+    }
+  }
+  anotarExitosa(hojaExitosas, {
+    usuario: v[2], paquete: v[3], referencia: v[5], codigo: codigo, urlCapture: v[7],
+    precioACobrar: v[4], codigoDescuento: v[6], idPedido: idPedido
+  }, "Central One " + ordenCO);
+  SpreadsheetApp.flush();
+  return { status: "success", yaEntregado: false, code: codigo, usuario: resumen.usuario, precio: resumen.precio, codigoDescuento: resumen.codigoDescuento };
+}
+
+// No se compró nada en Central One: el pago vuelve a "Verificado" (sirve para otra compra). { idPedido, motivo }
+function liberarApi(datos) {
+  var idPedido = String(datos.idPedido || "");
+  if (!PEDIDO_API_VALIDO.test(idPedido)) return { status: "error", message: "Datos inválidos." };
+  var hoja = hojaPedidosApi();
+  var fila = buscarFilaPedidoApi(idPedido);
+  if (!fila) return { status: "error", message: "Pedido no encontrado en " + HOJA_PEDIDOS_API + "." };
+  var v = hoja.getRange(fila, 1, 1, COLUMNAS_PEDIDOS_API.length).getValues()[0];
+  var estado = String(v[9]);
+  if (estado.indexOf("⏳") !== 0) {
+    // Ya entregado o ya liberado: no se toca (un aviso viejo que llega tarde)
+    var entregado = estado.indexOf(ESTADO_ENTREGADO_PAGINA) === 0 || estado.indexOf(ESTADO_ENTREGADO_WHATSAPP) === 0;
+    return entregado ? { status: "error", yaEntregado: true, message: "El pedido ya se entregó." } : { status: "success", sinCambios: true };
+  }
+  var hojaPagos = abrirHojaPagos();
+  if (!hojaPagos) return { status: "error", ocupado: true, message: "No se pudo abrir la hoja de pagos." };
+
+  var interno = leerDatosInternos(v[13]);
+  if (interno.enProceso && !cambiarEstadoPago(hojaPagos, String(interno.enProceso), "en proceso", "Verificado")) {
+    console.warn("Roblox: al liberar el pedido " + idPedido + " el pago " + interno.enProceso + " ya no estaba \"En proceso\"");
+  }
+  // Pago completado: la fila de "por_completar" vuelve a estar pendiente (el cliente puede intentarlo de nuevo)
+  var pc = interno.porCompletar;
+  if (pc) {
+    var filaPc = buscarFilaPorCompletar(14, pc.claveHash);
+    if (filaPc) {
+      hojaPorCompletar().getRange(filaPc, 11).setValue(textoSeguro(pc.estadoAnterior || ("PENDIENTE: faltan " + formatoBs(pc.falta))));
+      hojaPorCompletar().getRange(filaPc, 13).setValue(ahora());
+    }
+  }
+  hoja.getRange(fila, 10).setValue(textoSeguro(ESTADO_LIBERADO + String(datos.motivo || "sin motivo").slice(0, 400)));
+  hoja.getRange(fila, 13).setValue(ahora());
+  SpreadsheetApp.flush();
+  return { status: "success" };
+}
+
+// Nota en el estado de "pedidos_api". { idPedido, texto, siempre }: sin "siempre", solo mientras sigue ⏳
+// (lo que Vercel sabe cuando el código tarda); con "siempre", se agrega al estado que tenga (avisos).
+function notaApi(datos) {
+  var idPedido = String(datos.idPedido || "");
+  var texto = String(datos.texto || "").slice(0, 400);
+  if (!PEDIDO_API_VALIDO.test(idPedido) || !texto) return { status: "error", message: "Datos inválidos." };
+  var hoja = hojaPedidosApi();
+  var fila = buscarFilaPedidoApi(idPedido);
+  if (!fila) return { status: "error", message: "Pedido no encontrado en " + HOJA_PEDIDOS_API + "." };
+  var estado = String(hoja.getRange(fila, 10).getValue());
+  if (datos.siempre === true) {
+    hoja.getRange(fila, 10).setValue(textoSeguro((estado + " · " + texto).slice(0, 1000)));
+  } else if (estado.indexOf("⏳") === 0) {
+    hoja.getRange(fila, 10).setValue(textoSeguro("⏳ " + texto));
+  } else {
+    return { status: "success", sinCambios: true };
+  }
+  hoja.getRange(fila, 13).setValue(ahora());
+  SpreadsheetApp.flush();
+  return { status: "success" };
+}
+
+function hojaPedidosApi() {
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = libro.getSheetByName(HOJA_PEDIDOS_API);
+  if (!hoja) {
+    hoja = libro.insertSheet(HOJA_PEDIDOS_API);
+    hoja.appendRow(COLUMNAS_PEDIDOS_API);
+    hoja.getRange(1, 1, 1, COLUMNAS_PEDIDOS_API.length).setFontWeight("bold");
+    hoja.setFrozenRows(1);
+    hoja.getRange(1, COLUMNAS_PEDIDOS_API.length).setNote("Lo usa el script para entregar o liberar el pago. No lo cambies.");
+  }
+  return hoja;
+}
+
+// Fila (la más reciente) de "pedidos_api" con ese idPedido. 0 si no está.
+function buscarFilaPedidoApi(idPedido) {
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_PEDIDOS_API);
+  if (!idPedido || !hoja || hoja.getLastRow() < 2) return 0;
+  var celdas = hoja.getRange(2, 2, hoja.getLastRow() - 1, 1)
+    .createTextFinder(String(idPedido)).matchEntireCell(true).matchCase(true).findAll();
+  return celdas.length ? celdas[celdas.length - 1].getRow() : 0;
+}
+
+function leerDatosInternos(valor) {
+  try {
+    var d = JSON.parse(String(valor || "{}"));
+    return d && typeof d === "object" ? d : {};
+  } catch (err) {
+    console.error("Roblox: columna 'datos internos' ilegible en " + HOJA_PEDIDOS_API + ": " + err);
+    return {};
+  }
+}
+
+// Cambia el estado del pago con esa referencia completa (la fila más reciente) solo si está en "desde"
+function cambiarEstadoPago(hojaPagos, referencia, desde, hacia) {
+  var ultima = hojaPagos.getLastRow();
+  var filas = ultima > 1 ? hojaPagos.getRange(2, 3, ultima - 1, 3).getValues() : [];
+  for (var i = filas.length - 1; i >= 0; i--) {
+    if (String(filas[i][0]).replace(/\s+/g, "") !== referencia) continue;
+    if (String(filas[i][2]).trim().toLowerCase() !== desde) return false;
+    hojaPagos.getRange(i + 2, 5).setValue(hacia);
+    SpreadsheetApp.flush();
+    return true;
+  }
+  return false;
+}
+
+// product_id de Central One del paquete (fila 3 de "PreciosRoblox"). "" si no tiene uno válido.
+function productoDePaquete(libro, numeroPaquete) {
+  var hoja = libro.getSheetByName(sheetNamePreciosRoblox);
+  if (!hoja || !numeroPaquete || hoja.getLastColumn() < 1) return "";
+  var filas = hoja.getRange(1, 1, FILA_PRODUCTO, hoja.getLastColumn()).getValues();
+  for (var p = 0; p < filas[0].length; p++) {
+    if (String(filas[0][p]).replace(/[^0-9]/g, "") !== numeroPaquete) continue;
+    var producto = String(filas[FILA_PRODUCTO - 1][p]).trim();
+    return PRODUCTO_VALIDO.test(producto) ? producto : "";
+  }
+  return "";
 }
 
 // Pestaña "pagos" de la hoja compartida. null (y aviso en el registro) si no se puede abrir.
@@ -494,8 +774,10 @@ function precioDePaquete(libro, numeroPaquete) {
   return 0;
 }
 
-// Sin candado: solo lectura. Precios { "800 Robux": 1700, ... } y códigos libres por paquete
-// { "800 Robux": 4, ... } (Vercel convierte la cantidad en disponible / últimos / agotado).
+// Sin candado: solo lectura. Precios { "800 Robux": 1700, ... }, códigos libres por paquete
+// { "800 Robux": 4, ... } (Vercel convierte la cantidad en disponible / últimos / agotado) y el
+// product_id de Central One de cada paquete que lo tenga (Vercel nunca lo manda al navegador).
+// Un paquete sin precio mayor que 0 no se muestra (p. ej. falta el dólar en "tasa_dolar").
 function obtenerPrecios() {
   var libro = SpreadsheetApp.getActiveSpreadsheet();
   var hoja = libro.getSheetByName(sheetNamePreciosRoblox);
@@ -503,17 +785,20 @@ function obtenerPrecios() {
   var ultimaColumna = hoja.getLastColumn();
   var precios = {};
   var stock = {};
+  var productos = {};
   var libresPorNumero = contarCodigosLibres(libro.getSheetByName(sheetNameCodigos));
   if (ultimaColumna > 0) {
-    var filas = hoja.getRange(1, 1, 2, ultimaColumna).getValues();
+    var filas = hoja.getRange(1, 1, FILA_PRODUCTO, ultimaColumna).getValues();
     for (var i = 0; i < filas[0].length; i++) {
       var titulo = String(filas[0][i]).trim();
-      if (!titulo) continue;
+      if (!titulo || !(limpiarMontoVES(filas[1][i]) > 0)) continue;
       precios[titulo] = filas[1][i];
       stock[titulo] = libresPorNumero[titulo.replace(/[^0-9]/g, "")] || 0;
+      var producto = String(filas[FILA_PRODUCTO - 1][i]).trim();
+      if (PRODUCTO_VALIDO.test(producto)) productos[titulo] = producto;
     }
   }
-  return responder({ status: "success", precios: precios, stock: stock });
+  return responder({ status: "success", precios: precios, stock: stock, productos: productos });
 }
 
 // { "800": 4, "1700": 0, ... }: códigos libres de cada columna de "Codigos", por el número del título
@@ -574,4 +859,211 @@ function limpiarMontoVES(valor) {
     m = m.replace(",", ".");
   }
   return parseFloat(m) || 0;
+}
+
+
+// =====================================================================
+// MENÚ 🎮 ROBLOX: PRODUCTOS DE CENTRAL ONE EN "PreciosRoblox"
+//   🔑 guarda la llave (propiedad del script, nunca en la hoja; basta con catalog:read) · 🔄 trae las
+//   tarjetas de Roblox de tu catálogo y les pone el precio en Bs con el dólar y la ganancia de la pestaña
+//   "tasa_dolar" (cambias el dólar y todos los precios cambian). No borra paquetes: uno que ya está (mismo
+//   número en la fila 1) se actualiza y los nuevos se agregan al final. Los que no están en Central One
+//   quedan como estaban y se venden solo con los códigos guardados.
+// =====================================================================
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu("🎮 Roblox")
+    .addItem("🔄 Traer productos de Central One", "traerProductosCentralOne")
+    .addItem("🔑 Guardar llave de Central One", "guardarLlaveCentralOne")
+    .addToUi();
+}
+
+function guardarLlaveCentralOne() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt("Llave de Central One",
+    "Pega la llave (empieza por co_live_). Basta con el permiso catalog:read: la que compra va en Vercel (roblox_nuevo). Se guarda en las propiedades del script, no en la hoja.",
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var llave = r.getResponseText().trim();
+  if (!/^co_live_[A-Za-z0-9_-]{8,200}$/.test(llave)) {
+    ui.alert("Esa no parece una llave de Central One (empieza por co_live_). No se guardó nada.");
+    return;
+  }
+  PropertiesService.getScriptProperties().setProperty(PROPIEDAD_LLAVE_CENTRALONE, llave);
+  ui.alert("✅ Llave guardada. Ahora: menú 🎮 Roblox → 🔄 Traer productos de Central One.");
+}
+
+function traerProductosCentralOne() {
+  var ui = SpreadsheetApp.getUi();
+  var llave = PropertiesService.getScriptProperties().getProperty(PROPIEDAD_LLAVE_CENTRALONE);
+  if (!llave) {
+    ui.alert("Primero guarda la llave: menú 🎮 Roblox → 🔑 Guardar llave de Central One.");
+    return;
+  }
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = libro.getSheetByName(sheetNamePreciosRoblox) || libro.insertSheet(sheetNamePreciosRoblox);
+
+  var respuesta = UrlFetchApp.fetch(URL_CENTRALONE + "/catalog", {
+    headers: { Authorization: "Bearer " + llave }, muteHttpExceptions: true
+  });
+  var codigo = respuesta.getResponseCode();
+  if (codigo !== 200) {
+    var porque = codigo === 401 ? " (llave inválida, revocada o cuenta inactiva)" : codigo === 403 ? " (la llave no tiene el permiso catalog:read)" : codigo === 429 ? " (demasiadas consultas: espera un minuto)" : "";
+    ui.alert("Central One respondió HTTP " + codigo + porque + ". No se cambió nada.");
+    return;
+  }
+  // Solo tarjetas (códigos): un producto que pide datos del jugador no se puede vender como código
+  var deRoblox = (JSON.parse(respuesta.getContentText()).items || []).filter(function (p) {
+    return String(p.product_family_name + " " + p.name).toLowerCase().replace(/[^a-z0-9]/g, "").indexOf("roblox") !== -1 && !p.requires_target;
+  });
+  if (!deRoblox.length) {
+    ui.alert("Tu catálogo de Central One no tiene tarjetas de Roblox habilitadas. No se cambió nada.");
+    return;
+  }
+  var regionDe = function (p) { return String(p.region || "").trim().toUpperCase(); };
+  var productos = deRoblox.filter(function (p) {
+    return REGIONES_ROBLOX.indexOf(regionDe(p)) !== -1 && numeroDePaquete(nombreCortoRoblox(p.name));
+  });
+  if (!productos.length) {
+    var regiones = deRoblox.map(function (p) { return regionDe(p) || "sin región"; })
+      .filter(function (r, i, lista) { return lista.indexOf(r) === i; });
+    ui.alert("Hay " + deRoblox.length + " tarjeta(s) de Roblox, pero ninguna de las regiones " + REGIONES_ROBLOX.join(", ") +
+      " con un monto en el nombre (regiones que hay: " + regiones.join(", ") + "). No se cambió nada.");
+    return;
+  }
+  productos.sort(function (a, b) { return Number(a.reseller_price) - Number(b.reseller_price); });
+
+  // Uno por monto (el número de la fila 1 es con lo que se encuentra su columna en "Codigos"): el que
+  // tiene stock, después la región que va primero en REGIONES_ROBLOX y, si no, el más barato.
+  var elegido = {}, repetidos = [];
+  productos.forEach(function (p) {
+    var n = numeroDePaquete(nombreCortoRoblox(p.name));
+    var actual = elegido[n];
+    if (!actual) { elegido[n] = p; return; }
+    var mejor = actual;
+    if ((actual.in_stock === false) !== (p.in_stock === false)) mejor = actual.in_stock === false ? p : actual;
+    else if (REGIONES_ROBLOX.indexOf(regionDe(p)) < REGIONES_ROBLOX.indexOf(regionDe(actual))) mejor = p;
+    repetidos.push(mejor === p ? actual : p);
+    elegido[n] = mejor;
+  });
+
+  // Fila 2: fórmula en notación R1C1 (Apps Script las escribe en inglés, con comas, sea cual sea el idioma
+  // de la hoja). R[2]C = la celda del costo, 2 filas más abajo en la misma columna. Sin dólar o sin costo, vacía.
+  var tasa = "'" + HOJA_TASA + "'!R1C2", ganancia = "'" + HOJA_TASA + "'!R2C2", costo = "R[" + (FILA_COSTO - 2) + "]C";
+  var formula = "=IF(OR(" + tasa + "=\"\"," + costo + "=\"\"),\"\",ROUND(" + costo + "*" + tasa + "*(1+" + ganancia + "/100),2))";
+  var columnaDe = function (nombre, p) {
+    return {
+      nombre: nombre, precio: formula, producto: p.product_id, costo: Number(p.reseller_price) || "",
+      nota: (p.in_stock === false ? "SIN STOCK en Central One" : "con stock") + (p.region ? " · " + p.region : "")
+    };
+  };
+
+  // Columnas que ya están: se actualizan las de Central One y las demás quedan como estaban
+  var ultimaColumna = hoja.getLastColumn();
+  var actuales = ultimaColumna > 0 ? hoja.getRange(1, 1, 5, ultimaColumna).getValues() : [[], [], [], [], []];
+  var formulasActuales = ultimaColumna > 0 ? hoja.getRange(2, 1, 1, ultimaColumna).getFormulasR1C1()[0] : [];
+  var columnas = [], usados = {}, actualizados = 0, sinCentralOne = [];
+  for (var c = 0; c < ultimaColumna; c++) {
+    var nombre = String(actuales[0][c]).trim();
+    if (!nombre) continue;
+    var n = numeroDePaquete(nombre);
+    if (n && elegido[n] && !usados[n]) {
+      usados[n] = true;
+      actualizados++;
+      columnas.push(columnaDe(nombre, elegido[n]));
+      continue;
+    }
+    var teniaProducto = PRODUCTO_VALIDO.test(String(actuales[FILA_PRODUCTO - 1][c]).trim());
+    if (teniaProducto) sinCentralOne.push(nombre);
+    columnas.push({
+      nombre: nombre, precio: formulasActuales[c] || actuales[1][c], producto: "", costo: actuales[FILA_COSTO - 1][c],
+      nota: teniaProducto ? "ya no está en Central One: solo códigos guardados" : "solo códigos guardados"
+    });
+  }
+  var nuevos = Object.keys(elegido).filter(function (n) { return !usados[n]; })
+    .sort(function (a, b) { return Number(a) - Number(b); });
+  nuevos.forEach(function (n) { columnas.push(columnaDe(nombreCortoRoblox(elegido[n].name), elegido[n])); });
+
+  var hojaTasa = hojaDeTasa();
+  var dolar = limpiarMontoVES(hojaTasa.getRange("B1").getValue());
+  var seguir = ui.alert("Traer productos de Central One",
+    "En \"" + sheetNamePreciosRoblox + "\": se actualizan " + actualizados + " paquete(s) y se agregan " + nuevos.length + " nuevo(s)" +
+    (repetidos.length ? " (se quitaron " + repetidos.length + " repetido(s))" : "") + ". Los paquetes que no están en Central One quedan igual.\n\n" +
+    "El precio en Bs se calcula solo: costo en USD × dólar (pestaña \"" + HOJA_TASA + "\", B1) + la ganancia (B2).\n\n" +
+    "Primero se venden los códigos guardados en \"" + sheetNameCodigos + "\"; cuando se acaban, la tienda compra el código en Central One. " +
+    "El número del paquete (fila 1) debe ser el mismo que el de su columna en \"" + sheetNameCodigos + "\".\n\n¿Seguir?",
+    ui.ButtonSet.YES_NO);
+  if (seguir !== ui.Button.YES) return;
+
+  var total = columnas.length;
+  hoja.getRange(1, 1, 5, Math.max(total, ultimaColumna, 1)).clearContent();
+  var valores = [[], [], [], [], []];
+  columnas.forEach(function (col) {
+    valores[0].push(textoSeguro(col.nombre));
+    valores[1].push("");
+    valores[2].push(textoSeguro(col.producto));
+    valores[3].push(col.costo);
+    valores[4].push(textoSeguro(col.nota));
+  });
+  hoja.getRange(1, 1, 5, total).setValues(valores);
+  columnas.forEach(function (col, i) {
+    var celda = hoja.getRange(2, i + 1);
+    if (typeof col.precio === "string" && col.precio.charAt(0) === "=") celda.setFormulaR1C1(col.precio);
+    else celda.setValue(col.precio);
+  });
+  hoja.getRange(1, 1, 1, total).setFontWeight("bold");
+  hoja.getRange(2, 1, 1, total).setNumberFormat("#,##0.00");
+  hoja.getRange(FILA_COSTO, 1, 1, total).setNumberFormat("0.0000\" USD\"");
+  hoja.getRange(FILA_PRODUCTO, 1, 3, total).setFontColor("#888888");
+  hoja.getRange(2, 1).setNote("Fila 2: precio en Bs = costo (fila 4) × dólar × (1 + ganancia %). El dólar y la ganancia " +
+    "se cambian en la pestaña \"" + HOJA_TASA + "\". Si escribes un número encima, ese paquete queda con precio fijo hasta el próximo 🔄.");
+  hoja.getRange(FILA_PRODUCTO, 1).setNote("Fila 3: product_id de Central One, NO la toques (con él se compra el código cuando no " +
+    "quedan guardados; vacía = solo códigos guardados). Fila 4: costo en USD · fila 5: stock (del momento del 🔄). " +
+    "La fila 1 se puede renombrar, pero con el mismo número (es el que une el paquete con su columna de \"" + sheetNameCodigos + "\").");
+  SpreadsheetApp.flush();
+  ui.alert("✅ Listo: " + actualizados + " actualizado(s) y " + nuevos.length + " nuevo(s)." +
+    (repetidos.length ? " Se quitaron " + repetidos.length + " repetido(s): " + repetidos.slice(0, 8).map(function (p) {
+      return nombreCortoRoblox(p.name) + " (" + p.reseller_price + " " + p.currency + (p.region ? ", " + p.region : "") + ")";
+    }).join(", ") + (repetidos.length > 8 ? "…" : "") + "." : "") +
+    (sinCentralOne.length ? " Ya no están en Central One (solo códigos guardados): " + sinCentralOne.join(", ") + "." : "") +
+    (dolar > 0
+      ? " Precios calculados con el dólar a " + formatoBs(dolar) + " y " + hojaTasa.getRange("B2").getValue() + " % de ganancia."
+      : " ⚠️ Falta el precio del dólar: escríbelo en la pestaña \"" + HOJA_TASA + "\", celda B1. Hasta entonces esos paquetes no se venden.") +
+    " La tienda tarda hasta ~2 minutos en mostrar los cambios.");
+}
+
+// Pestaña "tasa_dolar" (se crea la primera vez): B1 = dólar en Bs (lo escribes tú) · B2 = ganancia en %
+function hojaDeTasa() {
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = libro.getSheetByName(HOJA_TASA);
+  if (!hoja) {
+    hoja = libro.insertSheet(HOJA_TASA);
+    hoja.getRange("A1:B3").setValues([
+      ["Precio del dólar (Bs)", ""],
+      ["Ganancia (%)", GANANCIA_INICIAL],
+      ["Cambia B1 o B2 y todos los precios de " + sheetNamePreciosRoblox + " se recalculan solos.", ""]
+    ]);
+    hoja.getRange("A1:A2").setFontWeight("bold");
+    hoja.getRange("B1").setNumberFormat("#,##0.00").setBackground("#fff2cc");
+    hoja.getRange("B2").setBackground("#fff2cc");
+    hoja.getRange("A3").setFontColor("#888888");
+    hoja.setColumnWidth(1, 200);
+  }
+  return hoja;
+}
+
+// Nombre corto de una tarjeta de Central One: "Roblox Gift Card 800 Robux (US)" -> "800 Robux",
+// "Roblox $10 USD" -> "10 USD". Tiene UN solo número: es la clave del paquete (ver numeroDePaquete).
+function nombreCortoRoblox(nombre) {
+  var t = String(nombre || "");
+  var robux = t.match(/(\d[\d.,]*)\s*robux/i);
+  if (robux) return robux[1].replace(/[.,]/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " Robux";
+  var usd = t.match(/(?:\$|usd)\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*(?:\$|usd|dollars?|d[oó]lares)/i);
+  if (usd) return String(Number(String(usd[1] || usd[2]).replace(",", "."))) + " USD";
+  return t.trim().slice(0, 60);
+}
+
+// Clave de un paquete: los números de su nombre ("1.000 Robux" -> "1000"), igual que en "Codigos"
+function numeroDePaquete(nombre) {
+  return String(nombre || "").replace(/[^0-9]/g, "");
 }

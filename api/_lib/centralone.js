@@ -1,7 +1,7 @@
-// API de Central One (recargas directas por ID de jugador). Por ahora solo Blood Strike.
+// API de Central One: recargas directas por ID (Blood Strike) y códigos de gift card (Roblox).
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
-// Docs: portal de Central One → Integración. La llave (variable blood_nuevo) solo vive en Vercel:
-// la API no acepta llamadas desde el navegador (sin CORS) y autoriza a gastar todo el saldo.
+// Docs: portal de Central One → Integración. Las llaves (variables blood_nuevo y roblox_nuevo) solo viven
+// en Vercel: la API no acepta llamadas desde el navegador (sin CORS) y autorizan a gastar todo el saldo.
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { pedirJSON, conCache } from './externo.js';
 
@@ -14,8 +14,9 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Catálogo con el precio de revendedor. Central One pide no consultarlo en cada compra (60 lecturas
 // por minuto por llave): copia de 15 min por instancia, y la copia anterior si la API no responde.
-async function catalogo(apiKey) {
-  const { datos } = await conCache('catalogo:centralone',
+// La copia es por llave (Blood Strike y Roblox usan llaves distintas).
+export async function catalogo(apiKey) {
+  const { datos } = await conCache(`catalogo:centralone:${String(apiKey).slice(-8)}`,
     () => pedirJSON(`${URL_API}/catalog`, { metodo: 'GET', cabeceras: cabeceras(apiKey), tiempoMs: 8000, reintentos: 1, reintentarTrasTimeout: true }),
     { frescoMs: 15 * 60_000, esValido: (d) => Array.isArray(d?.items) });
   return datos.items;
@@ -139,6 +140,62 @@ export async function crearPedidoCentralOne({ apiKey, productId, payload, idempo
     if (intento === 1) await esperar(1000);
   }
   return { ...resultado, motivo: `${resultado.motivo} (tras reintentar con la misma Idempotency-Key)` };
+}
+
+// Primer código de una respuesta de GET /orders/{id}/codes (o de order.codes de un aviso). "" si no hay.
+export function primerCodigo(lineas) {
+  for (const linea of Array.isArray(lineas) ? lineas : []) {
+    const codigo = (Array.isArray(linea?.codes) ? linea.codes : []).find((c) => typeof c === 'string' && c.trim());
+    if (codigo) return codigo.trim().slice(0, 200);
+  }
+  return '';
+}
+
+// Códigos de un pedido ya entregado (permiso codes:read; cada lectura queda en la auditoría de Central One).
+// { codigo } · { sinPermiso: true } (la llave no tiene codes:read) · { codigo: '' } (todavía no hay).
+export async function leerCodigos(apiKey, idOrden) {
+  const datos = await pedirJSON(`${URL_API}/orders/${encodeURIComponent(idOrden)}/codes`,
+    { metodo: 'GET', cabeceras: cabeceras(apiKey), tiempoMs: 7000, reintentos: 1, reintentarTrasTimeout: true });
+  if (datos?.error?.code === 'insufficient_scope') return { sinPermiso: true };
+  return { codigo: primerCodigo(datos?.order?.items) };
+}
+
+/**
+ * Gift cards: después de crear el pedido, espera su código hasta `limite` (marca de tiempo).
+ * Consulta GET /orders/{id} cada vez más espaciado (2 s, 3 s, 4 s… hasta 10 s: nunca en bucle cerrado)
+ * y, cuando la línea tiene delivered_count > 0, lee el código.
+ *  - { codigo }:  listo para entregar.
+ *  - { fallo }:   Central One cerró el pedido sin entregar (failed/cancelled): no se cobró.
+ *  - { pendiente }: no llegó a tiempo (o la llave no tiene codes:read). El pedido sigue en Central One y
+ *                 el código llegará por el aviso order.delivered (api/centralone-webhook.js).
+ */
+export async function esperarCodigo({ apiKey, idOrden, limite }) {
+  const esperas = [2000, 3000, 4000, 5000, 5000, 7000, 8000, 10000, 10000, 10000, 10000];
+  for (const espera of esperas) {
+    if (Date.now() + espera + 8000 > limite) break;
+    await esperar(espera);
+    let orden;
+    try {
+      ({ order: orden } = await pedirJSON(`${URL_API}/orders/${encodeURIComponent(idOrden)}`, { metodo: 'GET', cabeceras: cabeceras(apiKey), tiempoMs: 6000 }));
+    } catch (error) {
+      continue; // una consulta que falla no cambia nada: se pregunta de nuevo
+    }
+    const estado = String(orden?.status || '');
+    if (estado === 'failed' || estado === 'cancelled') {
+      const falla = orden?.failure || orden?.items?.[0]?.failure;
+      return { fallo: `Central One cerró el pedido como ${estado}${falla?.code ? ` (${falla.code})` : ''}` };
+    }
+    const lineas = Array.isArray(orden?.items) ? orden.items : [];
+    if (!lineas.some((l) => Number(l?.delivered_count) > 0)) continue;
+    try {
+      const r = await leerCodigos(apiKey, idOrden);
+      if (r.sinPermiso) return { pendiente: 'la llave de Roblox no tiene el permiso codes:read' };
+      if (r.codigo) return { codigo: r.codigo };
+    } catch (error) {
+      console.error(`⚠️ Central One: no se pudo leer el código del pedido ${idOrden}: ${error.message}`);
+    }
+  }
+  return { pendiente: 'el código no llegó a tiempo' };
 }
 
 // Webhook: X-CentralOne-Signature = "sha256=" + HMAC-SHA256(secreto, timestamp + "." + cuerpo crudo) en hex.
