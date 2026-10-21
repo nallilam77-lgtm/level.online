@@ -64,6 +64,9 @@ async function estadoStock({ stock, productos } = {}) {
   }
   const apiKey = llaveRoblox();
   const deCentralOne = Object.keys(estados).filter((p) => estados[p] === 'agotado' && PRODUCTO_VALIDO.test(String(productos?.[p] || '')));
+  // Por qué un paquete sin códigos guardados sale "agotado" (solo al log, nunca al cliente)
+  if (!productos) console.warn('Roblox: el Apps Script no manda "productos": publicar roblox.gs como Nueva versión');
+  else if (!apiKey && deCentralOne.length) console.error('Roblox: falta la variable roblox_nuevo en Vercel: los paquetes de Central One salen agotados');
   if (apiKey && deCentralOne.length) {
     let items = null;
     try {
@@ -75,6 +78,7 @@ async function estadoStock({ stock, productos } = {}) {
       const item = items?.find((i) => i?.product_id === productos[p]);
       // Sin catálogo no se sabe: se deja vender (la compra lo comprueba antes de pedir nada)
       if (!items || (item && item.in_stock !== false)) estados[p] = 'disponible';
+      else if (!item) console.warn(`Roblox: "${p}" (${productos[p]}) no está en el catálogo de la llave roblox_nuevo: sale agotado`);
     }
   }
   return estados;

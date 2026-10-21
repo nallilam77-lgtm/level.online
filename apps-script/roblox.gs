@@ -76,8 +76,8 @@ const MAX_PAGOS_POR_PEDIDO = 4;
 const URL_CENTRALONE = "https://portal.centraloneglobal.com/api/v1";
 // Llave SOLO con catalog:read, para el menú 🔄 (la que compra vive en Vercel, variable roblox_nuevo)
 const PROPIEDAD_LLAVE_CENTRALONE = "CENTRALONE_API_KEY";
-// Regiones de las tarjetas que se traen (solo GLOBAL: sirven en cualquier país). Solo tarjetas de Robux:
-// las de saldo en USD no se traen y el 🔄 las quita de PreciosRoblox
+// Regiones de las tarjetas que se traen (solo GLOBAL: sirven en cualquier país). Solo tarjetas de Robux
+// con stock: las de saldo en USD y las agotadas no se traen
 const REGIONES_ROBLOX = ["GLOBAL"];
 const FILA_PRODUCTO = 3;
 const FILA_COSTO = 4;
@@ -184,11 +184,11 @@ function procesarPagoYExtraerCodigo(datos) {
     }
   }
 
-  // ---- Pestañas de este libro (antes de tocar nada) ----
+  // ---- Pestañas de este libro (antes de tocar nada). "Codigos" es opcional: sin ella, todo se compra en Central One ----
   var hojaCodigos = libro.getSheetByName(sheetNameCodigos);
   var hojaExitosas = libro.getSheetByName(sheetNameExitosas);
-  if (!hojaCodigos || !hojaExitosas) {
-    console.error("Roblox: faltan las pestañas '" + sheetNameCodigos + "' o '" + sheetNameExitosas + "'");
+  if (!hojaExitosas) {
+    console.error("Roblox: falta la pestaña '" + sheetNameExitosas + "'");
     return { status: "error", message: "⚠️ La tienda de Roblox no está disponible en este momento." };
   }
 
@@ -353,7 +353,7 @@ function completarCompra(datos) {
   var hojaCodigos = libro.getSheetByName(sheetNameCodigos);
   var hojaExitosas = libro.getSheetByName(sheetNameExitosas);
   var hojaPagos = abrirHojaPagos();
-  if (!hojaCodigos || !hojaExitosas || !hojaPagos) {
+  if (!hojaExitosas || !hojaPagos) {
     return { status: "error", message: "⚠️ No pudimos revisar tu pago en este momento. Intenta de nuevo en unos segundos." };
   }
 
@@ -753,6 +753,7 @@ function codigoLibre(celda) {
 
 // Columna (1, 2...) del paquete en "Codigos" según los números del título. -1 si no está.
 function columnaDePaquete(hojaCodigos, numeroPaquete) {
+  if (!hojaCodigos) return -1;
   var ultimaColumna = hojaCodigos.getLastColumn();
   if (ultimaColumna < 1) return -1;
   var titulos = hojaCodigos.getRange(1, 1, 1, ultimaColumna).getValues()[0];
@@ -867,9 +868,8 @@ function limpiarMontoVES(valor) {
 // MENÚ 🎮 ROBLOX: PRODUCTOS DE CENTRAL ONE EN "PreciosRoblox"
 //   🔑 guarda la llave (propiedad del script, nunca en la hoja; basta con catalog:read) · 🔄 trae las
 //   tarjetas de Roblox de tu catálogo y les pone el precio en Bs con el dólar y la ganancia de la pestaña
-//   "tasa_dolar" (cambias el dólar y todos los precios cambian). No borra paquetes: uno que ya está (mismo
-//   número en la fila 1) se actualiza y los nuevos se agregan al final. Los que no están en Central One
-//   quedan como estaban y se venden solo con los códigos guardados.
+//   "tasa_dolar" (cambias el dólar y todos los precios cambian). Reemplaza toda la pestaña: solo quedan las
+//   tarjetas de Robux GLOBAL que Central One tiene en stock (las agotadas y las de saldo en USD no se traen).
 // =====================================================================
 
 function onOpen() {
@@ -934,109 +934,73 @@ function traerProductosCentralOne() {
       "). No se cambió nada.");
     return;
   }
+  // Solo los que Central One tiene en stock: un paquete agotado no se muestra en la tienda
+  var sinStock = productos.filter(function (p) { return p.in_stock === false; });
+  productos = productos.filter(function (p) { return p.in_stock !== false; });
+  if (!productos.length) {
+    ui.alert("Central One no tiene stock de ninguna tarjeta de Robux " + REGIONES_ROBLOX.join(", ") + " en este momento (" +
+      sinStock.length + " sin stock). No se cambió nada: inténtalo más tarde.");
+    return;
+  }
   productos.sort(function (a, b) { return Number(a.reseller_price) - Number(b.reseller_price); });
 
-  // Uno por monto (el número de la fila 1 es con lo que se encuentra su columna en "Codigos"): el que
-  // tiene stock, después la región que va primero en REGIONES_ROBLOX y, si no, el más barato.
+  // Uno por monto de Robux: el de la región que va primero en REGIONES_ROBLOX y, si no, el más barato
   var elegido = {}, repetidos = [];
   productos.forEach(function (p) {
     var n = numeroDePaquete(nombreCortoRoblox(p.name));
     var actual = elegido[n];
     if (!actual) { elegido[n] = p; return; }
-    var mejor = actual;
-    if ((actual.in_stock === false) !== (p.in_stock === false)) mejor = actual.in_stock === false ? p : actual;
-    else if (REGIONES_ROBLOX.indexOf(regionDe(p)) < REGIONES_ROBLOX.indexOf(regionDe(actual))) mejor = p;
+    var mejor = REGIONES_ROBLOX.indexOf(regionDe(p)) < REGIONES_ROBLOX.indexOf(regionDe(actual)) ? p : actual;
     repetidos.push(mejor === p ? actual : p);
     elegido[n] = mejor;
   });
+  var montos = Object.keys(elegido).sort(function (a, b) { return Number(a) - Number(b); });
+
+  var hojaTasa = hojaDeTasa();
+  var dolar = limpiarMontoVES(hojaTasa.getRange("B1").getValue());
+  var seguir = ui.alert("Traer productos de Central One",
+    "Se reemplaza TODA la pestaña \"" + sheetNamePreciosRoblox + "\" con " + montos.length + " paquete(s) de Robux " +
+    REGIONES_ROBLOX.join(", ") + " que Central One tiene en stock" +
+    (sinStock.length ? " (" + sinStock.length + " sin stock no se traen)" : "") + ". Los demás paquetes se eliminan.\n\n" +
+    "El precio en Bs se calcula solo: costo en USD × dólar (pestaña \"" + HOJA_TASA + "\", B1) + la ganancia (B2).\n\n¿Seguir?",
+    ui.ButtonSet.YES_NO);
+  if (seguir !== ui.Button.YES) return;
 
   // Fila 2: fórmula en notación R1C1 (Apps Script las escribe en inglés, con comas, sea cual sea el idioma
   // de la hoja). R[2]C = la celda del costo, 2 filas más abajo en la misma columna. Sin dólar o sin costo, vacía.
   var tasa = "'" + HOJA_TASA + "'!R1C2", ganancia = "'" + HOJA_TASA + "'!R2C2", costo = "R[" + (FILA_COSTO - 2) + "]C";
   var formula = "=IF(OR(" + tasa + "=\"\"," + costo + "=\"\"),\"\",ROUND(" + costo + "*" + tasa + "*(1+" + ganancia + "/100),2))";
-  var columnaDe = function (nombre, p) {
-    return {
-      nombre: nombre, precio: formula, producto: p.product_id, costo: Number(p.reseller_price) || "",
-      nota: (p.in_stock === false ? "SIN STOCK en Central One" : "con stock") + (p.region ? " · " + p.region : "")
-    };
-  };
-
-  // Columnas que ya están: se actualizan las de Central One, se quitan las de saldo en USD y las demás
-  // quedan como estaban
-  var ultimaColumna = hoja.getLastColumn();
-  var actuales = ultimaColumna > 0 ? hoja.getRange(1, 1, 5, ultimaColumna).getValues() : [[], [], [], [], []];
-  var formulasActuales = ultimaColumna > 0 ? hoja.getRange(2, 1, 1, ultimaColumna).getFormulasR1C1()[0] : [];
-  var columnas = [], usados = {}, actualizados = 0, sinCentralOne = [], eliminados = [];
-  for (var c = 0; c < ultimaColumna; c++) {
-    var nombre = String(actuales[0][c]).trim();
-    if (!nombre) continue;
-    if (esDeUsd(nombre)) { eliminados.push(nombre); continue; }
-    var n = numeroDePaquete(nombre);
-    if (n && elegido[n] && !usados[n]) {
-      usados[n] = true;
-      actualizados++;
-      columnas.push(columnaDe(nombre, elegido[n]));
-      continue;
-    }
-    var teniaProducto = PRODUCTO_VALIDO.test(String(actuales[FILA_PRODUCTO - 1][c]).trim());
-    if (teniaProducto) sinCentralOne.push(nombre);
-    columnas.push({
-      nombre: nombre, precio: formulasActuales[c] || actuales[1][c], producto: "", costo: actuales[FILA_COSTO - 1][c],
-      nota: teniaProducto ? "ya no está en Central One: solo códigos guardados" : "solo códigos guardados"
-    });
-  }
-  var nuevos = Object.keys(elegido).filter(function (n) { return !usados[n]; })
-    .sort(function (a, b) { return Number(a) - Number(b); });
-  nuevos.forEach(function (n) { columnas.push(columnaDe(nombreCortoRoblox(elegido[n].name), elegido[n])); });
-
-  var hojaTasa = hojaDeTasa();
-  var dolar = limpiarMontoVES(hojaTasa.getRange("B1").getValue());
-  var seguir = ui.alert("Traer productos de Central One",
-    "En \"" + sheetNamePreciosRoblox + "\": se actualizan " + actualizados + " paquete(s) y se agregan " + nuevos.length + " nuevo(s)" +
-    (repetidos.length ? " (se quitaron " + repetidos.length + " repetido(s))" : "") + ". Los paquetes que no están en Central One quedan igual.\n\n" +
-    (eliminados.length ? "Se ELIMINAN los paquetes en USD: " + eliminados.join(", ") + " (solo se venden Robux).\n\n" : "") +
-    "El precio en Bs se calcula solo: costo en USD × dólar (pestaña \"" + HOJA_TASA + "\", B1) + la ganancia (B2).\n\n" +
-    "Primero se venden los códigos guardados en \"" + sheetNameCodigos + "\"; cuando se acaban, la tienda compra el código en Central One. " +
-    "El número del paquete (fila 1) debe ser el mismo que el de su columna en \"" + sheetNameCodigos + "\".\n\n¿Seguir?",
-    ui.ButtonSet.YES_NO);
-  if (seguir !== ui.Button.YES) return;
-
-  var total = columnas.length;
-  hoja.getRange(1, 1, 5, Math.max(total, ultimaColumna, 1)).clearContent();
   var valores = [[], [], [], [], []];
-  columnas.forEach(function (col) {
-    valores[0].push(textoSeguro(col.nombre));
+  var formulas = [];
+  montos.forEach(function (n) {
+    var p = elegido[n];
+    valores[0].push(textoSeguro(nombreCortoRoblox(p.name)));
     valores[1].push("");
-    valores[2].push(textoSeguro(col.producto));
-    valores[3].push(col.costo);
-    valores[4].push(textoSeguro(col.nota));
+    valores[2].push(textoSeguro(p.product_id));
+    valores[3].push(Number(p.reseller_price) || "");
+    valores[4].push(textoSeguro("con stock" + (p.region ? " · " + p.region : "")));
+    formulas.push(formula);
   });
+  var total = montos.length;
+  hoja.clearContents();
   hoja.getRange(1, 1, 5, total).setValues(valores);
-  columnas.forEach(function (col, i) {
-    var celda = hoja.getRange(2, i + 1);
-    if (typeof col.precio === "string" && col.precio.charAt(0) === "=") celda.setFormulaR1C1(col.precio);
-    else celda.setValue(col.precio);
-  });
+  hoja.getRange(2, 1, 1, total).setFormulasR1C1([formulas]);
   hoja.getRange(1, 1, 1, total).setFontWeight("bold");
   hoja.getRange(2, 1, 1, total).setNumberFormat("#,##0.00");
   hoja.getRange(FILA_COSTO, 1, 1, total).setNumberFormat("0.0000\" USD\"");
   hoja.getRange(FILA_PRODUCTO, 1, 3, total).setFontColor("#888888");
   hoja.getRange(2, 1).setNote("Fila 2: precio en Bs = costo (fila 4) × dólar × (1 + ganancia %). El dólar y la ganancia " +
     "se cambian en la pestaña \"" + HOJA_TASA + "\". Si escribes un número encima, ese paquete queda con precio fijo hasta el próximo 🔄.");
-  hoja.getRange(FILA_PRODUCTO, 1).setNote("Fila 3: product_id de Central One, NO la toques (con él se compra el código cuando no " +
-    "quedan guardados; vacía = solo códigos guardados). Fila 4: costo en USD · fila 5: stock (del momento del 🔄). " +
-    "La fila 1 se puede renombrar, pero con el mismo número (es el que une el paquete con su columna de \"" + sheetNameCodigos + "\").");
+  hoja.getRange(FILA_PRODUCTO, 1).setNote("Fila 3: product_id de Central One, NO la toques (con él se compra el código). " +
+    "Fila 4: costo en USD · fila 5: stock (del momento del 🔄). La fila 1 se puede renombrar, pero con el mismo número de Robux.");
   SpreadsheetApp.flush();
-  ui.alert("✅ Listo: " + actualizados + " actualizado(s) y " + nuevos.length + " nuevo(s)." +
-    (eliminados.length ? " Eliminados (USD): " + eliminados.join(", ") + "." : "") +
-    (repetidos.length ? " Se quitaron " + repetidos.length + " repetido(s): " + repetidos.slice(0, 8).map(function (p) {
-      return nombreCortoRoblox(p.name) + " (" + p.reseller_price + " " + p.currency + (p.region ? ", " + p.region : "") + ")";
-    }).join(", ") + (repetidos.length > 8 ? "…" : "") + "." : "") +
-    (sinCentralOne.length ? " Ya no están en Central One (solo códigos guardados): " + sinCentralOne.join(", ") + "." : "") +
+  ui.alert("✅ Listo: " + total + " paquete(s) de Robux con stock." +
+    (sinStock.length ? " No se trajeron " + sinStock.length + " sin stock." : "") +
+    (repetidos.length ? " Se quitaron " + repetidos.length + " repetido(s)." : "") +
     (dolar > 0
       ? " Precios calculados con el dólar a " + formatoBs(dolar) + " y " + hojaTasa.getRange("B2").getValue() + " % de ganancia."
-      : " ⚠️ Falta el precio del dólar: escríbelo en la pestaña \"" + HOJA_TASA + "\", celda B1. Hasta entonces esos paquetes no se venden.") +
-    " La tienda tarda hasta ~2 minutos en mostrar los cambios.");
+      : " ⚠️ Falta el precio del dólar: escríbelo en la pestaña \"" + HOJA_TASA + "\", celda B1. Hasta entonces no se vende nada.") +
+    " La tienda tarda hasta ~2 minutos en mostrar los cambios. Vuelve a usar 🔄 cuando quieras actualizar stock y costos.");
 }
 
 // Pestaña "tasa_dolar" (se crea la primera vez): B1 = dólar en Bs (lo escribes tú) · B2 = ganancia en %
@@ -1073,12 +1037,6 @@ function nombreCortoRoblox(nombre) {
 // Tarjeta de Robux (el monto en Robux en el nombre)
 function esDeRobux(nombre) {
   return /\d[\d.,]*\s*robux/i.test(String(nombre || ""));
-}
-
-// Paquete de saldo en USD ("10 USD", "$25"), no de Robux: el 🔄 lo quita de PreciosRoblox
-function esDeUsd(nombre) {
-  var t = String(nombre || "");
-  return !esDeRobux(t) && /\busd\b|\$|d[oó]lar/i.test(t);
 }
 
 // Clave de un paquete: los números de su nombre ("1.000 Robux" -> "1000"), igual que en "Codigos"
