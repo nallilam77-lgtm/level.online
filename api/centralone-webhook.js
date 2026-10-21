@@ -10,6 +10,8 @@ import { limpiarMontoVES } from './_lib/recarga-comun.js';
 // Cuando un pedido se cierra (entregado / fallido / entregado en parte / reembolsado):
 //  - Blood Strike: su estado pasa a la pestaña "fazer_card" de la hoja de Blood Strike (acción estado_fazer
 //    de bloodstrike.gs, la misma que usa FazerCards); si falló, bloodstrike.gs anota UNA fila en "errores".
+//  - Free Fire (idempotency_key "ff-…"): igual, en la pestaña "fazer_card" de la hoja de Free Fire
+//    (estado_fazer de recargas.gs, SCRIPT_RECARGAS_URL).
 //  - Roblox (idempotency_key "rbx-…"): roblox.gs (GAS_URL) anota el código que la compra no alcanzó a
 //    esperar (entregar_api: "pedidos_api" dice que hay que enviarlo por WhatsApp) o libera el pago si
 //    falló (liberar_api). Las dos miran el estado de la fila: un aviso repetido no cambia nada.
@@ -34,6 +36,9 @@ const ORDEN_VALIDA = /^[A-Za-z0-9_.:-]{1,80}$/;
 const ESTADO_VALIDO = /^[a-z_]{1,30}$/;
 // idPedido de una compra de Roblox (api/_lib/juegos/roblox.js), que es su Idempotency-Key
 const PEDIDO_ROBLOX = /^rbx-[0-9a-f-]{36}$/;
+// Idempotency-Key de una recarga de Free Fire (api/_lib/juegos/freefire.js): "ff-<idPedido>" o, si el
+// paquete son varios pedidos (220 = dos de 110), "ff-<idPedido>-1", "-2"…
+const PEDIDO_FREEFIRE = /^ff-[0-9a-f-]{36}(-[1-9])?$/;
 const AL_SCRIPT = { tiempoMs: 8500, intentoMs: 8500 };
 
 export default async function handler(req, res) {
@@ -78,13 +83,17 @@ export default async function handler(req, res) {
   const idPedido = String(aviso?.order?.idempotency_key ?? '');
   if (PEDIDO_ROBLOX.test(idPedido)) return avisoRoblox(res, { aviso, evento, ordenCentralOne, idPedido });
 
-  const URL_BLOOD = (process.env.SCRIPT_BLOOD || '').trim();
-  if (!URL_BLOOD) {
-    console.error('🚨 centralone-webhook: falta SCRIPT_BLOOD en Vercel');
+  // Free Fire o Blood Strike: las dos hojas anotan el estado igual (acción estado_fazer)
+  const freeFire = PEDIDO_FREEFIRE.test(idPedido);
+  const juego = freeFire ? 'Free Fire' : 'Blood Strike';
+  const variable = freeFire ? 'SCRIPT_RECARGAS_URL' : 'SCRIPT_BLOOD';
+  const URL_HOJA = (process.env[variable] || '').trim();
+  if (!URL_HOJA) {
+    console.error(`🚨 centralone-webhook: falta ${variable} en Vercel (aviso de un pedido de ${juego})`);
     return res.status(503).json({ ok: false });
   }
   try {
-    const r = await llamarScript(URL_BLOOD, {
+    const r = await llamarScript(URL_HOJA, {
       accion: 'estado_fazer', ordenFazer: ordenCentralOne, estado, evento,
       idEvento: String(aviso.event_id ?? '').slice(0, 80),
       // Los avisos de la forma original no traen sequence: 0 = sin orden que comprobar
@@ -97,10 +106,10 @@ export default async function handler(req, res) {
     // "ocupado": no se anotó nada, que Central One lo repita. Otro error (p. ej. un Apps Script sin
     // estado_fazer): repetir no lo arreglaría.
     if (r?.ocupado) throw new Error('ocupado');
-    console.error(`⚠️ centralone-webhook: Blood Strike respondió "${r?.message || 'respuesta inválida'}" a estado_fazer (pedido ${ordenCentralOne}, ${estado})`);
+    console.error(`⚠️ centralone-webhook: ${juego} respondió "${r?.message || 'respuesta inválida'}" a estado_fazer (pedido ${ordenCentralOne}, ${estado})`);
     return res.status(200).json({ ok: true });
   } catch (error) {
-    console.error(`❌ centralone-webhook: no se pudo anotar el pedido ${ordenCentralOne} (${estado}): ${error.message}. Central One lo reintentará.`);
+    console.error(`❌ centralone-webhook: no se pudo anotar el pedido de ${juego} ${ordenCentralOne} (${estado}): ${error.message}. Central One lo reintentará.`);
     return res.status(503).json({ ok: false });
   }
 }

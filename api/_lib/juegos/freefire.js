@@ -1,6 +1,6 @@
 // Free Fire: precios, verificación de ID y recarga. Cómo se entrega lo decide el modo del menú
 // "🖐️ Recargas Free Fire" de la hoja (recargas.gs): manual ("sin_codigo"), pines + bot de Railway,
-// o API de FazerCards (pestaña "fazer_card", con el estado en tiempo real vía api/fazer-webhook.js).
+// o API de Central One (pestaña "fazer_card", con el estado en tiempo real vía api/centralone-webhook.js).
 // Lo usan api/juego.js (acciones precios y verificar) y api/recargar.js (recargar).
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
@@ -9,20 +9,22 @@ import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion
 import { FASES, ESTADO_PINES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
-import { crearOrdenFazer } from '../fazer.js';
+import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con fallo del bot:
 // precios 8 + verificar 32 + códigos 32 + bot 45 + devolver pines 15 + registrar 12 + marcar 12 = 156 s
 // Peor caso con éxito: precios 12 + verificar 32 + códigos 32 + bot 45 + marcar 12 + finalizado 12 + aviso 12 = 157 s
-// Peor caso por FazerCards: precios 12 + verificar 32 + códigos 32 + fazer 40 + marcar 12 + finalizado 12 + aviso 12 = 152 s
+// Peor caso por Central One: precios 12 + verificar 32 + catálogo 17 + códigos 32 + pedidos 40 + respuesta = 133 s
+// (el cierre sigue en segundo plano)
 const TIEMPOS = {
   // verificar_pago y obtener_codigo: hasta 3 intentos de 15 s dentro de 32 s
   idempotente: { tiempoMs: 32000, intentoMs: 15000, reintentos: 2, reintentarTrasTimeout: true },
   // Apps Script anterior (sin idPedido): un solo intento largo, nunca se repite
   sinIdempotencia: { tiempoMs: 20000 },
   bot: 45000,
-  // La orden de FazerCards NUNCA se reintenta: repetirla podría recargar dos veces
-  fazer: 40000,
+  // Pedidos de Central One (todos los de un paquete: 220 = dos de 110). Solo se repiten con la misma
+  // Idempotency-Key, así Central One nunca cobra dos veces
+  centralOne: 40000,
   devolver: { tiempoMs: 15000, intentoMs: 10000, reintentos: 1, reintentarTrasTimeout: true },
   incidente: 12000,
 };
@@ -30,39 +32,36 @@ const RAILWAY_URL = "https://bot-levelup-production.up.railway.app/canjear";
 // Error no previsto: no se sabe si el bot llegó a canjear los pines (recargas.gs los lista en la columna L)
 const PINES_POR_REVISAR = { pinesNoUsados: ['los de la columna L ("pines asignados al pedido")'], estadoNoUsados: ESTADO_PINES.inciertos };
 
-// Modo API (FazerCards): categoría y offer_id de cada paquete (clave del paquete -> offer_id).
-// Un paquete sin offer_id aquí NO se envía a la API: va a "sin_codigo" para hacerlo a mano.
-// Para ver los valores reales: node scripts/ofertas-fazer.mjs (con FAZER_API_KEY).
-const CATEGORIA_FAZER = "free_fire_latam";
-// Una lista = varias órdenes para un mismo paquete (FazerCards no vende 220: son dos de 110).
-const OFERTAS_FAZER = {
-  "110": "110_diamonds",
-  "220": ["110_diamonds", "110_diamonds"],
-  "341": "341_diamonds",
-  "572": "572_diamonds",
-  "1166": "1166_diamonds",
-  "2398": "2398_diamonds",
-  "6160": "6160_diamonds",
-  "semanal_lite": "weekly_lite",
-  "semanal": "weekly_membership",
-  "mensual": "monthly_membership",
-};
+// Modo API (Central One): el product_id de cada paquete está en la fila 3 de la pestaña "precios"
+// (la llena el menú "🖐️ Recargas Free Fire → 🔄 Traer productos de Central One" de recargas.gs) y
+// obtener_precios lo manda como "producto". Nunca se envía al navegador (ver sinProducto).
+// "2x<product_id>" = dos pedidos de ese producto (Central One no vende 220: son dos de 110).
+const PRODUCTO_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PRODUCTOS_DEL_PAQUETE = /^(?:([2-9])x)?([0-9a-f-]{36})$/i;
+const sinProducto = ({ producto, ...paquete }) => paquete;
+// Lista de product_id a pedir para un paquete (vacía = no se puede pedir por la API)
+function productosDe(producto) {
+  const partes = String(producto ?? '').trim().match(PRODUCTOS_DEL_PAQUETE);
+  if (!partes || !PRODUCTO_VALIDO.test(partes[2])) return [];
+  return Array(Number(partes[1] || 1)).fill(partes[2].toLowerCase());
+}
+// Cómo se anota en la hoja: "<id>" o "2x<id>"
+const textoProductos = (lista) => (lista.length > 1 ? `${lista.length}x${lista[0]}` : lista[0] || '');
+// Idempotency-Key de cada pedido: el webhook reconoce los de Free Fire por el "ff-" (api/centralone-webhook.js)
+const llavePedido = (idPedido, i, total) => `ff-${idPedido}${total > 1 ? `-${i + 1}` : ''}`;
 
 // Clave de un paquete, igual que clavePaquete() de recargas.gs: "110 Diamantes" -> "110";
 // las tarjetas se reconocen por el nombre de su columna en "precios" ("Tarjeta semanal",
-// "Semanal Lite", "Tarjeta mensual"; también en inglés) -> "semanal", "semanal_lite", "mensual".
+// "Semanal Lite", "Tarjeta mensual"; también en inglés) -> "semanal", "semanal_lite", "mensual";
+// los demás productos con nombre (p. ej. "Pase de Subida de Nivel") por sus palabras -> "pase_de_subida_de_nivel".
 function clavePaquete(texto) {
-  const t = String(texto ?? '').toLowerCase();
+  const t = String(texto ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   if (/semanal|weekly/.test(t)) return /lite/.test(t) ? 'semanal_lite' : 'semanal';
   if (/mensual|monthly/.test(t)) return 'mensual';
-  return t.replace(/[^0-9]/g, '');
+  const nombre = t.replace(/free\s*fire|latam|diamantes?|diamonds?/g, ' ');
+  if (!/[a-z]/.test(nombre)) return t.replace(/[^0-9]/g, '');
+  return nombre.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
-// Clave del ID del jugador en "fields" (la que muestra el script de ofertas para Free Fire)
-const CAMPO_JUGADOR_FAZER = "player_id";
-// offer_id de las órdenes de un paquete (vacía = no se puede pedir por la API) y cómo se anotan en
-// la hoja ("110_diamonds", o "2x110_diamonds" cuando son varias iguales)
-const ofertasDe = (clave) => [].concat(OFERTAS_FAZER[clave] || []);
-const textoOfertas = (lista) => (lista.length > 1 && lista.every((o) => o === lista[0]) ? `${lista.length}x${lista[0]}` : lista.join(':'));
 
 // Completar un pago insuficiente: la clave que recibe el cliente (la hoja solo guarda su huella SHA-256)
 const CLAVE_COMPLEMENTO = /^[A-Za-z0-9_-]{32,64}$/;
@@ -95,7 +94,7 @@ async function precios(req, res) {
       () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT),
       { esValido: catalogoValido });
     cabecerasCachePrecios(res);
-    return res.status(200).json(datos);
+    return res.status(200).json({ ...datos, catalogo: datos.catalogo.map(sinProducto) });
   } catch (error) {
     console.error("Error al obtener precios de Free Fire:", error.message);
     return res.status(503).json({ status: "error", message: "Error al conectar con la hoja de precios." });
@@ -151,7 +150,7 @@ async function catalogoFreeFire() {
   const { datos } = await conCache('precios:ff',
     () => llamarScript(process.env.SCRIPT_RECARGAS_URL, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT),
     { esValido: catalogoValido });
-  return datos.catalogo;
+  return datos.catalogo.map(sinProducto);
 }
 
 export const acciones = { precios, verificar, descuento: crearAccionDescuento('Free Fire', catalogoFreeFire) };
@@ -232,13 +231,49 @@ async function canjearEnBot({ pines, idJugador, secreto }) {
   }
 }
 
+// Llave de Central One para Free Fire (catalog:read, orders:read y orders:write). Sin ella, en modo
+// API los pedidos van a "sin_codigo" (recarga manual).
+const llaveFreeFire = () => (process.env.freefire_nuevo || "").trim();
+
+/**
+ * Qué pedir a Central One para este paquete, comprobado antes de tocar el saldo:
+ *  - { productos, payload }: listo (productos = lista de product_id; payload = datos del jugador).
+ *  - { motivo }: no se puede pedir por la API (sin llave, sin product_id, fuera del catálogo, sin stock
+ *               o pide un dato que la tienda no pregunta). En modo API el pedido va a "sin_codigo".
+ * En los modos manual y bot el resultado no se usa (solo cuesta leer el catálogo, en caché 15 min).
+ */
+async function prepararCentralOne({ apiKey, producto, id, paquete }) {
+  if (!apiKey) return { motivo: 'falta la variable freefire_nuevo en Vercel' };
+  const productos = productosDe(producto);
+  if (!productos.length) return { motivo: `el paquete "${paquete}" no tiene product_id de Central One en la fila 3 de "precios" (usar 🔄 Traer productos de Central One)` };
+  try {
+    const datos = await datosParaPedido({ apiKey, productId: productos[0], idJugador: String(id) });
+    return datos.error ? { motivo: datos.error } : { productos, payload: datos.payload };
+  } catch (error) {
+    return { motivo: `no se pudo preparar el pedido de Central One: ${error.message}` };
+  }
+}
+
+// product_id del paquete al completar un pago (el paquete sale de "por_completar"). "" si no se puede leer.
+async function productoDelCatalogo(urlScript, clave) {
+  try {
+    const { datos } = await conCache('precios:ff',
+      () => llamarScript(urlScript, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true }),
+      { esValido: catalogoValido, respaldoMs: 0 });
+    return datos.catalogo.find((p) => clavePaquete(p.diamantes) === clave)?.producto || '';
+  } catch (error) {
+    console.error(`⚠️ No se pudo leer el producto de Central One del paquete ${clave}: ${error.message}`);
+    return '';
+  }
+}
+
 /**
  * Fases 3-5 de una recarga con el pago ya verificado (y bloqueado "En proceso"): pines o
- * "sin_codigo" o API de FazerCards, canje y cierre. La usan recargar (un pago) y completarPago
+ * "sin_codigo" o API de Central One, canje y cierre. La usan recargar (un pago) y completarPago
  * (varios pagos que juntos cubren el precio).
  */
 async function entregarRecarga(res, {
-  URL_GOOGLE_SCRIPT, RAILWAY_SECRET, FAZER_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
+  URL_GOOGLE_SCRIPT, RAILWAY_SECRET, CENTRALONE_API_KEY, producto, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
   comprobante, referencias, scriptV2, cierreIdempotente, opcionesCriticas,
   utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
 }) {
@@ -257,6 +292,11 @@ async function entregarRecarga(res, {
     return todos;
   };
 
+  // Modo API: qué se pediría a Central One. Se comprueba ANTES de obtener_codigo (catálogo, stock y
+  // datos que pide el producto): si no se puede, en modo API el pedido va a "sin_codigo" con el motivo,
+  // en vez de bloquear el pago por un pedido que Central One iba a rechazar. No se ha gastado nada.
+  const api = await prepararCentralOne({ apiKey: CENTRALONE_API_KEY, producto, id, paquete });
+
   // ==========================================
   // FASE 3: EXTRAER LOS CÓDIGOS DE LA HOJA
   // ==========================================
@@ -267,8 +307,9 @@ async function entregarRecarga(res, {
     dataCodigos = await llamarScript(URL_GOOGLE_SCRIPT, {
       accion: "obtener_codigo", diamantes: numeroDiamantes, idPedido, referencia: referenciaCompleta,
       manualSiNoHay: true, idJugador: String(id), paquete: textoParaHoja(String(paquete)), montoCobrado: precioReal, comprobante,
-      // Modo API: con qué oferta se pediría a FazerCards (vacía = no se puede, va a "sin_codigo")
-      ofertaFazer: FAZER_API_KEY ? textoOfertas(ofertasDe(numeroDiamantes)) : "",
+      // Modo API: qué producto se pediría a Central One (vacío = no se puede: va a "sin_codigo" con el motivo)
+      ofertaFazer: textoProductos(api.productos || []),
+      ...(api.motivo && { motivoSinApi: textoParaHoja(api.motivo, 300) }),
       ...(desc && { codigoDescuento: desc.codigo }),
     }, opcionesCriticas);
   } catch (error) {
@@ -287,8 +328,8 @@ async function entregarRecarga(res, {
           : { sinPines: true };
         // El pedido se quedó en "sin_codigo": hacerlo desde ahí
         if (devolucion.manual) queHacer = 'el pedido está en la pestaña "sin_codigo": hacer la recarga a mano desde ahí';
-        // Modo API: la orden NO se envió a FazerCards (quedó "NO ENVIADO" en "fazer_card")
-        if (devolucion.api) queHacer = 'la orden NO se envió a FazerCards (pestaña "fazer_card"): hacer la recarga a mano';
+        // Modo API: el pedido NO se envió a Central One (quedó "NO ENVIADO" en "fazer_card")
+        if (devolucion.api) queHacer = 'el pedido NO se envió a Central One (pestaña "fazer_card"): hacer la recarga a mano';
       } else {
         detallePines = { pinesNoUsados: [`consultar la pestaña "asignaciones_pines", pedido ${idPedido}`], estadoNoUsados: `${ESTADO_PINES.noDevueltos} (Apps Script tampoco respondió a la devolución: ${devolucion?.message})` };
       }
@@ -304,7 +345,7 @@ async function entregarRecarga(res, {
   // Sin pines: el pedido quedó en "sin_codigo" para hacerlo a mano; se cierra igual que una recarga
   const manual = dataCodigos?.status === "success" && dataCodigos.manual === true;
   if (manual) console.info(`📝 Sin pines de ${numeroDiamantes}: pedido ${idPedido} (ID ${id}) anotado en "sin_codigo" para recarga manual`);
-  // Modo API: el pedido quedó en "fazer_card" y la recarga la hace FazerCards
+  // Modo API: el pedido quedó en "fazer_card" y la recarga la hace Central One
   const porApi = dataCodigos?.status === "success" && dataCodigos.api === true;
 
   if (!manual && !porApi && (!dataCodigos || dataCodigos.status !== "success" || !Array.isArray(dataCodigos.pines) || !dataCodigos.pines.length)) {
@@ -320,25 +361,27 @@ async function entregarRecarga(res, {
   const pinesExtraidos = manual || porApi ? [] : dataCodigos.pines;
 
   // ==========================================
-  // FASE 4 (modo API): ORDEN EN FAZERCARDS
+  // FASE 4 (modo API): PEDIDOS EN CENTRAL ONE
   // ==========================================
   let ordenFazer = null;
   if (porApi) {
-    const ofertas = ofertasDe(numeroDiamantes);
-    const offerId = textoOfertas(ofertas);
-    // Una orden tras otra (220 = dos de 110), cada una con su Idempotency-Key, dentro del mismo tiempo total
+    const productos = api.productos || [];
+    const productoTexto = textoProductos(productos);
+    // Un pedido tras otro (220 = dos de 110), cada uno con su Idempotency-Key, dentro del mismo tiempo total
     const ordenes = [];
-    let orden = ofertas.length && FAZER_API_KEY ? null
-      // No debería pasar (sin oferta recargas.gs lo manda a "sin_codigo"); por si acaso, no se llama a la API
-      : { tipo: 'rechazo', motivo: `El paquete ${numeroDiamantes} no tiene offer_id en OFERTAS_FAZER o falta FAZER_API_KEY. No se llamó a la API.` };
-    for (let i = 0; i < ofertas.length && !orden; i++) {
-      const resultado = await crearOrdenFazer({
-        apiKey: FAZER_API_KEY, categoria: CATEGORIA_FAZER, offerId: ofertas[i], campos: { [CAMPO_JUGADOR_FAZER]: String(id) },
-        idempotencia: ofertas.length > 1 ? `${idPedido}-${i + 1}` : idPedido, tiempoMs: Math.round(TIEMPOS.fazer / ofertas.length),
+    let orden = productos.length ? null
+      // No debería pasar (sin producto recargas.gs lo manda a "sin_codigo"); por si acaso, no se llama a la API
+      : { tipo: 'rechazo', motivo: `El paquete ${numeroDiamantes} no se puede pedir a Central One (${api.motivo || 'sin product_id'}). No se llamó a la API.` };
+    for (let i = 0; i < productos.length && !orden; i++) {
+      const resultado = await crearPedidoCentralOne({
+        apiKey: CENTRALONE_API_KEY, productId: productos[i], payload: api.payload,
+        idempotencia: llavePedido(idPedido, i, productos.length),
+        nota: `Level Up ${idPedido}${productos.length > 1 ? ` (${i + 1} de ${productos.length})` : ''}`,
+        tiempoMs: Math.round(TIEMPOS.centralOne / productos.length),
       });
       if (resultado.tipo === 'ok') ordenes.push(resultado.orden);
       else orden = ordenes.length
-        ? { ...resultado, motivo: `${resultado.motivo} OJO: antes ya se había creado ${ordenes.length} de ${ofertas.length} órdenes (${ordenes.map((o) => o.id).join(', ')}): esa parte SÍ se recargó; falta el resto.` }
+        ? { ...resultado, motivo: `${resultado.motivo} OJO: antes ya se había creado ${ordenes.length} de ${productos.length} pedidos (${ordenes.map((o) => o.referencia).join(', ')}): esa parte SÍ se recargó; falta el resto.` }
         : resultado;
     }
 
@@ -348,18 +391,21 @@ async function entregarRecarga(res, {
       await bloquear({
         fase: FASES.apiFreeFire, noAplica: true,
         motivo: orden.tipo === 'incierto'
-          ? `${orden.motivo} Oferta ${offerId}. ANTES DE REPETIR: buscar en el panel de FazerCards si existe una orden para el jugador ${id}.`
-          : `${orden.motivo} Oferta ${offerId}.`,
+          ? `${orden.motivo} Producto ${productoTexto}. ANTES DE REPETIR: buscar en el portal de Central One un pedido con la nota "Level Up ${idPedido}" para el jugador ${id}.`
+          : `${orden.motivo} Producto ${productoTexto}.`,
         queHacer: orden.tipo === 'incierto'
-          ? 'confirmar la orden en FazerCards antes de repetir la recarga'
-          : 'no se cobró nada en FazerCards; hacer la recarga a mano con el ID correcto o devolver el pago',
+          ? 'confirmar el pedido en Central One antes de repetir la recarga'
+          : orden.codigo === 'insufficient_balance'
+            ? 'RECARGAR SALDO en Central One; no se cobró nada. Hacer la recarga a mano o devolver el pago'
+            : 'no se cobró nada en Central One; hacer la recarga a mano con el ID correcto o devolver el pago',
       });
       // "fallo técnico": la página muestra el modal de "recarga en revisión"
       return res.status(202).json({ status: "error", message: "Fallo técnico con el proveedor. Tu pago está verificado y la recarga quedó en revisión." });
     }
-    // Varias órdenes: sus números separados por comas (recargas.gs pone cada una en su fila de "fazer_card")
-    ordenFazer = { id: ordenes.map((o) => o.id).join(','), status: ordenes[0].status };
-    console.info(`🛒 FazerCards: orden ${ordenFazer.id} (${ordenFazer.status}) para el pedido ${idPedido} (ID ${id})`);
+    // Varios pedidos: sus reference_code separados por comas (recargas.gs pone cada uno en su fila de
+    // "fazer_card"; el webhook de Central One los busca por ese código)
+    ordenFazer = { id: ordenes.map((o) => o.referencia).join(','), status: ordenes[0].status, total: ordenes.map((o) => o.total).join(' + ') };
+    console.info(`🛒 Central One: pedido ${ordenFazer.id} (${ordenFazer.status}, ${ordenFazer.total}) para el pedido ${idPedido} (ID ${id})`);
   }
 
   // ==========================================
@@ -414,7 +460,7 @@ async function entregarRecarga(res, {
     paquete: paquete,
     referencias: referenciaCompleta,
     codigosUsados: manual ? 'SIN CÓDIGO: recarga manual pendiente (pestaña "sin_codigo")'
-      : porApi ? `API FazerCards (orden ${ordenFazer.id || 'sin id'})` : pinesExtraidos.join(" | "),
+      : porApi ? `API Central One (pedido ${ordenFazer.id || 'sin id'}, ${ordenFazer.total})` : pinesExtraidos.join(" | "),
     // recargas.gs guarda la orden y su estado en la pestaña "fazer_card"
     ...(porApi && { ordenFazer: ordenFazer.id, estadoFazer: ordenFazer.status }),
     urlImagen: comprobante,
@@ -437,7 +483,7 @@ async function entregarRecarga(res, {
       motivo: manual
         ? `Recarga MANUAL (anotada en "sin_codigo"), pero Apps Script no respondió al cierre${reintentos}: falta ${pendiente}`
         : porApi
-          ? `FazerCards aceptó la orden ${ordenFazer.id}, pero Apps Script no respondió al cierre${reintentos}: falta ${pendiente}`
+          ? `Central One aceptó el pedido ${ordenFazer.id}, pero Apps Script no respondió al cierre${reintentos}: falta ${pendiente}`
           : `La recarga SÍ se entregó, pero Apps Script no respondió al cierre${reintentos}: falta ${pendiente}`,
       referenciaCompleta, pinesUsados: bot.usados, noAplica: porApi,
       estadoPago: faltan.includes('marcar el pago como "Usado"')
@@ -475,7 +521,7 @@ export async function recargar(req, res) {
     // y el bot lo rechaza con 401 aunque la clave "se vea" igual
     const RAILWAY_SECRET = (process.env.RAILWAY_SECRET || "").trim();
     // Opcional: sin ella, en modo API los pedidos van a "sin_codigo" (recarga manual)
-    const FAZER_API_KEY = (process.env.FAZER_API_KEY || "").trim();
+    const CENTRALONE_API_KEY = llaveFreeFire();
 
     // Sin secreto no se puede autenticar con el bot: se aborta antes de tocar pagos o códigos
     if (!URL_GOOGLE_SCRIPT || !RAILWAY_SECRET) {
@@ -625,7 +671,7 @@ export async function recargar(req, res) {
     }
 
     return await entregarRecarga(res, {
-      URL_GOOGLE_SCRIPT, RAILWAY_SECRET, FAZER_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
+      URL_GOOGLE_SCRIPT, RAILWAY_SECRET, CENTRALONE_API_KEY, producto: paqueteGsheet.producto, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
       comprobante, referencias: [referenciaCompleta], scriptV2, cierreIdempotente, opcionesCriticas,
       utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
     });
@@ -662,7 +708,7 @@ async function completarPago(req, res) {
 
     const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
     const RAILWAY_SECRET = (process.env.RAILWAY_SECRET || "").trim();
-    const FAZER_API_KEY = (process.env.FAZER_API_KEY || "").trim();
+    const CENTRALONE_API_KEY = llaveFreeFire();
     if (!URL_GOOGLE_SCRIPT || !RAILWAY_SECRET) {
       return faltaConfiguracion(res, ["SCRIPT_RECARGAS_URL", "RAILWAY_SECRET"].filter((v) => !(process.env[v] || "").trim()),
         { status: "error", message: "No podemos completar tu pago en este momento. Escríbenos por WhatsApp con tus referencias." });
@@ -747,7 +793,8 @@ async function completarPago(req, res) {
     console.info(`🧩 Pago completado (${referencias.join(' + ')}) para el pedido ${datos.idPedidoOriginal} -> ${idPedido} (ID ${id})`);
 
     return await entregarRecarga(res, {
-      URL_GOOGLE_SCRIPT, RAILWAY_SECRET, FAZER_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal,
+      URL_GOOGLE_SCRIPT, RAILWAY_SECRET, CENTRALONE_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal,
+      producto: await productoDelCatalogo(URL_GOOGLE_SCRIPT, numeroDiamantes),
       desc: datos.codigoDescuento ? { codigo: String(datos.codigoDescuento) } : null,
       comprobante, referencias, scriptV2: true, opcionesCriticas: TIEMPOS.idempotente, utilidades,
       // usar_complemento de recargas.gs v3 anuncia su versión

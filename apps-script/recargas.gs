@@ -21,9 +21,12 @@
 //   - Un pago encontrado NUNCA vuelve a "Verificado": ante cualquier error queda "Usado" y el
 //     pedido se anota en "errores" (por eso ya no existen liberar_pedido ni marcar_verificado).
 //   - Free Fire tiene 3 modos (menú "🖐️ Recargas Free Fire"): MANUAL (todo a "sin_codigo"),
-//     BOT (pines de "codigos" + bot de Railway) y API (FazerCards: pestaña "fazer_card", con el
-//     estado que avisa FazerCards en tiempo real). Sin pines o sin oferta de FazerCards, el pedido
+//     BOT (pines de "codigos" + bot de Railway) y API (Central One: pestaña "fazer_card", con el
+//     estado que avisa Central One en tiempo real). Sin pines o sin producto de Central One, el pedido
 //     va a "sin_codigo" para hacerlo a mano. En los tres, al cliente se le responde recarga exitosa.
+//   - Pestaña "precios": fila 1 paquete · fila 2 precio en Bs (lo escribes tú; vacío = no se vende) ·
+//     fila 3 product_id de Central One · fila 4 costo en USD · fila 5 stock. Las filas 3-5 las llena
+//     el menú "🖐️ Recargas Free Fire → 🔄 Traer productos de Central One" (llave con el menú 🔑).
 //   - Pago insuficiente: el pago queda "Por completar" (nadie más puede usarlo) y el pedido en la
 //     pestaña "por_completar". El cliente paga la diferencia con su clave (Vercel solo manda la huella);
 //     el jugador, el paquete y el precio salen de esa fila, nunca del navegador.
@@ -50,7 +53,7 @@ const ESPERA_CANDADO_MS = 8000;
 // MacroDroid espera 30 s: un pago nuevo puede esperar más que Vercel a que termine una recarga
 // (con 8 s, si había una recarga en curso, el pago se rechazaba como "ocupado" y NO se guardaba).
 const ESPERA_CANDADO_MACRODROID_MS = 20000;
-// Webhook de FazerCards: solo espera 10 s (si no, lo reintenta en 1 minuto)
+// Webhooks de Central One y FazerCards: solo esperan 10 s (si no, lo reintentan más tarde)
 const ESPERA_CANDADO_WEBHOOK_MS = 4000;
 const MENSAJE_ERROR_INTERNO = "Error interno en el sistema de recargas. Intenta de nuevo en unos segundos.";
 
@@ -76,19 +79,26 @@ const COLUMNAS_SIN_CODIGO = ["fecha-hora", "id jugador", "paquete", "referencia"
 // Interruptor (menú "🖐️ Recargas Free Fire"), valor guardado en esta propiedad:
 //   "manual"     = TODOS los pedidos van a "sin_codigo" aunque haya pines (también si no se eligió nada)
 //   "automatico" = BOT: se usan los pines y solo van a "sin_codigo" si faltan
-//   "api"        = FazerCards: Vercel envía la orden; solo van a "sin_codigo" los paquetes sin oferta
+//   "api"        = Central One: Vercel envía el pedido; solo van a "sin_codigo" los paquetes sin producto
 const PROPIEDAD_MODO_RECARGA = "MODO_RECARGA_FF";
 
-// --- FazerCards (modo API) ---
-// Una fila por pedido enviado a la API. La columna K ("estado") la actualiza el webhook de
-// FazerCards (api/fazer-webhook.js -> estado_fazer) cada vez que la orden cambia de estado.
+// --- Central One (modo API) ---
+// Una fila por pedido enviado a la API (el nombre "fazer_card" se quedó de cuando era FazerCards).
+// La columna K ("estado") la actualiza el webhook de Central One (api/centralone-webhook.js ->
+// estado_fazer) cada vez que el pedido cambia de estado. J = reference_code del pedido (CO-ORD-…).
 const HOJA_FAZER = "fazer_card";
-const COLUMNAS_FAZER = ["fecha-hora", "id jugador", "paquete", "oferta FazerCards", "referencia", "cobrado (Bs)",
-  "comprobante", "código descuento", "id pedido", "orden FazerCards", "estado", "actualizado", "detalle"];
+const COLUMNAS_FAZER = ["fecha-hora", "id jugador", "paquete", "producto Central One", "referencia", "cobrado (Bs)",
+  "comprobante", "código descuento", "id pedido", "pedido Central One", "estado", "actualizado", "detalle"];
 // Estado en "asignaciones_pines" de un pedido que va por la API (no salió ningún pin)
-const ESTADO_API = "API FAZERCARDS";
+const ESTADO_API = "API CENTRAL ONE";
 const OFERTA_FAZER_VALIDA = /^[A-Za-z0-9_.:-]{1,80}$/;
-const TEXTO_ESTADO_FAZER = { processing: "⏳ EN PROCESO", completed: "✅ COMPLETADA", failed: "❌ FALLIDA", refund: "↩️ REEMBOLSADA", refunded: "↩️ REEMBOLSADA" };
+// confirmed/processing/completed/failed/partially_completed/cancelled/refunded: Central One
+// (processing/completed/failed/refund también son de FazerCards: órdenes anteriores)
+const TEXTO_ESTADO_FAZER = { processing: "⏳ EN PROCESO", confirmed: "⏳ EN PROCESO", completed: "✅ COMPLETADA", failed: "❌ FALLIDA",
+  partially_completed: "⚠️ ENTREGA PARCIAL", cancelled: "❌ CANCELADA", refund: "↩️ REEMBOLSADA", refunded: "↩️ REEMBOLSADA" };
+// Estados en los que la recarga NO llegó (completa) al jugador: se anotan en "errores"
+const ESTADOS_FALLO_FAZER = /^(failed|cancelled|partially_completed|refund)/;
+const TEXTO_FALLO_FAZER = /FALLIDA|CANCELADA|PARCIAL|REEMBOLSADA/;
 // Aviso del webhook que llegó antes de que la orden se anotara: se guarda este tiempo (máximo de CacheService)
 const ESPERA_AVISO_FAZER_S = 21600;
 // Columnas de la pestaña "errores" (A-E son las de siempre; F-L agregan el detalle)
@@ -185,7 +195,8 @@ function doPost(e) {
   };
 
   try {
-    // Webhook de FazerCards (api/fazer-webhook.js): espera menos el candado porque FazerCards corta a los 10 s
+    // Webhooks de Central One y FazerCards (api/centralone-webhook.js, api/fazer-webhook.js): esperan menos
+    // el candado porque cortan a los 10 s
     if (accion === "estado_fazer") return conCandado(function () { return estadoFazer(datos); }, ESPERA_CANDADO_WEBHOOK_MS);
     if (sinCandado.hasOwnProperty(accion)) return sinCandado[accion](datos);
     if (conCandadoAcciones.hasOwnProperty(accion)) {
@@ -604,17 +615,27 @@ function marcarUsadosLosFinalizados() {
 //    -> registrar_finalizado (éxito) o registrar_error + devolver_codigos (fallo)
 // =====================================================================
 
-// Sin candado: solo lectura de la pestaña "precios" (fila 1: paquetes, fila 2: precios)
+// Sin candado: solo lectura de la pestaña "precios" (fila 1: paquetes, fila 2: precios, fila 3: product_id
+// de Central One, que Vercel usa para comprar y nunca muestra al cliente, fila 5: stock)
 function obtenerPrecios() {
   var hojaPrecios = obtenerHoja("precios", true);
   if (!hojaPrecios) return responder({ status: "error", message: "Falta pestaña precios" });
 
   var rows = hojaPrecios.getDataRange().getValues();
   var paquetes = [];
+  // En modo API no se muestra lo que Central One no tenía en stock en el último 🔄 (los demás modos no dependen de él)
+  var soloConStock = modoRecarga() === "api";
   if (rows.length >= 2) {
     for (var i = 0; i < rows[0].length; i++) {
       var titulo = String(rows[0][i] || "").trim();
-      if (titulo) paquetes.push({ diamantes: titulo, precio: rows[1][i] });
+      // Sin precio no se vende: se cobraría 0
+      if (!titulo || !(limpiarMontoVES(rows[1][i]) > 0)) continue;
+      if (soloConStock && rows.length >= FILA_STOCK && /^SIN STOCK/.test(String(rows[FILA_STOCK - 1][i]))) continue;
+      // Un precio escrito como número (1144.4) se manda como se escribe en Bs ("1.144,40")
+      var paquete = { diamantes: titulo, precio: typeof rows[1][i] === "number" ? formatoBs(rows[1][i]) : rows[1][i] };
+      var producto = rows.length >= FILA_PRODUCTO ? String(rows[FILA_PRODUCTO - 1][i] || "").trim() : "";
+      if (producto) paquete.producto = producto;
+      paquetes.push(paquete);
     }
   }
   return responder({ status: "success", catalogo: paquetes, version: VERSION_SCRIPT });
@@ -643,10 +664,10 @@ function obtenerCodigo(datos) {
   // Modo manual: no se toca el inventario, el pedido va directo a "sin_codigo"
   var modo = modoRecarga();
   if (modo === "manual" && puedeIrASinCodigo(datos, idPedido)) return pasarASinCodigo(datos, idPedido, "modo manual activado");
-  // Modo API: la recarga la hace FazerCards (Vercel envía la orden); sin oferta para el paquete, a mano
+  // Modo API: la recarga la hace Central One (Vercel envía el pedido); si no se puede pedir, a mano con el motivo
   if (modo === "api" && puedeIrASinCodigo(datos, idPedido)) {
     return OFERTA_FAZER_VALIDA.test(String(datos.ofertaFazer || "")) ? pasarAFazer(datos, idPedido)
-      : pasarASinCodigo(datos, idPedido, "modo API: el paquete no tiene oferta de FazerCards (OFERTAS_FAZER en Vercel)");
+      : pasarASinCodigo(datos, idPedido, "modo API: " + String(datos.motivoSinApi || "el paquete no tiene producto de Central One (fila 3 de precios)").slice(0, 300));
   }
 
   var hojaCodigos = obtenerHoja("codigos");
@@ -699,12 +720,15 @@ function obtenerCodigo(datos) {
 
 // Clave de un paquete (igual que en api/_lib/juegos/freefire.js): "110 💎" -> "110"; las tarjetas
 // por su nombre: "Tarjeta semanal" -> "semanal", "Semanal Lite" -> "semanal_lite", "Tarjeta mensual"
-// -> "mensual". Así una columna "Tarjeta semanal" en "codigos" guarda los pines de esa tarjeta.
+// -> "mensual"; los demás productos con nombre por sus palabras ("Pase de Subida de Nivel" ->
+// "pase_de_subida_de_nivel"). Así una columna "Tarjeta semanal" en "codigos" guarda los pines de esa tarjeta.
 function clavePaquete(texto) {
-  var t = String(texto || "").toLowerCase();
+  var t = String(texto || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   if (/semanal|weekly/.test(t)) return /lite/.test(t) ? "semanal_lite" : "semanal";
   if (/mensual|monthly/.test(t)) return "mensual";
-  return t.replace(/[^0-9]/g, "");
+  var nombre = t.replace(/free\s*fire|latam|diamantes?|diamonds?/g, " ");
+  if (!/[a-z]/.test(nombre)) return t.replace(/[^0-9]/g, "");
+  return nombre.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
 // La tienda lo pide (manualSiNoHay) y el pedido trae su id: sin id no se podría evitar
@@ -763,8 +787,9 @@ function cambiarModoRecarga(modo) {
   var textos = {
     manual: "🖐️ MODO MANUAL: todos los pedidos van a la pestaña \"" + HOJA_SIN_CODIGO + "\" para que los hagas tú. No se usan los pines.",
     bot: "⚡ MODO BOT: se usan los pines de \"codigos\" y los canjea el bot. Solo van a \"" + HOJA_SIN_CODIGO + "\" los paquetes sin pines.",
-    api: "🛒 MODO API: cada pedido se envía a FazerCards y queda en la pestaña \"" + HOJA_FAZER + "\" con su estado en tiempo real. " +
-      "Los paquetes sin oferta de FazerCards van a \"" + HOJA_SIN_CODIGO + "\"."
+    api: "🛒 MODO API: cada pedido se envía a Central One y queda en la pestaña \"" + HOJA_FAZER + "\" con su estado en tiempo real. " +
+      "Los paquetes que no se pueden pedir (sin producto en la fila 3 de precios, sin stock o sin la llave freefire_nuevo en Vercel) van a \"" +
+      HOJA_SIN_CODIGO + "\" con el motivo."
   };
   SpreadsheetApp.getUi().alert("Recargas de Free Fire", textos[modoRecarga()], SpreadsheetApp.getUi().ButtonSet.OK);
 }
@@ -789,7 +814,7 @@ function pasarAFazer(datos, idPedido) {
     ""
   ]);
   hojaAsignaciones().appendRow([fechaHora, idPedido, textoSeguro(datos.referencia || ""),
-    textoSeguro("oferta " + datos.ofertaFazer), "", "", ESTADO_API + " - POR ENVIAR (pestaña " + HOJA_FAZER + ")"]);
+    textoSeguro("producto " + datos.ofertaFazer), "", "", ESTADO_API + " - POR ENVIAR (pestaña " + HOJA_FAZER + ")"]);
   SpreadsheetApp.flush();
   return responder({ status: "success", pines: [], api: true });
 }
@@ -829,8 +854,8 @@ function textoEstadoFazer(estado) {
   return (TEXTO_ESTADO_FAZER[e] || "❔ " + e.toUpperCase()) + " (" + e + ")";
 }
 
-// registrar_finalizado de un pedido por API: la orden que aceptó FazerCards queda en su fila. Si son
-// varias ("ord1,ord2": 220 = dos de 110), cada una en su propia fila para que el webhook la siga.
+// registrar_finalizado de un pedido por API: el pedido que aceptó Central One queda en su fila. Si son
+// varios ("CO-ORD-1,CO-ORD-2": 220 = dos de 110), cada uno en su propia fila para que el webhook lo siga.
 // Si el webhook avisó antes de este momento, se aplica ahora ese estado.
 function anotarOrdenFazer(idPedido, orden, estado) {
   var fila = buscarFilaFazer(9, idPedido);
@@ -849,7 +874,7 @@ function anotarOrdenFazer(idPedido, orden, estado) {
   var cache = CacheService.getScriptCache();
   ordenes.forEach(function (o, i) {
     actualizarFilaFazer(filas[i], { orden: o, estado: textoEstadoFazer(estado || "processing"),
-      detalle: ordenes.length > 1 ? "orden " + (i + 1) + " de " + ordenes.length + " aceptada por FazerCards" : "orden aceptada por FazerCards" });
+      detalle: ordenes.length > 1 ? "pedido " + (i + 1) + " de " + ordenes.length + " aceptado por Central One" : "pedido aceptado por Central One" });
     var guardado = o && cache.get("fazer_" + o);
     if (guardado) {
       var aviso = JSON.parse(guardado);
@@ -859,18 +884,27 @@ function anotarOrdenFazer(idPedido, orden, estado) {
   });
 }
 
-// Webhook de FazerCards (acción estado_fazer, con candado): nuevo estado de una orden.
+// Webhook de Central One o de FazerCards (acción estado_fazer, con candado): nuevo estado de un pedido.
 // Se puede repetir: el mismo estado dos veces no cambia nada.
 function estadoFazer(datos) {
   var orden = String(datos.ordenFazer || "");
   var estado = String(datos.estado || "").toLowerCase();
   if (!OFERTA_FAZER_VALIDA.test(orden) || !/^[a-z_]{1,30}$/.test(estado)) {
-    return responder({ status: "error", message: "Datos de FazerCards inválidos" });
+    return responder({ status: "error", message: "Datos del proveedor inválidos" });
+  }
+  // Central One no garantiza el orden de los avisos: uno con "sequence" menor que el último ya anotado
+  // para este pedido es viejo y no debe pisar al nuevo (FazerCards no manda secuencia: 0)
+  var secuencia = Number(datos.secuencia) || 0;
+  if (secuencia) {
+    var cacheSecuencia = CacheService.getScriptCache();
+    var ultima = Number(cacheSecuencia.get("seq_" + orden)) || 0;
+    if (secuencia < ultima) return responder({ status: "success", encontrado: true, ignorado: "aviso anterior al último anotado" });
+    cacheSecuencia.put("seq_" + orden, String(secuencia), ESPERA_AVISO_FAZER_S);
   }
   var fila = buscarFilaFazer(10, orden);
   if (!fila) {
-    // La orden aún no se anotó (el aviso llegó antes que registrar_finalizado) o es de otro juego
-    // (Blood Strike usa la misma cuenta): se guarda unas horas por si aparece
+    // El pedido aún no se anotó (el aviso llegó antes que registrar_finalizado) o es de una orden vieja
+    // de FazerCards de otro juego: se guarda unas horas por si aparece
     CacheService.getScriptCache().put("fazer_" + orden, JSON.stringify({ estado: estado, evento: String(datos.evento || "") }), ESPERA_AVISO_FAZER_S);
     return responder({ status: "success", encontrado: false });
   }
@@ -879,26 +913,36 @@ function estadoFazer(datos) {
   return responder({ status: "success", encontrado: true });
 }
 
-// Si la orden falló o se reembolsó, la recarga NO llegó al jugador: se anota UNA vez en "errores"
-// para hacerla a mano (el pago ya está "Usado").
+// Si el pedido falló, se canceló, se entregó en parte o se reembolsó, la recarga NO llegó (completa) al
+// jugador: se anota UNA vez en "errores" para hacerla a mano (el pago ya está "Usado").
 function aplicarEstadoFazer(fila, estado, evento) {
   var valores = hojaFazer().getRange(fila, 1, 1, COLUMNAS_FAZER.length).getValues()[0];
   var anterior = String(valores[10]);
   var texto = textoEstadoFazer(estado);
   if (anterior === texto) return;
-  var fallo = estado === "failed" || estado.indexOf("refund") === 0;
-  if (fallo && !/FALLIDA|REEMBOLSADA/.test(anterior)) {
-    var motivo = "FazerCards marcó la orden " + valores[9] + " como " + estado + ": la recarga NO llegó al jugador";
-    registrarError({
+  var fallo = ESTADOS_FALLO_FAZER.test(estado);
+  var datosError = function (fase, motivo, estadoPago) {
+    return {
       idJugador: valores[1], paquete: valores[2], referencia: valores[4], idPedido: valores[8], comprobante: valores[6],
-      fase: "4. RECARGA DE FREE FIRE EN LA API DEL PROVEEDOR (FazerCards) - aviso posterior del webhook",
-      motivo: motivo,
+      fase: fase, motivo: motivo,
       estadoPines: "NO APLICA: recarga directa por API, sin pines",
-      estadoPago: "USADO: hacer la recarga a mano o devolver el pago",
+      estadoPago: estadoPago,
       urlImagen: motivo + " | JUGADOR: " + valores[1] + " | PAQUETE: " + valores[2] + " | REFERENCIA: " + valores[4] + " | PEDIDO: " + valores[8]
-    });
+    };
+  };
+  if (fallo && !TEXTO_FALLO_FAZER.test(anterior)) {
+    registrarError(datosError("4. RECARGA DE FREE FIRE EN LA API DEL PROVEEDOR (Central One) - aviso posterior del webhook",
+      "El proveedor marcó el pedido " + valores[9] + " como " + estado + ": la recarga NO llegó (completa) al jugador",
+      "USADO: hacer la recarga a mano o devolver el pago"));
   }
-  actualizarFilaFazer(fila, { estado: texto, detalle: "aviso " + String(evento || "de FazerCards") + (fallo ? " - anotado en errores" : "") });
+  // Central One: un pedido "failed" puede entregarse después (y se cobra). Si ya estaba en "errores"
+  // para hacerla a mano, se avisa para no recargar dos veces.
+  if (estado === "completed" && /FALLIDA|CANCELADA/.test(anterior)) {
+    registrarError(datosError("4. RECARGA DE FREE FIRE EN LA API DEL PROVEEDOR (Central One) - entrega posterior a un fallo",
+      "ATENCIÓN: el pedido " + valores[9] + " figuraba como fallido y el proveedor lo ENTREGÓ después: NO hacer la recarga a mano (si ya se hizo, el jugador recibió dos)",
+      "USADO (correcto): la recarga sí llegó"));
+  }
+  actualizarFilaFazer(fila, { estado: texto, detalle: "aviso " + String(evento || "del proveedor") + (fallo ? " - anotado en errores" : "") });
 }
 
 // Devuelve al inventario los pines de un pedido (el bot nunca los recibió o no los procesó)
@@ -1014,10 +1058,10 @@ function registrarFinalizado(datos) {
     }
     if (asignacion && asignacion.estado.indexOf(ESTADO_API) === 0) {
       hojaAsignaciones().getRange(asignacion.fila, 7).setValue(
-        textoSeguro(ESTADO_API + " - ENVIADA (orden " + (datos.ordenFazer || "sin id") + ", " + fechaHora + ")"));
+        textoSeguro(ESTADO_API + " - ENVIADA (pedido " + (datos.ordenFazer || "sin id") + ", " + fechaHora + ")"));
     }
   });
-  // Modo API: la orden de FazerCards y su estado quedan en "fazer_card"
+  // Modo API: el pedido de Central One y su estado quedan en "fazer_card"
   if (datos.ordenFazer) {
     paso("fazer_card", function () { anotarOrdenFazer(idPedido, String(datos.ordenFazer), datos.estadoFazer); });
   }
@@ -1046,7 +1090,7 @@ function registrarFinalizado(datos) {
   return responder({ status: "success", message: "Guardado en finalizados correctamente", fallos: fallos });
 }
 
-// Fallo del bot o de FazerCards: fila en "errores" con los pines del pedido. NO cambia el estado del pago.
+// Fallo del bot o de Central One: fila en "errores" con los pines del pedido. NO cambia el estado del pago.
 function registrarError(datos) {
   // Si la pestaña no existe se crea (antes, sin ella los pines del error se perdían en silencio)
   var hojaErrores = hojaConTitulos("errores", COLUMNAS_ERRORES);
@@ -1714,7 +1758,10 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu("🖐️ Recargas Free Fire")
     .addItem("🖐️ Todas manuales (pestaña sin_codigo)", "activarModoManual")
     .addItem("⚡ Bot con códigos de canjeo (pines)", "activarModoAutomatico")
-    .addItem("🛒 API de FazerCards (pestaña fazer_card)", "activarModoApi")
+    .addItem("🛒 API de Central One (pestaña fazer_card)", "activarModoApi")
+    .addSeparator()
+    .addItem("🔄 Traer productos de Central One", "traerProductosCentralOne")
+    .addItem("🔑 Guardar llave de Central One", "guardarLlaveCentralOne")
     .addSeparator()
     .addItem("❓ Ver modo actual", "verModoRecarga")
     .addItem("🧹 Marcar como Usado los pagos ya finalizados", "marcarUsadosLosFinalizados")
@@ -2013,6 +2060,211 @@ function sincronizarPagos(destino, valores, formatos, elegidas) {
   });
   if (nuevas.length) escribirFilasCopiadas(destino, ultima + 1, nuevas, valores, formatos);
   return nuevas.length + " pagos nuevos, " + cambiados + " estados actualizados";
+}
+
+
+// =====================================================================
+// 7b. MENÚ: PRODUCTOS DE CENTRAL ONE EN LA PESTAÑA "precios"
+//     🔑 guarda la llave (propiedad del script, nunca en la hoja) · 🔄 reemplaza la pestaña "precios"
+//     con los productos de Free Fire LATAM (diamantes, subidas de nivel y tarjetas; sin pines). El
+//     precio en Bs lo pones tú en la fila 2: se conserva el que ya tenía cada producto.
+// =====================================================================
+
+const URL_CENTRALONE = "https://portal.centraloneglobal.com/api/v1";
+// Llave con el permiso catalog:read (basta con ese): Configuración del proyecto > Propiedades del script
+const PROPIEDAD_LLAVE_CENTRALONE = "CENTRALONE_API_KEY";
+// Filas de la pestaña "precios" (1 = paquete, 2 = precio en Bs)
+const FILA_PRODUCTO = 3;
+const FILA_COSTO = 4;
+const FILA_STOCK = 5;
+// Solo la región de Free Fire que se vende (se busca en la región y en el nombre del producto)
+const REGION_FREEFIRE = /latam|latin/i;
+// Pines y gift cards: no se traen (la tienda recarga por ID)
+const ES_PIN = /\bpins?\b|voucher|gift\s*card|redeem|c[oó]digo|\bcode\b/i;
+// 220 no existe en Central One: son dos pedidos de 110 ("2x<product_id>" en la fila 3)
+const COMBINADOS_FREEFIRE = [{ nombre: "220 Diamantes", de: "110", veces: 2 }];
+
+function guardarLlaveCentralOne() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt("Llave de Central One",
+    "Pega la llave (empieza por co_live_). Basta con el permiso catalog:read. Se guarda en las propiedades del script, no en la hoja.\n\n" +
+    "La llave que compra (orders:write) va SOLO en Vercel, en la variable freefire_nuevo.",
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var llave = r.getResponseText().trim();
+  if (!/^co_live_[A-Za-z0-9_-]{8,200}$/.test(llave)) {
+    ui.alert("Esa no parece una llave de Central One (empieza por co_live_). No se guardó nada.");
+    return;
+  }
+  PropertiesService.getScriptProperties().setProperty(PROPIEDAD_LLAVE_CENTRALONE, llave);
+  ui.alert("✅ Llave guardada. Ahora: menú 🖐️ Recargas Free Fire → 🔄 Traer productos de Central One.");
+}
+
+function traerProductosCentralOne() {
+  var ui = SpreadsheetApp.getUi();
+  var llave = PropertiesService.getScriptProperties().getProperty(PROPIEDAD_LLAVE_CENTRALONE);
+  if (!llave) {
+    ui.alert("Primero guarda la llave: menú 🖐️ Recargas Free Fire → 🔑 Guardar llave de Central One.");
+    return;
+  }
+  var hoja = obtenerHoja("precios", true);
+  if (!hoja) {
+    ui.alert("No encuentro la pestaña \"precios\". No se cambió nada.");
+    return;
+  }
+
+  var respuesta = UrlFetchApp.fetch(URL_CENTRALONE + "/catalog", {
+    headers: { Authorization: "Bearer " + llave }, muteHttpExceptions: true
+  });
+  var codigo = respuesta.getResponseCode();
+  if (codigo !== 200) {
+    var porque = codigo === 401 ? " (llave inválida, revocada o cuenta inactiva)" : codigo === 403 ? " (la llave no tiene el permiso catalog:read)" : codigo === 429 ? " (demasiadas consultas: espera un minuto)" : "";
+    ui.alert("Central One respondió HTTP " + codigo + porque + ". No se cambió nada.");
+    return;
+  }
+  var deFreeFire = (JSON.parse(respuesta.getContentText()).items || []).filter(function (p) {
+    return String(p.product_family_name + " " + p.name).toLowerCase().replace(/[^a-z0-9]/g, "").indexOf("freefire") !== -1;
+  });
+  if (!deFreeFire.length) {
+    ui.alert("Tu catálogo de Central One no tiene productos de Free Fire habilitados. No se cambió nada.");
+    return;
+  }
+  var deLatam = deFreeFire.filter(function (p) { return REGION_FREEFIRE.test(String(p.region || "") + " " + p.name + " " + p.product_family_name); });
+  if (!deLatam.length) {
+    var regiones = deFreeFire.map(function (p) { return String(p.region || "sin región"); })
+      .filter(function (r, i, lista) { return lista.indexOf(r) === i; });
+    ui.alert("Hay " + deFreeFire.length + " producto(s) de Free Fire, pero ninguno de LATAM (regiones que hay: " + regiones.join(", ") + "). No se cambió nada.");
+    return;
+  }
+  // Sin pines: solo lo que se recarga directo al ID del jugador
+  var pines = deLatam.filter(function (p) { return !p.requires_target || ES_PIN.test(p.name); });
+  var productos = deLatam.filter(function (p) { return pines.indexOf(p) === -1; });
+  if (!productos.length) {
+    ui.alert("Los " + deLatam.length + " producto(s) de Free Fire LATAM son pines (no se recargan por ID). No se cambió nada.");
+    return;
+  }
+  productos.sort(function (a, b) { return Number(a.reseller_price) - Number(b.reseller_price); });
+
+  // Un solo producto por paquete de la tienda (misma clave con la que Vercel reconoce el paquete): si
+  // Central One tiene varios, queda el que tiene stock y, entre ellos, el más barato (la lista va de menor a
+  // mayor precio). Con dos columnas iguales la tienda vendería siempre la primera.
+  var elegido = {}, repetidos = [];
+  productos.forEach(function (p) {
+    var clave = clavePaquete(nombreCortoFreeFire(p.name));
+    var actual = elegido[clave];
+    if (!actual) { elegido[clave] = p; return; }
+    var mejor = (actual.in_stock === false && p.in_stock !== false) ? p : actual;
+    repetidos.push(mejor === p ? actual : p);
+    elegido[clave] = mejor;
+  });
+  // 220 = dos de 110 (si Central One tuviera uno de 220, no se usa)
+  var columnas = [];
+  Object.keys(elegido).forEach(function (clave) {
+    if (COMBINADOS_FREEFIRE.some(function (c) { return clavePaquete(c.nombre) === clave; })) return;
+    var p = elegido[clave];
+    columnas.push({ nombre: nombreCortoFreeFire(p.name), producto: String(p.product_id), costo: Number(p.reseller_price) || 0, conStock: p.in_stock !== false, region: p.region });
+  });
+  COMBINADOS_FREEFIRE.forEach(function (c) {
+    var base = elegido[c.de];
+    if (!base) return;
+    columnas.push({ nombre: c.nombre, producto: c.veces + "x" + base.product_id, costo: (Number(base.reseller_price) || 0) * c.veces, conStock: base.in_stock !== false, region: base.region });
+  });
+  if (!columnas.length) {
+    ui.alert("No quedó ningún producto de Free Fire LATAM para la tienda. No se cambió nada.");
+    return;
+  }
+  // Diamantes de menor a mayor y después las tarjetas y pases (como los muestra la tienda)
+  columnas.sort(function (a, b) {
+    var na = /^\d+$/.test(clavePaquete(a.nombre)), nb = /^\d+$/.test(clavePaquete(b.nombre));
+    if (na !== nb) return na ? -1 : 1;
+    return na ? Number(clavePaquete(a.nombre)) - Number(clavePaquete(b.nombre)) : a.costo - b.costo;
+  });
+
+  // Lo que ya tenías: tu precio (y tu nombre) de cada product_id; si la columna aún no tenía product_id,
+  // el precio del paquete con la misma clave ("110 💎" -> 110 Diamantes)
+  var anteriores = hoja.getDataRange().getValues();
+  var porProducto = {}, porClave = {}, nombresAnteriores = [];
+  if (anteriores.length >= 2) {
+    for (var i = 0; i < anteriores[0].length; i++) {
+      var nombreAnterior = String(anteriores[0][i] || "").trim();
+      var precioAnterior = anteriores[1][i];
+      if (!nombreAnterior) continue;
+      nombresAnteriores.push(nombreAnterior);
+      var productoAnterior = anteriores.length >= FILA_PRODUCTO ? String(anteriores[FILA_PRODUCTO - 1][i] || "").trim() : "";
+      if (productoAnterior) porProducto[productoAnterior] = { nombre: nombreAnterior, precio: precioAnterior };
+      if (!(clavePaquete(nombreAnterior) in porClave)) porClave[clavePaquete(nombreAnterior)] = precioAnterior;
+    }
+  }
+  var conPrecio = 0;
+  columnas.forEach(function (c) {
+    var antes = porProducto[c.producto];
+    // Tu nombre se conserva solo si sigue siendo el mismo paquete para la tienda
+    if (antes && clavePaquete(antes.nombre) === clavePaquete(c.nombre)) c.nombre = antes.nombre;
+    var precio = antes ? antes.precio : porClave[clavePaquete(c.nombre)];
+    c.precio = limpiarMontoVES(precio) > 0 ? precio : "";
+    if (c.precio !== "") conPrecio++;
+  });
+  var sinStock = columnas.filter(function (c) { return !c.conStock; }).length;
+  // Paquetes de la pestaña que Central One no tiene: dejan de venderse
+  var clavesNuevas = columnas.map(function (c) { return clavePaquete(c.nombre); });
+  var quitados = nombresAnteriores.filter(function (n) { return clavesNuevas.indexOf(clavePaquete(n)) === -1; });
+
+  var seguir = ui.alert("Traer productos de Central One",
+    "Se reemplaza TODA la pestaña \"" + hoja.getName() + "\" con " + columnas.length + " producto(s) de Free Fire LATAM " +
+    "(diamantes, subidas de nivel y tarjetas; 220 = dos de 110). No se traen " + pines.length + " pin(es)" +
+    (repetidos.length ? " ni " + repetidos.length + " repetido(s)" : "") + ".\n\n" +
+    "Precios: " + conPrecio + " conservan el que ya tenían; los demás quedan VACÍOS y no se venden hasta que escribas su precio en Bs en la fila 2." +
+    (sinStock ? " " + sinStock + " sin stock (en modo API no se muestran)." : "") +
+    (quitados.length ? "\n\nCentral One no tiene estos paquetes y DEJAN DE VENDERSE: " + quitados.join(", ") + "." : "") + "\n\n¿Seguir?",
+    ui.ButtonSet.YES_NO);
+  if (seguir !== ui.Button.YES) return;
+
+  var valores = [[], [], [], [], []];
+  columnas.forEach(function (c) {
+    valores[0].push(textoSeguro(c.nombre));
+    valores[1].push(c.precio);
+    valores[2].push(textoSeguro(c.producto));
+    valores[3].push(c.costo || "");
+    valores[4].push((c.conStock ? "con stock" : "SIN STOCK") + (c.region ? " · " + textoSeguro(c.region) : ""));
+  });
+  var total = columnas.length;
+  hoja.clearContents();
+  hoja.getRange(1, 1, 5, total).setValues(valores);
+  hoja.getRange(1, 1, 1, total).setFontWeight("bold");
+  hoja.getRange(2, 1, 1, total).setBackground("#fff2cc");
+  hoja.getRange(FILA_COSTO, 1, 1, total).setNumberFormat("0.0000\" USD\"");
+  hoja.getRange(FILA_PRODUCTO, 1, 3, total).setFontColor("#888888");
+  hoja.getRange(2, 1).setNote("Fila 2: TU precio en Bs (lo escribes tú). Vacío = ese paquete no se vende. El 🔄 conserva el precio de cada producto.");
+  hoja.getRange(FILA_PRODUCTO, 1).setNote("Fila 3: product_id de Central One, NO la toques (con él se compra; \"2x…\" = dos pedidos). " +
+    "Fila 4: lo que te cuesta en Central One · fila 5: stock (del momento del 🔄). La fila 1 se puede renombrar: los diamantes con su número.");
+  SpreadsheetApp.flush();
+  ui.alert("✅ Listo: " + total + " producto(s) de Free Fire LATAM." +
+    (total - conPrecio ? " ⚠️ " + (total - conPrecio) + " sin precio: escríbelo en la fila 2 (celdas amarillas) para venderlos." : "") +
+    " La tienda tarda hasta ~2 minutos en mostrar los cambios. Para vender por Central One, elige 🛒 API de Central One en este menú.");
+}
+
+// Nombres de Central One (en inglés) como los muestra la tienda: "Free Fire LATAM 100+10 Diamonds" ->
+// "110 Diamantes", "Weekly Membership" -> "Tarjeta Semanal", "Level Up Pass" -> "Pase de Subida de Nivel".
+function nombreCortoFreeFire(nombre) {
+  var original = String(nombre || "").trim();
+  var t = original.replace(/free\s*fire/ig, "").replace(/\(?\b(latam|latin\s*america)\b\)?/ig, "")
+    .replace(/^[\s\-–|:·]+|[\s\-–|:·]+$/g, "").replace(/\s+/g, " ").trim();
+  if (/week|semana/i.test(t)) return /lite/i.test(t) ? "Tarjeta Semanal Lite" : "Tarjeta Semanal";
+  if (/month|mensual/i.test(t)) return "Tarjeta Mensual";
+  if (/level\s*up|nivel/i.test(t)) {
+    var resto = t.replace(/level\s*up|subidas?\s*de\s*nivel|nivel/ig, "").replace(/\bpass\b|\bpase\b/ig, "").replace(/\s+/g, " ").trim();
+    return ("Pase de Subida de Nivel " + resto.replace(/\blv\.?\s*/ig, "Nv. ")).trim();
+  }
+  if (/diamond|diamante|💎/i.test(t)) {
+    // Cantidades enteras: "2,180" y "2.180" son 2180 (no 2,18)
+    var entero = function (texto) { return Number(String(texto || "").replace(/[^0-9]/g, "")) || 0; };
+    var suma = t.match(/(\d[\d.,]*)\s*\+\s*(\d[\d.,]*)/);
+    var cantidad = suma ? entero(suma[1]) + entero(suma[2]) : entero((t.match(/\d[\d.,]*/) || [""])[0]);
+    if (cantidad > 0) return cantidad + " Diamantes";
+  }
+  var traducido = t.replace(/booyah\s*pass/ig, "Pase Booyah").replace(/\bpass\b/ig, "Pase").replace(/\bmembership\b/ig, "Membresía")
+    .replace(/\bcard\b/ig, "Tarjeta").replace(/\b(bundle|pack)\b/ig, "Paquete").replace(/\s+/g, " ").trim();
+  return traducido || original;
 }
 
 
