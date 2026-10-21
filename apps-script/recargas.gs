@@ -2251,9 +2251,10 @@ function nombreCortoFreeFire(nombre) {
     .replace(/^[\s\-–|:·]+|[\s\-–|:·]+$/g, "").replace(/\s+/g, " ").trim();
   if (/week|semana/i.test(t)) return /lite/i.test(t) ? "Tarjeta Semanal Lite" : "Tarjeta Semanal";
   if (/month|mensual/i.test(t)) return "Tarjeta Mensual";
+  // "Level Up Pass - Paquete de mejora de nivel - 6" -> "Pase de Subida de Nivel 6" (el número es el nivel)
   if (/level\s*up|nivel/i.test(t)) {
-    var resto = t.replace(/level\s*up|subidas?\s*de\s*nivel|nivel/ig, "").replace(/\bpass\b|\bpase\b/ig, "").replace(/\s+/g, " ").trim();
-    return ("Pase de Subida de Nivel " + resto.replace(/\blv\.?\s*/ig, "Nv. ")).trim();
+    var nivel = t.match(/(\d+)(?!.*\d)/);
+    return "Pase de Subida de Nivel" + (nivel ? " " + nivel[1] : "");
   }
   if (/diamond|diamante|💎/i.test(t)) {
     // Cantidades enteras: "2,180" y "2.180" son 2180 (no 2,18)
@@ -2264,6 +2265,11 @@ function nombreCortoFreeFire(nombre) {
   }
   var traducido = t.replace(/booyah\s*pass/ig, "Pase Booyah").replace(/\bpass\b/ig, "Pase").replace(/\bmembership\b/ig, "Membresía")
     .replace(/\bcard\b/ig, "Tarjeta").replace(/\b(bundle|pack)\b/ig, "Paquete").replace(/\s+/g, " ").trim();
+  // Sin palabras sueltas al final ni al principio ("Pase Booyah Premium de" -> "Pase Booyah Premium")
+  for (var anterior = ""; anterior !== traducido;) {
+    anterior = traducido;
+    traducido = traducido.replace(/^(de|del|la|el|para|-|–)\s+|\s+(de|del|la|el|para|-|–)$/i, "").trim();
+  }
   return traducido || original;
 }
 
