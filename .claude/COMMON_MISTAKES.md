@@ -116,3 +116,9 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 **Síntoma**: todas las recargas de Free Fire caen en "errores"; el log del bot muestra ese error al abrir Playwright (`async_playwright()`).
 **Causa**: el contenedor se quedaba sin procesos: Chromium y su Playwright se abrían en cada canje, sin init que recogiera los procesos terminados (zombis) y con canjes en paralelo.
 **Regla** (repo `bot-levelup`): `tini` como ENTRYPOINT en el Dockerfile, un solo Chromium reutilizado (contexto nuevo por canje, cerrado en `finally`), un canje a la vez (`asyncio.Semaphore(1)`) y 503 si el navegador no abre (Vercel lo trata como "no procesado" y devuelve los pines). Mientras el bot falle, usar el modo manual de recargas.gs (menú "🖐️ Recargas Free Fire").
+
+## 11. Tienda con el pie legal al lado de la tarjeta (2026-10-22)
+
+**Síntoma**: en Free Fire, Blood Strike y Roblox la tarjeta salía angosta, con los precios cortados, y el pie legal a su derecha sin estilo.
+**Causa**: al insertar el bloque "TEMA …" antes de `</style>` se reemplazó también la línea `<link rel="stylesheet" href="css/pie-legal.css">` (es la que pone `flex-wrap` en `body.pagina-juego`).
+**Regla**: al tocar el final del `<style>` de una tienda, comprobar que siguen los tres `<link>` (pie-legal, descuento, aviso-codigo). Revisar a 360 y 390 px con capturas reales, no solo la sintaxis: Edge sin interfaz no baja de ~500 px de ventana, así que la página se mete en un iframe del ancho del celular.
