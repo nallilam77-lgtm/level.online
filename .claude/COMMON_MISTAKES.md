@@ -109,7 +109,7 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 ## 9e. Mobile Legends (Central One, desde 2026-10-22)
 
 **Reglas**: el producto pide DOS datos (ID y Zona ID): `datosParaPedido` recibe `zona` y solo arma el pedido si el `target_schema` tiene exactamente dos campos de texto y uno se llama zone/zona/server/servidor (`CAMPO_ZONA`, igual en validador.gs); si no, bloquea sin crear pedido. Nunca mandar la zona pegada al ID. La Idempotency-Key lleva el prefijo `ml-`: sin él, el webhook mandaría el aviso a Free Fire/Blood Strike y "pedidos" nunca se actualizaría. Los finalizados se escriben en la hoja de Free Fire con `openById`: la cuenta que publica mobilelegends.gs debe poder editar esa hoja. Si el 🔄 dice que no hay productos de la región, agregar la región en `REGIONES_CENTRALONE`.
-**Despliegue**: 1) hoja nueva + mobilelegends.gs (🧱, 🔑, 💲, 🔄) y publicarlo como aplicación web (autorizar Sheets de la hoja central); 2) `SCRIPT_MLBB` y `mlbb_nuevo` en Vercel; 3) validador.gs como Nueva versión; 4) desplegar Vercel; 5) TOKEN_VERCEL en mobilelegends.gs si Vercel tiene SCRIPT_RECARGAS_TOKEN. El webhook de Central One no se toca en el portal (es la misma URL).
+**Despliegue**: 1) hoja nueva + mobilelegends.gs (🧱, 🔑, 💲, 🔄) y publicarlo como aplicación web (autorizar Sheets de la hoja central); 2) `SCRIPT_MLBB` en Vercel (la llave es `blood_nuevo`, la misma de Blood Strike); 3) validador.gs como Nueva versión; 4) desplegar Vercel; 5) TOKEN_VERCEL en mobilelegends.gs si Vercel tiene SCRIPT_RECARGAS_TOKEN. El webhook de Central One no se toca en el portal (es la misma URL).
 
 ## 10. Bot de Railway: `BlockingIOError: [Errno 11] Resource temporarily unavailable`
 

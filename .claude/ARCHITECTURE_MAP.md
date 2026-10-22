@@ -13,7 +13,7 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 │   │   ├── index.js      Lista cerrada de juegos + carga diferida (cargarJuego)
 │   │   ├── freefire.js   acciones { precios, verificar, descuento } + recargar: manual, pines + bot de Railway o API de Central One (product_id en la fila 3 de "precios", `freefire_nuevo`)
 │   │   ├── bloodstrike.js  acciones { precios, verificar, descuento } + recargar: API de Central One (product_id en la fila 3 de PreciosBlood)
-│   │   ├── mobilelegends.js  igual que bloodstrike.js, pero el jugador es ID + Zona ID (`zona`). Hoja propia (SCRIPT_MLBB, apps-script/mobilelegends.gs), llave `mlbb_nuevo`, Idempotency-Key `ml-<idPedido>`
+│   │   ├── mobilelegends.js  igual que bloodstrike.js, pero el jugador es ID + Zona ID (`zona`). Hoja propia (SCRIPT_MLBB, apps-script/mobilelegends.gs), llave `blood_nuevo` (la de Blood Strike; `mlbb_nuevo` opcional la reemplaza), Idempotency-Key `ml-<idPedido>`
 │   │   └── roblox.js     acciones { precios (+ stock: disponible/pocos/agotado, nunca la cantidad), descuento } + recargar: compra en apps-script/roblox.gs (sin reintentos; manda montoACobrar con código e idPedido; responde solo campos conocidos; pago insuficiente → clave para completar con `tokenComplemento` → `completarCompra`). Sin códigos guardados y con `roblox_nuevo`: roblox.gs responde `status: "comprar"` (pago "En proceso", fila en "pedidos_api") → `comprarEnCentralOne` (pedido + `esperarCodigo` hasta 150 s) → `entregar_api` / `liberar_api` / `nota_api`. Menú de la hoja "🎮 Roblox → 🔄" (solo tarjetas de Robux GLOBAL con stock, `REGIONES_ROBLOX`): reemplaza toda PreciosRoblox; "Codigos" es opcional (fila 2 fórmula con tasa_dolar, fila 3 product_id, 4 costo USD, 5 stock)
 │   ├── recarga-comun.js  limpiarMontoVES, formatearVES, crearUtilidadesPedido (Free Fire y Blood Strike)
 │   ├── descuentos.js     Códigos de descuento (tabla común en la pestaña "Descuentos" de la hoja de Free Fire)
@@ -81,7 +81,7 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 | Apps Script ruleta (`apps-script/ruleta.gs`) | `SCRIPT_RULETA_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | ruleta |
 | Apps Script Roblox (`apps-script/roblox.gs`) | `GAS_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | juegos/roblox |
 | Apps Script Blood Strike + Central One | `SCRIPT_BLOOD` (+ `SCRIPT_RECARGAS_TOKEN`, que llamarScript también le envía), `blood_nuevo` | juegos/bloodstrike |
-| Apps Script Mobile Legends + Central One | `SCRIPT_MLBB` (+ `SCRIPT_RECARGAS_TOKEN`), `mlbb_nuevo` | juegos/mobilelegends, centralone-webhook |
+| Apps Script Mobile Legends + Central One | `SCRIPT_MLBB` (+ `SCRIPT_RECARGAS_TOKEN`), `blood_nuevo` (o `mlbb_nuevo`) | juegos/mobilelegends, centralone-webhook |
 | Webhook Central One | `CENTRALONE_WEBHOOK_SECRET` (+ `SCRIPT_BLOOD`, `SCRIPT_RECARGAS_URL`, `GAS_URL`, `roblox_nuevo`) | centralone-webhook |
 | Central One para Free Fire | `freefire_nuevo` (catalog:read, orders:read, orders:write) | juegos/freefire (modo API) |
 | Central One para Roblox | `roblox_nuevo` (catalog:read, orders:read, orders:write, codes:read) | juegos/roblox |

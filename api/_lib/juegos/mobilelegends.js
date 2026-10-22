@@ -165,8 +165,9 @@ export const acciones = { precios, verificar, descuento: crearAccionDescuento(NO
 // Variables de entorno de la recarga (null si falta alguna: se responde con faltaConfiguracion)
 function configuracion() {
   const URL_GOOGLE_SCRIPT = (process.env.SCRIPT_MLBB || "").trim();
-  const CENTRALONE_API_KEY = (process.env.mlbb_nuevo || "").trim();
-  const faltan = [!URL_GOOGLE_SCRIPT && "SCRIPT_MLBB", !CENTRALONE_API_KEY && "mlbb_nuevo"].filter(Boolean);
+  // La misma llave de Central One que Blood Strike (blood_nuevo); mlbb_nuevo solo si algún día se quiere otra
+  const CENTRALONE_API_KEY = (process.env.mlbb_nuevo || process.env.blood_nuevo || "").trim();
+  const faltan = [!URL_GOOGLE_SCRIPT && "SCRIPT_MLBB", !CENTRALONE_API_KEY && "blood_nuevo"].filter(Boolean);
   return { URL_GOOGLE_SCRIPT, CENTRALONE_API_KEY, faltan };
 }
 
