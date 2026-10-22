@@ -38,6 +38,14 @@
       --game-text: #ffc94a;
       --game-gradient: linear-gradient(135deg, #b8860b, #ffc94a);
       --on-game-cta: #0f172a;
+      /* Tema Mobile Legends: oro del emblema, noche azul de la Tierra del Amanecer y gemas de diamante */
+      --ml-oro-claro: #fff1b8;
+      --ml-oro-oscuro: #b8860b;
+      --ml-azul-noche: #0b1a3a;
+      --ml-azul-noche-rgb: 11, 26, 58;
+      --ml-gema-claro: #e0f2fe;
+      --ml-gema-oscuro: #2563eb;
+      --ml-brillo-rgb: 255, 255, 255;
       /* Paleta Level Up: ver .claude/UI_RULES.md */
       --bg-base: #0f172a;
       --bg-deep: #0b1120;
@@ -514,6 +522,96 @@
       *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
       .anim-slide-up { opacity: 1; }
     }
+
+    /* ======================================================= */
+    /* TEMA MOBILE LEGENDS: oro del emblema sobre la noche azul */
+    /* de la Tierra del Amanecer, con panal de hexágonos.       */
+    /* Va al final para pisar el estilo base de la tienda.      */
+    /* ======================================================= */
+    body {
+      isolation: isolate;
+      background-image:
+        radial-gradient(ellipse 80% 45% at 50% -5%, rgba(var(--game-accent-2-rgb), 0.20), transparent 60%),
+        radial-gradient(circle at 0% 100%, rgba(var(--game-accent-rgb), 0.12), transparent 45%),
+        radial-gradient(circle at 100% 55%, rgba(var(--ml-azul-noche-rgb), 0.95), transparent 55%),
+        radial-gradient(circle at top, var(--bg-base) 0%, var(--bg-deep) 70%);
+    }
+    /* Panal muy tenue: la máscara da la forma de los hexágonos y el color sale de las variables */
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background: linear-gradient(180deg, rgba(var(--game-accent-2-rgb), 0.16), rgba(var(--game-accent-rgb), 0.08) 70%, transparent);
+      -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath d='M28 66L0 50V16L28 0l28 16v34L28 66v34M28 0v34L0 50v34l28 16 28-16V50L28 34' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E");
+      mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath d='M28 66L0 50V16L28 0l28 16v34L28 66v34M28 0v34L0 50v34l28 16 28-16V50L28 34' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E");
+      -webkit-mask-size: 56px 100px; mask-size: 56px 100px;
+    }
+
+    .main-card { position: relative; border-color: rgba(var(--game-accent-rgb), 0.28); box-shadow: var(--shadow-lg), var(--shadow-glow), inset 0 1px 0 rgba(var(--game-accent-rgb), 0.22); }
+    .main-card::before { content: ''; position: absolute; top: -1px; left: 12%; right: 12%; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--game-accent), var(--game-accent-2), var(--game-accent), transparent); }
+
+    /* Encabezado con el emblema */
+    .ml-hero { display: grid; justify-items: center; gap: 4px; text-align: center; margin: 4px 0 18px; }
+    .ml-emblema { width: 68px; height: 68px; filter: drop-shadow(0 0 14px rgba(var(--game-accent-rgb), 0.55)); animation: flotarEmblema 3.6s ease-in-out infinite; }
+    .ml-emblema svg { width: 100%; height: 100%; display: block; }
+    .ml-hero-kicker { font-family: 'Montserrat', sans-serif; font-size: 10px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--game-accent-2); }
+    .title-banner {
+      margin-bottom: 0; font-size: 28px; letter-spacing: 2px; text-shadow: none;
+      background: linear-gradient(180deg, var(--ml-oro-claro) 0%, var(--game-accent) 55%, var(--ml-oro-oscuro) 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 2px 10px rgba(var(--game-accent-rgb), 0.35));
+    }
+    .ml-hero-sub { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    @keyframes flotarEmblema { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+    .trust-chip { background: rgba(var(--game-accent-2-rgb), 0.08); border-color: rgba(var(--game-accent-2-rgb), 0.24); color: var(--text-main); }
+
+    /* Números de paso en hexágono (como los marcos del juego) */
+    .step-num { width: 24px; border-radius: 0; clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%); }
+    .stepper-item.active .stepper-dot { background: rgba(var(--game-accent-rgb), 0.12); }
+    .stepper::before { background: linear-gradient(90deg, rgba(var(--game-accent-2-rgb), 0.35), rgba(var(--game-accent-rgb), 0.35)); }
+
+    #inputZona { color: var(--game-accent-2); }
+    #inputZona:focus { border-color: var(--game-accent-2); box-shadow: 0 0 12px rgba(var(--game-accent-2-rgb), 0.4); }
+
+    /* Paquetes: cristal azul con filo dorado y una gema por tarjeta */
+    .product-card { background: linear-gradient(180deg, rgba(var(--game-accent-2-rgb), 0.10), var(--surface) 65%); border-color: rgba(var(--game-accent-rgb), 0.18); }
+    .product-card::before { content: ''; position: absolute; top: 0; left: 22%; right: 22%; height: 2px; background: linear-gradient(90deg, transparent, var(--game-accent), transparent); opacity: 0.55; transition: opacity 0.25s ease, left 0.25s ease, right 0.25s ease; }
+    .product-card:hover::before, .product-card.selected::before { opacity: 1; left: 8%; right: 8%; }
+    .product-card:hover { border-color: rgba(var(--game-accent-rgb), 0.7); }
+    .product-card.selected { border-color: var(--game-accent); background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.16), rgba(var(--game-accent-2-rgb), 0.08)); box-shadow: var(--shadow-lg), 0 0 0 1px rgba(var(--game-accent-rgb), 0.35), 0 0 22px rgba(var(--game-accent-rgb), 0.35); }
+    .product-card.selected::after { border-radius: 0; clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%); }
+    .product-card.skeleton::before { display: none; }
+    .ml-gema { width: 30px; height: 30px; display: block; margin: 0 auto 6px; color: var(--ml-azul-noche); filter: drop-shadow(0 0 8px rgba(var(--game-accent-2-rgb), 0.55)); transition: transform 0.25s ease; }
+    .product-card:hover .ml-gema, .product-card.selected .ml-gema { transform: translateY(-2px) rotate(-6deg) scale(1.08); }
+    .diamonds-count { letter-spacing: 0.5px; }
+    .product-label { color: var(--game-accent-2); }
+    .price-box { background: rgba(var(--game-accent-rgb), 0.10); border-color: rgba(var(--game-accent-rgb), 0.35); }
+
+    .checkout-section { border-color: rgba(var(--game-accent-2-rgb), 0.35); background: linear-gradient(180deg, rgba(var(--ml-azul-noche-rgb), 0.55), rgba(0, 0, 0, 0.35)); }
+
+    /* Botones dorados con un destello que cruza (como los botones de batalla) */
+    .btn-submit-order, .btn-verify, .sticky-cta-btn { position: relative; overflow: hidden; letter-spacing: 0.8px; }
+    .btn-submit-order::after, .btn-verify::after, .sticky-cta-btn.ready::after {
+      content: ''; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; pointer-events: none;
+      background: linear-gradient(100deg, transparent, rgba(var(--ml-brillo-rgb), 0.45), transparent);
+      transform: skewX(-20deg); animation: destelloBoton 3.4s ease-in-out infinite;
+    }
+    @keyframes destelloBoton { 0%, 62% { left: -60%; } 100% { left: 135%; } }
+
+    /* Chat */
+    .chat-header { background: linear-gradient(90deg, rgba(var(--game-accent-2-rgb), 0.16), var(--bg-base)); }
+    .chat-avatar-ai { border-color: var(--game-accent); background: rgba(var(--game-accent-rgb), 0.08); }
+    .chat-avatar-ai svg { width: 22px; height: 22px; display: block; }
+    .msg-bubble.bot { border-color: rgba(var(--game-accent-2-rgb), 0.3); }
+    .msg-bubble.bot strong { color: var(--game-text); }
+    .chat-chips { display: flex; flex-wrap: wrap; gap: 6px; align-self: flex-start; max-width: 100%; }
+    .chat-chip { min-height: 44px; padding: 6px 12px; border-radius: 50px; border: 1px solid rgba(var(--game-accent-rgb), 0.45); background: rgba(var(--game-accent-rgb), 0.08); color: var(--game-text); font-family: 'Poppins', sans-serif; font-size: 11px; font-weight: 700; cursor: pointer; transition: background 0.2s ease, box-shadow 0.2s ease; }
+    .chat-chip:hover, .chat-chip:focus-visible { background: rgba(var(--game-accent-rgb), 0.18); box-shadow: 0 0 12px rgba(var(--game-accent-rgb), 0.3); }
+    .chat-resumen { font-size: 12px; text-align: left; line-height: 1.6; margin: 6px 0 10px; }
+    .chat-resumen strong { color: var(--game-text); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .ml-emblema, .btn-submit-order::after, .btn-verify::after, .sticky-cta-btn.ready::after { animation: none; }
+    }
   </style>
   <link rel="stylesheet" href="css/pie-legal.css">
   <link rel="stylesheet" href="css/descuento.css">
@@ -584,8 +682,8 @@
   <!-- Modal Recarga Exitosa -->
   <div id="modalExitosa" class="overlay-pantalla">
     <div class="modal-content success-theme">
-      <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
-      <h2 class="modal-titulo" style="font-size: 20px;">¡RECARGA EXITOSA!</h2>
+      <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">🏆</div>
+      <h2 class="modal-titulo" style="font-size: 20px;">¡VICTORIA! RECARGA EXITOSA</h2>
       <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado y los diamantes llegarán a tu cuenta en unos minutos.</p>
       <div class="tx-caja success" id="codigoTxnExito">TXN-XXXXXX</div>
       <button type="button" class="btn-confirmar" style="background: var(--game-gradient); color: var(--on-cta); margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(var(--game-accent-rgb), 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
@@ -641,10 +739,27 @@
   <!-- Contenido Principal -->
   <div class="main-card anim-slide-up">
     <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a></div>
-    <h1 class="title-banner anim-slide-up delay-1">💎 MOBILE LEGENDS 💎</h1>
+    <header class="ml-hero anim-slide-up delay-1">
+      <div class="ml-emblema">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="mlOro" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--ml-oro-claro)"/><stop offset=".55" style="stop-color: var(--game-accent)"/><stop offset="1" style="stop-color: var(--ml-oro-oscuro)"/></linearGradient>
+            <linearGradient id="mlNoche" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: var(--game-accent-2)"/><stop offset="1" style="stop-color: var(--ml-azul-noche)"/></linearGradient>
+            <linearGradient id="mlGema" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--ml-gema-claro)"/><stop offset=".5" style="stop-color: var(--game-accent-2)"/><stop offset="1" style="stop-color: var(--ml-gema-oscuro)"/></linearGradient>
+          </defs>
+          <path d="M32 3 56 13v18c0 15-11 25-24 30C19 56 8 46 8 31V13Z" fill="url(#mlNoche)" stroke="url(#mlOro)" stroke-width="3"/>
+          <path d="M32 16 45 29 32 48 19 29Z" fill="url(#mlOro)"/>
+          <path d="M19 29h26M32 16l-4 13 4 19 4-19Z" fill="none" style="stroke: var(--ml-azul-noche)" stroke-width="1.2" opacity=".5"/>
+        </svg>
+      </div>
+      <p class="ml-hero-kicker">Tierra del Amanecer</p>
+      <h1 class="title-banner">Mobile Legends</h1>
+      <p class="ml-hero-sub">Diamantes directo a tu cuenta con tu ID y tu Zona</p>
+    </header>
 
     <div class="trust-strip anim-slide-up delay-1">
       <span class="trust-chip">⚡ Entrega 1–5 min</span>
+      <span class="trust-chip">🌐 Servidor Global</span>
       <span class="trust-chip">🔒 Pago verificado</span>
       <span class="trust-chip">💬 Soporte WhatsApp</span>
     </div>
@@ -737,7 +852,7 @@
         <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputReferencia" class="input-field" placeholder="Solo los últimos 5 dígitos del pago" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
       </div>
 
-      <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🚀 PROCESAR RECARGA</button>
+      <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">💎 COMPRAR DIAMANTES</button>
       <p class="aviso-aceptacion">Al procesar tu pedido aceptas los <a href="terminos.html" target="_blank">Términos y Condiciones</a>, la <a href="privacidad.html" target="_blank">Política de Privacidad</a> y la <a href="reembolsos.html" target="_blank">Política de Reembolsos</a>.</p>
     </div> 
   </div> 
@@ -777,9 +892,9 @@
   <div class="chat-modal-window" id="chatModalWindow">
     <div class="chat-header">
       <div class="chat-title-box">
-        <div class="chat-avatar-ai">🤖</div>
+        <div class="chat-avatar-ai"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 3 56 13v18c0 15-11 25-24 30C19 56 8 46 8 31V13Z" fill="url(#mlNoche)" stroke="url(#mlOro)" stroke-width="4"/><path d="M32 16 45 29 32 48 19 29Z" fill="url(#mlOro)"/></svg></div>
         <div>
-          <div class="chat-title-text">Soporte IA Level Up</div>
+          <div class="chat-title-text">Asistente MLBB · Level Up</div>
           <div class="chat-subtitle-text">En línea • Respuestas inmediatas</div>
         </div>
       </div>
@@ -788,7 +903,13 @@
 
     <div class="chat-body-messages" id="chat-messages">
       <div class="msg-bubble bot">
-        👋 ¡Hola! Te ayudaré a realizar tu recarga paso a paso. Si es tu primera vez o tienes problemas, ¡escríbeme!
+        👋 ¡Hola, leyenda! Te ayudo a recargar tus diamantes de Mobile Legends. Dime tu <strong>ID</strong>, tu <strong>Zona</strong> y el paquete que quieres, o toca una opción:
+      </div>
+      <div class="chat-chips" id="chatChips">
+        <button type="button" class="chat-chip" data-mensaje="Quiero recargar diamantes">💎 Quiero recargar</button>
+        <button type="button" class="chat-chip" data-mensaje="¿Dónde veo mi ID y mi Zona?">🔎 ¿Dónde veo mi ID y Zona?</button>
+        <button type="button" class="chat-chip" data-mensaje="¿Cuánto tarda en llegar la recarga?">⏱️ ¿Cuánto tarda?</button>
+        <button type="button" class="chat-chip" data-mensaje="Ya pagué y no me llegaron los diamantes">🆘 Pagué y no llegó</button>
       </div>
     </div>
 
@@ -903,6 +1024,8 @@
       const texto = String(item.diamantes).trim();
       return esPase(texto) ? texto : `${cantidadDiamantes(texto)} Diamantes`;
     };
+    // Gema de diamante (los degradados #mlGema están en el emblema del encabezado)
+    const GEMA_SVG = '<svg class="ml-gema" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10l5 6-10 12L2 9z" fill="url(#mlGema)"/><path d="M2 9h20M7 3l5 18 5-18M7 3l5 6 5-6" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/></svg>';
     const etiquetaPase = (texto) => /membres|estelar|starlight/i.test(String(texto)) ? 'Membresía' : 'Pase';
 
     // Dibuja el catálogo. Con descuento, cada paquete trae "precioOriginal" (tachado) y "precio"
@@ -925,7 +1048,7 @@
           card.setAttribute('tabindex', '0');
           const cantidad = cantidadDiamantes(item.diamantes);
           // "etiqueta" es opcional en el catálogo (ej: "🔥 Más popular"); si no viene, no se muestra badge
-          card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}${esPase(item.diamantes) ? `<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="product-label">${etiquetaPase(item.diamantes)}</div>` : `<div class="diamonds-count">${cantidad} 💎</div><div class="product-label">Diamantes</div>`}${item.precioOriginal !== undefined ? `<div class="price-original">${item.precioOriginal} Bs</div>` : ''}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
+          card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}${esPase(item.diamantes) ? `<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="product-label">${etiquetaPase(item.diamantes)}</div>` : `${GEMA_SVG}<div class="diamonds-count">${cantidad}</div><div class="product-label">Diamantes</div>`}${item.precioOriginal !== undefined ? `<div class="price-original">${item.precioOriginal} Bs</div>` : ''}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
           card.addEventListener('click', () => seleccionarProducto(card, item));
           card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, item); } });
           container.appendChild(card);
@@ -1063,7 +1186,8 @@
 
     // VERIFICACIÓN DEL ID (Central One, por el servidor). Solo un "no existe" confirmado frena al cliente;
     // si no se pudo comprobar (lento, sin respuesta), se acepta el ID como antes.
-    document.getElementById('btnVerifyId').addEventListener('click', async () => {
+    // Devuelve true si la cuenta quedó confirmada (la usan el botón y el chat)
+    const verificarCuenta = async () => {
       const idInput = document.getElementById('inputPlayerId').value.trim();
       const zonaInput = document.getElementById('inputZona').value.trim();
       const statusDiv = document.getElementById('idStatus'); const btnVerify = document.getElementById('btnVerifyId');
@@ -1106,7 +1230,9 @@
       } catch (error) {
         aceptarSinComprobar();
       } finally { btnVerify.disabled = false; btnVerify.innerText = "CONFIRMAR MI ID"; verificarEstadoDesbloqueo(); }
-    });
+      return idVerificado;
+    };
+    document.getElementById('btnVerifyId').addEventListener('click', verificarCuenta);
 
     // Cambiar el ID o la Zona obliga a confirmar de nuevo
     const reiniciarVerificacion = () => { idVerificado = false; nombreJugadorVerificado = ""; document.getElementById('idStatus').style.display = 'none'; verificarEstadoDesbloqueo(); };
@@ -1457,17 +1583,17 @@
           localStorage.setItem('intentos_recarga', '0');
           localStorage.setItem('tiempo_bloqueo', '0');
 
-          textoElem.innerHTML = "💎 ¡Sistema remoto conectado a Mobile Legends!";
+          textoElem.innerHTML = "🛡️ Pago confirmado: abriendo portal a la Tierra del Amanecer...";
           barraFill.style.width = '75%';
            
           await new Promise(r => setTimeout(r, 1500)); 
 
-          textoElem.innerHTML = "🚀 Enviando los diamantes a tu cuenta...";
+          textoElem.textContent = `💎 Enviando tus diamantes a ${playerId} (${zonaJugador})...`;
           barraFill.style.width = '90%';
 
           await new Promise(r => setTimeout(r, 1200)); 
 
-          textoElem.innerHTML = "✅ ¡Recarga Exitosa!";
+          textoElem.innerHTML = "🏆 ¡VICTORIA! Recarga enviada";
           barraFill.style.width = '100%';
 
           setTimeout(() => {
@@ -1593,35 +1719,121 @@
         }
     }
 
-    window.verificarIdDesdeChat = function(id, paqueteTexto) {
-        document.getElementById('inputPlayerId').value = id;
-        // Mobile Legends también necesita la Zona: sin ella se pide en el formulario y se confirma ahí
-        if (!ZONA_VALIDA.test(document.getElementById('inputZona').value.trim())) {
-            reiniciarVerificacion();
-            toggleChatModal();
-            const zona = document.getElementById('inputZona');
-            zona.scrollIntoView({ behavior: 'smooth', block: 'center' }); zona.focus({ preventScroll: true });
-            mostrarBurbuja("✍️ Escribe tu Zona ID (el número entre paréntesis) y toca CONFIRMAR MI ID.", "var(--game-text)");
+    // =======================================================
+    // 💬 CHAT: la IA guía y la PÁGINA hace lo real. La cuenta se confirma con la misma verificación
+    // del formulario (nunca "a ciegas"), el paquete se elige del catálogo exacto ("86" no elige "186")
+    // y el pago pasa por la misma confirmación de siempre.
+    // =======================================================
+    const historialChat = [];
+    const MAX_HISTORIAL = 8;
+    const anotarEnHistorial = (rol, texto) => {
+        historialChat.push({ rol, texto: String(texto).slice(0, 500) });
+        while (historialChat.length > MAX_HISTORIAL) historialChat.shift();
+    };
+    const soloDigitos = (texto) => String(texto ?? '').replace(/[^0-9]/g, '');
+    const contenedorMensajes = () => document.getElementById('chat-messages');
+    const bajarChat = () => { const c = contenedorMensajes(); c.scrollTop = c.scrollHeight; };
+
+    function burbujaBot(html) {
+        const msg = document.createElement('div');
+        msg.className = 'msg-bubble bot';
+        msg.innerHTML = html;
+        contenedorMensajes().appendChild(msg);
+        bajarChat();
+        return msg;
+    }
+
+    // Paquete del catálogo que nombró el cliente: diamantes por su número exacto; pases por su nombre
+    function buscarPaqueteDelChat(texto) {
+        const lista = window.catalogoGlobal || [];
+        const numero = soloDigitos(texto);
+        if (numero) {
+            const exacto = lista.find((p) => !esPase(p.diamantes) && soloDigitos(p.diamantes) === numero);
+            if (exacto) return exacto;
+        }
+        const buscado = String(texto ?? '').toLowerCase().trim();
+        return buscado ? lista.find((p) => esPase(p.diamantes) && String(p.diamantes).toLowerCase().includes(buscado)) || null : null;
+    }
+
+    // Elige el paquete en el catálogo de la página (misma tarjeta que tocaría el cliente)
+    function marcarPaquete(paquete) {
+        const indice = (window.catalogoGlobal || []).indexOf(paquete);
+        const tarjeta = document.querySelectorAll('#catalogContainer .product-card')[indice];
+        if (indice >= 0 && tarjeta) seleccionarProducto(tarjeta, paquete);
+    }
+
+    // Botones de paquetes dentro del chat (cuando falta elegir uno)
+    function ofrecerPaquetes(texto) {
+        const lista = window.catalogoGlobal || [];
+        if (!lista.length) { burbujaBot('Los precios todavía están cargando. Intenta en unos segundos.'); return; }
+        const msg = burbujaBot(texto);
+        const chips = document.createElement('div');
+        chips.className = 'chat-chips';
+        lista.forEach((p) => {
+            const boton = document.createElement('button');
+            boton.type = 'button'; boton.className = 'chat-chip';
+            boton.textContent = `${nombrePaquete(p)} · ${p.precio} Bs`;
+            boton.addEventListener('click', () => { marcarPaquete(p); chips.remove(); mostrarTarjetaPago(); });
+            chips.appendChild(boton);
+        });
+        msg.after(chips);
+        bajarChat();
+    }
+
+    // Tarjeta de pago dentro del chat: resumen real del pedido + datos del Pago Móvil + comprobante
+    function mostrarTarjetaPago() {
+        if (!idVerificado) { burbujaBot('Primero confirmemos tu cuenta: dime tu <strong>ID</strong> y tu <strong>Zona</strong>.'); return; }
+        if (!paqueteSeleccionado) { ofrecerPaquetes('¿Qué paquete quieres? 👇'); return; }
+        document.getElementById('tarjetaPagoChat')?.remove();
+        const id = document.getElementById('inputPlayerId').value.trim();
+        const zona = document.getElementById('inputZona').value.trim();
+        const tarjeta = document.createElement('div');
+        tarjeta.className = 'msg-bubble bot';
+        tarjeta.id = 'tarjetaPagoChat';
+        tarjeta.innerHTML = `
+            <div class="chat-action-card">
+                <p style="color:var(--game-text); font-weight:900; font-size:13px;">🏦 TU PEDIDO</p>
+                <div class="chat-resumen">
+                    Cuenta: <strong>${escaparHtml(id)} (${escaparHtml(zona)})</strong>${nombreJugadorVerificado && nombreJugadorVerificado !== 'ID Validado' ? ` · ${escaparHtml(nombreJugadorVerificado)}` : ''}<br>
+                    Paquete: <strong>${escaparHtml(nombrePaquete(paqueteSeleccionado))}</strong><br>
+                    Total: <strong>${escaparHtml(paqueteSeleccionado.precio)} Bs</strong>
+                </div>
+                <p style="font-size:12px; margin: 8px 0; line-height:1.5;">Banco: ${escaparHtml(datosBancoGlobal.banco)}<br>Tel: ${escaparHtml(datosBancoGlobal.telefono)}<br>Cédula: ${escaparHtml(datosBancoGlobal.cedula)}</p>
+                <button class="btn-copy" style="padding: 10px; font-size: 11px; margin-bottom: 12px;" onclick="copiarDatosBanco()">📋 COPIAR DATOS</button>
+                <hr style="border-color: rgba(var(--game-accent-rgb),0.2); margin: 12px 0;">
+                <p style="color:var(--text-main); font-weight:bold; font-size: 12px; margin-bottom:8px;">Paga el monto exacto y sube tu comprobante:</p>
+                <input type="file" id="inputComprobanteChat" accept="image/*" onchange="analizarCaptureChat(this)">
+                <div id="resultadoIAChat" class="resultado-ia-chat"></div>
+                <input type="text" id="inputRefChat" class="input-field" inputmode="numeric" style="padding: 10px; font-size: 16px; margin-bottom: 4px;" placeholder="Últimos 5 dígitos" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                <a href="https://drive.google.com/file/d/1b0V-JMYmBqEwyMxLOKySIESIU2XLtYUW/view?usp=sharing" target="_blank" rel="noopener noreferrer" style="font-size: 10px; color: var(--warning); display: block; margin-bottom: 12px; text-decoration: underline;">¿Dónde está la referencia? (Ver pista)</a>
+                <button class="btn-submit-order" style="padding: 12px; font-size: 12px;" onclick="procesarRecargaDesdeChat()">💎 COMPRAR DIAMANTES</button>
+            </div>`;
+        contenedorMensajes().appendChild(tarjeta);
+        bajarChat();
+    }
+
+    // Confirma la cuenta con la verificación real (Central One) y sigue con el paquete y el pago
+    window.verificarIdDesdeChat = async function(id, zona, paqueteTexto) {
+        if (!ID_VALIDO.test(String(id)) || !ZONA_VALIDA.test(String(zona))) {
+            burbujaBot('Necesito tu <strong>ID</strong> y tu <strong>Zona</strong>. En el juego toca tu foto de perfil (arriba a la izquierda): aparece así <strong>123456789 (1234)</strong>.');
             return;
         }
-        mostrarBurbuja("⏳ Confirmando ID...", "var(--game-text)");
-
-        setTimeout(() => {
-            idVerificado = true;
-            nombreJugadorVerificado = "Jugador Confirmado";
-
-            if (window.catalogoGlobal) {
-                let numeroPaquete = paqueteTexto.replace(/[^0-9]/g, '');
-                paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
-            }
-            if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteTexto, precio: "Validando..." }; }
-
-            const chatContainer = document.getElementById('chat-messages');
-            chatContainer.innerHTML += `<div class="msg-bubble user" style="background: var(--success); text-align:left; border: none; color: #000;">✅ <b>Jugador:</b> ${nombreJugadorVerificado}<br>💎 <b>Paquete:</b> ${paqueteSeleccionado.diamantes}<br>💰 <b>Total:</b> ${paqueteSeleccionado.precio} Bs<br><br>Todo correcto, dame los datos de pago.</div>`;
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            enviarMensajeAI("SISTEMA: El jugador ha sido confirmado para " + paqueteSeleccionado.diamantes + ". Dame los datos de pago con [ACCION_PAGO].", true);
-        }, 500);
+        document.getElementById('inputPlayerId').value = id;
+        document.getElementById('inputZona').value = zona;
+        reiniciarVerificacion();
+        const espera = burbujaBot('⏳ Verificando tu cuenta...');
+        const confirmada = await verificarCuenta();
+        espera.remove();
+        if (!confirmada) {
+            burbujaBot('❌ No pude confirmar esa cuenta. Revisa tu <strong>ID</strong> y tu <strong>Zona</strong> (el número del paréntesis) y escríbelos de nuevo.');
+            return;
+        }
+        const jugador = nombreJugadorVerificado && nombreJugadorVerificado !== 'ID Validado' ? ` <strong>${escaparHtml(nombreJugadorVerificado)}</strong>` : '';
+        burbujaBot(`✅ Cuenta confirmada:${jugador} ${escaparHtml(id)} (${escaparHtml(zona)}).`);
+        const paquete = buscarPaqueteDelChat(paqueteTexto);
+        if (paquete) marcarPaquete(paquete);
+        if (paqueteSeleccionado) mostrarTarjetaPago();
+        else ofrecerPaquetes('¿Qué paquete quieres? 👇');
     };
 
     window.procesarRecargaDesdeChat = function() {
@@ -1636,9 +1848,31 @@
         document.getElementById('inputReferencia').value = refInputChat;
         window.chatFileOverride = fileInputChat.files[0];
 
-        toggleChatModal(); 
-        abrirModal();      
+        toggleChatModal();
+        abrirModal();
     };
+
+    // Opciones rápidas del saludo
+    document.getElementById('chatChips')?.addEventListener('click', (e) => {
+        const boton = e.target.closest('.chat-chip');
+        if (!boton) return;
+        document.getElementById('chatChips').remove();
+        enviarMensajeAI(boton.dataset.mensaje);
+    });
+
+    // Lo que la página ya sabe del pedido: la IA no vuelve a pedir lo que ya está
+    function estadoParaIA() {
+        const id = document.getElementById('inputPlayerId').value.trim();
+        const zona = document.getElementById('inputZona').value.trim();
+        return [
+            idVerificado ? `Cuenta confirmada: ${id} (${zona})${nombreJugadorVerificado && nombreJugadorVerificado !== 'ID Validado' ? `, jugador ${nombreJugadorVerificado}` : ''}` : 'Cuenta sin confirmar',
+            paqueteSeleccionado ? `Paquete elegido: ${nombrePaquete(paqueteSeleccionado)} (${paqueteSeleccionado.precio} Bs)` : 'Sin paquete elegido',
+            descuento.codigo() ? `Código de descuento aplicado: ${descuento.codigo()}` : '',
+        ].filter(Boolean).join('. ').slice(0, 300);
+    }
+
+    // Texto de la IA a HTML seguro: se escapa todo y solo se permite **negrita** y saltos de línea
+    const formatoRespuesta = (texto) => escaparHtml(texto).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
 
     async function enviarMensajeAI(textoUsuario, ocultarBurbujaUsuario = false) {
         let registro = obtenerHistorialRateLimit();
@@ -1652,125 +1886,70 @@
         localStorage.setItem('ia_chat_limit', JSON.stringify(registro));
         actualizarInterfazRateLimit();
 
-        const contenedorChat = document.getElementById('chat-messages');
-         
+        const contenedorChat = contenedorMensajes();
+
         if (!ocultarBurbujaUsuario) {
             const msgUser = document.createElement('div');
             msgUser.className = "msg-bubble user";
             msgUser.innerText = textoUsuario;
             contenedorChat.appendChild(msgUser);
-            contenedorChat.scrollTop = contenedorChat.scrollHeight;
+            bajarChat();
         }
 
         const msgCargando = document.createElement('div');
-        msgCargando.id = "tempCargando";
         msgCargando.className = "msg-bubble bot";
-        msgCargando.innerHTML = `<div class="typing-indicator"><span style="font-size: 14px; margin-right: 6px;">🤖</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+        msgCargando.innerHTML = `<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
         contenedorChat.appendChild(msgCargando);
-        contenedorChat.scrollTop = contenedorChat.scrollHeight;
+        bajarChat();
 
-        let nombreJuegoDetectado = "Mobile Legends";
-        const tituloBanner = document.querySelector('.title-banner');
-        if (tituloBanner) {
-            nombreJuegoDetectado = tituloBanner.innerText.replace(/[^a-zA-Z\s]/g, '').trim();
-        }
-         
-        let catalogoTexto = "Aún cargando precios...";
-        if (window.catalogoGlobal && window.catalogoGlobal.length > 0) {
-            catalogoTexto = window.catalogoGlobal.map(p => `- ${nombrePaquete(p)}: ${p.precio} Bs`).join("\n");
-        }
+        const catalogoTexto = window.catalogoGlobal && window.catalogoGlobal.length
+            ? window.catalogoGlobal.map((p) => `- ${nombrePaquete(p)}: ${p.precio} Bs`).join("\n")
+            : "Aún cargando precios...";
 
         try {
             const response = await fetch('/api/ia-soporte', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     mensaje: textoUsuario,
-                    juego: nombreJuegoDetectado,
-                    catalogo: catalogoTexto
+                    juego: 'Mobile Legends',
+                    juegoId: 'mobilelegends',
+                    catalogo: catalogoTexto,
+                    estado: estadoParaIA(),
+                    historial: historialChat.slice(),
                 })
             });
-             
+
             const resultado = await response.json();
-            const cargandoEl = document.getElementById('tempCargando');
-            if (cargandoEl) cargandoEl.remove();
+            msgCargando.remove();
+            const respuesta = String(resultado.respuesta || "Disculpa, no pude responder. Escríbenos por WhatsApp.");
+            anotarEnHistorial('cliente', textoUsuario);
+            anotarEnHistorial('asistente', respuesta.replace(/\[ACCION_[^\]]*\]/g, '').trim());
 
-            const msgBot = document.createElement('div');
-            msgBot.className = "msg-bubble bot";
-            // Se escapa la respuesta de la IA antes de insertar las tarjetas propias (evita inyectar HTML vía prompt)
-            let htmlRespuesta = escaparHtml(resultado.respuesta || "Disculpa, no pude responder. Escríbenos por WhatsApp.");
+            // Acciones que pide la IA (la página las ejecuta de verdad):
+            //   [ACCION_VERIFICAR:id:zona:paquete] confirma la cuenta (y elige el paquete)
+            //   [ACCION_PAGO] muestra la tarjeta de pago del pedido actual
+            const verificar = respuesta.match(/\[ACCION_VERIFICAR:(\d{5,15}):(\d{1,6}):?([^\]]{0,40})\]/);
+            // Formato de los otros juegos (sin zona): se usa la zona del formulario si ya está
+            const sinZona = !verificar && respuesta.match(/\[ACCION_(?:VERIFICAR|PAGO):(\d{5,15}):([^\]]{0,40})\]/);
+            const pedirPago = /\[ACCION_PAGO\]/.test(respuesta);
+            const texto = respuesta.replace(/\[ACCION_[^\]]*\]/g, '').trim();
+            if (texto) burbujaBot(formatoRespuesta(texto));
 
-            const matchVerificar = htmlRespuesta.match(/\[ACCION_VERIFICAR:([\w-]+):(.*?)\]/);
-            if (matchVerificar) {
-                let idChat = matchVerificar[1];
-                let paqueteChat = matchVerificar[2].replace(/[^\w\s.-]/g, '');
-                htmlRespuesta = htmlRespuesta.replace(matchVerificar[0], `
-                    <div class="chat-action-card">
-                        <p style="color:var(--game-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
-                        <p style="font-size:12px; margin-bottom:8px;">Verifica que este ID sea correcto:<br><b style="font-size:16px; color:#fff;">${idChat}</b></p>
-                        <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">✅ SÍ, ES MI ID</button>
-                    </div>
-                `);
+            if (verificar) {
+                await verificarIdDesdeChat(verificar[1], verificar[2], verificar[3]);
+            } else if (sinZona) {
+                await verificarIdDesdeChat(sinZona[1], document.getElementById('inputZona').value.trim(), sinZona[2]);
+            } else if (pedirPago) {
+                mostrarTarjetaPago();
             }
 
-            const matchPagoDirecto = htmlRespuesta.match(/\[ACCION_PAGO:([\w-]+):(.*?)\]/);
-            if (matchPagoDirecto) {
-                let idChat = matchPagoDirecto[1];
-                let paqueteChat = matchPagoDirecto[2].replace(/[^\w\s.-]/g, '');
-
-                if (!idVerificado) {
-                    htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], `
-                        <div class="chat-action-card">
-                            <p style="color:var(--game-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
-                            <p style="font-size:12px; margin-bottom:8px;">Antes de pagar, confirma que tu ID es exacto:<br><b style="font-size:16px; color:#fff;">${idChat}</b></p>
-                            <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">✅ SÍ, ESTÁ CORRECTO</button>
-                        </div>
-                    `);
-                } else {
-                    document.getElementById('inputPlayerId').value = idChat;
-                    nombreJugadorVerificado = "Jugador de " + nombreJuegoDetectado;
-
-                    if (window.catalogoGlobal) {
-                        let numeroPaquete = paqueteChat.replace(/[^0-9]/g, '');
-                        paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
-                    }
-                    if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteChat, precio: "Calculando..." }; }
-
-                    htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], "[ACCION_PAGO]");
-                }
-            }
-
-            if (htmlRespuesta.includes("[ACCION_PAGO]")) {
-                htmlRespuesta = htmlRespuesta.replace("[ACCION_PAGO]", `
-                    <div class="chat-action-card">
-                        <p style="color:var(--game-text); font-weight:900; font-size:13px;">🏦 DATOS DE PAGO</p>
-                        <p style="font-size:12px; margin: 8px 0; line-height:1.5;">Banco: ${datosBancoGlobal.banco}<br>Tel: ${datosBancoGlobal.telefono}<br>Cédula: ${datosBancoGlobal.cedula}</p>
-                        <button class="btn-copy" style="padding: 10px; font-size: 11px; margin-bottom: 12px;" onclick="copiarDatosBanco()">📋 COPIAR DATOS</button>
-                        <hr style="border-color: rgba(var(--game-accent-rgb),0.2); margin: 12px 0;">
-                        <p style="color:var(--text-main); font-weight:bold; font-size: 12px; margin-bottom:8px;">Sube tu comprobante:</p>
-                        <input type="file" id="inputComprobanteChat" accept="image/*" onchange="analizarCaptureChat(this)">
-                         
-                        <div id="resultadoIAChat" class="resultado-ia-chat"></div>
-
-                        <input type="text" id="inputRefChat" class="input-field" inputmode="numeric" style="padding: 10px; font-size: 16px; margin-bottom: 4px;" placeholder="Últimos 5 dígitos" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
-                        <a href="https://drive.google.com/file/d/1b0V-JMYmBqEwyMxLOKySIESIU2XLtYUW/view?usp=sharing" target="_blank" style="font-size: 10px; color: var(--warning); display: block; margin-bottom: 12px; text-decoration: underline;">¿Dónde está la referencia? (Ver pista)</a>
-                        <button class="btn-submit-order" style="padding: 12px; font-size: 12px;" onclick="procesarRecargaDesdeChat()">🚀 PROCESAR RECARGA</button>
-                    </div>
-                `);
-            }
-
-            msgBot.innerHTML = htmlRespuesta;
-            contenedorChat.appendChild(msgBot);
-            contenedorChat.scrollTop = contenedorChat.scrollHeight;
-
-            if(resultado.respaldoWhatsapp || textoUsuario.toLowerCase().includes("ayuda") || textoUsuario.toLowerCase().includes("humano")) {
+            if (resultado.respaldoWhatsapp || /ayuda|humano|asesor|persona/i.test(textoUsuario)) {
                 document.getElementById('whatsappEscalateContainer').style.display = 'block';
             }
 
         } catch (e) {
-            const cargandoEl = document.getElementById('tempCargando');
-            if (cargandoEl) cargandoEl.remove();
-             
+            msgCargando.remove();
             const msgError = document.createElement('div');
             msgError.className = "msg-bubble error";
             msgError.innerText = "Disculpa, ocurrió un error de conexión con la IA.";
