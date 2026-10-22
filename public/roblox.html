@@ -28,6 +28,7 @@
   <script src="/js/lector-referencia.js" defer></script>
   <!-- Código de descuento (compartido con Free Fire y Blood Strike) -->
   <script src="/js/descuento.js" defer></script>
+  <script src="/js/ultimo-id.js" defer></script>
   <script src="/js/aviso-codigo.js?v=3" defer></script>
   <style>
     :root {
@@ -39,6 +40,9 @@
       --game-text: #4d94ff;
       --game-gradient: linear-gradient(135deg, #003fbf, #0066ff);
       --on-game-cta: #ffffff;
+      /* Tema Roblox: bloques con "studs" (los botoncitos de las piezas) y cubos azules */
+      --rb-azul-claro: #bfdbfe;
+      --rb-azul-oscuro: #1e3a8a;
       /* Paleta Level Up: ver .claude/UI_RULES.md */
       --bg-base: #0f172a;
       --bg-deep: #0b1120;
@@ -500,8 +504,75 @@
       *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
       .anim-slide-up { opacity: 1; }
     }
+
+    /* ======================================================= */
+    /* TEMA ROBLOX: bloques con studs y cubos azules (va al final para pisar el estilo base)  */
+    /* ======================================================= */
+    body {
+      isolation: isolate;
+      background-image: 
+        radial-gradient(ellipse 80% 45% at 50% -5%, rgba(var(--game-accent-rgb), 0.22), transparent 60%),
+        radial-gradient(circle at 100% 100%, rgba(var(--game-accent-2-rgb), 0.10), transparent 45%),
+        radial-gradient(circle at top, var(--bg-base) 0%, var(--bg-deep) 70%);
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background: radial-gradient(circle, rgba(var(--game-accent-2-rgb), 0.13) 3px, transparent 4px) 0 0 / 28px 28px;
+      -webkit-mask-image: linear-gradient(180deg, black, transparent 85%); mask-image: linear-gradient(180deg, black, transparent 85%);
+    }
+    .main-card { position: relative; border-color: rgba(var(--game-accent-rgb), 0.28); box-shadow: var(--shadow-lg), var(--shadow-glow), inset 0 1px 0 rgba(var(--game-accent-rgb), 0.22); }
+    .main-card::before { content: ''; position: absolute; top: -1px; left: 12%; right: 12%; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--game-accent), var(--game-accent-2), var(--game-accent), transparent); }
+
+    .juego-hero { display: grid; justify-items: center; gap: 4px; text-align: center; margin: 4px 0 18px; }
+    .juego-emblema { width: 68px; height: 68px; filter: drop-shadow(0 0 14px rgba(var(--game-accent-rgb), 0.55)); animation: flotarEmblema 3.6s ease-in-out infinite; }
+    .juego-emblema svg { width: 100%; height: 100%; display: block; }
+    .juego-kicker { font-family: 'Montserrat', sans-serif; font-size: 10px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--game-text); }
+    .title-banner {
+      margin-bottom: 0; font-size: 28px; letter-spacing: 2px; text-shadow: none;
+      background: linear-gradient(180deg, var(--text-main) 0%, var(--game-accent-2) 55%, var(--game-accent) 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 2px 10px rgba(var(--game-accent-rgb), 0.35));
+    }
+    .juego-sub { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    @keyframes flotarEmblema { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+    .trust-chip { background: rgba(var(--game-accent-rgb), 0.07); border-color: rgba(var(--game-accent-rgb), 0.22); color: var(--text-main); }
+
+    .product-card { border-color: rgba(var(--game-accent-rgb), 0.18); }
+    .product-card::before { content: ''; position: absolute; top: 0; left: 22%; right: 22%; height: 2px; background: linear-gradient(90deg, transparent, var(--game-accent), transparent); opacity: 0.55; transition: opacity 0.25s ease, left 0.25s ease, right 0.25s ease; }
+    .product-card:hover::before, .product-card.selected::before { opacity: 1; left: 8%; right: 8%; }
+    .product-card.skeleton::before { display: none; }
+    .juego-icono { width: 30px; height: 30px; display: block; margin: 0 auto 6px; filter: drop-shadow(0 0 8px rgba(var(--game-accent-rgb), 0.5)); transition: transform 0.25s ease; }
+    .product-card:hover .juego-icono, .product-card.selected .juego-icono { transform: translateY(-2px) rotate(-6deg) scale(1.08); }
+
+    /* Botones con un destello que los cruza */
+    .btn-submit-order, .btn-verify, .sticky-cta-btn { position: relative; overflow: hidden; letter-spacing: 0.8px; }
+    .btn-submit-order::after, .btn-verify::after, .sticky-cta-btn.ready::after {
+      content: ''; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; pointer-events: none;
+      background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+      transform: skewX(-20deg); animation: destelloBoton 3.4s ease-in-out infinite;
+    }
+    @keyframes destelloBoton { 0%, 62% { left: -60%; } 100% { left: 135%; } }
+
+    /* Chat */
+    .chat-header { background: linear-gradient(90deg, rgba(var(--game-accent-rgb), 0.14), var(--bg-base)); }
+    .chat-avatar-ai { border-color: var(--game-accent); background: rgba(var(--game-accent-rgb), 0.08); }
+    .chat-avatar-ai svg { width: 22px; height: 22px; display: block; }
+    .msg-bubble.bot strong { color: var(--game-text); }
+    .chat-chips { display: flex; flex-wrap: wrap; gap: 6px; align-self: flex-start; max-width: 100%; }
+    .chat-chip { min-height: 44px; padding: 6px 12px; border-radius: 50px; border: 1px solid rgba(var(--game-accent-rgb), 0.45); background: rgba(var(--game-accent-rgb), 0.08); color: var(--game-text); font-family: 'Poppins', sans-serif; font-size: 11px; font-weight: 700; cursor: pointer; transition: background 0.2s ease, box-shadow 0.2s ease; }
+    .chat-chip:hover, .chat-chip:focus-visible { background: rgba(var(--game-accent-rgb), 0.18); box-shadow: 0 0 12px rgba(var(--game-accent-rgb), 0.3); }
+    .chat-resumen { font-size: 12px; text-align: left; line-height: 1.6; margin: 6px 0 10px; }
+    .chat-resumen strong { color: var(--game-text); }
+    /* Roblox: piezas cuadradas como bloques */
+    .step-num, .product-card.selected::after { border-radius: 5px; }
+    .product-card { border-radius: 12px; background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.10), var(--surface) 65%); }
+    .product-card.selected { background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.20), rgba(var(--game-accent-2-rgb), 0.06)); box-shadow: var(--shadow-lg), 0 0 0 1px rgba(var(--game-accent-2-rgb), 0.4), 0 0 22px rgba(var(--game-accent-rgb), 0.4); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .juego-emblema, .btn-submit-order::after, .btn-verify::after, .sticky-cta-btn.ready::after { animation: none; }
+    }
   </style>
-  <link rel="stylesheet" href="css/pie-legal.css">
   <link rel="stylesheet" href="css/descuento.css">
   <link rel="stylesheet" href="css/aviso-codigo.css?v=3">
 </head>
@@ -629,10 +700,24 @@
 
   <div class="main-card anim-slide-up">
     <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a></div>
-    <h1 class="title-banner anim-slide-up delay-1">🟥 ROBLOX 🟥</h1>
+    <header class="juego-hero anim-slide-up delay-1">
+      <div class="juego-emblema">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M32 6 56 19 32 32 8 19Z" style="fill: var(--rb-azul-claro)"/>
+          <path d="M8 19 32 32v26L8 45Z" style="fill: var(--game-accent)"/>
+          <path d="M56 19 32 32v26l24-13Z" style="fill: var(--rb-azul-oscuro)"/>
+          <ellipse cx="25" cy="18" rx="4" ry="2" style="fill: var(--game-accent-2)"/><ellipse cx="39" cy="18" rx="4" ry="2" style="fill: var(--game-accent-2)"/>
+          <ellipse cx="32" cy="22" rx="4" ry="2" style="fill: var(--game-accent-2)"/><ellipse cx="32" cy="14" rx="4" ry="2" style="fill: var(--game-accent-2)"/>
+        </svg>
+      </div>
+      <p class="juego-kicker">Robux para tu avatar</p>
+      <h1 class="title-banner">Roblox</h1>
+      <p class="juego-sub">Tu código de Robux al instante, listo para canjear</p>
+    </header>
 
     <div class="trust-strip anim-slide-up delay-1">
       <span class="trust-chip">⚡ Entrega 1–5 min</span>
+      <span class="trust-chip">🎁 Código para canjear</span>
       <span class="trust-chip">🔒 Pago verificado</span>
       <span class="trust-chip">💬 Soporte WhatsApp</span>
     </div>
@@ -759,9 +844,9 @@
   <div class="chat-modal-window" id="chatModalWindow">
     <div class="chat-header">
       <div class="chat-title-box">
-        <div class="chat-avatar-ai">🤖</div>
+        <div class="chat-avatar-ai"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 6 56 19 32 32 8 19Z" style="fill: var(--rb-azul-claro)"/><path d="M8 19 32 32v26L8 45Z" style="fill: var(--game-accent)"/><path d="M56 19 32 32v26l24-13Z" style="fill: var(--rb-azul-oscuro)"/></svg></div>
         <div>
-          <div class="chat-title-text">Soporte IA Level Up</div>
+          <div class="chat-title-text">Asistente Roblox · Level Up</div>
           <div class="chat-subtitle-text">En línea • Respuestas inmediatas</div>
         </div>
       </div>
@@ -770,7 +855,13 @@
 
     <div class="chat-body-messages" id="chat-messages">
       <div class="msg-bubble bot">
-        👋 ¡Hola! Soy tu asistente virtual de Level Up. ¿Tienes dudas sobre tu Pago Móvil o cómo conseguir tu número de referencia? ¡Pregúntame!
+        👋 ¡Hola! Te ayudo a comprar tu código de Robux. Dime tu <strong>usuario de Roblox</strong> y el paquete que quieres, o toca una opción:
+      </div>
+      <div class="chat-chips" id="chatChips">
+        <button type="button" class="chat-chip" data-mensaje="Quiero comprar Robux">🎁 Quiero Robux</button>
+        <button type="button" class="chat-chip" data-mensaje="¿Cómo canjeo el código de Robux?">❓ ¿Cómo canjeo el código?</button>
+        <button type="button" class="chat-chip" data-mensaje="¿Cuánto tarda en llegar el código?">⏱️ ¿Cuánto tarda?</button>
+        <button type="button" class="chat-chip" data-mensaje="Ya pagué y no me llegó el código">🆘 Pagué y no llegó</button>
       </div>
     </div>
 
@@ -887,7 +978,10 @@
     // ya descontado por el servidor. Si había un paquete elegido, se vuelve a elegir con el precio nuevo.
     // Los textos vienen de la hoja: se pintan con textContent, nunca como HTML.
     // item.stock: 'disponible' | 'pocos' | 'agotado' (sin dato = se vende normal).
+    const ICONO_ROBUX = '<svg class="juego-icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 21 7v10l-9 5-9-5V7z" style="fill: var(--game-accent-2)"/><path d="M12 6.5 16.5 9v6L12 17.5 7.5 15V9z" style="fill: var(--rb-azul-oscuro)"/><rect x="10" y="10" width="4" height="4" rx=".8" style="fill: var(--rb-azul-claro)"/></svg>';
     function renderizarCatalogo(lista) {
+      // El chat elige paquetes de esta misma lista (mismo orden que las tarjetas)
+      window.catalogoGlobal = lista;
       const container = document.getElementById('catalogContainer');
       const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.producto) : null;
       container.replaceChildren();
@@ -909,6 +1003,7 @@
         // "800 Robux" → número grande + "Robux" pequeño; otros nombres se muestran completos
         const partes = String(item.producto).match(/^\s*([\d.,]+)\s+(.+)$/);
         if (partes) {
+          card.insertAdjacentHTML('beforeend', ICONO_ROBUX);
           card.append(div('robux-count', partes[1]), div('product-label', partes[2]));
         } else {
           const nombre = div('robux-count', item.producto);
@@ -1092,6 +1187,8 @@
       }
       
       usuarioVerificado = true;
+      // Se recuerda en este dispositivo para la próxima compra (js/ultimo-id.js)
+      if (/^[A-Za-z0-9_]{3,20}$/.test(usuarioInput)) window.UltimoId?.guardar('roblox', { id: usuarioInput });
       statusDiv.style.display = 'block';
       statusDiv.style.color = 'var(--game-text)'; 
       statusDiv.innerHTML = `✔️ Usuario verificado: <strong style="color: #fff;">${escaparHtml(usuarioInput)}</strong>`;
@@ -1519,6 +1616,91 @@
         }
     }
 
+    // =======================================================
+    // 💬 CHAT: la IA guía y la PÁGINA hace lo real: escribe el usuario, elige el paquete exacto del
+    // catálogo (sin los agotados) y lleva al cliente al pago del formulario. Recuerda la conversación.
+    // =======================================================
+    const USUARIO_CHAT = /^[A-Za-z0-9_]{3,20}$/;
+    const historialChat = [];
+    const MAX_HISTORIAL = 8;
+    const anotarEnHistorial = (rol, texto) => {
+        historialChat.push({ rol, texto: String(texto).slice(0, 500) });
+        while (historialChat.length > MAX_HISTORIAL) historialChat.shift();
+    };
+    const contenedorMensajes = () => document.getElementById('chat-messages');
+    const bajarChat = () => { const c = contenedorMensajes(); c.scrollTop = c.scrollHeight; };
+    function burbujaBot(html) {
+        const msg = document.createElement('div');
+        msg.className = 'msg-bubble bot';
+        msg.innerHTML = html;
+        contenedorMensajes().appendChild(msg);
+        bajarChat();
+        return msg;
+    }
+    const formatoRespuesta = (texto) => escaparHtml(texto).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+
+    // Tarjeta del catálogo que nombró el cliente: por el número exacto de Robux ("800" no elige "1800")
+    function tarjetaDelChat(texto) {
+        const numero = String(texto ?? '').replace(/[^0-9]/g, '');
+        if (!numero) return null;
+        const lista = window.catalogoGlobal || [];
+        const indice = lista.findIndex((p) => p.stock !== 'agotado' && String(p.producto).match(/^\s*([\d.,]+)/)?.[1].replace(/[^0-9]/g, '') === numero);
+        return indice >= 0 ? document.querySelectorAll('#catalogContainer .product-card')[indice] || null : null;
+    }
+
+    // Escribe y confirma el usuario, elige el paquete y lleva al pago del formulario
+    window.usarUsuarioDesdeChat = function(usuario, paqueteTexto) {
+        if (!USUARIO_CHAT.test(String(usuario))) { burbujaBot('Escríbeme tu <strong>usuario de Roblox</strong> exacto (el @ de tu perfil, sin espacios).'); return; }
+        document.getElementById('inputPlayerId').value = usuario;
+        document.getElementById('btnVerifyId').click();
+        const tarjeta = tarjetaDelChat(paqueteTexto);
+        if (tarjeta) tarjeta.click();
+        toggleChatModal();
+        const destino = paqueteSeleccionado ? document.getElementById('checkoutSection') : document.getElementById('catalogContainer');
+        setTimeout(() => destino.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+        mostrarBurbuja(paqueteSeleccionado ? '✅ Listo: paga el monto exacto y sube tu comprobante.' : '✅ Usuario listo: ahora elige tu paquete de Robux.', 'var(--game-text)');
+    };
+
+    // Tarjeta para que el cliente confirme el usuario antes de usarlo (Roblox no lo valida: un error
+    // de una letra manda la compra a otra persona)
+    function confirmarUsuario(usuario, paqueteTexto) {
+        const msg = burbujaBot(`<div class="chat-action-card"><p style="font-size:12px; margin-bottom:8px;">¿Tu usuario es <strong>${escaparHtml(usuario)}</strong>${paqueteTexto ? ` y quieres <strong>${escaparHtml(paqueteTexto)}</strong>` : ''}?</p><button type="button" class="btn-verify" style="padding:10px; font-size:11px;">✅ SÍ, CONTINUAR</button></div>`);
+        msg.querySelector('button').addEventListener('click', () => usarUsuarioDesdeChat(usuario, paqueteTexto));
+    }
+
+    // Último usuario de este dispositivo (js/ultimo-id.js)
+    const ultimoUsuario = window.UltimoId?.leer('roblox') || null;
+    if (ultimoUsuario && USUARIO_CHAT.test(ultimoUsuario.id) && !document.getElementById('inputPlayerId').value) {
+        document.getElementById('inputPlayerId').value = ultimoUsuario.id;
+        const aviso = document.getElementById('idStatus');
+        aviso.style.display = 'block'; aviso.style.color = 'var(--text-muted)';
+        aviso.innerHTML = `↺ Es tu último usuario: <strong style="color: #fff;">${escaparHtml(ultimoUsuario.id)}</strong>. Confírmalo con el botón o escribe otro.`;
+    }
+    const chipsSaludo = document.getElementById('chatChips');
+    if (chipsSaludo && ultimoUsuario && USUARIO_CHAT.test(ultimoUsuario.id)) {
+        const boton = document.createElement('button');
+        boton.type = 'button'; boton.className = 'chat-chip';
+        boton.dataset.ultimoId = ultimoUsuario.id;
+        boton.textContent = `🔁 Comprar para ${ultimoUsuario.id}`;
+        chipsSaludo.prepend(boton);
+    }
+    chipsSaludo?.addEventListener('click', (e) => {
+        const boton = e.target.closest('.chat-chip');
+        if (!boton) return;
+        chipsSaludo.remove();
+        if (boton.dataset.ultimoId) confirmarUsuario(boton.dataset.ultimoId, '');
+        else enviarMensajeAI(boton.dataset.mensaje);
+    });
+
+    function estadoParaIA() {
+        const usuario = document.getElementById('inputPlayerId').value.trim();
+        return [
+            usuarioVerificado ? `Usuario confirmado: ${usuario}` : (usuario ? `Usuario escrito sin confirmar: ${usuario}` : 'Sin usuario'),
+            paqueteSeleccionado ? `Paquete elegido: ${paqueteSeleccionado.producto} (${formatoBs(paqueteSeleccionado.precio)})` : 'Sin paquete elegido',
+            descuento.codigo() ? `Código de descuento aplicado: ${descuento.codigo()}` : '',
+        ].filter(Boolean).join('. ').slice(0, 300);
+    }
+
     async function enviarMensajeAI(textoUsuario) {
         let registro = obtenerHistorialRateLimit();
         if (registro.count >= LIMITE_MENSAJES) {
@@ -1531,47 +1713,47 @@
         localStorage.setItem('ia_chat_limit_roblox', JSON.stringify(registro));
         actualizarInterfazRateLimit();
 
-        const contenedorChat = document.getElementById('chat-messages');
-        
+        const contenedorChat = contenedorMensajes();
         const msgUser = document.createElement('div');
         msgUser.className = "msg-bubble user";
         msgUser.innerText = textoUsuario;
         contenedorChat.appendChild(msgUser);
-        contenedorChat.scrollTop = contenedorChat.scrollHeight;
 
         const msgCargando = document.createElement('div');
-        msgCargando.id = "tempCargando";
         msgCargando.className = "msg-bubble bot";
-        msgCargando.style.fontStyle = "italic";
-        msgCargando.innerText = "🤖 Pensando respuesta...";
+        msgCargando.innerHTML = `<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
         contenedorChat.appendChild(msgCargando);
-        contenedorChat.scrollTop = contenedorChat.scrollHeight;
+        bajarChat();
+
+        const catalogoTexto = (window.catalogoGlobal || []).length
+            ? window.catalogoGlobal.map((p) => `- ${p.producto}: ${formatoBs(p.precio)}${p.stock === 'agotado' ? ' (AGOTADO)' : ''}`).join('\n')
+            : 'Aún cargando precios...';
 
         try {
             const response = await fetch('/api/ia-soporte', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mensaje: textoUsuario })
+                body: JSON.stringify({ mensaje: textoUsuario, juego: 'Roblox', juegoId: 'roblox', catalogo: catalogoTexto, estado: estadoParaIA(), historial: historialChat.slice() })
             });
-            
+
             const resultado = await response.json();
-            const cargandoEl = document.getElementById('tempCargando');
-            if (cargandoEl) cargandoEl.remove();
+            msgCargando.remove();
+            const respuesta = String(resultado.respuesta || "Disculpa, no pude responder. Escríbenos por WhatsApp.");
+            anotarEnHistorial('cliente', textoUsuario);
+            anotarEnHistorial('asistente', respuesta.replace(/\[ACCION_[^\]]*\]/g, '').trim());
 
-            const msgBot = document.createElement('div');
-            msgBot.className = "msg-bubble bot";
-            msgBot.innerText = resultado.respuesta || "Disculpa, no pude responder. Escríbenos por WhatsApp.";
-            contenedorChat.appendChild(msgBot);
-            contenedorChat.scrollTop = contenedorChat.scrollHeight;
+            // [ACCION_USUARIO:usuario:paquete]: la página pide confirmar el usuario y lleva al pago
+            const accion = respuesta.match(/\[ACCION_USUARIO:([A-Za-z0-9_]{3,20}):?([^\]]{0,40})\]/);
+            const texto = respuesta.replace(/\[ACCION_[^\]]*\]/g, '').trim();
+            if (texto) burbujaBot(formatoRespuesta(texto));
+            if (accion) confirmarUsuario(accion[1], accion[2].trim());
 
-            if(resultado.respaldoWhatsapp || textoUsuario.toLowerCase().includes("ayuda") || textoUsuario.toLowerCase().includes("humano")) {
+            if (resultado.respaldoWhatsapp || /ayuda|humano|asesor|persona/i.test(textoUsuario)) {
                 document.getElementById('whatsappEscalateContainer').style.display = 'block';
             }
 
         } catch (e) {
-            const cargandoEl = document.getElementById('tempCargando');
-            if (cargandoEl) cargandoEl.remove();
-            
+            msgCargando.remove();
             const msgError = document.createElement('div');
             msgError.className = "msg-bubble error";
             msgError.innerText = "Disculpa, ocurrió un error de conexión con la IA.";

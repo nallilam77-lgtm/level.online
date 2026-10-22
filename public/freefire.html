@@ -27,6 +27,7 @@
   <!-- Lector de referencias con Tesseract (compartido entre juegos; Tesseract se descarga bajo demanda) -->
   <script src="/js/lector-referencia.js" defer></script>
   <script src="/js/descuento.js" defer></script>
+  <script src="/js/ultimo-id.js" defer></script>
   <script src="/js/aviso-codigo.js?v=3" defer></script>
   <style>
     :root {
@@ -38,6 +39,11 @@
       --game-text: #ff9900;
       --game-gradient: linear-gradient(135deg, #ff9900, #ffcc00);
       --on-game-cta: #0f172a;
+      /* Tema Free Fire: fuego de la zona segura sobre la noche, con franjas de batalla */
+      --ff-fuego-claro: #fff3c4;
+      --ff-fuego-oscuro: #c2410c;
+      --ff-fuego-oscuro-rgb: 194, 65, 12;
+      --ff-noche: #1a0f05;
       /* Paleta Level Up: ver .claude/UI_RULES.md */
       --bg-base: #0f172a;
       --bg-deep: #0b1120;
@@ -509,8 +515,75 @@
       *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
       .anim-slide-up { opacity: 1; }
     }
+
+    /* ======================================================= */
+    /* TEMA FREE FIRE: fuego naranja, franjas de batalla y la isla de noche (va al final para pisar el estilo base)  */
+    /* ======================================================= */
+    body {
+      isolation: isolate;
+      background-image: 
+        radial-gradient(ellipse 80% 45% at 50% -5%, rgba(var(--game-accent-rgb), 0.20), transparent 60%),
+        radial-gradient(circle at 100% 100%, rgba(var(--ff-fuego-oscuro-rgb), 0.22), transparent 50%),
+        radial-gradient(circle at top, var(--bg-base) 0%, var(--bg-deep) 70%);
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background: repeating-linear-gradient(135deg, rgba(var(--game-accent-rgb), 0.07) 0 2px, transparent 2px 24px);
+      -webkit-mask-image: linear-gradient(180deg, black, transparent 80%); mask-image: linear-gradient(180deg, black, transparent 80%);
+    }
+    .main-card { position: relative; border-color: rgba(var(--game-accent-rgb), 0.28); box-shadow: var(--shadow-lg), var(--shadow-glow), inset 0 1px 0 rgba(var(--game-accent-rgb), 0.22); }
+    .main-card::before { content: ''; position: absolute; top: -1px; left: 12%; right: 12%; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--game-accent), var(--game-accent-2), var(--game-accent), transparent); }
+
+    .juego-hero { display: grid; justify-items: center; gap: 4px; text-align: center; margin: 4px 0 18px; }
+    .juego-emblema { width: 68px; height: 68px; filter: drop-shadow(0 0 14px rgba(var(--game-accent-rgb), 0.55)); animation: flotarEmblema 3.6s ease-in-out infinite; }
+    .juego-emblema svg { width: 100%; height: 100%; display: block; }
+    .juego-kicker { font-family: 'Montserrat', sans-serif; font-size: 10px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--game-text); }
+    .title-banner {
+      margin-bottom: 0; font-size: 28px; letter-spacing: 2px; text-shadow: none;
+      background: linear-gradient(180deg, var(--ff-fuego-claro) 0%, var(--game-accent-2) 40%, var(--game-accent) 70%, var(--ff-fuego-oscuro) 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 2px 10px rgba(var(--game-accent-rgb), 0.35));
+    }
+    .juego-sub { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    @keyframes flotarEmblema { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+    .trust-chip { background: rgba(var(--game-accent-rgb), 0.07); border-color: rgba(var(--game-accent-rgb), 0.22); color: var(--text-main); }
+
+    .product-card { border-color: rgba(var(--game-accent-rgb), 0.18); }
+    .product-card::before { content: ''; position: absolute; top: 0; left: 22%; right: 22%; height: 2px; background: linear-gradient(90deg, transparent, var(--game-accent), transparent); opacity: 0.55; transition: opacity 0.25s ease, left 0.25s ease, right 0.25s ease; }
+    .product-card:hover::before, .product-card.selected::before { opacity: 1; left: 8%; right: 8%; }
+    .product-card.skeleton::before { display: none; }
+    .juego-icono { width: 30px; height: 30px; display: block; margin: 0 auto 6px; filter: drop-shadow(0 0 8px rgba(var(--game-accent-rgb), 0.5)); transition: transform 0.25s ease; }
+    .product-card:hover .juego-icono, .product-card.selected .juego-icono { transform: translateY(-2px) rotate(-6deg) scale(1.08); }
+
+    /* Botones con un destello que los cruza */
+    .btn-submit-order, .btn-verify, .sticky-cta-btn { position: relative; overflow: hidden; letter-spacing: 0.8px; }
+    .btn-submit-order::after, .btn-verify::after, .sticky-cta-btn.ready::after {
+      content: ''; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; pointer-events: none;
+      background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+      transform: skewX(-20deg); animation: destelloBoton 3.4s ease-in-out infinite;
+    }
+    @keyframes destelloBoton { 0%, 62% { left: -60%; } 100% { left: 135%; } }
+
+    /* Chat */
+    .chat-header { background: linear-gradient(90deg, rgba(var(--game-accent-rgb), 0.14), var(--bg-base)); }
+    .chat-avatar-ai { border-color: var(--game-accent); background: rgba(var(--game-accent-rgb), 0.08); }
+    .chat-avatar-ai svg { width: 22px; height: 22px; display: block; }
+    .msg-bubble.bot strong { color: var(--game-text); }
+    .chat-chips { display: flex; flex-wrap: wrap; gap: 6px; align-self: flex-start; max-width: 100%; }
+    .chat-chip { min-height: 44px; padding: 6px 12px; border-radius: 50px; border: 1px solid rgba(var(--game-accent-rgb), 0.45); background: rgba(var(--game-accent-rgb), 0.08); color: var(--game-text); font-family: 'Poppins', sans-serif; font-size: 11px; font-weight: 700; cursor: pointer; transition: background 0.2s ease, box-shadow 0.2s ease; }
+    .chat-chip:hover, .chat-chip:focus-visible { background: rgba(var(--game-accent-rgb), 0.18); box-shadow: 0 0 12px rgba(var(--game-accent-rgb), 0.3); }
+    .chat-resumen { font-size: 12px; text-align: left; line-height: 1.6; margin: 6px 0 10px; }
+    .chat-resumen strong { color: var(--game-text); }
+    /* Free Fire: esquinas cortadas como los marcos del juego */
+    .step-num, .product-card.selected::after { border-radius: 0; clip-path: polygon(28% 0, 72% 0, 100% 28%, 100% 72%, 72% 100%, 28% 100%, 0 72%, 0 28%); }
+    .product-card { background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.08), var(--surface) 65%); }
+    .product-card.selected { background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.18), rgba(var(--ff-fuego-oscuro-rgb), 0.10)); box-shadow: var(--shadow-lg), 0 0 0 1px rgba(var(--game-accent-rgb), 0.35), 0 0 22px rgba(var(--game-accent-rgb), 0.4); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .juego-emblema, .btn-submit-order::after, .btn-verify::after, .sticky-cta-btn.ready::after { animation: none; }
+    }
   </style>
-  <link rel="stylesheet" href="css/pie-legal.css">
   <link rel="stylesheet" href="css/descuento.css">
   <link rel="stylesheet" href="css/aviso-codigo.css?v=3">
 </head>
@@ -580,7 +653,7 @@
   <div id="modalExitosa" class="overlay-pantalla">
     <div class="modal-content success-theme">
       <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
-      <h2 class="modal-titulo" style="font-size: 20px;">¡RECARGA EXITOSA!</h2>
+      <h2 class="modal-titulo" style="font-size: 20px;">¡BOOYAH! RECARGA EXITOSA</h2>
       <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado y los diamantes ya están en tu cuenta.</p>
       <div class="tx-caja success" id="codigoTxnExito">TXN-XXXXXX</div>
       <button type="button" class="btn-confirmar" style="background: var(--game-gradient); margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(var(--game-accent-2-rgb), 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
@@ -636,10 +709,26 @@
   <!-- Contenido Principal -->
   <div class="main-card anim-slide-up">
     <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a></div>
-    <h1 class="title-banner anim-slide-up delay-1">🔥 FREE FIRE 🔥</h1>
+    <header class="juego-hero anim-slide-up delay-1">
+      <div class="juego-emblema">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="ffFuego" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--ff-fuego-claro)"/><stop offset=".45" style="stop-color: var(--game-accent-2)"/><stop offset="1" style="stop-color: var(--ff-fuego-oscuro)"/></linearGradient>
+            <linearGradient id="ffNoche" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: var(--ff-fuego-oscuro)"/><stop offset="1" style="stop-color: var(--ff-noche)"/></linearGradient>
+          </defs>
+          <path d="M32 3 56 13v18c0 15-11 25-24 30C19 56 8 46 8 31V13Z" fill="url(#ffNoche)" stroke="url(#ffFuego)" stroke-width="3"/>
+          <path d="M33 12c3 8 12 12 12 22a13 13 0 0 1-26 0c0-6 3-10 6-13 0 5 2 8 5 8-3-6-1-12 3-17z" fill="url(#ffFuego)"/>
+          <path d="M32 30c2 4 6 6 6 10a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3-1-2 0-5 1-7z" style="fill: var(--ff-noche)" opacity=".55"/>
+        </svg>
+      </div>
+      <p class="juego-kicker">Battle Royale · Servidor LATAM</p>
+      <h1 class="title-banner">Free Fire</h1>
+      <p class="juego-sub">Diamantes directo a tu cuenta con tu ID</p>
+    </header>
 
     <div class="trust-strip anim-slide-up delay-1">
       <span class="trust-chip">⚡ Entrega 1–5 min</span>
+      <span class="trust-chip">🌎 Servidor LATAM</span>
       <span class="trust-chip">🔒 Pago verificado</span>
       <span class="trust-chip">💬 Soporte WhatsApp</span>
     </div>
@@ -727,7 +816,7 @@
         <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputReferencia" class="input-field" placeholder="Solo los últimos 5 dígitos del pago" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
       </div>
 
-      <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🚀 PROCESAR RECARGA</button>
+      <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">💎 COMPRAR DIAMANTES</button>
       <p class="aviso-aceptacion">Al procesar tu pedido aceptas los <a href="terminos.html" target="_blank">Términos y Condiciones</a>, la <a href="privacidad.html" target="_blank">Política de Privacidad</a> y la <a href="reembolsos.html" target="_blank">Política de Reembolsos</a>.</p>
     </div> 
   </div> 
@@ -767,9 +856,9 @@
   <div class="chat-modal-window" id="chatModalWindow">
     <div class="chat-header">
       <div class="chat-title-box">
-        <div class="chat-avatar-ai">🤖</div>
+        <div class="chat-avatar-ai"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 3 56 13v18c0 15-11 25-24 30C19 56 8 46 8 31V13Z" fill="url(#ffNoche)" stroke="url(#ffFuego)" stroke-width="4"/><path d="M33 12c3 8 12 12 12 22a13 13 0 0 1-26 0c0-6 3-10 6-13 0 5 2 8 5 8-3-6-1-12 3-17z" fill="url(#ffFuego)"/></svg></div>
         <div>
-          <div class="chat-title-text">Soporte IA Level Up</div>
+          <div class="chat-title-text">Asistente Free Fire · Level Up</div>
           <div class="chat-subtitle-text">En línea • Respuestas inmediatas</div>
         </div>
       </div>
@@ -778,7 +867,13 @@
 
     <div class="chat-body-messages" id="chat-messages">
       <div class="msg-bubble bot">
-        👋 ¡Hola! Te ayudaré a realizar tu recarga paso a paso. Si es tu primera vez o tienes problemas, ¡escríbeme!
+        👋 ¡Hola, superviviente! Te ayudo a recargar tus diamantes de Free Fire. Dime tu <strong>ID</strong> y el paquete que quieres, o toca una opción:
+      </div>
+      <div class="chat-chips" id="chatChips">
+        <button type="button" class="chat-chip" data-mensaje="Quiero recargar diamantes">💎 Quiero recargar</button>
+        <button type="button" class="chat-chip" data-mensaje="¿Dónde veo mi ID de Free Fire?">🔎 ¿Dónde veo mi ID?</button>
+        <button type="button" class="chat-chip" data-mensaje="¿Cuánto tarda en llegar la recarga?">⏱️ ¿Cuánto tarda?</button>
+        <button type="button" class="chat-chip" data-mensaje="Ya pagué y no me llegaron los diamantes">🆘 Pagué y no llegó</button>
       </div>
     </div>
 
@@ -884,6 +979,7 @@
     // "Pase de Subida de Nivel"): se muestran y se piden por su nombre. Misma regla que clavePaquete del servidor.
     const esTarjeta = (texto) => /[a-zñ]/i.test(String(texto).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/free\s*fire|latam|diamantes?|diamonds?/gi, ''));
     const etiquetaTarjeta = (texto) => (/semanal|weekly|mensual|monthly/i.test(String(texto)) ? 'Membresía' : 'Pase');
+    const ICONO_PAQUETE = '<svg class="juego-icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10l5 6-10 12L2 9z" fill="url(#ffFuego)"/><path d="M2 9h20M7 3l5 18 5-18M7 3l5 6 5-6" fill="none" style="stroke: var(--ff-noche)" stroke-width="1" opacity=".45"/></svg>';
     const nombrePaquete = (item) => {
       const texto = String(item.diamantes).trim();
       return esTarjeta(texto) ? texto : `${texto.replace(/diamantes/gi, '').trim()} Diamantes`;
@@ -912,7 +1008,7 @@
         // "etiqueta" es opcional en el catálogo (ej: "🔥 Más popular"); si no viene, no se muestra badge
         const titulo = esTarjeta(item.diamantes)
           ? `<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="diamonds-label">${etiquetaTarjeta(item.diamantes)}</div>`
-          : `<div class="diamonds-count">${cantidad} 💎</div><div class="diamonds-label">Diamantes</div>`;
+          : `${ICONO_PAQUETE}<div class="diamonds-count">${cantidad}</div><div class="diamonds-label">Diamantes</div>`;
         card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}${titulo}${precioTachado}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
         card.addEventListener('click', () => seleccionarProducto(card, item));
         card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, item); } });
@@ -1049,7 +1145,8 @@
 
     document.getElementById('inputReferencia').addEventListener('input', actualizarProgreso);
 
-    document.getElementById('btnVerifyId').addEventListener('click', async () => {
+    // Devuelve true si el ID quedó confirmado (la usan el botón y el chat)
+    const verificarCuenta = async () => {
       const idInput = document.getElementById('inputPlayerId').value.trim();
       const statusDiv = document.getElementById('idStatus'); const btnVerify = document.getElementById('btnVerifyId');
 
@@ -1077,7 +1174,11 @@
         statusDiv.style.color = 'var(--game-text)'; statusDiv.innerHTML = `✔️ <strong style="color: #fff;">ID Validado</strong>`;
       }
       finally { btnVerify.disabled = false; btnVerify.innerText = "VERIFICAR ID"; verificarEstadoDesbloqueo(); }
-    });
+      // Se recuerda en este dispositivo para la próxima recarga (js/ultimo-id.js)
+      if (idVerificado) window.UltimoId?.guardar('freefire', { id: idInput, nombre: nombreJugadorVerificado === 'ID Validado' ? '' : nombreJugadorVerificado });
+      return idVerificado;
+    };
+    document.getElementById('btnVerifyId').addEventListener('click', verificarCuenta);
 
     document.getElementById('inputPlayerId').addEventListener('input', () => { idVerificado = false; nombreJugadorVerificado = ""; document.getElementById('idStatus').style.display = 'none'; verificarEstadoDesbloqueo(); });
 
@@ -1412,17 +1513,17 @@
           localStorage.setItem('intentos_recarga', '0');
           localStorage.setItem('tiempo_bloqueo', '0');
 
-          textoElem.innerHTML = "💎 ¡Pines extraídos y bot ejecutándose en la nube!";
+          textoElem.innerHTML = "🪂 ¡Saltando del avión! Preparando tus diamantes...";
           barraFill.style.width = '75%';
           
           await new Promise(r => setTimeout(r, 1500)); 
 
-          textoElem.innerHTML = "🚀 Inyectando diamantes a tu cuenta de Free Fire...";
+          textoElem.innerHTML = "💎 Enviando tus diamantes a tu cuenta de Free Fire...";
           barraFill.style.width = '90%';
 
           await new Promise(r => setTimeout(r, 1200)); 
 
-          textoElem.innerHTML = "✅ ¡Recarga Exitosa!";
+          textoElem.innerHTML = "🔥 ¡BOOYAH! Recarga enviada";
           barraFill.style.width = '100%';
 
           setTimeout(() => {
@@ -1548,32 +1649,120 @@
     }
 
     // Funciones Auxiliares para procesar desde el chat
-    window.verificarIdDesdeChat = async function(id, paqueteTexto) {
-        document.getElementById('inputPlayerId').value = id;
-        mostrarBurbuja("⏳ Verificando ID...", "var(--game-text)");
+    // =======================================================
+    // 💬 CHAT: la IA guía y la PÁGINA hace lo real. El ID se confirma con la misma verificación del
+    // formulario (nunca "a ciegas"), el paquete se elige del catálogo exacto ("100" no elige "1000")
+    // y el pago pasa por la misma confirmación de siempre.
+    // =======================================================
+    const JUEGO_CHAT = 'freefire';
+    const ID_CHAT = /^\d{5,15}$/;
+    const historialChat = [];
+    const MAX_HISTORIAL = 8;
+    const anotarEnHistorial = (rol, texto) => {
+        historialChat.push({ rol, texto: String(texto).slice(0, 500) });
+        while (historialChat.length > MAX_HISTORIAL) historialChat.shift();
+    };
+    const soloDigitos = (texto) => String(texto ?? '').replace(/[^0-9]/g, '');
+    const contenedorMensajes = () => document.getElementById('chat-messages');
+    const bajarChat = () => { const c = contenedorMensajes(); c.scrollTop = c.scrollHeight; };
+    const nombreReal = () => (nombreJugadorVerificado && nombreJugadorVerificado !== 'ID Validado' ? nombreJugadorVerificado : '');
 
-        try {
-            const response = await fetch(SCRIPT_VALIDADOR_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) });
-            const data = await response.json();
+    function burbujaBot(html) {
+        const msg = document.createElement('div');
+        msg.className = 'msg-bubble bot';
+        msg.innerHTML = html;
+        contenedorMensajes().appendChild(msg);
+        bajarChat();
+        return msg;
+    }
 
-            idVerificado = true;
-            nombreJugadorVerificado = data.valid && data.player_name ? data.player_name : "ID Validado";
-
-            if (window.catalogoGlobal) {
-                let numeroPaquete = paqueteTexto.replace(/[^0-9]/g, '');
-                paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
-            }
-            if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteTexto, precio: "Validando..." }; }
-
-            const chatContainer = document.getElementById('chat-messages');
-            chatContainer.innerHTML += `<div class="msg-bubble user" style="background: var(--success); text-align:left;">✅ <b>Jugador:</b> ${nombreJugadorVerificado}<br>💎 <b>Paquete:</b> ${paqueteSeleccionado.diamantes}<br>💰 <b>Total:</b> ${paqueteSeleccionado.precio} Bs<br><br>Todo correcto, dame los datos de pago.</div>`;
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            // Se envía a la IA pero OCULTANDO el mensaje para que no se duplique
-            enviarMensajeAI("SISTEMA: El jugador " + nombreJugadorVerificado + " ha sido confirmado para " + paqueteSeleccionado.diamantes + ". Dame los datos de pago con [ACCION_PAGO].", true);
-        } catch (e) {
-            mostrarBurbuja("❌ Error al verificar. Intenta nuevamente.", "var(--danger)");
+    // Paquete del catálogo que nombró el cliente: por su número exacto; los que tienen nombre, por el nombre
+    function buscarPaqueteDelChat(texto) {
+        const lista = window.catalogoGlobal || [];
+        const numero = soloDigitos(texto);
+        if (numero) {
+            const exacto = lista.find((p) => !esTarjeta(p.diamantes) && soloDigitos(p.diamantes) === numero);
+            if (exacto) return exacto;
         }
+        const buscado = String(texto ?? '').toLowerCase().trim();
+        return buscado ? lista.find((p) => esTarjeta(p.diamantes) && String(p.diamantes).toLowerCase().includes(buscado)) || null : null;
+    }
+
+    // Elige el paquete tocando su tarjeta del catálogo (lo mismo que haría el cliente)
+    function marcarPaquete(paquete) {
+        const indice = (window.catalogoGlobal || []).indexOf(paquete);
+        const tarjeta = document.querySelectorAll('#catalogContainer .product-card')[indice];
+        if (indice >= 0 && tarjeta) seleccionarProducto(tarjeta, paquete);
+    }
+
+    function ofrecerPaquetes(texto) {
+        const lista = window.catalogoGlobal || [];
+        if (!lista.length) { burbujaBot('Los precios todavía están cargando. Intenta en unos segundos.'); return; }
+        const msg = burbujaBot(texto);
+        const chips = document.createElement('div');
+        chips.className = 'chat-chips';
+        lista.forEach((p) => {
+            const boton = document.createElement('button');
+            boton.type = 'button'; boton.className = 'chat-chip';
+            boton.textContent = `${nombrePaquete(p)} · ${p.precio} Bs`;
+            boton.addEventListener('click', () => { marcarPaquete(p); chips.remove(); mostrarTarjetaPago(); });
+            chips.appendChild(boton);
+        });
+        msg.after(chips);
+        bajarChat();
+    }
+
+    // Tarjeta de pago dentro del chat: resumen real del pedido + datos del Pago Móvil + comprobante
+    function mostrarTarjetaPago() {
+        if (!idVerificado) { burbujaBot('Primero confirmemos tu cuenta: dime tu <strong>ID de jugador</strong>.'); return; }
+        if (!paqueteSeleccionado) { ofrecerPaquetes('¿Qué paquete quieres? 👇'); return; }
+        document.getElementById('tarjetaPagoChat')?.remove();
+        const id = document.getElementById('inputPlayerId').value.trim();
+        const tarjeta = document.createElement('div');
+        tarjeta.className = 'msg-bubble bot';
+        tarjeta.id = 'tarjetaPagoChat';
+        tarjeta.innerHTML = `
+            <div class="chat-action-card">
+                <p style="color:var(--game-text); font-weight:900; font-size:13px;">🏦 TU PEDIDO</p>
+                <div class="chat-resumen">
+                    Cuenta: <strong>${escaparHtml(id)}</strong>${nombreReal() ? ` · ${escaparHtml(nombreReal())}` : ''}<br>
+                    Paquete: <strong>${escaparHtml(nombrePaquete(paqueteSeleccionado))}</strong><br>
+                    Total: <strong>${escaparHtml(paqueteSeleccionado.precio)} Bs</strong>
+                </div>
+                <p style="font-size:12px; margin: 8px 0; line-height:1.5;">Banco: ${escaparHtml(datosBancoGlobal.banco)}<br>Tel: ${escaparHtml(datosBancoGlobal.telefono)}<br>Cédula: ${escaparHtml(datosBancoGlobal.cedula)}</p>
+                <button class="btn-copy" style="padding: 10px; font-size: 11px; margin-bottom: 12px;" onclick="copiarDatosBanco()">📋 COPIAR DATOS</button>
+                <hr style="border-color: rgba(var(--game-accent-rgb),0.2); margin: 12px 0;">
+                <p style="color:var(--text-main); font-weight:bold; font-size: 12px; margin-bottom:8px;">Paga el monto exacto y sube tu comprobante:</p>
+                <input type="file" id="inputComprobanteChat" accept="image/*" onchange="analizarCaptureChat(this)">
+                <div id="resultadoIAChat" class="resultado-ia-chat"></div>
+                <input type="text" id="inputRefChat" class="input-field" inputmode="numeric" style="padding: 10px; font-size: 16px; margin-bottom: 4px;" placeholder="Últimos 5 dígitos" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                <a href="https://drive.google.com/file/d/1b0V-JMYmBqEwyMxLOKySIESIU2XLtYUW/view?usp=sharing" target="_blank" rel="noopener noreferrer" style="font-size: 10px; color: var(--warning); display: block; margin-bottom: 12px; text-decoration: underline;">¿Dónde está la referencia? (Ver pista)</a>
+                <button class="btn-submit-order" style="padding: 12px; font-size: 12px;" onclick="procesarRecargaDesdeChat()">💎 COMPRAR DIAMANTES</button>
+            </div>`;
+        contenedorMensajes().appendChild(tarjeta);
+        bajarChat();
+    }
+
+    // Confirma el ID con la verificación real y sigue con el paquete y el pago
+    window.verificarIdDesdeChat = async function(id, paqueteTexto) {
+        if (!ID_CHAT.test(String(id))) {
+            burbujaBot('Necesito tu <strong>ID de jugador</strong> (solo números). Está en tu perfil: toca tu foto arriba a la izquierda.');
+            return;
+        }
+        document.getElementById('inputPlayerId').value = id;
+        idVerificado = false; nombreJugadorVerificado = ''; verificarEstadoDesbloqueo();
+        const espera = burbujaBot('⏳ Verificando tu ID...');
+        const confirmada = await verificarCuenta();
+        espera.remove();
+        if (!confirmada) {
+            burbujaBot('❌ No pude confirmar ese ID. Revísalo y escríbelo de nuevo.');
+            return;
+        }
+        burbujaBot(`✅ Cuenta confirmada:${nombreReal() ? ` <strong>${escaparHtml(nombreReal())}</strong>` : ''} ${escaparHtml(id)}.`);
+        const paquete = buscarPaqueteDelChat(paqueteTexto);
+        if (paquete) marcarPaquete(paquete);
+        if (paqueteSeleccionado) mostrarTarjetaPago();
+        else ofrecerPaquetes('¿Qué paquete quieres? 👇');
     };
 
     window.procesarRecargaDesdeChat = function() {
@@ -1588,10 +1777,49 @@
         document.getElementById('inputReferencia').value = refInputChat;
         window.chatFileOverride = fileInputChat.files[0];
 
-        abrirModal();      
+        toggleChatModal();
+        abrirModal();
     };
 
-    // Parámetro "ocultarBurbujaUsuario" añadido para evitar duplicación
+    // Último ID de este juego en este dispositivo (js/ultimo-id.js): se escribe solo y el cliente lo confirma
+    const ultimoIdGuardado = window.UltimoId?.leer(JUEGO_CHAT) || null;
+    if (ultimoIdGuardado && ID_CHAT.test(ultimoIdGuardado.id) && !document.getElementById('inputPlayerId').value) {
+        document.getElementById('inputPlayerId').value = ultimoIdGuardado.id;
+        const aviso = document.getElementById('idStatus');
+        aviso.style.display = 'block'; aviso.style.color = 'var(--text-muted)';
+        aviso.innerHTML = `↺ Es tu último ID${ultimoIdGuardado.nombre ? ` (<strong style="color: #fff;">${escaparHtml(ultimoIdGuardado.nombre)}</strong>)` : ''}. Confírmalo con el botón o escribe otro.`;
+    }
+
+    // Opciones rápidas del saludo (+ "recargar a mi último ID" si hay uno guardado)
+    const chipsSaludo = document.getElementById('chatChips');
+    if (chipsSaludo && ultimoIdGuardado && ID_CHAT.test(ultimoIdGuardado.id)) {
+        const boton = document.createElement('button');
+        boton.type = 'button'; boton.className = 'chat-chip';
+        boton.dataset.ultimoId = ultimoIdGuardado.id;
+        boton.textContent = `🔁 Recargar a mi último ID (${ultimoIdGuardado.id})`;
+        chipsSaludo.prepend(boton);
+    }
+    chipsSaludo?.addEventListener('click', (e) => {
+        const boton = e.target.closest('.chat-chip');
+        if (!boton) return;
+        chipsSaludo.remove();
+        if (boton.dataset.ultimoId) verificarIdDesdeChat(boton.dataset.ultimoId, '');
+        else enviarMensajeAI(boton.dataset.mensaje);
+    });
+
+    // Lo que la página ya sabe del pedido: la IA no vuelve a pedir lo que ya está
+    function estadoParaIA() {
+        const id = document.getElementById('inputPlayerId').value.trim();
+        return [
+            idVerificado ? `ID confirmado: ${id}${nombreReal() ? `, jugador ${nombreReal()}` : ''}` : (id ? `ID escrito sin confirmar: ${id}` : 'Sin ID'),
+            paqueteSeleccionado ? `Paquete elegido: ${nombrePaquete(paqueteSeleccionado)} (${paqueteSeleccionado.precio} Bs)` : 'Sin paquete elegido',
+            descuento.codigo() ? `Código de descuento aplicado: ${descuento.codigo()}` : '',
+        ].filter(Boolean).join('. ').slice(0, 300);
+    }
+
+    // Texto de la IA a HTML seguro: se escapa todo y solo se permite **negrita** y saltos de línea
+    const formatoRespuesta = (texto) => escaparHtml(texto).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+
     async function enviarMensajeAI(textoUsuario, ocultarBurbujaUsuario = false) {
         let registro = obtenerHistorialRateLimit();
         if (registro.count >= LIMITE_MENSAJES) {
@@ -1604,119 +1832,62 @@
         localStorage.setItem('ia_chat_limit', JSON.stringify(registro));
         actualizarInterfazRateLimit();
 
-        const contenedorChat = document.getElementById('chat-messages');
-        
-        // Dibuja la burbuja solo si NO la hemos ocultado explícitamente
+        const contenedorChat = contenedorMensajes();
+
         if (!ocultarBurbujaUsuario) {
             const msgUser = document.createElement('div');
             msgUser.className = "msg-bubble user";
             msgUser.innerText = textoUsuario;
             contenedorChat.appendChild(msgUser);
-            contenedorChat.scrollTop = contenedorChat.scrollHeight;
+            bajarChat();
         }
 
         const msgCargando = document.createElement('div');
-        msgCargando.id = "tempCargando";
         msgCargando.className = "msg-bubble bot";
-        msgCargando.innerHTML = `<div class="typing-indicator"><span style="font-size: 14px; margin-right: 6px;">🤖</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+        msgCargando.innerHTML = `<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
         contenedorChat.appendChild(msgCargando);
-        contenedorChat.scrollTop = contenedorChat.scrollHeight;
+        bajarChat();
 
-        let nombreJuegoDetectado = "Juego Desconocido";
-        const tituloBanner = document.querySelector('.title-banner');
-        if (tituloBanner) {
-            nombreJuegoDetectado = tituloBanner.innerText.replace(/[^a-zA-Z\s]/g, '').trim();
-        }
-        
-        let catalogoTexto = "Aún cargando precios...";
-        if (window.catalogoGlobal && window.catalogoGlobal.length > 0) {
-            catalogoTexto = window.catalogoGlobal.map(p => `- ${p.diamantes}: ${p.precio} Bs`).join("\n");
-        }
+        const catalogoTexto = window.catalogoGlobal && window.catalogoGlobal.length
+            ? window.catalogoGlobal.map((p) => `- ${nombrePaquete(p)}: ${p.precio} Bs`).join("\n")
+            : "Aún cargando precios...";
 
         try {
             const response = await fetch('/api/ia-soporte', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     mensaje: textoUsuario,
-                    juego: nombreJuegoDetectado,
-                    catalogo: catalogoTexto
+                    juego: 'Free Fire',
+                    juegoId: JUEGO_CHAT,
+                    catalogo: catalogoTexto,
+                    estado: estadoParaIA(),
+                    historial: historialChat.slice(),
                 })
             });
-            
+
             const resultado = await response.json();
-            const cargandoEl = document.getElementById('tempCargando');
-            if (cargandoEl) cargandoEl.remove();
+            msgCargando.remove();
+            const respuesta = String(resultado.respuesta || "Disculpa, no pude responder. Escríbenos por WhatsApp.");
+            anotarEnHistorial('cliente', textoUsuario);
+            anotarEnHistorial('asistente', respuesta.replace(/\[ACCION_[^\]]*\]/g, '').trim());
 
-            const msgBot = document.createElement('div');
-            msgBot.className = "msg-bubble bot";
-            // Se escapa la respuesta de la IA antes de insertar las tarjetas propias (evita inyectar HTML vía prompt)
-            let htmlRespuesta = escaparHtml(resultado.respuesta || "Disculpa, no pude responder. Escríbenos por WhatsApp.");
+            // Acciones que pide la IA (la página las ejecuta de verdad):
+            //   [ACCION_VERIFICAR:id:paquete] confirma el ID (y elige el paquete) · [ACCION_PAGO] muestra el pago
+            const verificar = respuesta.match(/\[ACCION_(?:VERIFICAR|PAGO):(\d{5,15}):?([^\]]{0,40})\]/);
+            const pedirPago = /\[ACCION_PAGO\]/.test(respuesta);
+            const texto = respuesta.replace(/\[ACCION_[^\]]*\]/g, '').trim();
+            if (texto) burbujaBot(formatoRespuesta(texto));
 
-            // 1. Detectar si la IA pide verificar ID
-            const matchVerificar = htmlRespuesta.match(/\[ACCION_VERIFICAR:([\w-]+):(.*?)\]/);
-            if (matchVerificar) {
-                let idChat = matchVerificar[1];
-                let paqueteChat = matchVerificar[2].replace(/[^\w\s.-]/g, '');
-                htmlRespuesta = htmlRespuesta.replace(matchVerificar[0], `
-                    <div class="chat-action-card">
-                        <p style="font-size:12px; margin-bottom:8px;">Validaremos el ID: <b>${idChat}</b></p>
-                        <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">🔍 VERIFICAR JUGADOR</button>
-                    </div>
-                `);
-            }
+            if (verificar) await verificarIdDesdeChat(verificar[1], verificar[2]);
+            else if (pedirPago) mostrarTarjetaPago();
 
-            // 2. Detectar si la IA manda la caja de pago directa
-            const matchPagoDirecto = htmlRespuesta.match(/\[ACCION_PAGO:([\w-]+):(.*?)\]/);
-            if (matchPagoDirecto) {
-                let idChat = matchPagoDirecto[1];
-                let paqueteChat = matchPagoDirecto[2].replace(/[^\w\s.-]/g, '');
-
-                document.getElementById('inputPlayerId').value = idChat;
-                idVerificado = true;
-                nombreJugadorVerificado = "Jugador de " + nombreJuegoDetectado;
-
-                if (window.catalogoGlobal) {
-                    let numeroPaquete = paqueteChat.replace(/[^0-9]/g, '');
-                    paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
-                }
-                if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteChat, precio: "Calculando..." }; }
-
-                htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], "[ACCION_PAGO]");
-            }
-
-            // 3. Renderizar la Caja de Pago (Con la funcionalidad de IA añadida)
-            if (htmlRespuesta.includes("[ACCION_PAGO]")) {
-                htmlRespuesta = htmlRespuesta.replace("[ACCION_PAGO]", `
-                    <div class="chat-action-card">
-                        <p style="color:var(--game-accent); font-weight:900; font-size:13px;">🏦 DATOS DE PAGO</p>
-                        <p style="font-size:12px; margin: 8px 0; line-height:1.5;">Banco: ${datosBancoGlobal.banco}<br>Tel: ${datosBancoGlobal.telefono}<br>Cédula: ${datosBancoGlobal.cedula}</p>
-                        <button class="btn-copy" style="padding: 10px; font-size: 11px; margin-bottom: 12px;" onclick="copiarDatosBanco()">📋 COPIAR DATOS</button>
-                        <hr style="border-color: rgba(var(--game-accent-rgb),0.2); margin: 12px 0;">
-                        <p style="color:var(--game-text); font-weight:bold; font-size: 12px; margin-bottom:8px;">Sube tu comprobante:</p>
-                        <input type="file" id="inputComprobanteChat" accept="image/*" onchange="analizarCaptureChat(this)">
-                        
-                        <div id="resultadoIAChat" class="resultado-ia-chat"></div>
-
-                        <input type="text" id="inputRefChat" class="input-field" inputmode="numeric" style="padding: 10px; font-size: 16px; margin-bottom: 4px;" placeholder="Últimos 5 dígitos" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
-                        <a href="https://drive.google.com/file/d/1b0V-JMYmBqEwyMxLOKySIESIU2XLtYUW/view?usp=sharing" target="_blank" style="font-size: 10px; color: var(--warning); display: block; margin-bottom: 12px; text-decoration: underline;">¿Dónde está la referencia? (Ver pista)</a>
-                        <button class="btn-submit-order" style="padding: 12px; font-size: 12px;" onclick="procesarRecargaDesdeChat()">🚀 PROCESAR RECARGA</button>
-                    </div>
-                `);
-            }
-
-            msgBot.innerHTML = htmlRespuesta;
-            contenedorChat.appendChild(msgBot);
-            contenedorChat.scrollTop = contenedorChat.scrollHeight;
-
-            if(resultado.respaldoWhatsapp || textoUsuario.toLowerCase().includes("ayuda") || textoUsuario.toLowerCase().includes("humano")) {
+            if (resultado.respaldoWhatsapp || /ayuda|humano|asesor|persona/i.test(textoUsuario)) {
                 document.getElementById('whatsappEscalateContainer').style.display = 'block';
             }
 
         } catch (e) {
-            const cargandoEl = document.getElementById('tempCargando');
-            if (cargandoEl) cargandoEl.remove();
-            
+            msgCargando.remove();
             const msgError = document.createElement('div');
             msgError.className = "msg-bubble error";
             msgError.innerText = "Disculpa, ocurrió un error de conexión con la IA.";

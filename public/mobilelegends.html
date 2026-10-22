@@ -27,6 +27,7 @@
   <!-- Lector de referencias con Tesseract (compartido entre juegos; Tesseract se descarga bajo demanda) -->
   <script src="/js/lector-referencia.js" defer></script>
   <script src="/js/descuento.js" defer></script>
+  <script src="/js/ultimo-id.js" defer></script>
   <script src="/js/aviso-codigo.js?v=3" defer></script>
   <style>
     :root {
@@ -1230,6 +1231,8 @@
       } catch (error) {
         aceptarSinComprobar();
       } finally { btnVerify.disabled = false; btnVerify.innerText = "CONFIRMAR MI ID"; verificarEstadoDesbloqueo(); }
+      // Se recuerda en este dispositivo para la próxima recarga (js/ultimo-id.js)
+      if (idVerificado) window.UltimoId?.guardar('mobilelegends', { id: idInput, zona: zonaInput, nombre: nombreJugadorVerificado === 'ID Validado' ? '' : nombreJugadorVerificado });
       return idVerificado;
     };
     document.getElementById('btnVerifyId').addEventListener('click', verificarCuenta);
@@ -1852,12 +1855,32 @@
         abrirModal();
     };
 
-    // Opciones rápidas del saludo
-    document.getElementById('chatChips')?.addEventListener('click', (e) => {
+    // Último ID y Zona de este dispositivo (js/ultimo-id.js): se escriben solos y el cliente los confirma
+    const ultimoIdGuardado = window.UltimoId?.leer('mobilelegends') || null;
+    const hayUltimoId = !!(ultimoIdGuardado && ID_VALIDO.test(ultimoIdGuardado.id) && ZONA_VALIDA.test(ultimoIdGuardado.zona));
+    if (hayUltimoId && !document.getElementById('inputPlayerId').value) {
+        document.getElementById('inputPlayerId').value = ultimoIdGuardado.id;
+        document.getElementById('inputZona').value = ultimoIdGuardado.zona;
+        const aviso = document.getElementById('idStatus');
+        aviso.style.display = 'block'; aviso.style.color = 'var(--text-muted)';
+        aviso.innerHTML = `↺ Es tu última cuenta${ultimoIdGuardado.nombre ? ` (<strong style="color: #fff;">${escaparHtml(ultimoIdGuardado.nombre)}</strong>)` : ''}. Confírmala con el botón o escribe otra.`;
+    }
+
+    // Opciones rápidas del saludo (+ "recargar a mi última cuenta" si hay una guardada)
+    const chipsSaludo = document.getElementById('chatChips');
+    if (chipsSaludo && hayUltimoId) {
+        const boton = document.createElement('button');
+        boton.type = 'button'; boton.className = 'chat-chip';
+        boton.dataset.ultimoId = '1';
+        boton.textContent = `🔁 Recargar a ${ultimoIdGuardado.id} (${ultimoIdGuardado.zona})`;
+        chipsSaludo.prepend(boton);
+    }
+    chipsSaludo?.addEventListener('click', (e) => {
         const boton = e.target.closest('.chat-chip');
         if (!boton) return;
-        document.getElementById('chatChips').remove();
-        enviarMensajeAI(boton.dataset.mensaje);
+        chipsSaludo.remove();
+        if (boton.dataset.ultimoId) verificarIdDesdeChat(ultimoIdGuardado.id, ultimoIdGuardado.zona, '');
+        else enviarMensajeAI(boton.dataset.mensaje);
     });
 
     // Lo que la página ya sabe del pedido: la IA no vuelve a pedir lo que ya está
@@ -1865,7 +1888,7 @@
         const id = document.getElementById('inputPlayerId').value.trim();
         const zona = document.getElementById('inputZona').value.trim();
         return [
-            idVerificado ? `Cuenta confirmada: ${id} (${zona})${nombreJugadorVerificado && nombreJugadorVerificado !== 'ID Validado' ? `, jugador ${nombreJugadorVerificado}` : ''}` : 'Cuenta sin confirmar',
+            idVerificado ? `Cuenta confirmada: ${id} (${zona})${nombreJugadorVerificado && nombreJugadorVerificado !== 'ID Validado' ? `, jugador ${nombreJugadorVerificado}` : ''}` : (id ? `ID y Zona escritos sin confirmar: ${id} (${zona || 'sin zona'})` : 'Cuenta sin confirmar'),
             paqueteSeleccionado ? `Paquete elegido: ${nombrePaquete(paqueteSeleccionado)} (${paqueteSeleccionado.precio} Bs)` : 'Sin paquete elegido',
             descuento.codigo() ? `Código de descuento aplicado: ${descuento.codigo()}` : '',
         ].filter(Boolean).join('. ').slice(0, 300);

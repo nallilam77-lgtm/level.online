@@ -8,7 +8,47 @@ const FLUJO_ANTERIOR = `FLUJO DE AYUDA:
 - Si da su ID y paquete (Blood Strike o Roblox): Genera [ACCION_PAGO:id:paquete]
 - Si el sistema ya confirmó el ID de Free Fire: Genera [ACCION_PAGO]`;
 
+// Reglas comunes de las tiendas de recarga directa por ID (Free Fire y Blood Strike)
+const PAGO_Y_PROBLEMAS = `- Pago: Pago Móvil por el monto EXACTO que muestra la página, subir el capture y escribir los últimos 5 dígitos de la referencia. Con un código de creador paga 1,5 % menos.
+- Si pagó de menos, la página le deja pagar la diferencia (tiene 48 horas). Una recarga a un ID equivocado no se puede devolver.
+- Ya pagó y no llegó, pago rechazado, reembolsos o cualquier problema con su dinero: muestra empatía y dile que escriba por WhatsApp con su referencia y su código TXN (no prometas nada).`;
+
+const FLUJO_POR_ID = `FLUJO (la página ejecuta las acciones; escríbelas tal cual, al final de tu mensaje):
+- Si quiere recargar y falta el ID o el paquete: pide SOLO lo que falte, en una línea. Si el ESTADO trae un ID escrito, pregúntale si recarga a ese mismo.
+- Cuando tengas el ID (y el paquete, si lo dijo): genera [ACCION_VERIFICAR:id:paquete]. Ejemplo: [ACCION_VERIFICAR:123456789:100 Diamantes]. Si no dijo paquete, deja el último campo vacío: [ACCION_VERIFICAR:123456789:].
+- Si el ESTADO dice que el ID ya está confirmado y hay paquete elegido, y quiere pagar: genera [ACCION_PAGO].`;
+
 const GUIAS = {
+  freefire: `CONOCIMIENTO DE FREE FIRE:
+- La recarga es directa a la cuenta: el cliente solo da su ID de jugador (solo números). NUNCA pidas contraseña, correo, Facebook ni Google.
+- Dónde verlo: en el juego, tocar la foto de perfil (arriba a la izquierda); el ID está debajo del apodo.
+- Son diamantes del servidor LATAM. También puede haber tarjetas (Semanal, Mensual) o pases: solo los del catálogo.
+- Los diamantes llegan normalmente en 1 a 5 minutos. Si pasan 15 minutos y no llegan, que escriba por WhatsApp con su código TXN.
+${PAGO_Y_PROBLEMAS}
+
+${FLUJO_POR_ID}`,
+
+  bloodstrike: `CONOCIMIENTO DE BLOOD STRIKE:
+- La recarga es directa a la cuenta: el cliente solo da su ID de jugador (solo números). NUNCA pidas contraseña ni inicio de sesión.
+- Dónde verlo: en el juego, tocar la foto de perfil en el menú principal; ahí aparece el ID.
+- Vendemos oro (Gold) del servidor Global y los pases o bolsas que aparezcan en el catálogo (Strike Pass, Lucky Bag...).
+- La recarga llega normalmente en 1 a 5 minutos. Si pasan 15 minutos y no llega, que escriba por WhatsApp con su código TXN.
+${PAGO_Y_PROBLEMAS}
+
+${FLUJO_POR_ID.replace('100 Diamantes', '105 Oro')}`,
+
+  roblox: `CONOCIMIENTO DE ROBLOX:
+- No recargamos la cuenta directamente: después del pago la página muestra un CÓDIGO de tarjeta de regalo (gift card) de Robux. El cliente lo canjea en roblox.com/redeem con su cuenta abierta y los Robux se suman solos. Nunca pidas su contraseña.
+- Le pedimos su usuario de Roblox solo para identificar el pedido.
+- Los paquetes que dicen AGOTADO en el catálogo no se pueden comprar ahora; ofrece otro.
+- El código sale en pantalla en cuanto se confirma el pago (normalmente en 1 a 5 minutos). Que lo copie y lo guarde. Si se cerró la página o no lo vio, que escriba por WhatsApp con su referencia.
+- Pago: Pago Móvil por el monto EXACTO que muestra la página, subir el capture y escribir los últimos 5 dígitos de la referencia. Con un código de creador paga 1,5 % menos.
+- Ya pagó y no le salió el código, código que no funciona, reembolsos o cualquier problema con su dinero: muestra empatía y dile que escriba por WhatsApp con su referencia (no prometas nada).
+
+FLUJO (la página ejecuta las acciones; escríbelas tal cual, al final de tu mensaje):
+- Si quiere comprar y falta el usuario o el paquete: pide SOLO lo que falte, en una línea.
+- Cuando tengas el usuario (y el paquete, si lo dijo): genera [ACCION_USUARIO:usuario:paquete]. Ejemplo: [ACCION_USUARIO:MiUsuario_123:800 Robux]. Si no dijo paquete: [ACCION_USUARIO:MiUsuario_123:]. La página le pide confirmar el usuario y lo lleva al pago.`,
+
   mobilelegends: `CONOCIMIENTO DE MOBILE LEGENDS: BANG BANG (MLBB):
 - La recarga es directa a la cuenta: el cliente solo da su ID y su Zona (Zone ID). NUNCA pidas contraseña, correo ni inicio de sesión.
 - Dónde verlos: en el juego, tocar la foto de perfil (arriba a la izquierda). Aparece así: 123456789 (1234). El primer número es el ID y el del paréntesis la Zona.
