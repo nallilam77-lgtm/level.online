@@ -1,4 +1,4 @@
-// API de Central One: recargas directas por ID (Blood Strike) y códigos de gift card (Roblox).
+// API de Central One: recargas directas por ID (Free Fire, Blood Strike, Mobile Legends) y códigos de gift card (Roblox).
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 // Docs: portal de Central One → Integración. Las llaves (variables blood_nuevo y roblox_nuevo) solo viven
 // en Vercel: la API no acepta llamadas desde el navegador (sin CORS) y autorizan a gastar todo el saldo.
@@ -28,16 +28,18 @@ export async function catalogo(apiKey) {
  *  - { payload }: listo para POST /orders (null si el producto no pide datos del jugador).
  *  - { error }:   el producto no se puede comprar así (fuera del catálogo, sin stock o pide un dato que
  *                 la tienda no pregunta). No se llamó a POST /orders: no se movió dinero.
- * Si el catálogo no responde se manda solo { player_id }: si faltara un campo, Central One rechaza el
- * pedido antes de cobrar.
+ * Si el catálogo no responde se manda solo { player_id } (con zona, también zone_id): si faltara un
+ * campo, Central One rechaza el pedido antes de cobrar.
+ * zona: solo los juegos que piden dos datos (Mobile Legends: ID + Zona ID). Va en el campo cuyo nombre
+ * habla de zona/servidor (CAMPO_ZONA) y el ID en el otro.
  */
-export async function datosParaPedido({ apiKey, productId, idJugador }) {
+export async function datosParaPedido({ apiKey, productId, idJugador, zona = '' }) {
   let items;
   try {
     items = await catalogo(apiKey);
   } catch (error) {
-    console.error(`⚠️ Central One: no se pudo leer el catálogo (${error.message}). Se envía solo player_id.`);
-    return { payload: { player_id: idJugador } };
+    console.error(`⚠️ Central One: no se pudo leer el catálogo (${error.message}). Se envía solo player_id${zona ? ' y zone_id' : ''}.`);
+    return { payload: zona ? { player_id: idJugador, zone_id: zona } : { player_id: idJugador } };
   }
   const producto = items.find((p) => p?.product_id === productId);
   if (!producto) return { error: `El producto ${productId} no está en el catálogo de Central One (no habilitado, en pausa o inexistente).` };
@@ -48,14 +50,17 @@ export async function datosParaPedido({ apiKey, productId, idJugador }) {
     ? producto.target_schema
     : (producto.target_fields || []).map((key) => ({ key, type: 'text' }));
   const textos = campos.filter((c) => c.type !== 'select');
-  // La tienda solo pregunta el ID del jugador: va en el único campo de texto
-  if (textos.length !== 1) {
-    return { error: `"${producto.name}" pide ${textos.length} datos de texto (${textos.map((c) => c.key).join(', ') || 'ninguno'}) y la tienda solo tiene el ID del jugador.` };
+  // Sin zona, la tienda solo pregunta el ID del jugador: va en el único campo de texto. Con zona, tienen
+  // que ser dos campos de texto y exactamente uno de zona/servidor (si no, no se sabe dónde va cada uno).
+  const camposZona = textos.filter(esCampoZona);
+  const encaja = zona ? textos.length === 2 && camposZona.length === 1 : textos.length === 1;
+  if (!encaja) {
+    return { error: `"${producto.name}" pide ${textos.length} datos de texto (${textos.map((c) => c.key).join(', ') || 'ninguno'}) y la tienda solo tiene ${zona ? 'el ID y la Zona ID' : 'el ID'} del jugador.` };
   }
   const payload = {};
   for (const campo of campos) {
     if (campo.type !== 'select') {
-      payload[campo.key] = idJugador;
+      payload[campo.key] = zona && esCampoZona(campo) ? zona : idJugador;
       continue;
     }
     // Un "select" solo acepta el value de una de sus opciones; con varias, habría que preguntarla
@@ -67,6 +72,10 @@ export async function datosParaPedido({ apiKey, productId, idJugador }) {
   }
   return { payload };
 }
+
+// Campo del target_schema donde va la Zona ID (Mobile Legends la llama zone_id, server_id o "Server")
+const CAMPO_ZONA = /zone|zona|server|servidor/i;
+const esCampoZona = (campo) => CAMPO_ZONA.test(`${campo?.key || ''} ${campo?.label || ''}`);
 
 // Lo que ve el cliente cuando Central One rechaza el pedido (el código técnico va a "errores")
 function mensajeRechazo(codigo) {

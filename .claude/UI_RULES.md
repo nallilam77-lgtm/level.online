@@ -42,11 +42,12 @@ Cada tienda (y su tarjeta en el catálogo de inicio) usa el acento de su logo en
 | Free Fire | `#ff9900` | `#ff9900` | `#ff9900 → #ffcc00` | `#0f172a` |
 | Blood Strike | `#ff0000` | `#22d3ee` (la "X" del logo) | `#8b0000 → #ff1a1a` | `#ffffff` |
 | Roblox | `#0066ff` | `#4d94ff` | `#003fbf → #0066ff` | `#ffffff` |
+| Mobile Legends | `#f5b800` | `#ffc94a` | `#b8860b → #ffc94a` | `#0f172a` |
 
 - Hover de tarjetas: `box-shadow: 0 0 20px rgba(<acento>, 0.4)`.
 - Roblox: `#0066ff` no llega a 4.5:1 sobre slate, así que el texto usa `#4d94ff`.
 - Blood Strike: los textos destacados van en cian para no confundirse con los mensajes de error (rojos).
-- En inicio, cada tarjeta de juego lleva su clase (`card--freefire`, `card--bloodstrike`, `card--roblox`) con el mismo acento.
+- En inicio, cada tarjeta de juego lleva su clase (`card--freefire`, `card--bloodstrike`, `card--roblox`, `card--mobilelegends`) con el mismo acento.
 - Contraste de texto mínimo WCAG AA (4.5:1) sobre el fondo.
 
 ## 3. Glassmorphism en navegación y tarjetas de producto

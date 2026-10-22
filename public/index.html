@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="description" content="Level Up - Centro de Recargas de Free Fire, Roblox y Blood Strike. El servicio más rápido y seguro de Venezuela.">
+  <meta name="description" content="Level Up - Centro de Recargas de Free Fire, Roblox, Blood Strike y Mobile Legends. El servicio más rápido y seguro de Venezuela.">
   <meta name="theme-color" content="#0f172a">
   <title>Level Up - Centro de Recargas</title>
   <!-- Vista previa al compartir el enlace (WhatsApp, Facebook, Telegram, X) -->
@@ -13,13 +13,13 @@
   <meta property="og:locale" content="es_VE">
   <meta property="og:url" content="https://www.levelupstore.online/">
   <meta property="og:title" content="Level Up · Recargas de juegos al instante">
-  <meta property="og:description" content="Recarga Free Fire, Roblox y Blood Strike con Pago Móvil. Entrega automática en minutos y soporte por WhatsApp.">
+  <meta property="og:description" content="Recarga Free Fire, Roblox, Blood Strike y Mobile Legends con Pago Móvil. Entrega automática en minutos y soporte por WhatsApp.">
   <meta property="og:image" content="https://www.levelupstore.online/img/og-inicio.jpg?v=1">
   <meta property="og:image:secure_url" content="https://www.levelupstore.online/img/og-inicio.jpg?v=1">
   <meta property="og:image:type" content="image/jpeg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Level Up: recargas de Free Fire, Roblox y Blood Strike en Venezuela">
+  <meta property="og:image:alt" content="Level Up: recargas de Free Fire, Roblox, Blood Strike y Mobile Legends en Venezuela">
   <meta name="twitter:card" content="summary_large_image">
   
   <link rel="icon" type="image/png" href="logo.png">
@@ -350,6 +350,7 @@
     .card--freefire { --card-accent: #ff9900; --card-accent-rgb: 255, 153, 0; }
     .card--bloodstrike { --card-accent: #ff0000; --card-accent-rgb: 255, 0, 0; }
     .card--roblox { --card-accent: #0066ff; --card-accent-rgb: 0, 102, 255; }
+    .card--mobilelegends { --card-accent: #f5b800; --card-accent-rgb: 245, 184, 0; }
     
     .img-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
     .img-container::after {
@@ -490,6 +491,7 @@
     <a href="freefire.html">🔥 Free Fire</a>
     <a href="roblox.html">🧱 Roblox</a>
     <a href="bloodstrike.html">🎯 Blood Strike</a>
+    <a href="mobilelegends.html">💎 Mobile Legends</a>
     <a href="creadores.html">⭐ Panel de Creadores</a>
     <a href="terminos.html">📜 Términos y Condiciones</a>
     <a href="privacidad.html">🔒 Política de Privacidad</a>
@@ -546,6 +548,11 @@
         <a href="#" class="card card--bloodstrike" onclick="interceptarJuego(event, 'bloodstrike.html')">
           <div class="img-container"><img src="bloodstrike.jpg" alt="Blood Strike" loading="lazy"></div>
           <h3>Blood Strike</h3>
+        </a>
+        <!-- Tarjeta Mobile Legends (imagen: public/mobilelegends.jpg; si aún no existe, la tarjeta se ve sin foto) -->
+        <a href="#" class="card card--mobilelegends" onclick="interceptarJuego(event, 'mobilelegends.html')">
+          <div class="img-container"><img src="mobilelegends.jpg" alt="Mobile Legends" loading="lazy" onerror="this.remove()"></div>
+          <h3>Mobile Legends</h3>
         </a>
       </div>
     </div>
@@ -605,7 +612,7 @@
       <a href="privacidad.html">Política de Privacidad</a>
       <a href="reembolsos.html">Política de Reembolsos</a>
     </div>
-    <p class="pie-legal-aviso">Level Up es un servicio de recarga independiente. No está afiliado, patrocinado ni respaldado por Garena (Free Fire), Roblox Corporation ni NetEase Games (Blood Strike). Todas las marcas y logotipos pertenecen a sus respectivos dueños.</p>
+    <p class="pie-legal-aviso">Level Up es un servicio de recarga independiente. No está afiliado, patrocinado ni respaldado por Garena (Free Fire), Roblox Corporation NetEase Games (Blood Strike) ni Moonton (Mobile Legends: Bang Bang). Todas las marcas y logotipos pertenecen a sus respectivos dueños.</p>
     <p class="pie-legal-copy">&copy; 2026 <strong>Level Up</strong>. Todos los derechos reservados.</p>
   </footer>
 

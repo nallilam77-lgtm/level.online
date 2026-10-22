@@ -12,6 +12,8 @@ import { limpiarMontoVES } from './_lib/recarga-comun.js';
 //    de bloodstrike.gs, la misma que usa FazerCards); si falló, bloodstrike.gs anota UNA fila en "errores".
 //  - Free Fire (idempotency_key "ff-…"): igual, en la pestaña "fazer_card" de la hoja de Free Fire
 //    (estado_fazer de recargas.gs, SCRIPT_RECARGAS_URL).
+//  - Mobile Legends (idempotency_key "ml-…"): igual, en la pestaña "pedidos" de la hoja de Mobile Legends
+//    (estado_fazer de mobilelegends.gs, SCRIPT_MLBB). Solo va a esa hoja.
 //  - Roblox (idempotency_key "rbx-…"): roblox.gs (GAS_URL) anota el código que la compra no alcanzó a
 //    esperar (entregar_api: "pedidos_api" dice que hay que enviarlo por WhatsApp) o libera el pago si
 //    falló (liberar_api). Las dos miran el estado de la fila: un aviso repetido no cambia nada.
@@ -39,6 +41,8 @@ const PEDIDO_ROBLOX = /^rbx-[0-9a-f-]{36}$/;
 // Idempotency-Key de una recarga de Free Fire (api/_lib/juegos/freefire.js): "ff-<idPedido>" o, si el
 // paquete son varios pedidos (220 = dos de 110), "ff-<idPedido>-1", "-2"…
 const PEDIDO_FREEFIRE = /^ff-[0-9a-f-]{36}(-[1-9])?$/;
+// Idempotency-Key de una recarga de Mobile Legends (api/_lib/juegos/mobilelegends.js): "ml-<idPedido>"
+const PEDIDO_MLBB = /^ml-[0-9a-f-]{36}$/;
 // Idempotency-Key de una recarga de Blood Strike (api/_lib/juegos/bloodstrike.js): el idPedido tal cual
 const PEDIDO_BLOOD = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Estados con los que un pedido ya terminó (para eventos de pedido con otro nombre, p. ej. order.completed)
@@ -92,14 +96,16 @@ export default async function handler(req, res) {
 
   if (PEDIDO_ROBLOX.test(idPedido)) return avisoRoblox(res, { aviso, evento, ordenCentralOne, idPedido });
 
-  // Free Fire o Blood Strike: las dos hojas anotan el estado igual (acción estado_fazer) y solo la que
-  // tiene el pedido en "fazer_card" lo aplica. Con idempotency_key se sabe a cuál va; sin ella (o con
-  // una que no se reconoce) se manda a las dos, como el webhook de FazerCards.
-  const hojas = [
-    { juego: 'Free Fire', variable: 'SCRIPT_RECARGAS_URL' },
-    { juego: 'Blood Strike', variable: 'SCRIPT_BLOOD' },
-  ].filter((h) => !idPedido || !(PEDIDO_FREEFIRE.test(idPedido) || PEDIDO_BLOOD.test(idPedido))
-    || (h.juego === 'Free Fire') === PEDIDO_FREEFIRE.test(idPedido));
+  // Free Fire, Blood Strike o Mobile Legends: las hojas anotan el estado igual (acción estado_fazer) y
+  // solo la que tiene el pedido lo aplica. Con idempotency_key se sabe a cuál va; sin ella (o con una que
+  // no se reconoce) se manda a Free Fire y Blood Strike, como el webhook de FazerCards (Mobile Legends
+  // siempre manda la suya: nunca le llega un aviso ajeno).
+  const FREE_FIRE = { juego: 'Free Fire', variable: 'SCRIPT_RECARGAS_URL' };
+  const BLOOD = { juego: 'Blood Strike', variable: 'SCRIPT_BLOOD' };
+  const hojas = PEDIDO_MLBB.test(idPedido) ? [{ juego: 'Mobile Legends', variable: 'SCRIPT_MLBB' }]
+    : PEDIDO_FREEFIRE.test(idPedido) ? [FREE_FIRE]
+      : PEDIDO_BLOOD.test(idPedido) ? [BLOOD]
+        : [FREE_FIRE, BLOOD];
   const faltan = hojas.filter((h) => !(process.env[h.variable] || '').trim());
   if (faltan.length) {
     console.error(`🚨 centralone-webhook: falta ${faltan.map((h) => h.variable).join(' y ')} en Vercel (aviso del pedido ${ordenCentralOne})`);
@@ -116,7 +122,7 @@ export default async function handler(req, res) {
     .then((r) => ({ ...h, r }), (error) => ({ ...h, fallo: error.message }))));
   const encontrado = resultados.find((x) => x.r?.status === 'success' && x.r.encontrado);
   if (encontrado) {
-    console.info(`✅ centralone-webhook: pedido ${ordenCentralOne} (${estado}) anotado en "fazer_card" de ${encontrado.juego}`);
+    console.info(`✅ centralone-webhook: pedido ${ordenCentralOne} (${estado}) anotado en la hoja de ${encontrado.juego}`);
     return res.status(200).json({ ok: true });
   }
   // "ocupado" o sin respuesta: no se anotó nada, que Central One lo repita. Otro error (p. ej. un Apps

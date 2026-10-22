@@ -68,23 +68,29 @@ function girar(ultimos5, idJugador, premio, juego) {
 
   // De abajo hacia arriba: el pago "Usado" más reciente con esos 5 dígitos que todavía no giró.
   // Solo coincidencia exacta de los últimos 5 dígitos (como verificar_pago en recargas.gs).
-  var rows = hojaPagos.getDataRange().getValues();
+  // Solo se leen las columnas C-F (referencia, monto, estado, marca): la pestaña no para de crecer.
+  var ultima = hojaPagos.getLastRow();
+  var filas = ultima > 1 ? hojaPagos.getRange(2, 3, ultima - 1, 4).getValues() : [];
   var referenciaQueYaGiro = "";
   var hayPagoSinRecarga = false;
-  for (var r = rows.length - 1; r >= 1; r--) {
-    var referenciaCompleta = String(rows[r][2]).replace(/\s+/g, "");
+  var hayEnCierre = false;
+  for (var r = filas.length - 1; r >= 0; r--) {
+    var referenciaCompleta = String(filas[r][0]).replace(/\s+/g, "");
     if (!referenciaCompleta || referenciaCompleta.slice(-5) !== ultimos5) continue;
 
-    // Solo pagos con la recarga completada: antes giraba cualquier pago, aunque no se hubiera usado
-    if (String(rows[r][4]).trim().toLowerCase() !== "usado") { hayPagoSinRecarga = true; continue; }
+    // Solo pagos con la recarga completada: antes giraba cualquier pago, aunque no se hubiera usado.
+    // "En proceso": la recarga se está cerrando (Vercel marca "Usado" justo después de responder).
+    var estado = String(filas[r][2]).trim().toLowerCase();
+    if (estado === "en proceso") { hayEnCierre = true; continue; }
+    if (estado !== "usado" && estado !== "usada") { hayPagoSinRecarga = true; continue; }
 
-    var marca = String(rows[r][5]).trim().toLowerCase();
+    var marca = String(filas[r][3]).trim().toLowerCase();
     if (marca === "listo" || marca === "usado") {
       if (!referenciaQueYaGiro) referenciaQueYaGiro = referenciaCompleta;
       continue;
     }
 
-    hojaPagos.getRange(r + 1, 6).setValue("listo");
+    hojaPagos.getRange(r + 2, 6).setValue("listo");
     SpreadsheetApp.flush();
     var fechaHora = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
     hojaPremios().appendRow([fechaHora, textoSeguro(idJugador), referenciaCompleta, textoSeguro(juego), textoSeguro(premio)]);
@@ -98,6 +104,10 @@ function girar(ultimos5, idJugador, premio, juego) {
     if (anterior) return { status: "success", repetido: true, premio: anterior };
     return { status: "error", message: "⚠️ Esta recarga ya participó en la ruleta." };
   }
+  if (hayEnCierre) {
+    // Vercel lo repite unos segundos después: el cliente no pierde su giro
+    return { status: "error", enCierre: true, message: "⏳ Tu recarga se está terminando de registrar. Intenta girar de nuevo en unos segundos." };
+  }
   if (hayPagoSinRecarga) {
     return { status: "error", message: "❌ Ese pago todavía no tiene una recarga completada." };
   }
@@ -106,7 +116,8 @@ function girar(ultimos5, idJugador, premio, juego) {
 
 // Premio ya anotado para esta referencia y este jugador (las filas viejas tienen solo 5 dígitos)
 function premioAnotado(referenciaCompleta, ultimos5, idJugador) {
-  var filas = hojaPremios().getDataRange().getValues();
+  var hoja = hojaPremios();
+  var filas = hoja.getLastRow() ? hoja.getRange(1, 1, hoja.getLastRow(), 5).getValues() : [];
   for (var i = filas.length - 1; i >= 0; i--) {
     var ref = String(filas[i][2]).replace(/\s+/g, "");
     if (String(filas[i][1]).trim() !== idJugador) continue;

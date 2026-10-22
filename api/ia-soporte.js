@@ -57,7 +57,7 @@ REGLAS ABSOLUTAS:
 FLUJO DE AYUDA:
 - Si saluda o no sabe qué hacer: Pregúntale: "¿Cuál es tu ID de jugador y qué paquete deseas?"
 - Si da su ID y paquete (Free Fire): Genera [ACCION_VERIFICAR:id:paquete]
-- Si da su ID y paquete (Blood Strike o Roblox): Genera [ACCION_PAGO:id:paquete]
+- Si da su ID y paquete (Blood Strike, Mobile Legends o Roblox): Genera [ACCION_PAGO:id:paquete]
 - Si el sistema ya confirmó el ID de Free Fire: Genera [ACCION_PAGO]`;
 
         let textoRespuesta = "";

@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Level Up - Recargas Mobile Legends</title>
+  <meta name="description" content="Recarga diamantes de Mobile Legends con Pago Móvil y recíbelos en minutos. Solo necesitas tu ID y tu Zona ID. 1,5 % menos con código de creador.">
+  <meta name="theme-color" content="#0f172a">
+  <!-- Vista previa al compartir el enlace (WhatsApp, Facebook, Telegram, X) -->
+  <link rel="canonical" href="https://www.levelupstore.online/mobilelegends.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Level Up">
+  <meta property="og:locale" content="es_VE">
+  <meta property="og:url" content="https://www.levelupstore.online/mobilelegends.html">
+  <meta property="og:title" content="Diamantes de Mobile Legends al instante · Level Up">
+  <meta property="og:description" content="Recarga diamantes de Mobile Legends con Pago Móvil y recíbelos en minutos. Solo necesitas tu ID y tu Zona ID. 1,5 % menos con código de creador.">
+  <meta property="og:image" content="https://www.levelupstore.online/img/og-inicio.jpg?v=1">
+  <meta property="og:image:secure_url" content="https://www.levelupstore.online/img/og-inicio.jpg?v=1">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Recarga de diamantes de Mobile Legends en Level Up">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lector de referencias con Tesseract (compartido entre juegos; Tesseract se descarga bajo demanda) -->
+  <script src="/js/lector-referencia.js" defer></script>
+  <script src="/js/descuento.js" defer></script>
+  <script src="/js/aviso-codigo.js?v=3" defer></script>
+  <style>
+    :root {
+      /* Acento del juego (Mobile Legends: dorado del emblema con detalles azul cielo): bordes, botones, sombras y glows */
+      --game-accent: #f5b800;
+      --game-accent-rgb: 245, 184, 0;
+      --game-accent-2: #38bdf8;
+      --game-accent-2-rgb: 56, 189, 248;
+      --game-text: #ffc94a;
+      --game-gradient: linear-gradient(135deg, #b8860b, #ffc94a);
+      --on-game-cta: #0f172a;
+      /* Paleta Level Up: ver .claude/UI_RULES.md */
+      --bg-base: #0f172a;
+      --bg-deep: #0b1120;
+      --surface: rgba(15, 23, 42, 0.6);
+      --border-glass: rgba(148, 163, 184, 0.15);
+      --cta-gradient: var(--game-gradient);
+      --on-cta: var(--on-game-cta);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+      --shadow-glow: 0 10px 25px -5px rgba(var(--game-accent-rgb), 0.2);
+
+      --shadow-glow-hover: 0 0 20px rgba(var(--game-accent-rgb), 0.4);
+
+      --glass-blur: 12px;
+
+      --radius-card: 16px;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: var(--game-accent);
+      --accent-rgb: var(--game-accent-rgb);
+      --primary-gradient: var(--cta-gradient);
+      --bg-dark: var(--bg-deep);
+      --panel-bg: var(--bg-base);
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --price-bg: var(--bg-deep);
+      --game-glow: rgba(var(--game-accent-rgb), 0.4);
+      --danger: #ff3b3b;
+      --danger-dark: #2a0b10;
+      --warning: #ffcc00;
+      --warning-dark: #2a2000;
+      --whatsapp: #1db954;
+      --whatsapp-dark: #0e1e14;
+      --success: #00cc66;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html { background: var(--bg-dark); }
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--bg-dark);
+      background-image: radial-gradient(circle at 15% 0%, rgba(var(--game-accent-rgb), 0.14), transparent 45%), radial-gradient(circle at 100% 100%, rgba(var(--game-accent-2-rgb), 0.07), transparent 40%), radial-gradient(circle at top, var(--bg-base) 0%, var(--bg-deep) 70%);
+      background-attachment: fixed;
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 24px 16px;
+      /* Espacio para la barra de compra fija inferior */
+      padding-bottom: calc(96px + env(safe-area-inset-bottom));
+      overflow-x: hidden;
+    }
+
+    @keyframes slideInUp {
+      0% { opacity: 0; transform: translateY(40px) scale(0.98); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes popIn {
+      0% { opacity: 0; transform: scale(0.85); }
+      70% { transform: scale(1.05); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes floating {
+      0%, 100% { transform: translateY(0); text-shadow: 0 0 15px rgba(var(--game-accent-rgb), 0.6); }
+      50% { transform: translateY(-5px); text-shadow: 0 0 25px rgba(var(--game-accent-rgb), 0.9); }
+    }
+    @keyframes pulse-whatsapp {
+      0% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0.6); }
+      70% { box-shadow: 0 0 0 15px rgba(29, 185, 84, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0); }
+    }
+    @keyframes pulse-ia {
+      0% { box-shadow: 0 0 0 0 rgba(var(--game-accent-rgb), 0.6); }
+      70% { box-shadow: 0 0 0 15px rgba(var(--game-accent-rgb), 0); }
+      100% { box-shadow: 0 0 0 0 rgba(var(--game-accent-rgb), 0); }
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    @keyframes typingBounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); box-shadow: 0 0 8px var(--game-text); } }
+
+    .anim-slide-up { opacity: 0; animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+
+.main-card {
+      background: var(--surface);
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      border: 1px solid var(--border-glass);
+      border-radius: 20px;
+      padding: 24px 16px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: var(--shadow-lg), var(--shadow-glow);
+      margin-bottom: 24px;
+    }
+
+    .top-nav { margin-bottom: 12px; }
+    .btn-back { color: var(--game-text); text-decoration: none; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; transition: 0.3s; min-height: 44px; padding-right: 8px; }
+    .btn-back:hover { transform: translateX(-5px); color: #fff; text-shadow: 0 0 8px var(--game-text); }
+
+    .title-banner { 
+      text-align: center; font-family: 'Montserrat', sans-serif; font-size: 24px; font-weight: 900; 
+      color: var(--game-accent); letter-spacing: 1px; margin-bottom: 12px;
+      text-transform: uppercase; text-shadow: 0 0 18px rgba(var(--game-accent-rgb), 0.6);
+    }
+
+    .step-title { font-size: 12px; font-weight: 800; color: var(--text-main); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+
+    .id-section { margin-bottom: 20px; }
+    .id-input-group { display: flex; flex-direction: column; gap: 10px; }
+    /* ID + Zona ID en una fila (la zona es corta: 4-5 números) */
+    .id-zona-grupo { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; }
+    .id-ayuda { font-size: 12px; color: var(--text-muted); text-align: center; margin: 2px 0 0; line-height: 1.5; }
+    .id-ayuda strong { color: var(--game-text); }
+    .input-field { width: 100%; background: var(--bg-deep); border: 2px solid var(--card-border); border-radius: 12px; padding: 12px 14px; color: var(--game-text); font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 700; outline: none; transition: all 0.3s ease; text-align: center; }
+    .input-field:focus { border-color: var(--game-text); box-shadow: 0 0 12px var(--game-glow); }
+
+    .btn-verify { width: 100%; background: var(--primary-gradient); color: var(--on-cta); border: none; border-radius: 12px; padding: 12px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; text-transform: uppercase; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 4px 15px rgba(var(--game-accent-rgb), 0.4); }
+    .btn-verify:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(var(--game-accent-rgb), 0.6); }
+    .btn-verify:active { transform: scale(0.97); }
+    .btn-verify:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+    
+    .id-status { font-size: 12px; margin-top: 8px; display: none; font-weight: 700; text-align: center; padding: 6px; border-radius: 8px; background: rgba(0,0,0,0.4); border: 1px solid rgba(var(--game-accent-rgb), 0.2); animation: popIn 0.3s ease; }
+
+    .catalog-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
+    .product-card { background: rgba(30, 41, 59, 0.55); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); border: 1px solid var(--border-glass); border-radius: var(--radius-card); padding: 20px 8px; box-shadow: var(--shadow-lg), var(--shadow-glow); text-align: center; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; overflow: hidden; }
+    .product-card:hover { border-color: var(--game-accent); transform: translateY(-3px); box-shadow: var(--shadow-lg), var(--shadow-glow-hover); }
+    .product-card:active { transform: scale(0.97); }
+.product-card.selected { border-color: var(--game-accent); background: linear-gradient(160deg, rgba(var(--game-accent-rgb), 0.16), rgba(var(--game-accent-rgb), 0.04)); box-shadow: var(--shadow-lg), 0 0 18px rgba(var(--game-accent-rgb), 0.4); transform: translateY(-2px) scale(1.01); }
+    .product-card.full-width { grid-column: span 2; }
+    
+    .diamonds-count { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 22px; color: #ffffff; line-height: 1.1; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .diamonds-count--texto { font-size: 16px; text-align: center; }
+    .price-box { display: inline-block; background: rgba(var(--game-accent-rgb), 0.08); border-radius: 50px; padding: 5px 10px; border: 1px solid rgba(var(--game-accent-rgb), 0.25); }
+    .price-text { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--game-text); letter-spacing: 0.5px; white-space: nowrap; }
+
+    .checkout-section { display: none; background: rgba(0, 0, 0, 0.4); border: 1px dashed rgba(var(--game-accent-rgb), 0.4); border-radius: 16px; padding: 16px 12px; margin-top: 16px; animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); scroll-margin-top: 12px; }
+    .checkout-section.active { display: block; }
+    
+    .bank-card { background: linear-gradient(135deg, rgba(var(--game-accent-rgb), 0.05), rgba(0, 0, 0, 0.5)); border: 1px solid var(--game-text); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: inset 0 0 15px rgba(var(--game-accent-rgb), 0.05); position: relative; overflow: hidden; }
+    .bank-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; color: #cbd5e1; font-weight: 600; }
+    .bank-row span { color: var(--game-text); font-weight: 900; font-size: 14px; }
+    
+    .btn-copy { background: var(--bg-deep); color: white; border: 1px solid var(--card-border); padding: 12px; min-height: 44px; border-radius: 12px; width: 100%; cursor: pointer; font-weight: 700; margin-bottom: 16px; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-copy:hover { border-color: var(--game-text); color: var(--game-text); background: var(--bg-base); }
+    .btn-copy:active { transform: scale(0.96); }
+    .btn-copy.copied { background: var(--game-text); border-color: var(--game-text); color: #000; font-weight: 900; }
+
+    .file-upload-box { margin-bottom: 16px; }
+    input[type="file"] { background: var(--bg-deep); padding: 10px; border-radius: 12px; border: 2px dashed var(--card-border); color: var(--text-muted); font-size: 12px; cursor: pointer; width: 100%; box-sizing: border-box; transition: 0.3s; }
+    input[type="file"]:hover { border-color: var(--game-text); background: rgba(var(--game-accent-rgb), 0.03); }
+    input[type="file"]::file-selector-button { background: var(--game-text); color: #000; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 900; cursor: pointer; margin-right: 10px; transition: 0.3s; }
+    
+    .btn-submit-order { width: 100%; background: var(--primary-gradient); color: var(--on-cta); border: none; padding: 14px; border-radius: 14px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; text-transform: uppercase; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 6px 20px rgba(var(--game-accent-rgb), 0.4); margin-top: 8px; }
+    .btn-submit-order:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 10px 25px rgba(var(--game-accent-rgb), 0.7); filter: brightness(1.2); }
+    .btn-submit-order:active { transform: scale(0.96); }
+
+    /* ======================================================= */
+    /* 🤖 BOTÓN FLOTANTE Y VENTANA DE CHAT IA PRO */
+    /* ======================================================= */
+    .floating-chat-btn {
+      position: fixed;
+      /* Por encima de la barra de compra fija */
+      bottom: calc(84px + env(safe-area-inset-bottom));
+      right: 16px;
+      width: 54px;
+      height: 54px;
+      background: linear-gradient(135deg, var(--game-text), var(--game-accent));
+      border: none;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 8px 25px var(--game-glow);
+      z-index: 9999;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      /* Solo unos pulsos al cargar para llamar la atención, sin gastar batería */
+      animation: pulse-ia 2.5s 3;
+    }
+    .floating-chat-btn:hover { transform: scale(1.1); box-shadow: 0 12px 30px rgba(var(--game-accent-rgb), 0.7); }
+    .floating-chat-btn svg { width: 28px; height: 28px; fill: #000; }
+
+    .chat-modal-window {
+      display: none;
+      position: fixed;
+      bottom: calc(148px + env(safe-area-inset-bottom));
+      right: 16px;
+      width: 360px;
+      max-width: calc(100vw - 40px);
+      background: var(--panel-bg);
+      border: 2px solid var(--game-text);
+      border-radius: 20px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px var(--game-glow);
+      z-index: 10000;
+      overflow: hidden;
+      animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .chat-modal-window.active { display: flex; flex-direction: column; }
+
+    .chat-header {
+      background: var(--bg-base);
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .chat-title-box { display: flex; align-items: center; gap: 8px; }
+    .chat-avatar-ai { width: 32px; height: 32px; background: rgba(var(--game-accent-rgb), 0.1); border: 1px solid var(--game-text); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .chat-title-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--game-text); text-transform: uppercase; }
+    .chat-subtitle-text { font-size: 10px; color: var(--text-muted); font-weight: 600; }
+    
+    .btn-close-chat { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; transition: 0.2s; width: 44px; height: 44px; margin: -8px -10px -8px 0; }
+    .btn-close-chat:hover { color: var(--danger); }
+
+    .chat-body-messages {
+      height: 280px;
+      overflow-y: auto;
+      padding: 12px;
+      background: #0b1120;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg-bubble {
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.4;
+      max-width: 85%;
+      word-break: break-word;
+    }
+    .msg-bubble.bot { background: var(--bg-base); color: #fff; border: 1px solid var(--card-border); align-self: flex-start; }
+    .msg-bubble.user { background: var(--card-bg); border: 1px solid var(--game-text); color: #fff; align-self: flex-end; }
+    .msg-bubble.error { background: var(--danger-dark); color: var(--danger); border: 1px solid var(--danger); align-self: center; text-align: center; }
+
+    /* Animación de los puntitos de la IA */
+    .typing-indicator { display: flex; gap: 4px; padding: 2px 4px; align-items: center; }
+    .typing-dot { width: 6px; height: 6px; background: var(--game-text); border-radius: 50%; animation: typingBounce 1.4s infinite ease-in-out both; }
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+    .chat-footer-box {
+      padding: 12px;
+      background: var(--panel-bg);
+      border-top: 1px solid var(--card-border);
+    }
+    .chat-input-row { display: flex; gap: 8px; }
+    .chat-rate-limit-info { font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 6px; font-weight: 600; }
+
+    .btn-whatsapp-redirect { background: var(--whatsapp); color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; margin-top: 8px; width: 100%; text-decoration: none; text-transform: uppercase; }
+
+    /* Estilos para las tarjetas dentro del chat */
+    .chat-action-card { background: rgba(0, 0, 0, 0.6); border: 1px solid var(--game-text); padding: 12px; border-radius: 12px; margin-top: 8px; text-align: center; }
+    .chat-action-card input[type="file"] { margin-bottom: 8px; background: var(--bg-base); }
+    .chat-action-card .resultado-ia-chat { display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; background: rgba(var(--game-accent-rgb),0.1); padding: 8px; border-radius: 8px; border: 1px dashed var(--game-text); }
+
+    /* Modales generales */
+    /* Modales generales: cubren TODA la pantalla. inset: 0 incluye la franja de la barra del
+       navegador en móviles (100vh no la cubre) y el z-index los deja por encima del chat flotante,
+       la barra de compra y cualquier otro elemento fijo. */
+    .overlay-pantalla { display: none; position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.94); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 20000; justify-content: center; align-items: center; padding: 15px 15px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; }
+    /* Con un modal abierto: sin scroll de fondo y sin chat/barra inferior asomándose */
+    body.modal-abierto { overflow: hidden; }
+    body.modal-abierto .floating-chat-btn,
+    body.modal-abierto .chat-modal-window,
+    body.modal-abierto .sticky-cta { visibility: hidden; pointer-events: none; }
+    /* Botones de envío bloqueados mientras se procesa (evita doble clic) */
+    .btn-confirmar:disabled, .btn-submit-order:disabled, .sticky-cta-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; filter: grayscale(0.3); }
+    .modal-content { background: var(--panel-bg); border: 2px solid var(--game-text); border-radius: 20px; padding: 24px 18px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(var(--game-accent-rgb), 0.2); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; }
+    .modal-titulo { color: var(--game-text); margin-top: 0; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 20px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    .whatsapp-theme { border-color: var(--whatsapp) !important; background: var(--whatsapp-dark) !important; box-shadow: 0 0 40px rgba(29, 185, 84, 0.15) !important; }
+    .whatsapp-theme .modal-titulo { color: var(--whatsapp) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .whatsapp-theme .modal-nota { background: rgba(29, 185, 84, 0.08); border-left: 4px solid var(--whatsapp); color: #a5f3c3; }
+    
+    .monto-detalle { background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; margin: 12px 0; text-align: left; }
+    /* Completar un pago insuficiente: mismos datos de pago + referencia del pago de la diferencia */
+    .completar-pago { display: none; text-align: left; }
+    .completar-pago .input-field { margin-bottom: 10px; }
+    .completar-pago .btn-confirmar { width: 100%; margin-bottom: 10px; }
+    .monto-item { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+    .monto-item span { color: var(--text-main); }
+    .monto-item strong { color: var(--whatsapp); font-size: 14px; }
+    .monto-item:last-child { margin-bottom: 0; }
+    .monto-item.red strong { color: var(--danger); }
+
+    .btn-whatsapp { background: var(--whatsapp); color: white; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 12px; font-weight: 900; font-family: 'Montserrat', sans-serif; text-transform: uppercase; font-size: 13px; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); width: 100%; margin-bottom: 10px; border: none; cursor: pointer; animation: pulse-whatsapp 2s infinite; }
+    .btn-whatsapp:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4); }
+
+    .error-theme { border-color: var(--danger) !important; background: var(--danger-dark) !important; box-shadow: 0 0 40px rgba(255, 59, 59, 0.15) !important; }
+    .error-theme .modal-titulo { color: var(--danger) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .error-theme .modal-nota { background: rgba(255, 59, 59, 0.08); border-left: 4px solid var(--warning); color: #ffcccc; font-size: 12px; text-align: left; margin-top: 12px; }
+
+    .warning-theme { border-color: var(--warning) !important; background: var(--warning-dark) !important; box-shadow: 0 0 40px rgba(255, 204, 0, 0.15) !important; }
+    .warning-theme .modal-titulo { color: var(--warning) !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .warning-theme .modal-nota { background: rgba(255, 204, 0, 0.08); border-left: 4px solid var(--warning); color: #ffe680; font-size: 12px; text-align: left; margin-top: 12px; }
+
+    .success-theme { border-color: var(--success) !important; background: rgba(0, 204, 102, 0.05) !important; box-shadow: 0 0 40px rgba(0, 204, 102, 0.15) !important; }
+    .success-theme .modal-titulo { color: var(--success) !important; }
+
+    .modal-botones { display: flex; gap: 8px; margin-top: 12px; }
+    .btn-revisar, .btn-confirmar { flex: 1; padding: 12px; min-height: 44px; border-radius: 10px; font-weight: 800; cursor: pointer; border: none; font-size: 12px; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); text-transform: uppercase; font-family: 'Montserrat', sans-serif; }
+    .btn-revisar { background: var(--card-bg); border: 1px solid var(--game-text); color: var(--game-text); }
+    .btn-revisar:hover { background: #333; }
+    .btn-confirmar { background: var(--primary-gradient); color: var(--on-cta); }
+    .btn-confirmar:hover { box-shadow: 0 6px 15px rgba(var(--game-accent-rgb), 0.6); }
+    
+    .btn-cerrar-dark { background: var(--bg-base); color: white; border: 1px solid var(--card-border); padding: 12px; min-height: 44px; border-radius: 10px; font-weight: 800; width: 100%; cursor: pointer; transition: 0.3s; font-family: 'Montserrat', sans-serif; font-size: 12px; }
+    .btn-cerrar-dark:hover { background: var(--card-bg); border-color: var(--game-text); }
+
+    .modal-anime-card { background: var(--panel-bg); border: 2px solid var(--game-text); border-radius: 20px; padding: 24px 18px; max-width: 360px; width: 100%; text-align: center; box-shadow: 0 0 40px rgba(var(--game-accent-rgb), 0.3); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .anime-avatar-box { width: 120px; height: 120px; margin: 0 auto 15px auto; border-radius: 20px; overflow: hidden; border: 2px solid var(--game-accent); box-shadow: 0 0 20px rgba(var(--game-accent-rgb), 0.4); }
+    .anime-avatar-box img { width: 100%; height: 100%; object-fit: cover; }
+    .anime-status-text { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--game-accent); margin-bottom: 15px; transition: all 0.3s; }
+    .progress-bar-container { width: 100%; height: 8px; background: var(--bg-base); border-radius: 8px; overflow: hidden; border: 1px solid var(--card-border); }
+    .progress-bar-fill { width: 0%; height: 100%; background: var(--game-gradient); box-shadow: 0 0 10px var(--game-accent); transition: width 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+    .tx-caja { background: var(--bg-deep); border: 2px dashed var(--game-text); padding: 12px; border-radius: 12px; margin: 15px 0; font-size: 18px; font-weight: 900; color: var(--game-text); letter-spacing: 2px; user-select: all; }
+    .tx-caja.warning { border-color: var(--warning); color: var(--warning); }
+    .tx-caja.success { border-color: var(--success); color: var(--success); }
+    
+    .btn-volver-inicio { background: var(--primary-gradient); color: var(--on-cta); padding: 12px 20px; border-radius: 10px; font-weight: 900; text-decoration: none; display: inline-block; width: 100%; transition: 0.3s; font-family: 'Montserrat', sans-serif; font-size: 13px; }
+    .btn-volver-inicio:hover { box-shadow: 0 8px 20px rgba(var(--game-accent-rgb), 0.5); }
+
+    .toast-bubble {
+      position: fixed;
+      bottom: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--game-text);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 30px var(--game-glow);
+      z-index: 30000;
+      transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      text-align: center;
+      white-space: normal;
+      width: max-content;
+      max-width: calc(100vw - 32px);
+      pointer-events: none;
+    }
+    /* Aparece por encima de la barra de compra fija */
+    .toast-bubble.show { bottom: calc(96px + env(safe-area-inset-bottom)); }
+    .loader-spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(var(--game-accent-rgb), 0.2); border-top-color: var(--game-text); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; }
+    
+    /* Estilos para el botón flotante deshabilitado */
+    .floating-chat-btn.disabled {
+      opacity: 0.5;
+      pointer-events: none;
+      cursor: not-allowed;
+      filter: grayscale(100%);
+    }
+    /* ======================================================= */
+    /* Compra guiada (mismo sistema que freefire.html).        */
+    /* Los colores salen de --accent, --cta-gradient y --on-cta */
+    /* ======================================================= */
+    .trust-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-bottom: 14px; }
+    .trust-chip { font-size: 11px; font-weight: 700; color: #cbd5e1; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 50px; padding: 5px 10px; white-space: nowrap; }
+
+    .stepper { display: flex; align-items: flex-start; justify-content: space-between; margin: 0 4px 18px; position: relative; list-style: none; }
+    .stepper::before { content: ''; position: absolute; top: 13px; left: 12%; right: 12%; height: 2px; background: var(--card-border); }
+    .stepper-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; z-index: 1; }
+    .stepper-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; font-family: 'Montserrat', sans-serif; background: var(--card-bg); border: 2px solid var(--card-border); color: var(--text-muted); transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease; }
+    .stepper-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+    .stepper-item.active .stepper-dot { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.4); }
+    .stepper-item.active .stepper-label { color: var(--text-main); }
+    .stepper-item.done .stepper-dot { background: var(--success); border-color: var(--success); color: #04140b; font-size: 0; }
+    .stepper-item.done .stepper-dot::after { content: '✓'; font-size: 14px; }
+    .stepper-item.done .stepper-label { color: var(--success); }
+
+    .step-num { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--cta-gradient); color: var(--on-cta); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; font-family: 'Montserrat', sans-serif; transition: background 0.3s ease; }
+    .step-title.done .step-num { background: var(--success); color: #04140b; font-size: 0; }
+    .step-title.done .step-num::after { content: '✓'; font-size: 12px; }
+
+    .product-card.selected::after { content: '✓'; position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 50%; background: var(--cta-gradient); color: var(--on-cta); font-size: 11px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+    .product-badge { position: absolute; top: 0; left: 0; background: var(--cta-gradient); color: var(--on-cta); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; padding: 3px 8px; border-bottom-right-radius: 10px; }
+    .product-card.has-badge { padding-top: 22px; }
+    .product-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin: 2px 0 10px; }
+    @keyframes shimmer { 0% { background-position: -200px 0; } 100% { background-position: 200px 0; } }
+    .product-card.skeleton { cursor: default; height: 112px; border-color: transparent; background: linear-gradient(90deg, var(--card-bg) 0px, var(--card-border) 80px, var(--card-bg) 160px); background-size: 400px 100%; animation: shimmer 1.2s linear infinite; }
+    .product-card.skeleton:hover { transform: none; box-shadow: none; }
+    .catalog-message { text-align: center; grid-column: span 2; color: var(--text-muted); padding: 20px 0; font-size: 13px; }
+    .catalog-message.error { color: var(--danger); }
+
+    .bank-row .bank-value { margin-left: auto; text-align: right; word-break: break-all; }
+    .btn-mini-copy { flex-shrink: 0; min-width: 44px; min-height: 36px; background: var(--price-bg); border: 1px solid var(--card-border); border-radius: 10px; color: #fff; font-size: 14px; cursor: pointer; transition: all 0.2s ease; }
+    .btn-mini-copy:hover { border-color: var(--accent); }
+    .btn-mini-copy.copied { background: var(--game-text); border-color: var(--game-text); color: #000; }
+    .bank-total { text-align: center; padding-top: 4px; }
+    .bank-total-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .bank-total-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 4px; }
+    .bank-total-amount { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 26px; color: var(--game-text); text-shadow: 0 0 14px rgba(var(--accent-rgb), 0.35); }
+
+    .visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+    .upload-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 110px; padding: 16px; border: 2px dashed var(--card-border); border-radius: 14px; background: var(--price-bg); cursor: pointer; text-align: center; transition: all 0.3s ease; }
+    .upload-drop:hover, .file-upload-box:focus-within .upload-drop { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.05); }
+    .upload-drop-icon { font-size: 28px; }
+    .upload-drop-title { font-size: 13px; font-weight: 800; color: var(--text-main); }
+    .upload-drop-hint { font-size: 11px; color: var(--text-muted); }
+    .upload-preview { display: none; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--success); border-radius: 14px; background: rgba(0, 204, 102, 0.06); }
+    .upload-preview.active { display: flex; }
+    .upload-preview img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; border: 1px solid var(--card-border); flex-shrink: 0; }
+    .upload-preview-info { flex: 1; min-width: 0; }
+    .upload-preview-name { font-size: 12px; font-weight: 700; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .upload-preview-ok { font-size: 11px; font-weight: 700; color: var(--success); }
+    .btn-change-file { flex-shrink: 0; min-height: 44px; padding: 0 14px; display: inline-flex; align-items: center; background: var(--card-border); color: #fff; border-radius: 10px; font-size: 11px; font-weight: 800; text-transform: uppercase; cursor: pointer; }
+
+    .ia-box { display: none; margin-top: 12px; padding: 12px; background: rgba(var(--accent-rgb), 0.05); border: 1px dashed var(--game-text); border-radius: 12px; }
+    .ia-loading { color: var(--game-text); font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .ia-loading::before { content: ''; width: 14px; height: 14px; border: 2px solid rgba(var(--accent-rgb), 0.3); border-top-color: var(--game-text); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+    .ia-result { display: none; font-size: 12px; font-weight: 700; color: var(--text-main); line-height: 1.5; }
+    .ia-result strong { color: var(--accent); font-size: 15px; letter-spacing: 1px; }
+    .ia-result small { display: block; color: var(--text-muted); font-weight: 600; }
+
+    .modal-texto { color: var(--text-main); font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px; }
+    .modal-nota { border-radius: 8px; padding: 10px; margin-bottom: 15px; font-size: 12px; line-height: 1.4; }
+    .resumen-box { background: rgba(0, 0, 0, 0.5); padding: 14px; border-radius: 12px; text-align: left; border: 1px solid var(--card-border); margin-bottom: 12px; }
+    .resumen-row { display: flex; justify-content: space-between; gap: 12px; margin: 6px 0; font-size: 12px; color: var(--text-muted); font-weight: 600; }
+    .resumen-row span { color: var(--text-main); font-weight: 800; text-align: right; word-break: break-word; }
+    .resumen-row span.destacado { color: var(--game-text); }
+    .aviso-warning { font-size: 11px; color: var(--warning); background: rgba(255, 204, 0, 0.08); padding: 10px; border-radius: 8px; border-left: 4px solid var(--warning); text-align: left; line-height: 1.4; margin-bottom: 15px; }
+
+.sticky-cta {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
+      display: flex; justify-content: center;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      border-top: 1px solid var(--border-glass);
+      box-shadow: 0 -10px 25px -5px rgba(0, 0, 0, 0.5), 0 -6px 20px -8px rgba(var(--game-accent-rgb), 0.2);
+    }
+    .sticky-cta-inner { width: 100%; max-width: 480px; display: flex; align-items: center; gap: 12px; }
+    .sticky-cta-info { flex: 1; min-width: 0; }
+    .sticky-cta-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .sticky-cta-value { font-family: 'Montserrat', sans-serif; font-size: 15px; font-weight: 900; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sticky-cta-value .precio { color: var(--game-text); }
+    .sticky-cta-btn { flex-shrink: 0; min-height: 48px; padding: 0 18px; border: none; border-radius: 12px; background: var(--cta-gradient); color: var(--on-cta); font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.3); transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .sticky-cta-btn:active { transform: scale(0.96); }
+    .sticky-cta-btn.ready { box-shadow: 0 0 22px rgba(var(--accent-rgb), 0.6); }
+
+    @media (min-width: 481px) {
+      .main-card { padding: 32px 28px; }
+      .catalog-grid { gap: 24px; }
+      .product-card { padding: 24px 16px; }
+    }
+
+    /* Pantallas muy estrechas: precios de 5 cifras en una sola línea */
+    @media (max-width: 380px) { .price-text { font-size: 13px; letter-spacing: 0; } }
+
+    @media (max-width: 480px) {
+      .chat-modal-window {
+        left: 0; right: 0; bottom: 0;
+        width: 100%; max-width: 100%;
+        max-height: 85dvh;
+        border-radius: 20px 20px 0 0;
+        border-width: 2px 0 0 0;
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .chat-body-messages { height: auto; flex: 1; min-height: 220px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+      .anim-slide-up { opacity: 1; }
+    }
+  </style>
+  <link rel="stylesheet" href="css/pie-legal.css">
+  <link rel="stylesheet" href="css/descuento.css">
+  <link rel="stylesheet" href="css/aviso-codigo.css?v=3">
+</head>
+<body class="pagina-juego">
+
+  <div id="toastBubble" class="toast-bubble"></div>
+
+  <!-- Modal Pago Insuficiente -->
+  <div id="modalWhatsApp" class="overlay-pantalla">
+    <div class="modal-content whatsapp-theme">
+      <h2 class="modal-titulo">⚠️ PAGO INSUFICIENTE</h2>
+      <p id="textoMotivoWhatsApp" class="modal-texto"></p>
+      
+      <div class="monto-detalle">
+        <div class="monto-item"><span>Monto Encontrado:</span> <strong id="waMontoEncontrado"></strong></div>
+        <div class="monto-item red"><span>Falta por pagar:</span> <strong id="waMontoFaltante"></strong></div>
+      </div>
+
+      <!-- Completar: paga la diferencia a los mismos datos y escribe la nueva referencia -->
+      <div id="bloqueCompletar" class="completar-pago">
+        <p class="modal-texto">Paga <strong id="completarFaltante"></strong> a estos mismos datos y escribe la referencia del nuevo pago. La recarga irá al mismo ID y paquete.</p>
+        <div class="monto-detalle" id="completarDatosBanco"></div>
+        <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputRefCompletar" class="input-field" placeholder="Últimos 5 dígitos del nuevo pago" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+        <button type="button" class="btn-confirmar" id="btnCompletarPago" onclick="completarPagoInsuficiente()">COMPLETAR PAGO</button>
+        <div class="modal-nota" id="completarNota"></div>
+      </div>
+
+      <div class="modal-nota" id="notaWhatsAppInsuficiente">
+        Para resolver esto rápidamente, haz clic en el botón de abajo y envíanos un mensaje a nuestro WhatsApp oficial <strong>0422-8887089</strong>.
+      </div>
+      
+      <a id="btnWhatsAppLink" href="#" target="_blank" class="btn-whatsapp">
+        <svg width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/></svg>
+        SOPORTE WHATSAPP
+      </a>
+      <button class="btn-cerrar-dark" onclick="cerrarModalWhatsApp()">CERRAR VENTANA</button>
+    </div>
+  </div>
+
+  <!-- Modal Error -->
+  <div id="modalPagoNoEncontrado" class="overlay-pantalla">
+    <div class="modal-content error-theme">
+      <h2 class="modal-titulo" id="tituloErrorGeneral">❌ ATENCIÓN</h2>
+      <p id="textoErrorPago" class="modal-texto">Tuvimos algunos inconvenientes procesando tu solicitud.</p>
+      <div id="notaErrorExtra" class="modal-nota danger"></div>
+      <a href="https://wa.me/584228887089?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20recarga%20de%20Mobile%20Legends." target="_blank" rel="noopener noreferrer" class="btn-whatsapp" style="animation: none; margin-top: 12px;">💬 ESCRIBIR A SOPORTE</a>
+      <button class="btn-cerrar-dark" style="margin-top: 12px;" onclick="cerrarModalNoEncontrado()">ENTENDIDO</button>
+    </div>
+  </div>
+
+  <!-- Modal Recarga en Proceso -->
+  <div id="modalEnProceso" class="overlay-pantalla">
+    <div class="modal-content warning-theme">
+      <div class="loader-spinner"></div>
+      <h2 class="modal-titulo" style="font-size: 18px;">¡RECARGA EN PROCESO!</h2>
+      <p class="modal-texto">Tu pago ha sido verificado con éxito, pero la recarga puede tardar un poco más en reflejarse.</p>
+      <div class="tx-caja warning" id="codigoTxnProceso">TXN-XXXXXX</div>
+      <div class="modal-nota warning">
+        ⏳ <strong>No te preocupes:</strong> Tu recarga se completará automáticamente en un lapso de <strong>1 a 5 minutos</strong>. Puedes cerrar esta ventana.
+      </div>
+      <a href="https://wa.me/584228887089?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20recarga%20de%20Mobile%20Legends." target="_blank" rel="noopener noreferrer" class="btn-whatsapp" style="animation: none; margin-top: 12px;">💬 ESCRIBIR A SOPORTE</a>
+      <a href="index.html" class="btn-volver-inicio" style="background: var(--card-bg); border: 1px solid var(--game-text); color: var(--game-text);">ENTENDIDO, VOLVER AL INICIO</a>
+    </div>
+  </div>
+
+  <!-- Modal Recarga Exitosa -->
+  <div id="modalExitosa" class="overlay-pantalla">
+    <div class="modal-content success-theme">
+      <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
+      <h2 class="modal-titulo" style="font-size: 20px;">¡RECARGA EXITOSA!</h2>
+      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado y los diamantes llegarán a tu cuenta en unos minutos.</p>
+      <div class="tx-caja success" id="codigoTxnExito">TXN-XXXXXX</div>
+      <button type="button" class="btn-confirmar" style="background: var(--game-gradient); color: var(--on-cta); margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(var(--game-accent-rgb), 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
+      <a href="index.html" class="btn-volver-inicio" style="background: var(--success); color: #000;">NUEVA RECARGA</a>
+    </div>
+  </div>
+
+  <!-- Modal Ruleta Automática -->
+  <div id="modalRuletaAutomatica" class="overlay-pantalla">
+    <div class="modal-content" style="border-color: var(--game-accent); background: var(--panel-bg); box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 40px rgba(var(--game-accent-rgb), 0.2);">
+      <h2 class="modal-titulo" style="color: var(--game-accent); text-shadow: 0 0 10px rgba(var(--game-accent-rgb),0.4);">🎰 RULETA MOBILE LEGENDS 🎰</h2>
+      <p id="textoEstadoRuleta" style="font-size: 13px; color: var(--text-main); margin-bottom: 20px; font-weight: 800; animation: floating 2s infinite;">Validando tu ticket y girando...</p>
+      <div style="position: relative; width: 220px; height: 220px; margin: 0 auto 25px auto;">
+        <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 22px solid var(--game-accent); z-index: 10; filter: drop-shadow(0 0 8px rgba(var(--game-accent-rgb), 0.8));"></div>
+        <div id="ruletaGiraAuto" style="width: 100%; height: 100%; border-radius: 50%; border: 4px solid var(--game-accent); transition: transform 4s cubic-bezier(0.15, 0.95, 0.15, 1); background: conic-gradient(#111 0deg 180deg, #222 180deg 360deg); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
+          <span style="position: absolute; top: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: #fff; text-shadow: 0 2px 5px #000;">VACÍO ❌</span>
+          <span style="position: absolute; bottom: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--game-text); text-shadow: 0 2px 5px #000; transform: rotate(180deg);">PREMIO 💎</span>
+        </div>
+      </div>
+      <button class="btn-cerrar-dark" id="btnCerrarRuleta" style="display: none; width: 100%; background: var(--game-accent); color: var(--on-cta); border-color: var(--game-accent);" onclick="cerrarRuletaAuto()">ENTENDIDO, VOLVER AL INICIO</button>
+    </div>
+  </div>
+
+  <!-- Modal Confirmación -->
+  <div id="modalConfirmacion" class="overlay-pantalla">
+    <div class="modal-content">
+      <h2 class="modal-titulo">⚠️ CONFIRMA TU PEDIDO</h2>
+      <div class="resumen-box">
+        <p class="resumen-row">ID (Zona): <span id="resumenId"></span></p>
+        <p class="resumen-row">Jugador: <span id="resumenNombreJugador" class="destacado"></span></p>
+        <p class="resumen-row">Recibirás: <span id="resumenPaquete" class="destacado"></span></p>
+        <p class="resumen-row">Tu Pago: <span id="resumenMonto"></span></p>
+      </div>
+      <div class="aviso-warning">
+        Por favor, <strong>revisa detalladamente que tu ID sea el correcto</strong>, ya que las recargas a cuentas equivocadas no son reembolsables.
+      </div>
+      <div class="modal-botones">
+        <button class="btn-revisar" onclick="cerrarModal()">REVISAR</button>
+        <button class="btn-confirmar" id="btnConfirmar" onclick="iniciarCargaConTiemposAleatorios()">¡SÍ, ENVIAR!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pantalla de Procesamiento -->
+  <div id="pantallaProcesando" class="overlay-pantalla">
+    <div class="modal-anime-card" id="cajaContenedorAnime">
+      <div class="anime-avatar-box"><picture><source srcset="jugando.webp" type="image/webp"><img src="jugando.gif" alt="Procesando recarga" width="120" height="120" loading="lazy"></picture></div>
+      <div class="anime-status-text" id="textoContadorAnimado">🔍 Iniciando sistema...</div>
+      <div class="progress-bar-container"><div class="progress-bar-fill" id="barraProgresoFill" style="width: 5%;"></div></div>
+    </div>
+  </div>
+
+  <!-- Contenido Principal -->
+  <div class="main-card anim-slide-up">
+    <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a></div>
+    <h1 class="title-banner anim-slide-up delay-1">💎 MOBILE LEGENDS 💎</h1>
+
+    <div class="trust-strip anim-slide-up delay-1">
+      <span class="trust-chip">⚡ Entrega 1–5 min</span>
+      <span class="trust-chip">🔒 Pago verificado</span>
+      <span class="trust-chip">💬 Soporte WhatsApp</span>
+    </div>
+
+    <ol class="stepper anim-slide-up delay-2" id="stepper" aria-label="Progreso de tu recarga">
+      <li class="stepper-item active" data-step="id"><span class="stepper-dot">1</span><span class="stepper-label">ID</span></li>
+      <li class="stepper-item" data-step="paquete"><span class="stepper-dot">2</span><span class="stepper-label">Paquete</span></li>
+      <li class="stepper-item" data-step="pago"><span class="stepper-dot">3</span><span class="stepper-label">Pago</span></li>
+      <li class="stepper-item" data-step="confirmar"><span class="stepper-dot">4</span><span class="stepper-label">Confirmar</span></li>
+    </ol>
+
+    <div class="id-section anim-slide-up delay-2">
+      <label class="step-title" id="stepTitleId" for="inputPlayerId"><span class="step-num">1</span> INGRESA TU ID Y TU ZONA</label>
+      <div class="id-input-group">
+        <div class="id-zona-grupo">
+          <input type="text" inputmode="numeric" autocomplete="off" spellcheck="false" id="inputPlayerId" class="input-field" placeholder="ID: 123456789" maxlength="30" required aria-label="ID de jugador">
+          <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" spellcheck="false" id="inputZona" class="input-field" placeholder="Zona" maxlength="6" required aria-label="Zona ID" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+        </div>
+        <p class="id-ayuda">En tu perfil aparece así: <strong>123456789 (1234)</strong>. El primero es tu ID y el del paréntesis tu Zona. Puedes pegarlo completo.</p>
+        <!-- BOTÓN MODIFICADO PARA SOLO CONFIRMAR -->
+        <button type="button" id="btnVerifyId" class="btn-verify">CONFIRMAR MI ID</button>
+      </div>
+      <div id="idStatus" class="id-status"></div>
+    </div>
+
+    <!-- CÓDIGO DE DESCUENTO (opcional): lo verifica el servidor; lógica en js/descuento.js -->
+    <div class="descuento-section anim-slide-up delay-3">
+      <label class="descuento-label" for="inputDescuento">🎟️ ¿Tienes un código de descuento? Pégalo o escríbelo aquí</label>
+      <div class="descuento-grupo">
+        <input type="text" id="inputDescuento" class="input-field descuento-input" placeholder="Ej: LEVELUP10" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+        <button type="button" id="btnVerificarDescuento" class="btn-descuento">VERIFICAR</button>
+      </div>
+      <div id="descuentoEstado" class="descuento-estado" role="status" aria-live="polite"></div>
+    </div>
+
+    <div class="step-title anim-slide-up delay-3" id="stepTitlePaquete"><span class="step-num">2</span> SELECCIONA TU RECARGA</div>
+    <div class="catalog-grid anim-slide-up delay-3" id="catalogContainer">
+      <div class="product-card skeleton"></div><div class="product-card skeleton"></div>
+      <div class="product-card skeleton"></div><div class="product-card skeleton"></div>
+      <div class="product-card skeleton"></div><div class="product-card skeleton"></div>
+    </div>
+
+    <!-- SECCIÓN DE PAGO (Checkout) -->
+    <div class="checkout-section" id="checkoutSection">
+      <div class="step-title" id="stepTitlePago"><span class="step-num">3</span> REALIZA EL PAGO MÓVIL</div>
+      <div class="bank-card">
+        <div id="bankInfoContainer">
+          <div class="bank-row">Banco: <span class="bank-value">Cargando...</span></div>
+          <div class="bank-row">Teléfono: <span class="bank-value">Cargando...</span></div>
+          <div class="bank-row">Cédula: <span class="bank-value">Cargando...</span></div>
+        </div>
+        <hr style="border-color: rgba(var(--game-accent-rgb), 0.2); margin: 12px 0;">
+        <div class="bank-total">
+          <div class="bank-total-label">Total a pagar</div>
+          <div class="bank-total-row">
+            <span id="montoPagar" class="bank-total-amount">0,00 Bs</span>
+            <button type="button" class="btn-mini-copy" onclick="copiarCampo('monto', this)" aria-label="Copiar monto">📋</button>
+          </div>
+        </div>
+      </div>
+      <button type="button" id="btnCopiarDatos" class="btn-copy" onclick="copiarDatosBanco()">📋 Copiar todos los datos</button>
+
+      <div class="file-upload-box">
+        <div class="step-title" id="stepTitleComprobante"><span class="step-num">4</span> SUBE TU COMPROBANTE (CAPTURE) <span style="color: var(--danger);">*</span></div>
+        <input type="file" id="inputComprobante" class="visually-hidden" accept="image/*" onchange="analizarCapture(this)" required>
+        <label for="inputComprobante" class="upload-drop" id="uploadDrop">
+          <span class="upload-drop-icon">📸</span>
+          <span class="upload-drop-title">Toca para subir tu capture</span>
+          <span class="upload-drop-hint">Imagen del pago móvil realizado</span>
+        </label>
+        <div class="upload-preview" id="uploadPreview">
+          <img id="uploadPreviewImg" alt="Vista previa del comprobante">
+          <div class="upload-preview-info">
+            <div class="upload-preview-name" id="uploadPreviewName"></div>
+            <div class="upload-preview-ok">✓ Comprobante cargado</div>
+          </div>
+          <label for="inputComprobante" class="btn-change-file">Cambiar</label>
+        </div>
+        <div id="cajaIA" class="ia-box" aria-live="polite">
+          <div id="cargandoIA" class="ia-loading">Leyendo comprobante...</div>
+          <div id="resultadoIA" class="ia-result">
+            ✓ Detectamos la referencia <strong id="refIA"></strong>
+            <small>La colocamos abajo. Revisa que coincida con tu capture; puedes editarla.</small>
+          </div>
+        </div>
+      </div>
+
+      <label class="step-title" id="stepTitleReferencia" for="inputReferencia"><span class="step-num">5</span> ÚLTIMOS 5 DÍGITOS DE REFERENCIA</label>
+      <div style="margin-bottom: 16px;">
+        <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputReferencia" class="input-field" placeholder="Solo los últimos 5 dígitos del pago" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+      </div>
+
+      <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🚀 PROCESAR RECARGA</button>
+      <p class="aviso-aceptacion">Al procesar tu pedido aceptas los <a href="terminos.html" target="_blank">Términos y Condiciones</a>, la <a href="privacidad.html" target="_blank">Política de Privacidad</a> y la <a href="reembolsos.html" target="_blank">Política de Reembolsos</a>.</p>
+    </div> 
+  </div> 
+  <!-- FIN DE MAIN-CARD -->
+
+  <footer class="pie-legal">
+    <div class="pie-legal-enlaces" role="navigation" aria-label="Información legal">
+      <a href="terminos.html">Términos y Condiciones</a>
+      <a href="privacidad.html">Política de Privacidad</a>
+      <a href="reembolsos.html">Política de Reembolsos</a>
+    </div>
+    <p class="pie-legal-aviso">Level Up es un servicio de recarga independiente. No está afiliado, patrocinado ni respaldado por Garena (Free Fire), Roblox Corporation NetEase Games (Blood Strike) ni Moonton (Mobile Legends: Bang Bang). Todas las marcas y logotipos pertenecen a sus respectivos dueños.</p>
+    <p class="pie-legal-copy">&copy; 2026 <strong>Level Up</strong>. Todos los derechos reservados.</p>
+  </footer>
+
+  <!-- Soporte oficial por WhatsApp, siempre visible -->
+  <a href="https://wa.me/584228887089?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20recarga%20de%20Mobile%20Legends." target="_blank" rel="noopener noreferrer" class="whatsapp-soporte" aria-label="Escribir a Soporte por WhatsApp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.031 0C5.385 0 0 5.383 0 12.029c0 2.124.553 4.195 1.605 6.01L.036 24l6.11-1.603c1.737 1.002 3.738 1.531 5.885 1.531 6.643 0 12.028-5.381 12.028-12.027C24.059 5.383 18.675 0 12.031 0zm3.565 17.27c-.54.269-3.187.584-3.557.584-.37 0-1.802-.234-4.225-2.656-2.424-2.425-2.657-3.856-2.657-4.226 0-.37.316-3.018.584-3.557.269-.54.912-.767 1.451-.497.54.269 1.433 3.493 1.433 3.864 0 .37-.197.808-.466 1.077-.466.466.269.269-.538.448-.179 1.077.359.627 1.614 1.882 2.241 2.241.628.359.808.09 1.077-.179.269-.269.808-.466 1.077-.466.37 0 3.595.892 3.864 1.432.27.539.043 1.182-.497 1.451z"/></svg></a>
+
+  <!-- Barra de compra fija inferior -->
+  <div class="sticky-cta" id="stickyCta">
+    <div class="sticky-cta-inner">
+      <div class="sticky-cta-info">
+        <div class="sticky-cta-label" id="stickyCtaLabel">Paso 1 de 4</div>
+        <div class="sticky-cta-value" id="stickyCtaValue">Confirma tu ID de jugador</div>
+      </div>
+      <button type="button" class="sticky-cta-btn" id="stickyCtaBtn" onclick="accionBarraCompra()">EMPEZAR</button>
+    </div>
+  </div>
+
+  <!-- ======================================================= -->
+  <!-- 💬 WIDGET FLOTANTE DE SOPORTE IA INTELIGENTE             -->
+  <!-- ======================================================= -->
+  <button type="button" id="floatingChatBtn" class="floating-chat-btn" onclick="toggleChatModal()" title="Abrir Asistente IA" aria-label="Abrir asistente de soporte IA">
+    <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A1.5 1.5 0 0 0 6 14.5A1.5 1.5 0 0 0 7.5 16A1.5 1.5 0 0 0 9 14.5A1.5 1.5 0 0 0 7.5 13m9 0a1.5 1.5 0 0 0-1.5 1.5a1.5 1.5 0 0 0 1.5 1.5a1.5 1.5 0 0 0 1.5-1.5a1.5 1.5 0 0 0-1.5-1.5m-5 3c-1.33 0-2.5.5-3.35 1.35a1 1 0 0 0 1.41 1.41C9.64 18.39 10.77 18 12 18s2.36.39 2.94.96a1 1 0 0 0 1.41-1.41C14.5 16.5 13.33 16 12 16z"/></svg>
+  </button>
+
+  <div class="chat-modal-window" id="chatModalWindow">
+    <div class="chat-header">
+      <div class="chat-title-box">
+        <div class="chat-avatar-ai">🤖</div>
+        <div>
+          <div class="chat-title-text">Soporte IA Level Up</div>
+          <div class="chat-subtitle-text">En línea • Respuestas inmediatas</div>
+        </div>
+      </div>
+      <button class="btn-close-chat" onclick="toggleChatModal()" aria-label="Cerrar chat">✕</button>
+    </div>
+
+    <div class="chat-body-messages" id="chat-messages">
+      <div class="msg-bubble bot">
+        👋 ¡Hola! Te ayudaré a realizar tu recarga paso a paso. Si es tu primera vez o tienes problemas, ¡escríbeme!
+      </div>
+    </div>
+
+    <div class="chat-footer-box">
+      <div class="chat-input-row">
+        <input type="text" id="input-chat" class="input-field" placeholder="Escribe tu consulta..." onkeypress="detectarEnter(event)" style="font-size: 16px; padding: 10px; text-align: left;">
+      </div>
+      <div class="chat-rate-limit-info" id="rateLimitInfo">Mensajes disponibles: 5 / 5</div>
+      <div id="whatsappEscalateContainer" style="display: none;">
+        <a href="https://wa.me/584228887089?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20recarga." target="_blank" class="btn-whatsapp-redirect">
+          💬 Hablar con Soporte Humano (WhatsApp)
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBIdEh_HzzB8dnzG8qkPQYOIo2kSb_F6xQ",
+      authDomain: "levelupstore-87d4d.firebaseapp.com",
+      projectId: "levelupstore-87d4d",
+      storageBucket: "levelupstore-87d4d.firebasestorage.app",
+      messagingSenderId: "948536026825",
+      appId: "1:948536026825:web:80520e4be7514a134d8f18",
+      measurementId: "G-3F8E5RCFS6"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let paqueteSeleccionado = null; let idVerificado = false; let nombreJugadorVerificado = "";
+    let datosBancoGlobal = { banco: "", telefono: "", cedula: "" }; let isProcessing = false;
+    // Pago insuficiente que se puede completar: { token, faltante } (la clave solo vive en esta pestaña)
+    let complementoPendiente = null;
+    let globalTxnCode = "";
+    
+    // RUTAS DE MOBILE LEGENDS
+    const SCRIPT_PRECIOS_URL = '/api/juego?juego=mobilelegends&accion=precios'; const SCRIPT_VALIDADOR_URL = '/api/juego?juego=mobilelegends&accion=verificar';
+    const SCRIPT_RECARGAS_URL = '/api/recargar?juego=mobilelegends';
+    // Mismos formatos que exige el servidor (api/_lib/juegos/mobilelegends.js)
+    const ID_VALIDO = /^\d{5,15}$/;
+    const ZONA_VALIDA = /^\d{1,6}$/;
+
+    window.mostrarBurbuja = function(mensaje, color = 'var(--game-text)') {
+      const burbuja = document.getElementById('toastBubble');
+      burbuja.innerText = mensaje;
+      burbuja.style.borderColor = color;
+      burbuja.style.boxShadow = `0 10px 30px ${color}60`; 
+      burbuja.classList.add('show');
+      setTimeout(() => { burbuja.classList.remove('show'); }, 3500);
+    };
+
+    window.formatearMontoVES = function(montoStr) {
+      if (!montoStr) return 0;
+      if (typeof montoStr === 'number') return montoStr;
+      let m = String(montoStr).trim().replace(/[^0-9.,-]/g, '');
+      if (!m) return 0;
+      let lastDot = m.lastIndexOf('.'); let lastComma = m.lastIndexOf(',');
+      let lastSeparatorIndex = Math.max(lastDot, lastComma);
+      if (lastSeparatorIndex === -1) { return parseFloat(m) || 0; }
+      let parteEntera = m.substring(0, lastSeparatorIndex).replace(/[^0-9-]/g, '');
+      let parteDecimal = m.substring(lastSeparatorIndex + 1).replace(/[^0-9]/g, '');
+      if (parteDecimal.length >= 3) { parteEntera = parteEntera + parteDecimal; parteDecimal = "00"; }
+      return parseFloat(parteEntera + "." + parteDecimal) || 0;
+    };
+
+    async function cargarDatosBancarios() {
+      try {
+        const docSnap = await getDoc(doc(db, "configuracion", "pago_movil"));
+        if (docSnap.exists()) {
+          const data = docSnap.data(); 
+          datosBancoGlobal = { banco: data.banco, telefono: data.telefono, cedula: data.cedula };
+          document.getElementById('bankInfoContainer').innerHTML = `
+            <div class="bank-row">Banco: <span class="bank-value">${datosBancoGlobal.banco}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('banco', this)" aria-label="Copiar banco">📋</button></div>
+            <div class="bank-row">Teléfono: <span class="bank-value">${datosBancoGlobal.telefono}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('telefono', this)" aria-label="Copiar teléfono">📋</button></div>
+            <div class="bank-row">Cédula: <span class="bank-value">${datosBancoGlobal.cedula}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('cedula', this)" aria-label="Copiar cédula">📋</button></div>
+          `;
+        }
+      } catch (error) {}
+    }
+
+    async function cargarCatalogoCliente() {
+      const container = document.getElementById('catalogContainer');
+      container.innerHTML = '<div class="product-card skeleton"></div>'.repeat(6);
+
+      try {
+        const res = await fetch(SCRIPT_PRECIOS_URL);
+        const data = await res.json();
+
+        if (!data || data.status !== "success" || !data.catalogo || data.catalogo.length === 0) {
+          container.innerHTML = '<div class="catalog-message">No hay paquetes disponibles en este momento.</div>';
+          return;
+        }
+
+        catalogoSinDescuento = data.catalogo;
+        // Si el cliente ya aplicó un código antes de que cargara el catálogo, se mantiene
+        if (!descuento.codigo()) renderizarCatalogo(catalogoSinDescuento);
+
+      } catch (e) {
+        container.innerHTML = '<div class="catalog-message error">Error de conexión al cargar el catálogo.</div>';
+      }
+    }
+
+    // Diamantes = columna que solo dice un número ("86" o "86 Diamantes"). Lo demás (pases y membresías,
+    // p. ej. "Pase Semanal de Diamantes" o "Pase Semanal x2") se muestra y se pide por su nombre.
+    const esPase = (texto) => !/^\s*[\d.,]+\s*(diamantes?|diamonds?)?\s*$/i.test(String(texto));
+    const cantidadDiamantes = (texto) => String(texto).replace(/diamantes?|diamonds?/gi, '').trim();
+    const nombrePaquete = (item) => {
+      const texto = String(item.diamantes).trim();
+      return esPase(texto) ? texto : `${cantidadDiamantes(texto)} Diamantes`;
+    };
+    const etiquetaPase = (texto) => /membres|estelar|starlight/i.test(String(texto)) ? 'Membresía' : 'Pase';
+
+    // Dibuja el catálogo. Con descuento, cada paquete trae "precioOriginal" (tachado) y "precio"
+    // ya descontado por el servidor. Si había un paquete elegido, se vuelve a elegir con el precio nuevo.
+    function renderizarCatalogo(lista) {
+      const container = document.getElementById('catalogContainer');
+      // Diamantes de menor a mayor y los pases al final
+      const paquetes = [...lista].sort((a, b) => (esPase(a.diamantes) - esPase(b.diamantes)) || (window.formatearMontoVES(a.diamantes) - window.formatearMontoVES(b.diamantes)));
+      window.catalogoGlobal = paquetes;
+      const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.diamantes) : null;
+
+        container.innerHTML = '';
+        paquetes.forEach((item, index) => {
+          const card = document.createElement('div');
+          const esUltimoImpar = (paquetes.length % 2 !== 0) && (index === paquetes.length - 1);
+          let delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
+          card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar || item.spanFull ? 'full-width' : ''} ${item.etiqueta ? 'has-badge' : ''}`;
+          // Accesible con teclado y lectores de pantalla
+          card.setAttribute('role', 'button');
+          card.setAttribute('tabindex', '0');
+          const cantidad = cantidadDiamantes(item.diamantes);
+          // "etiqueta" es opcional en el catálogo (ej: "🔥 Más popular"); si no viene, no se muestra badge
+          card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}${esPase(item.diamantes) ? `<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="product-label">${etiquetaPase(item.diamantes)}</div>` : `<div class="diamonds-count">${cantidad} 💎</div><div class="product-label">Diamantes</div>`}${item.precioOriginal !== undefined ? `<div class="price-original">${item.precioOriginal} Bs</div>` : ''}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
+          card.addEventListener('click', () => seleccionarProducto(card, item));
+          card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, item); } });
+          container.appendChild(card);
+          if (elegido !== null && String(item.diamantes) === elegido) seleccionarProducto(card, item);
+        });
+    }
+
+    // Código de descuento (js/descuento.js): el servidor devuelve los precios ya descontados
+    let catalogoSinDescuento = null;
+    const descuento = CodigoDescuento.iniciar({
+      juego: 'mobilelegends',
+      alAplicar: (catalogo) => renderizarCatalogo(catalogo),
+      alQuitar: () => { if (catalogoSinDescuento) renderizarCatalogo(catalogoSinDescuento); },
+    });
+
+    function seleccionarProducto(cardElement, paquete) {
+      document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+      cardElement.classList.add('selected'); paqueteSeleccionado = paquete;
+      document.getElementById('montoPagar').innerText = `${paquete.precio} Bs`;
+      verificarEstadoDesbloqueo();
+    }
+
+    let checkoutYaMostrado = false;
+
+    function verificarEstadoDesbloqueo() {
+      const checkoutSection = document.getElementById('checkoutSection');
+      if (idVerificado && paqueteSeleccionado) {
+        checkoutSection.classList.add('active');
+        // Solo la primera vez, para no mover la pantalla si el usuario cambia de paquete
+        if (!checkoutYaMostrado) {
+          checkoutYaMostrado = true;
+          setTimeout(() => checkoutSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+        }
+      } else { checkoutSection.classList.remove('active'); }
+      actualizarProgreso();
+    }
+
+    // =========================================================================
+    // PROGRESO: stepper superior, títulos de paso y barra de compra fija
+    // =========================================================================
+    function obtenerEstadoPasos() {
+      const comprobante = !!(window.chatFileOverride || document.getElementById('inputComprobante').files[0]);
+      const referencia = document.getElementById('inputReferencia').value.trim().length === 5;
+      return { id: idVerificado, paquete: !!paqueteSeleccionado, comprobante, referencia, pago: comprobante && referencia };
+    }
+
+    function actualizarProgreso() {
+      const estado = obtenerEstadoPasos();
+
+      // Stepper: el primer paso no completado queda "active"
+      const orden = ['id', 'paquete', 'pago', 'confirmar'];
+      const primeroPendiente = orden.find(p => !estado[p]);
+      document.querySelectorAll('.stepper-item').forEach(item => {
+        const paso = item.dataset.step;
+        item.classList.toggle('done', !!estado[paso]);
+        item.classList.toggle('active', paso === primeroPendiente);
+      });
+
+      // Títulos de cada paso: número → ✓ cuando está completo
+      document.getElementById('stepTitleId').classList.toggle('done', estado.id);
+      document.getElementById('stepTitlePaquete').classList.toggle('done', estado.paquete);
+      document.getElementById('stepTitlePago').classList.toggle('done', estado.comprobante);
+      document.getElementById('stepTitleComprobante').classList.toggle('done', estado.comprobante);
+      document.getElementById('stepTitleReferencia').classList.toggle('done', estado.referencia);
+
+      // Barra de compra fija
+      const label = document.getElementById('stickyCtaLabel');
+      const value = document.getElementById('stickyCtaValue');
+      const btn = document.getElementById('stickyCtaBtn');
+      btn.classList.remove('ready');
+
+      if (!estado.id) {
+        label.textContent = 'Paso 1 de 4';
+        value.textContent = 'Confirma tu ID y tu Zona';
+        btn.textContent = 'EMPEZAR';
+      } else if (!estado.paquete) {
+        label.textContent = 'Paso 2 de 4';
+        value.textContent = 'Elige un paquete';
+        btn.textContent = 'VER PAQUETES';
+      } else {
+        const cantidad = cantidadDiamantes(paqueteSeleccionado.diamantes);
+        label.textContent = estado.pago ? 'Listo para confirmar' : 'Paso 3 de 4 · Tu pedido';
+        value.innerHTML = '';
+        value.append(esPase(paqueteSeleccionado.diamantes) ? `${nombrePaquete(paqueteSeleccionado)} · ` : `💎 ${cantidad} · `);
+        const precio = document.createElement('span');
+        precio.className = 'precio';
+        precio.textContent = `${paqueteSeleccionado.precio} Bs`;
+        value.appendChild(precio);
+        btn.textContent = estado.pago ? 'PROCESAR' : 'PAGAR';
+        btn.classList.toggle('ready', estado.pago);
+      }
+    }
+
+    window.accionBarraCompra = function() {
+      const estado = obtenerEstadoPasos();
+      const irA = (el) => el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      if (!estado.id) {
+        const input = document.getElementById('inputPlayerId');
+        irA(input); input.focus({ preventScroll: true });
+      } else if (!estado.paquete) {
+        irA(document.getElementById('catalogContainer'));
+      } else if (!estado.comprobante) {
+        irA(document.getElementById('uploadDrop'));
+      } else if (!estado.referencia) {
+        const input = document.getElementById('inputReferencia');
+        irA(input); input.focus({ preventScroll: true });
+      } else {
+        abrirModal();
+      }
+    };
+
+    // Vista previa del comprobante seleccionado
+    let urlPreviewComprobante = null;
+    document.getElementById('inputComprobante').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      const preview = document.getElementById('uploadPreview');
+      const drop = document.getElementById('uploadDrop');
+      if (urlPreviewComprobante) { URL.revokeObjectURL(urlPreviewComprobante); urlPreviewComprobante = null; }
+
+      if (file && file.type.startsWith('image/')) {
+        urlPreviewComprobante = URL.createObjectURL(file);
+        document.getElementById('uploadPreviewImg').src = urlPreviewComprobante;
+        document.getElementById('uploadPreviewName').textContent = file.name;
+        preview.classList.add('active');
+        drop.style.display = 'none';
+      } else {
+        preview.classList.remove('active');
+        drop.style.display = '';
+      }
+      actualizarProgreso();
+    });
+
+    document.getElementById('inputReferencia').addEventListener('input', actualizarProgreso);
+
+    // VERIFICACIÓN DEL ID (Central One, por el servidor). Solo un "no existe" confirmado frena al cliente;
+    // si no se pudo comprobar (lento, sin respuesta), se acepta el ID como antes.
+    document.getElementById('btnVerifyId').addEventListener('click', async () => {
+      const idInput = document.getElementById('inputPlayerId').value.trim();
+      const zonaInput = document.getElementById('inputZona').value.trim();
+      const statusDiv = document.getElementById('idStatus'); const btnVerify = document.getElementById('btnVerifyId');
+
+      if (!ID_VALIDO.test(idInput)) {
+        mostrarBurbuja("❌ Ingresa un ID válido de Mobile Legends (solo números).", "var(--danger)");
+        statusDiv.style.display = 'none';
+        idVerificado = false; verificarEstadoDesbloqueo(); return;
+      }
+      if (!ZONA_VALIDA.test(zonaInput)) {
+        mostrarBurbuja("❌ Falta tu Zona ID: el número entre paréntesis de tu perfil.", "var(--danger)");
+        document.getElementById('inputZona').focus();
+        statusDiv.style.display = 'none';
+        idVerificado = false; verificarEstadoDesbloqueo(); return;
+      }
+      const aceptarSinComprobar = () => {
+        idVerificado = true; nombreJugadorVerificado = "ID Validado";
+        statusDiv.style.color = 'var(--game-text)'; statusDiv.innerHTML = `✔️ <strong style="color: #fff;">ID Validado</strong>`;
+      };
+      try {
+        btnVerify.disabled = true; btnVerify.innerText = "BUSCANDO...";
+        statusDiv.style.display = 'block'; statusDiv.style.color = 'var(--game-text)'; statusDiv.innerText = '⏳ Verificando ID...';
+
+        const response = await fetch(SCRIPT_VALIDADOR_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: idInput, zona: zonaInput }) });
+        const data = await response.json().catch(() => null);
+
+        if (response.status === 429) {
+          idVerificado = false;
+          statusDiv.style.color = 'var(--danger)'; statusDiv.innerText = data?.message || 'Demasiadas verificaciones. Espera un minuto.';
+        } else if (data && data.verificado && data.valid === false) {
+          idVerificado = false; nombreJugadorVerificado = "";
+          statusDiv.style.color = 'var(--danger)'; statusDiv.innerHTML = `❌ <strong>${escaparHtml(data.message || 'Ese ID con esa Zona no existe en Mobile Legends.')}</strong>`;
+          mostrarBurbuja("❌ Ese ID con esa Zona no existe en Mobile Legends. Revísalos.", "var(--danger)");
+        } else if (data && data.verificado && data.player_name) {
+          idVerificado = true; nombreJugadorVerificado = data.player_name;
+          statusDiv.style.color = 'var(--game-text)'; statusDiv.innerHTML = `✔️ Jugador: <strong style="color: #fff;">${escaparHtml(nombreJugadorVerificado)}</strong>`;
+        } else {
+          aceptarSinComprobar();
+        }
+      } catch (error) {
+        aceptarSinComprobar();
+      } finally { btnVerify.disabled = false; btnVerify.innerText = "CONFIRMAR MI ID"; verificarEstadoDesbloqueo(); }
+    });
+
+    // Cambiar el ID o la Zona obliga a confirmar de nuevo
+    const reiniciarVerificacion = () => { idVerificado = false; nombreJugadorVerificado = ""; document.getElementById('idStatus').style.display = 'none'; verificarEstadoDesbloqueo(); };
+    // Si pegan "123456789 (1234)" en el campo del ID, se reparte entre ID y Zona
+    document.getElementById('inputPlayerId').addEventListener('input', (e) => {
+      const campo = e.target;
+      const completo = campo.value.match(/(\d{5,15})\s*\(\s*(\d{1,6})\s*\)/);
+      if (completo) document.getElementById('inputZona').value = completo[2];
+      campo.value = completo ? completo[1] : campo.value.replace(/[^0-9]/g, '').slice(0, 15);
+      reiniciarVerificacion();
+    });
+    document.getElementById('inputZona').addEventListener('input', reiniciarVerificacion);
+
+    // =========================================================================
+    // LECTURA DE REFERENCIA CON TESSERACT (en el teléfono del cliente, sin IA)
+    // Se excluyen siempre la cédula y el teléfono de la tienda.
+    // =========================================================================
+    function leerReferenciaCapture(file) {
+      return window.LectorReferencia.leer(file, [datosBancoGlobal.telefono, datosBancoGlobal.cedula]);
+    }
+
+    // Analizador para el Input Principal (Formulario de la página)
+    window.analizarCapture = async function(input) {
+      if (!input.files || !input.files[0]) return; const file = input.files[0];
+      if (!file.type.startsWith("image/")) return;
+      const cajaIA = document.getElementById('cajaIA'); const resultadoIA = document.getElementById('resultadoIA'); const refIA = document.getElementById('refIA'); const cargandoIA = document.getElementById('cargandoIA');
+
+      cajaIA.style.display = 'block'; cargandoIA.style.display = 'flex'; resultadoIA.style.display = 'none';
+      cargandoIA.innerText = "Leyendo comprobante...";
+
+      const referencia = await leerReferenciaCapture(file);
+      if (!referencia) { cajaIA.style.display = 'none'; return; }
+
+      // Coloca la referencia detectada directamente en el paso 5 (el usuario puede editarla)
+      refIA.textContent = referencia;
+      document.getElementById('inputReferencia').value = referencia;
+      cargandoIA.style.display = 'none'; resultadoIA.style.display = 'block';
+      actualizarProgreso();
+    };
+
+    // Analizador para el Input secundario (El del CHAT DE IA)
+    window.analizarCaptureChat = async function(input) {
+      if (!input.files || !input.files[0]) return; const file = input.files[0];
+      const resultBox = document.getElementById('resultadoIAChat');
+      if (!resultBox || !file.type.startsWith("image/")) return;
+
+      resultBox.style.display = 'flex';
+      resultBox.innerHTML = `<span style="font-size:11px; color:var(--game-text);">🔍 Leyendo comprobante...</span>`;
+
+      const referencia = await leerReferenciaCapture(file);
+      if (!referencia) { resultBox.style.display = 'none'; return; }
+
+      resultBox.innerHTML = `
+        <span style="color: var(--text-main); font-size: 11px; font-weight: bold;">Encontré: <span style="font-size: 14px; color: var(--game-text); letter-spacing: 1px;">${referencia}</span></span>
+        <button type="button" onclick="usarReferenciaIA('inputRefChat', null, '${referencia}')" style="background: var(--primary-gradient); color: var(--on-cta); border: none; padding: 6px 10px; border-radius: 6px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-size: 10px;">Usar Número</button>
+      `;
+    };
+
+    window.usarReferenciaIA = function(targetInputId, sourceTextId, valorDirecto) { 
+      let target = targetInputId || 'inputReferencia';
+      let valor = valorDirecto ? valorDirecto : document.getElementById(sourceTextId || 'refIA').textContent;
+      document.getElementById(target).value = valor; 
+    };
+
+    window.copiarDatosBanco = function() {
+      navigator.clipboard.writeText(`Banco: ${datosBancoGlobal.banco}\nTeléfono: ${datosBancoGlobal.telefono}\nCédula: ${datosBancoGlobal.cedula}`).then(() => {
+        mostrarBurbuja("✅ ¡Datos copiados al portapapeles!", "var(--game-text)");
+        const btn = document.getElementById('btnCopiarDatos'); 
+        btn.innerHTML = "✅ ¡Copiado con éxito!"; btn.classList.add('copied');
+        setTimeout(() => { btn.innerHTML = "📋 Copiar todos los datos"; btn.classList.remove('copied'); }, 3000);
+      });
+    };
+
+    // Copia un solo dato (para pegarlo campo por campo en la app del banco)
+    window.copiarCampo = function(campo, boton) {
+      const nombres = { banco: 'Banco', telefono: 'Teléfono', cedula: 'Cédula', monto: 'Monto', faltante: 'Monto que falta' };
+      const valor = campo === 'monto'
+        ? (paqueteSeleccionado ? String(paqueteSeleccionado.precio) : '')
+        : campo === 'faltante'
+          ? (complementoPendiente ? complementoPendiente.faltante.toFixed(2).replace('.', ',') : '')
+          : datosBancoGlobal[campo];
+      if (!valor) return;
+
+      navigator.clipboard.writeText(valor).then(() => {
+        mostrarBurbuja(`✅ ${nombres[campo]} copiado`, "var(--game-text)");
+        boton.textContent = '✓'; boton.classList.add('copied');
+        setTimeout(() => { boton.textContent = '📋'; boton.classList.remove('copied'); }, 2000);
+      });
+    };
+
+    // Mientras haya un modal abierto se bloquea el scroll de fondo y se ocultan el chat y la barra
+    // inferior (ver body.modal-abierto en el CSS). Se observa el display de cada modal, así sirve
+    // para todos sin tocar cada función que los abre o cierra.
+    const modalesPantalla = document.querySelectorAll('.overlay-pantalla');
+    const sincronizarModalAbierto = () => {
+      const hayModal = Array.from(modalesPantalla).some((m) => m.style.display && m.style.display !== 'none');
+      document.body.classList.toggle('modal-abierto', hayModal);
+    };
+    const observadorModales = new MutationObserver(sincronizarModalAbierto);
+    modalesPantalla.forEach((m) => observadorModales.observe(m, { attributes: true, attributeFilter: ['style'] }));
+
+    window.abrirModal = function() {
+      // Si ya hay una recarga en curso no se abre otra confirmación (doble toque, chat, barra inferior)
+      if (isProcessing) return;
+      const btnConfirmarModal = document.getElementById('btnConfirmar');
+      btnConfirmarModal.disabled = false; btnConfirmarModal.textContent = '¡SÍ, ENVIAR!';
+      const id = document.getElementById('inputPlayerId').value.trim();
+      const zona = document.getElementById('inputZona').value.trim();
+      const ref = document.getElementById('inputReferencia').value.trim();
+      const archivo = window.chatFileOverride ? window.chatFileOverride : document.getElementById('inputComprobante').files[0];
+      
+      let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo') || '0');
+      if (Date.now() < tiempoBloqueo) {
+        let faltan = Math.ceil((tiempoBloqueo - Date.now()) / 1000 / 60);
+        mostrarBurbuja(`Has sido bloqueado temporalmente. Espera ${faltan} minutos para reintentar.`, "var(--danger)");
+        return;
+      }
+
+      if (!ID_VALIDO.test(id) || !ZONA_VALIDA.test(zona) || !idVerificado || !paqueteSeleccionado || ref.length !== 5 || !archivo) { 
+        mostrarBurbuja("⚠️ Faltan datos o es obligatorio subir el comprobante de pago.", "var(--danger)"); 
+        return; 
+      }
+      
+      
+      document.getElementById('resumenId').textContent = `${id} (${zona})`;
+      document.getElementById('resumenNombreJugador').textContent = nombreJugadorVerificado;
+      document.getElementById('resumenPaquete').textContent = `${nombrePaquete(paqueteSeleccionado)} (Mobile Legends)`;
+      document.getElementById('resumenMonto').textContent = `${paqueteSeleccionado.precio} Bs`;
+      
+      // =======================================================
+      // 🛡️ BLOQUEAR Y CERRAR LA IA CUANDO SE ABRE EL MODAL DE CONFIRMACIÓN
+      // =======================================================
+      const chatBtnFlotante = document.getElementById('floatingChatBtn');
+      if (chatBtnFlotante) chatBtnFlotante.classList.add('disabled');
+
+      const chatModalWindow = document.getElementById('chatModalWindow');
+      if (chatModalWindow) chatModalWindow.classList.remove('active');
+
+      document.getElementById('modalConfirmacion').style.display = 'flex';
+    };
+
+    window.cerrarModal = function() {
+      document.getElementById('modalConfirmacion').style.display = 'none';
+      // REACTIVAR EL BOTÓN FLOTANTE DE IA AL CERRAR EL MODAL
+      const chatBtnFlotante = document.getElementById('floatingChatBtn');
+      if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
+    };
+
+    window.cerrarModalNoEncontrado = function() { document.getElementById('modalPagoNoEncontrado').style.display = 'none'; };
+    window.cerrarModalWhatsApp = function() { document.getElementById('modalWhatsApp').style.display = 'none'; };
+
+    // Pago insuficiente: muestra (o esconde) el bloque para pagar la diferencia con otra referencia.
+    // complemento = { token, faltante, horas } o null si el servidor no permite completarlo.
+    function mostrarCompletarPago(complemento) {
+      complementoPendiente = complemento;
+      const bloque = document.getElementById('bloqueCompletar');
+      const notaWhatsApp = document.getElementById('notaWhatsAppInsuficiente');
+      if (!complemento) {
+        bloque.style.display = 'none';
+        notaWhatsApp.innerHTML = 'Para resolver esto rápidamente, haz clic en el botón de abajo y envíanos un mensaje a nuestro WhatsApp oficial <strong>0422-8887089</strong>.';
+        return;
+      }
+      const dato = (etiqueta, valor, campo) => `<div class="bank-row">${etiqueta}: <span class="bank-value">${escaparHtml(valor)}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('${campo}', this)" aria-label="Copiar ${etiqueta.toLowerCase()}">📋</button></div>`;
+      document.getElementById('completarFaltante').textContent = `${complemento.faltante.toFixed(2)} Bs`;
+      document.getElementById('completarDatosBanco').innerHTML =
+        dato('Banco', datosBancoGlobal.banco, 'banco') + dato('Teléfono', datosBancoGlobal.telefono, 'telefono') +
+        dato('Cédula', datosBancoGlobal.cedula, 'cedula') + dato('Monto', `${complemento.faltante.toFixed(2)} Bs`, 'faltante');
+      document.getElementById('completarNota').textContent =
+        `Tienes ${complemento.horas || 48} horas. Si el nuevo pago tampoco alcanza, podrás completar otra vez (hasta 4 pagos en total).`;
+      document.getElementById('inputRefCompletar').value = '';
+      notaWhatsApp.innerHTML = '¿Necesitas ayuda? Escríbenos a nuestro WhatsApp oficial <strong>0422-8887089</strong>.';
+      bloque.style.display = 'block';
+    }
+
+    window.completarPagoInsuficiente = function() {
+      const referencia = document.getElementById('inputRefCompletar').value.trim();
+      if (!complementoPendiente) return;
+      if (!/^\d{5}$/.test(referencia)) {
+        mostrarBurbuja("Escribe los últimos 5 dígitos de la referencia del nuevo pago.", "var(--danger)");
+        return;
+      }
+      cerrarModalWhatsApp();
+      iniciarCargaConTiemposAleatorios({ token: complementoPendiente.token, referencia });
+    };
+
+    async function subirComprobanteDrive(file) {
+      return new Promise((resolve) => {
+        const tiempoLimite = setTimeout(() => { resolve("Sin comprobante (Tiempo agotado)"); }, 8000); 
+
+        const reader = new FileReader(); 
+        reader.readAsDataURL(file);
+        
+        reader.onload = async () => {
+          try {
+            const res = await fetch('/api/subir-imagen', { 
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+              body: JSON.stringify({ base64: reader.result, nombre: file.name, mimeType: file.type }) 
+            });
+            const data = await res.json();
+            clearTimeout(tiempoLimite);
+            resolve(data && data.url ? data.url : "Sin comprobante");
+          } catch (e) { 
+            clearTimeout(tiempoLimite);
+            resolve("Sin comprobante (Error de subida)"); 
+          }
+        };
+        reader.onerror = () => { clearTimeout(tiempoLimite); resolve("Sin comprobante (Error de lectura)"); };
+      });
+    }
+
+    // Escapa texto externo (Apps Script, proveedores, IA, nombres de jugador) antes de insertarlo como HTML
+    const escaparHtml = (texto) => String(texto ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    function mostrarErrorGeneral(titulo, mensajePrincipal, htmlExtra) {
+        document.getElementById('pantallaProcesando').style.display = 'none';
+        document.getElementById('tituloErrorGeneral').innerHTML = titulo;
+        document.getElementById('textoErrorPago').innerHTML = mensajePrincipal;
+        const notaExtra = document.getElementById('notaErrorExtra');
+        if(htmlExtra) { notaExtra.style.display = 'block'; notaExtra.innerHTML = htmlExtra; } 
+        else { notaExtra.style.display = 'none'; }
+        document.getElementById('modalPagoNoEncontrado').style.display = 'flex';
+    }
+
+    // complemento = { token, referencia } al completar un pago insuficiente (botón "COMPLETAR PAGO")
+    window.iniciarCargaConTiemposAleatorios = async function(complemento) {
+      const datosComplemento = complemento && complemento.token ? complemento : null;
+      const btnConfirmar = document.getElementById('btnConfirmar');
+      if (isProcessing) return; 
+
+      let tiempoBloqueo = parseInt(localStorage.getItem('tiempo_bloqueo') || '0');
+      if (Date.now() < tiempoBloqueo) {
+        let faltan = Math.ceil((tiempoBloqueo - Date.now()) / 1000 / 60);
+        mostrarBurbuja(`Bloqueado por múltiples intentos. Espera ${faltan} minutos.`, "var(--danger)");
+        return;
+      }
+
+      isProcessing = true; btnConfirmar.disabled = true; btnConfirmar.textContent = 'PROCESANDO...';
+      
+      const chatBtnFlotante = document.getElementById('floatingChatBtn');
+      const chatModalWindow = document.getElementById('chatModalWindow');
+      if (chatModalWindow) chatModalWindow.classList.remove('active');
+
+      const referenciaUsuario = datosComplemento ? datosComplemento.referencia : document.getElementById('inputReferencia').value.trim();
+      const playerId = document.getElementById('inputPlayerId').value.trim();
+      const zonaJugador = document.getElementById('inputZona').value.trim();
+      cerrarModal(); document.getElementById('pantallaProcesando').style.display = 'flex';
+
+      const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; globalTxnCode = 'TXN-';
+      for (let i = 0; i < 6; i++) globalTxnCode += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
+
+      const textoElem = document.getElementById('textoContadorAnimado');
+      const barraFill = document.getElementById('barraProgresoFill');
+      
+      try {
+          let captureUrl = "Sin comprobante";
+          let archivoCargar = window.chatFileOverride ? window.chatFileOverride : document.getElementById('inputComprobante').files[0];
+           
+          // Al completar un pago no se vuelve a subir el comprobante (ya quedó con el primer pago)
+          if (archivoCargar && !datosComplemento) {
+              textoElem.innerHTML = "📄 Adjuntando comprobante en servidor...";
+              barraFill.style.width = '20%';
+              captureUrl = await subirComprobanteDrive(archivoCargar);
+          }
+
+          textoElem.innerHTML = "🔍 Verificando pago y bloqueando referencia...";
+          barraFill.style.width = '45%';
+           
+          const nombreDelPaquete = nombrePaquete(paqueteSeleccionado);
+
+          const respuestaServidor = await fetch(SCRIPT_RECARGAS_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            // Al completar solo van la clave y la nueva referencia: el ID, el paquete y el precio
+            // los toma el servidor del pedido original
+            body: JSON.stringify(datosComplemento ? { tokenComplemento: datosComplemento.token, referencia: referenciaUsuario } : {
+                id: playerId,
+                zona: zonaJugador,
+                paquete: `${nombreDelPaquete} Mobile Legends`,
+                referencia: referenciaUsuario, 
+                urlImagen: captureUrl,
+                // Solo el código: el servidor recalcula el descuento y el precio a cobrar
+                ...(descuento.codigo() && { codigoDescuento: descuento.codigo() })
+            })
+          });
+           
+          const resultado = await respuestaServidor.json();
+           
+          if (resultado.status !== "success") {
+             if(resultado.message && resultado.message.toLowerCase().includes("fallo técnico")) {
+                document.getElementById('pantallaProcesando').style.display = 'none';
+                document.getElementById('codigoTxnProceso').textContent = globalTxnCode;
+                document.getElementById('modalEnProceso').style.display = 'flex';
+                isProcessing = false; btnConfirmar.disabled = false;
+                if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
+                return;
+             }
+
+             let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga') || '0');
+             intentosFallidos++;
+             localStorage.setItem('intentos_recarga', intentosFallidos);
+             if (intentosFallidos >= 3) {
+                 localStorage.setItem('tiempo_bloqueo', Date.now() + (5 * 60 * 1000));
+                 mostrarBurbuja("⚠ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
+             }
+
+             let msg = resultado.message || "";
+             let msgLower = msg.toLowerCase();
+
+             // Al completar: si el pago nuevo no se encontró, se vuelve a la ventana para corregir la referencia
+             if (datosComplemento && complementoPendiente && !resultado.insuficiente && !resultado.complementoInvalido) {
+                 document.getElementById('pantallaProcesando').style.display = 'none';
+                 mostrarBurbuja(`⚠️ ${msg || 'No encontramos ese pago.'}`, "var(--danger)");
+                 document.getElementById('modalWhatsApp').style.display = 'flex';
+                 isProcessing = false; btnConfirmar.disabled = false;
+                 return;
+             }
+             if (resultado.complementoInvalido) complementoPendiente = null;
+
+             if (msgLower.includes("insuficiente") || resultado.insuficiente) {
+                 document.getElementById('pantallaProcesando').style.display = 'none';
+                 let pagado = parseFloat(resultado.montoPagado || 0);
+                 let precioReal = parseFloat(resultado.precioRequerido || 0);
+                 let faltante = parseFloat(resultado.faltante || 0);
+                 
+                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (<strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${nombreDelPaquete}</strong>.`;
+                 document.getElementById('waMontoEncontrado').innerText = pagado > 0 ? pagado.toFixed(2) + " Bs" : "Monto no detectado";
+                 document.getElementById('waMontoFaltante').innerText = pagado > 0 ? faltante.toFixed(2) + " Bs" : "Diferencia desconocida";
+
+                 let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Monto que pagué:* ${pagado.toFixed(2)} Bs%0A*Paquete deseado:* ${nombreDelPaquete} (${precioReal.toFixed(2)} Bs)%0A*Me faltan:* ${faltante.toFixed(2)} Bs%0A%0A¿Cómo hago para completarlo?`;
+                 document.getElementById('btnWhatsAppLink').href = `https://wa.me/584228887089?text=${msgWa}`;
+                 mostrarCompletarPago(resultado.tokenComplemento ? { token: resultado.tokenComplemento, faltante, horas: resultado.horasParaCompletar } : null);
+                 document.getElementById('modalWhatsApp').style.display = 'flex';
+             } 
+             else if(msgLower.includes("gastado") || msgLower.includes("usado")) {
+                 mostrarErrorGeneral("❌ PAGO YA USADO", "El sistema detectó que esta referencia ya fue utilizada para completar otra recarga anterior.", "⚠️ <strong>Importante:</strong><br><br>No puedes reutilizar pagos antiguos. Si crees que esto es un error, contáctanos a soporte.");
+             }
+             else if(msgLower.includes("no encontrado")) {
+                 mostrarErrorGeneral("❌ PAGO NO ENCONTRADO", "No pudimos localizar la referencia que ingresaste en nuestro sistema bancario.", "⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el pago transferido sea <strong>exacto</strong> al valor del paquete.<br><br>3. Que el pago fue enviado al banco correcto.");
+             } 
+             else {
+                 mostrarErrorGeneral("❌ ERROR", escaparHtml(msg), "");
+             }
+
+             isProcessing = false; btnConfirmar.disabled = false;
+             if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
+             return; 
+          }
+
+          localStorage.setItem('intentos_recarga', '0');
+          localStorage.setItem('tiempo_bloqueo', '0');
+
+          textoElem.innerHTML = "💎 ¡Sistema remoto conectado a Mobile Legends!";
+          barraFill.style.width = '75%';
+           
+          await new Promise(r => setTimeout(r, 1500)); 
+
+          textoElem.innerHTML = "🚀 Enviando los diamantes a tu cuenta...";
+          barraFill.style.width = '90%';
+
+          await new Promise(r => setTimeout(r, 1200)); 
+
+          textoElem.innerHTML = "✅ ¡Recarga Exitosa!";
+          barraFill.style.width = '100%';
+
+          setTimeout(() => {
+            document.getElementById('pantallaProcesando').style.display = 'none';
+            document.getElementById('codigoTxnExito').textContent = globalTxnCode;
+            document.getElementById('modalExitosa').style.display = 'flex';
+            isProcessing = false;
+            if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
+          }, 600);
+
+    } catch (err) {
+        mostrarErrorGeneral("⚠️ ERROR DE CONEXIÓN", "Tuvimos inconvenientes al conectar con el servidor. Por favor intenta nuevamente.", "");
+        isProcessing = false; 
+        btnConfirmar.disabled = false;
+        if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
+    }
+  };
+
+    window.ruletaYaGiro = false;
+
+    window.abrirRuletaAutomatica = async function() {
+      document.getElementById('modalExitosa').style.display = 'none';
+      document.getElementById('modalRuletaAutomatica').style.display = 'flex';
+       
+      if (window.ruletaYaGiro) return;
+      window.ruletaYaGiro = true;
+
+      const rueda = document.getElementById('ruletaGiraAuto');
+      const textoEstado = document.getElementById('textoEstadoRuleta');
+      const btnCerrar = document.getElementById('btnCerrarRuleta');
+
+      try {
+          const response = await fetch('/api/ruleta', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  id: document.getElementById('inputPlayerId').value.trim(),
+                  referencia: document.getElementById('inputReferencia').value.trim(),
+                  juego: "Mobile Legends"
+              })
+          });
+
+          const data = await response.json();
+
+          if (data.status === "success") {
+              textoEstado.innerText = "¡La suerte está echada! 🎲";
+              textoEstado.style.color = "var(--game-text)";
+               
+              rueda.style.transform = `rotate(${data.gradosDestino}deg)`;
+
+              setTimeout(() => {
+                  if (data.ganador) {
+                      textoEstado.style.color = "var(--success)";
+                      textoEstado.innerText = "🎉 ¡BRUTAL! Ganaste el premio de la ruleta. Pronto te lo enviaremos.";
+                  } else {
+                      textoEstado.style.color = "var(--danger)";
+                      textoEstado.innerText = "❌ No hubo suerte esta vez. ¡Gracias por participar!";
+                  }
+                  btnCerrar.style.display = 'block';
+              }, 4000);
+          } else {
+              textoEstado.style.color = "var(--danger)";
+              textoEstado.innerText = "⚠ " + data.message;
+              btnCerrar.style.display = 'block';
+          }
+      } catch (e) {
+          textoEstado.style.color = "var(--danger)";
+          textoEstado.innerText = "❌ Error de conexión con el servidor.";
+          btnCerrar.style.display = 'block';
+      }
+    };
+
+    window.cerrarRuletaAuto = function() {
+        document.getElementById('modalRuletaAutomatica').style.display = 'none';
+        window.location.href = "index.html";
+    };
+
+    // =======================================================
+    // 💬 LÓGICA DE CONTROL DE CHAT IA FLOTANTE Y RATE LIMIT
+    // =======================================================
+    window.toggleChatModal = function() {
+        const modal = document.getElementById('chatModalWindow');
+        modal.classList.toggle('active');
+    };
+
+    window.detectarEnter = function(event) {
+        if (event.key === 'Enter') {
+            const input = document.getElementById('input-chat');
+            const mensaje = input.value.trim();
+            if (mensaje !== "") {
+                input.value = '';
+                enviarMensajeAI(mensaje);
+            }
+        }
+    }
+
+    const LIMITE_MENSAJES = 5;
+    const TIEMPO_VENTANA_MS = 60 * 1000;
+
+    function obtenerHistorialRateLimit() {
+        let registro = JSON.parse(localStorage.getItem('ia_chat_limit') || '{"count":0, "resetTime":0}');
+        let ahora = Date.now();
+        if (ahora > registro.resetTime) {
+            registro = { count: 0, resetTime: ahora + TIEMPO_VENTANA_MS };
+            localStorage.setItem('ia_chat_limit', JSON.stringify(registro));
+        }
+        return registro;
+    }
+
+    function actualizarInterfazRateLimit() {
+        let registro = obtenerHistorialRateLimit();
+        let restantes = LIMITE_MENSAJES - registro.count;
+        if (restantes < 0) restantes = 0;
+         
+        const info = document.getElementById('rateLimitInfo');
+        if (restantes === 0) {
+            let segundosRestantes = Math.ceil((registro.resetTime - Date.now()) / 1000);
+            info.innerHTML = `⚠️ Límite alcanzado. Espera ${segundosRestantes > 0 ? segundosRestantes : 0}s para enviar más.`;
+            info.style.color = "var(--danger)";
+        } else {
+            info.innerHTML = `Mensajes disponibles: ${restantes} / ${LIMITE_MENSAJES}`;
+            info.style.color = "var(--text-muted)";
+        }
+    }
+
+    window.verificarIdDesdeChat = function(id, paqueteTexto) {
+        document.getElementById('inputPlayerId').value = id;
+        // Mobile Legends también necesita la Zona: sin ella se pide en el formulario y se confirma ahí
+        if (!ZONA_VALIDA.test(document.getElementById('inputZona').value.trim())) {
+            reiniciarVerificacion();
+            toggleChatModal();
+            const zona = document.getElementById('inputZona');
+            zona.scrollIntoView({ behavior: 'smooth', block: 'center' }); zona.focus({ preventScroll: true });
+            mostrarBurbuja("✍️ Escribe tu Zona ID (el número entre paréntesis) y toca CONFIRMAR MI ID.", "var(--game-text)");
+            return;
+        }
+        mostrarBurbuja("⏳ Confirmando ID...", "var(--game-text)");
+
+        setTimeout(() => {
+            idVerificado = true;
+            nombreJugadorVerificado = "Jugador Confirmado";
+
+            if (window.catalogoGlobal) {
+                let numeroPaquete = paqueteTexto.replace(/[^0-9]/g, '');
+                paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
+            }
+            if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteTexto, precio: "Validando..." }; }
+
+            const chatContainer = document.getElementById('chat-messages');
+            chatContainer.innerHTML += `<div class="msg-bubble user" style="background: var(--success); text-align:left; border: none; color: #000;">✅ <b>Jugador:</b> ${nombreJugadorVerificado}<br>💎 <b>Paquete:</b> ${paqueteSeleccionado.diamantes}<br>💰 <b>Total:</b> ${paqueteSeleccionado.precio} Bs<br><br>Todo correcto, dame los datos de pago.</div>`;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            enviarMensajeAI("SISTEMA: El jugador ha sido confirmado para " + paqueteSeleccionado.diamantes + ". Dame los datos de pago con [ACCION_PAGO].", true);
+        }, 500);
+    };
+
+    window.procesarRecargaDesdeChat = function() {
+        const fileInputChat = document.getElementById('inputComprobanteChat');
+        const refInputChat = document.getElementById('inputRefChat').value.trim();
+
+        if (refInputChat.length !== 5 || !fileInputChat.files[0]) {
+            mostrarBurbuja("⚠ Debes subir el comprobante y escribir los 5 dígitos.", "var(--danger)");
+            return;
+        }
+
+        document.getElementById('inputReferencia').value = refInputChat;
+        window.chatFileOverride = fileInputChat.files[0];
+
+        toggleChatModal(); 
+        abrirModal();      
+    };
+
+    async function enviarMensajeAI(textoUsuario, ocultarBurbujaUsuario = false) {
+        let registro = obtenerHistorialRateLimit();
+        if (registro.count >= LIMITE_MENSAJES) {
+            mostrarBurbuja("Has alcanzado el límite de mensajes por minuto. Espera un momento.", "var(--danger)");
+            actualizarInterfazRateLimit();
+            return;
+        }
+
+        registro.count++;
+        localStorage.setItem('ia_chat_limit', JSON.stringify(registro));
+        actualizarInterfazRateLimit();
+
+        const contenedorChat = document.getElementById('chat-messages');
+         
+        if (!ocultarBurbujaUsuario) {
+            const msgUser = document.createElement('div');
+            msgUser.className = "msg-bubble user";
+            msgUser.innerText = textoUsuario;
+            contenedorChat.appendChild(msgUser);
+            contenedorChat.scrollTop = contenedorChat.scrollHeight;
+        }
+
+        const msgCargando = document.createElement('div');
+        msgCargando.id = "tempCargando";
+        msgCargando.className = "msg-bubble bot";
+        msgCargando.innerHTML = `<div class="typing-indicator"><span style="font-size: 14px; margin-right: 6px;">🤖</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+        contenedorChat.appendChild(msgCargando);
+        contenedorChat.scrollTop = contenedorChat.scrollHeight;
+
+        let nombreJuegoDetectado = "Mobile Legends";
+        const tituloBanner = document.querySelector('.title-banner');
+        if (tituloBanner) {
+            nombreJuegoDetectado = tituloBanner.innerText.replace(/[^a-zA-Z\s]/g, '').trim();
+        }
+         
+        let catalogoTexto = "Aún cargando precios...";
+        if (window.catalogoGlobal && window.catalogoGlobal.length > 0) {
+            catalogoTexto = window.catalogoGlobal.map(p => `- ${nombrePaquete(p)}: ${p.precio} Bs`).join("\n");
+        }
+
+        try {
+            const response = await fetch('/api/ia-soporte', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    mensaje: textoUsuario,
+                    juego: nombreJuegoDetectado,
+                    catalogo: catalogoTexto
+                })
+            });
+             
+            const resultado = await response.json();
+            const cargandoEl = document.getElementById('tempCargando');
+            if (cargandoEl) cargandoEl.remove();
+
+            const msgBot = document.createElement('div');
+            msgBot.className = "msg-bubble bot";
+            // Se escapa la respuesta de la IA antes de insertar las tarjetas propias (evita inyectar HTML vía prompt)
+            let htmlRespuesta = escaparHtml(resultado.respuesta || "Disculpa, no pude responder. Escríbenos por WhatsApp.");
+
+            const matchVerificar = htmlRespuesta.match(/\[ACCION_VERIFICAR:([\w-]+):(.*?)\]/);
+            if (matchVerificar) {
+                let idChat = matchVerificar[1];
+                let paqueteChat = matchVerificar[2].replace(/[^\w\s.-]/g, '');
+                htmlRespuesta = htmlRespuesta.replace(matchVerificar[0], `
+                    <div class="chat-action-card">
+                        <p style="color:var(--game-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
+                        <p style="font-size:12px; margin-bottom:8px;">Verifica que este ID sea correcto:<br><b style="font-size:16px; color:#fff;">${idChat}</b></p>
+                        <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">✅ SÍ, ES MI ID</button>
+                    </div>
+                `);
+            }
+
+            const matchPagoDirecto = htmlRespuesta.match(/\[ACCION_PAGO:([\w-]+):(.*?)\]/);
+            if (matchPagoDirecto) {
+                let idChat = matchPagoDirecto[1];
+                let paqueteChat = matchPagoDirecto[2].replace(/[^\w\s.-]/g, '');
+
+                if (!idVerificado) {
+                    htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], `
+                        <div class="chat-action-card">
+                            <p style="color:var(--game-text); font-weight:900; font-size:13px;">⚠️ CONFIRMA TU ID</p>
+                            <p style="font-size:12px; margin-bottom:8px;">Antes de pagar, confirma que tu ID es exacto:<br><b style="font-size:16px; color:#fff;">${idChat}</b></p>
+                            <button class="btn-verify" style="padding:10px; font-size:11px;" onclick="verificarIdDesdeChat('${idChat}', '${paqueteChat}')">✅ SÍ, ESTÁ CORRECTO</button>
+                        </div>
+                    `);
+                } else {
+                    document.getElementById('inputPlayerId').value = idChat;
+                    nombreJugadorVerificado = "Jugador de " + nombreJuegoDetectado;
+
+                    if (window.catalogoGlobal) {
+                        let numeroPaquete = paqueteChat.replace(/[^0-9]/g, '');
+                        paqueteSeleccionado = window.catalogoGlobal.find(p => String(p.diamantes).includes(numeroPaquete));
+                    }
+                    if(!paqueteSeleccionado) { paqueteSeleccionado = { diamantes: paqueteChat, precio: "Calculando..." }; }
+
+                    htmlRespuesta = htmlRespuesta.replace(matchPagoDirecto[0], "[ACCION_PAGO]");
+                }
+            }
+
+            if (htmlRespuesta.includes("[ACCION_PAGO]")) {
+                htmlRespuesta = htmlRespuesta.replace("[ACCION_PAGO]", `
+                    <div class="chat-action-card">
+                        <p style="color:var(--game-text); font-weight:900; font-size:13px;">🏦 DATOS DE PAGO</p>
+                        <p style="font-size:12px; margin: 8px 0; line-height:1.5;">Banco: ${datosBancoGlobal.banco}<br>Tel: ${datosBancoGlobal.telefono}<br>Cédula: ${datosBancoGlobal.cedula}</p>
+                        <button class="btn-copy" style="padding: 10px; font-size: 11px; margin-bottom: 12px;" onclick="copiarDatosBanco()">📋 COPIAR DATOS</button>
+                        <hr style="border-color: rgba(var(--game-accent-rgb),0.2); margin: 12px 0;">
+                        <p style="color:var(--text-main); font-weight:bold; font-size: 12px; margin-bottom:8px;">Sube tu comprobante:</p>
+                        <input type="file" id="inputComprobanteChat" accept="image/*" onchange="analizarCaptureChat(this)">
+                         
+                        <div id="resultadoIAChat" class="resultado-ia-chat"></div>
+
+                        <input type="text" id="inputRefChat" class="input-field" inputmode="numeric" style="padding: 10px; font-size: 16px; margin-bottom: 4px;" placeholder="Últimos 5 dígitos" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                        <a href="https://drive.google.com/file/d/1b0V-JMYmBqEwyMxLOKySIESIU2XLtYUW/view?usp=sharing" target="_blank" style="font-size: 10px; color: var(--warning); display: block; margin-bottom: 12px; text-decoration: underline;">¿Dónde está la referencia? (Ver pista)</a>
+                        <button class="btn-submit-order" style="padding: 12px; font-size: 12px;" onclick="procesarRecargaDesdeChat()">🚀 PROCESAR RECARGA</button>
+                    </div>
+                `);
+            }
+
+            msgBot.innerHTML = htmlRespuesta;
+            contenedorChat.appendChild(msgBot);
+            contenedorChat.scrollTop = contenedorChat.scrollHeight;
+
+            if(resultado.respaldoWhatsapp || textoUsuario.toLowerCase().includes("ayuda") || textoUsuario.toLowerCase().includes("humano")) {
+                document.getElementById('whatsappEscalateContainer').style.display = 'block';
+            }
+
+        } catch (e) {
+            const cargandoEl = document.getElementById('tempCargando');
+            if (cargandoEl) cargandoEl.remove();
+             
+            const msgError = document.createElement('div');
+            msgError.className = "msg-bubble error";
+            msgError.innerText = "Disculpa, ocurrió un error de conexión con la IA.";
+            contenedorChat.appendChild(msgError);
+        }
+    }
+
+    setInterval(actualizarInterfazRateLimit, 1000);
+
+    cargarDatosBancarios(); cargarCatalogoCliente(); actualizarProgreso();
+  </script>
+</body>
+</html>

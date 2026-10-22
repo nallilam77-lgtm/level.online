@@ -2,11 +2,12 @@
 // se acepta una clave propia de este objeto (nada de "__proto__", "constructor"...).
 // Carga diferida: cada petición solo carga el módulo de su juego (menos arranque en frío) y un
 // error en un módulo no afecta a los otros. Las rutas van escritas tal cual para que Vercel
-// incluya los tres archivos en el paquete de la función.
+// incluya todos los archivos en el paquete de la función.
 const JUEGOS = {
   freefire: () => import('./freefire.js'),
   bloodstrike: () => import('./bloodstrike.js'),
   roblox: () => import('./roblox.js'),
+  mobilelegends: () => import('./mobilelegends.js'),
 };
 
 // Devuelve el módulo del juego, o null si el nombre no es válido

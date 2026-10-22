@@ -10,6 +10,7 @@ export const FASES = {
   botFreeFire: '4. CANJE EN FREE FIRE (bot de Railway)',
   apiBloodStrike: '4. RECARGA EN LA API DEL PROVEEDOR (Central One)',
   apiFreeFire: '4. RECARGA DE FREE FIRE EN LA API DEL PROVEEDOR (Central One)',
+  apiMobileLegends: '4. RECARGA DE MOBILE LEGENDS EN LA API DEL PROVEEDOR (Central One)',
   cierre: '5. CIERRE DEL PEDIDO (marcar pago usado / registrar finalizado)',
   inesperado: 'ERROR INESPERADO (excepción o respuesta no prevista en Vercel)',
 };

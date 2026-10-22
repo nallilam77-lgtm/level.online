@@ -2,7 +2,7 @@ import { llamarScript, LECTURA_APPS_SCRIPT } from './_lib/externo.js';
 
 // La ruleta es un extra: si su Apps Script no está configurado o no responde,
 // se avisa al cliente con un 503 claro y la compra no se ve afectada (nunca 500).
-const JUEGOS_PERMITIDOS = ['Free Fire', 'Blood Strike', 'Roblox'];
+const JUEGOS_PERMITIDOS = ['Free Fire', 'Blood Strike', 'Roblox', 'Mobile Legends'];
 const MENSAJE_NO_DISPONIBLE = "La ruleta no está disponible en este momento. Tu recarga no se ve afectada; intenta girar más tarde.";
 const PREMIO_GANADOR = "100 Diamantes 💎";
 const PREMIO_VACIO = "Vacío ❌";
@@ -55,14 +55,28 @@ export default async function handler(req, res) {
         // tarda al despertar (antes, un solo fallo dejaba al cliente sin su giro).
         // El token es opcional: el script solo lo exige si tiene la propiedad TOKEN_VERCEL.
         const token = (process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
-        const resultadoGAS = await llamarScript(URL_GOOGLE_SCRIPT, {
+        const cuerpo = {
             accion: "girar_ruleta",
             referencia: String(referencia),
             id_jugador: String(id),
             juego: juego || "Free Fire",
             premio: premioStr,
             ...(token && { token })
-        }, LECTURA_APPS_SCRIPT);
+        };
+        const inicio = Date.now();
+        let resultadoGAS = await llamarScript(URL_GOOGLE_SCRIPT, cuerpo, LECTURA_APPS_SCRIPT);
+
+        // El pago sigue "En proceso": la recarga se cierra en segundo plano justo después de responder
+        // al cliente (cerrarEnSegundoPlano). Se repite una vez, solo si cabe en maxDuration (30 s):
+        // como mucho 8 s de la primera llamada + 5 s de espera + 12 s del reintento.
+        if (resultadoGAS?.enCierre && Date.now() - inicio < 8000) {
+            await new Promise((r) => setTimeout(r, 5000));
+            resultadoGAS = await llamarScript(URL_GOOGLE_SCRIPT, cuerpo, { tiempoMs: 12000 });
+        }
+
+        if (resultadoGAS?.enCierre) {
+            return res.status(503).json({ status: "error", message: resultadoGAS.message || "Tu recarga se está terminando de registrar. Intenta girar de nuevo en unos segundos." });
+        }
 
         if (resultadoGAS?.ocupado) {
             return res.status(503).json({ status: "error", message: "La ruleta está ocupada. Espera unos segundos e intenta de nuevo." });
