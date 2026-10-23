@@ -598,8 +598,43 @@
     .product-card.selected { background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.16), rgba(var(--game-accent-2-rgb), 0.06)); box-shadow: var(--shadow-lg), 0 0 0 1px rgba(var(--game-accent-2-rgb), 0.35), 0 0 22px rgba(var(--game-accent-rgb), 0.35); }
     .juego-icono { filter: drop-shadow(0 0 8px rgba(var(--game-accent-2-rgb), 0.35)); }
 
+    /* Catálogo en grupos desplegables (Oro directo / Pases y bolsas), con esquinas de mira como el panel */
+    .grupo-paquetes { grid-column: 1 / -1; position: relative; border-radius: 6px; border: 1px solid rgba(var(--game-accent-rgb), 0.25); background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.07), var(--surface) 70%); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--shadow-lg), var(--shadow-glow); transition: border-color 0.25s ease, box-shadow 0.25s ease; }
+    .grupo-paquetes::before {
+      content: ''; position: absolute; inset: 4px; pointer-events: none; opacity: 0.45; transition: opacity 0.25s ease;
+      background:
+        linear-gradient(var(--game-accent-2), var(--game-accent-2)) top left / 10px 2px no-repeat,
+        linear-gradient(var(--game-accent-2), var(--game-accent-2)) top left / 2px 10px no-repeat,
+        linear-gradient(var(--game-accent-2), var(--game-accent-2)) bottom right / 10px 2px no-repeat,
+        linear-gradient(var(--game-accent-2), var(--game-accent-2)) bottom right / 2px 10px no-repeat;
+    }
+    .grupo-paquetes.abierto { border-color: rgba(var(--game-accent-rgb), 0.55); box-shadow: var(--shadow-lg), 0 0 18px rgba(var(--game-accent-rgb), 0.25); }
+    .grupo-paquetes.abierto::before { opacity: 1; }
+    .grupo-cabecera { width: 100%; min-height: 64px; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: none; border: 0; color: var(--text-main); font-family: 'Montserrat', sans-serif; text-align: left; cursor: pointer; border-radius: 6px; }
+    .grupo-cabecera:focus-visible { outline: 2px solid var(--game-accent-2); outline-offset: 2px; }
+    .grupo-icono { flex: 0 0 auto; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid rgba(var(--game-accent-2-rgb), 0.3); background: rgba(var(--game-accent-rgb), 0.12); }
+    .grupo-icono svg { width: 24px; height: 24px; display: block; filter: drop-shadow(0 0 6px rgba(var(--game-accent-2-rgb), 0.35)); }
+    .grupo-textos { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .grupo-titulo { font-size: 15px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+    .grupo-detalle { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    .grupo-detalle strong { color: var(--game-text); }
+    .grupo-flecha { flex: 0 0 auto; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid rgba(var(--game-accent-2-rgb), 0.35); color: var(--game-text); transition: transform 0.3s ease, background 0.25s ease; }
+    .grupo-flecha svg { width: 16px; height: 16px; display: block; }
+    .grupo-cabecera:hover .grupo-flecha { background: rgba(var(--game-accent-2-rgb), 0.12); }
+    .grupo-paquetes.abierto .grupo-flecha { transform: rotate(180deg); }
+    .grupo-cuerpo { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease; }
+    .grupo-paquetes.abierto .grupo-cuerpo { grid-template-rows: 1fr; }
+    .grupo-cuerpo > .grupo-recorte { overflow: hidden; min-height: 0; }
+    .grupo-cuerpo .catalog-grid { margin: 0; padding: 6px 10px 16px; }
+    @media (max-width: 380px) {
+      .grupo-cabecera { gap: 10px; padding: 12px; }
+      .grupo-titulo { font-size: 13px; letter-spacing: 0; }
+      .grupo-detalle { font-size: 11px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .juego-emblema, .btn-submit-order::after, .btn-verify::after, .sticky-cta-btn.ready::after { animation: none; }
+      .grupo-cuerpo, .grupo-flecha { transition: none; }
     }
   </style>
   <link rel="stylesheet" href="css/pie-legal.css">
@@ -1016,7 +1051,45 @@
       window.catalogoGlobal = paquetes;
       const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.diamantes) : null;
 
-        container.innerHTML = '';
+      container.innerHTML = '';
+      // Dos grupos que se abren y cierran tocándolos; las tarjetas quedan en el mismo orden que catalogoGlobal
+      const grupos = GRUPOS_CATALOGO.map((g) => ({ ...g, lista: paquetes.filter((p) => esPase(p.diamantes) === g.pases) }))
+        .filter((g) => g.lista.length);
+      grupos.forEach((g) => {
+        const desde = g.lista.reduce((min, p) => (window.formatearMontoVES(p.precio) < window.formatearMontoVES(min.precio) ? p : min));
+        const grupo = document.createElement('section');
+        grupo.className = 'grupo-paquetes';
+        grupo.dataset.grupo = g.clave;
+        grupo.innerHTML = `
+          <button type="button" class="grupo-cabecera" aria-expanded="false" aria-controls="grupo-${g.clave}">
+            <span class="grupo-icono">${g.icono}</span>
+            <span class="grupo-textos"><span class="grupo-titulo">${g.titulo}</span><span class="grupo-detalle">${g.lista.length} ${g.lista.length === 1 ? 'opción' : 'opciones'} · desde <strong>${desde.precio} Bs</strong></span></span>
+            <span class="grupo-flecha"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </button>
+          <div class="grupo-cuerpo"><div class="grupo-recorte"><div class="catalog-grid" id="grupo-${g.clave}"></div></div></div>`;
+        grupo.querySelector('.grupo-cabecera').addEventListener('click', () => abrirGrupo(grupo, !grupo.classList.contains('abierto')));
+        container.appendChild(grupo);
+        abrirGrupo(grupo, gruposAbiertos.has(g.clave));
+        dibujarTarjetas(grupo.querySelector('.catalog-grid'), g.lista, elegido);
+      });
+    }
+
+    const GRUPOS_CATALOGO = [
+      { clave: 'oro', pases: false, titulo: 'Oro directo', icono: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="url(#bsOro)"/><circle cx="12" cy="12" r="6.5" fill="none" style="stroke: var(--bs-oro-oscuro)" stroke-width="1.4" opacity=".6"/><path d="M12 8.5v7M9.5 10.5l2.5-2 2.5 2" fill="none" style="stroke: var(--bs-oro-oscuro)" stroke-width="1.4" stroke-linecap="round" opacity=".7"/></svg>' },
+      { clave: 'pases', pases: true, titulo: 'Pases y bolsas', icono: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 21 6.5v6c0 5-3.8 8.6-9 9.5-5.2-.9-9-4.5-9-9.5v-6z" fill="url(#bsRojo)"/><path d="M12 7.5l1.4 2.8 3.1.5-2.2 2.2.5 3.1-2.8-1.5-2.8 1.5.5-3.1-2.2-2.2 3.1-.5z" style="fill: var(--game-accent-2)"/></svg>' },
+    ];
+    // Grupos que el cliente dejó abiertos: se respetan al volver a dibujar (p. ej. al aplicar un código)
+    const gruposAbiertos = new Set();
+
+    function abrirGrupo(grupo, abrir) {
+      grupo.classList.toggle('abierto', abrir);
+      grupo.querySelector('.grupo-cabecera').setAttribute('aria-expanded', String(abrir));
+      // Cerrado: las tarjetas no reciben foco con el teclado
+      grupo.querySelector('.grupo-cuerpo').inert = !abrir;
+      if (abrir) gruposAbiertos.add(grupo.dataset.grupo); else gruposAbiertos.delete(grupo.dataset.grupo);
+    }
+
+    function dibujarTarjetas(container, paquetes, elegido) {
         paquetes.forEach((item, index) => {
           const card = document.createElement('div');
           const esUltimoImpar = (paquetes.length % 2 !== 0) && (index === paquetes.length - 1);
@@ -1046,6 +1119,9 @@
     function seleccionarProducto(cardElement, paquete) {
       document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
       cardElement.classList.add('selected'); paqueteSeleccionado = paquete;
+      // Si lo eligió el chat o el último pedido, su grupo se abre para que se vea
+      const grupo = cardElement.closest('.grupo-paquetes');
+      if (grupo && !grupo.classList.contains('abierto')) abrirGrupo(grupo, true);
       document.getElementById('montoPagar').innerText = `${paquete.precio} Bs`;
       verificarEstadoDesbloqueo();
     }
