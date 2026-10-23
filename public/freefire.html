@@ -580,8 +580,34 @@
     .product-card { background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.08), var(--surface) 65%); }
     .product-card.selected { background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.18), rgba(var(--ff-fuego-oscuro-rgb), 0.10)); box-shadow: var(--shadow-lg), 0 0 0 1px rgba(var(--game-accent-rgb), 0.35), 0 0 22px rgba(var(--game-accent-rgb), 0.4); }
 
+    /* Catálogo en grupos desplegables (Diamantes directos / Pases y membresías) */
+    .grupo-paquetes { grid-column: 1 / -1; border-radius: var(--radius-card); border: 1px solid rgba(var(--game-accent-rgb), 0.22); background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.06), var(--surface) 70%); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--shadow-lg), var(--shadow-glow); transition: border-color 0.25s ease, box-shadow 0.25s ease; }
+    .grupo-paquetes.abierto { border-color: rgba(var(--game-accent-rgb), 0.5); box-shadow: var(--shadow-lg), 0 0 18px rgba(var(--game-accent-rgb), 0.22); }
+    .grupo-cabecera { width: 100%; min-height: 64px; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: none; border: 0; color: var(--text-main); font-family: 'Montserrat', sans-serif; text-align: left; cursor: pointer; border-radius: var(--radius-card); }
+    .grupo-cabecera:focus-visible { outline: 2px solid var(--game-accent); outline-offset: 2px; }
+    .grupo-icono { flex: 0 0 auto; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: rgba(var(--game-accent-rgb), 0.12); clip-path: polygon(28% 0, 72% 0, 100% 28%, 100% 72%, 72% 100%, 28% 100%, 0 72%, 0 28%); }
+    .grupo-icono svg { width: 24px; height: 24px; display: block; filter: drop-shadow(0 0 6px rgba(var(--game-accent-rgb), 0.5)); }
+    .grupo-textos { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .grupo-titulo { font-size: 15px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
+    .grupo-detalle { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    .grupo-detalle strong { color: var(--game-text); }
+    .grupo-flecha { flex: 0 0 auto; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(var(--game-accent-rgb), 0.1); color: var(--game-text); transition: transform 0.3s ease, background 0.25s ease; }
+    .grupo-flecha svg { width: 16px; height: 16px; display: block; }
+    .grupo-cabecera:hover .grupo-flecha { background: rgba(var(--game-accent-rgb), 0.22); }
+    .grupo-paquetes.abierto .grupo-flecha { transform: rotate(180deg); }
+    .grupo-cuerpo { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease; }
+    .grupo-paquetes.abierto .grupo-cuerpo { grid-template-rows: 1fr; }
+    .grupo-cuerpo > .grupo-recorte { overflow: hidden; min-height: 0; }
+    .grupo-cuerpo .catalog-grid { margin: 0; padding: 6px 10px 16px; }
+    @media (max-width: 380px) {
+      .grupo-cabecera { gap: 10px; padding: 12px; }
+      .grupo-titulo { font-size: 13px; letter-spacing: 0; }
+      .grupo-detalle { font-size: 11px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .juego-emblema, .btn-submit-order::after, .btn-verify::after, .sticky-cta-btn.ready::after { animation: none; }
+      .grupo-cuerpo, .grupo-flecha { transition: none; }
     }
   </style>
   <link rel="stylesheet" href="css/pie-legal.css">
@@ -996,6 +1022,44 @@
       const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.diamantes) : null;
 
       container.innerHTML = '';
+      // Dos grupos que se abren y cierran tocándolos; las tarjetas quedan en el mismo orden que catalogoGlobal
+      const grupos = GRUPOS_CATALOGO.map((g) => ({ ...g, lista: paquetes.filter((p) => esTarjeta(p.diamantes) === g.tarjetas) }))
+        .filter((g) => g.lista.length);
+      grupos.forEach((g) => {
+        const desde = g.lista.reduce((min, p) => (window.formatearMontoVES(p.precio) < window.formatearMontoVES(min.precio) ? p : min));
+        const grupo = document.createElement('section');
+        grupo.className = 'grupo-paquetes';
+        grupo.dataset.grupo = g.clave;
+        grupo.innerHTML = `
+          <button type="button" class="grupo-cabecera" aria-expanded="false" aria-controls="grupo-${g.clave}">
+            <span class="grupo-icono">${g.icono}</span>
+            <span class="grupo-textos"><span class="grupo-titulo">${g.titulo}</span><span class="grupo-detalle">${g.lista.length} ${g.lista.length === 1 ? 'opción' : 'opciones'} · desde <strong>${desde.precio} Bs</strong></span></span>
+            <span class="grupo-flecha"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </button>
+          <div class="grupo-cuerpo"><div class="grupo-recorte"><div class="catalog-grid" id="grupo-${g.clave}"></div></div></div>`;
+        grupo.querySelector('.grupo-cabecera').addEventListener('click', () => abrirGrupo(grupo, !grupo.classList.contains('abierto')));
+        container.appendChild(grupo);
+        abrirGrupo(grupo, gruposAbiertos.has(g.clave));
+        dibujarTarjetas(grupo.querySelector('.catalog-grid'), g.lista, elegido);
+      });
+    }
+
+    const GRUPOS_CATALOGO = [
+      { clave: 'diamantes', tarjetas: false, titulo: 'Diamantes directos', icono: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10l5 6-10 12L2 9z" fill="url(#ffFuego)"/><path d="M2 9h20M7 3l5 18 5-18M7 3l5 6 5-6" fill="none" style="stroke: var(--ff-noche)" stroke-width="1" opacity=".45"/></svg>' },
+      { clave: 'pases', tarjetas: true, titulo: 'Pases y membresías', icono: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5z" fill="url(#ffFuego)"/><path d="M12 8.2l1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4z" style="fill: var(--ff-noche)" opacity=".7"/></svg>' },
+    ];
+    // Grupos que el cliente dejó abiertos: se respetan al volver a dibujar (p. ej. al aplicar un código)
+    const gruposAbiertos = new Set();
+
+    function abrirGrupo(grupo, abrir) {
+      grupo.classList.toggle('abierto', abrir);
+      grupo.querySelector('.grupo-cabecera').setAttribute('aria-expanded', String(abrir));
+      // Cerrado: las tarjetas no reciben foco con el teclado
+      grupo.querySelector('.grupo-cuerpo').inert = !abrir;
+      if (abrir) gruposAbiertos.add(grupo.dataset.grupo); else gruposAbiertos.delete(grupo.dataset.grupo);
+    }
+
+    function dibujarTarjetas(container, paquetes, elegido) {
       paquetes.forEach((item, index) => {
         const card = document.createElement('div');
         const esUltimoImpar = (paquetes.length % 2 !== 0) && (index === paquetes.length - 1);
@@ -1029,6 +1093,9 @@
     function seleccionarProducto(cardElement, paquete) {
       document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
       cardElement.classList.add('selected'); paqueteSeleccionado = paquete;
+      // Si lo eligió el chat o el último pedido, su grupo se abre para que se vea
+      const grupo = cardElement.closest('.grupo-paquetes');
+      if (grupo && !grupo.classList.contains('abierto')) abrirGrupo(grupo, true);
       document.getElementById('montoPagar').innerText = `${paquete.precio} Bs`;
       verificarEstadoDesbloqueo();
     }
