@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <script>
+    // Modo ligero: en celulares sencillos, con ahorro de datos o "reducir movimiento" se quitan el desenfoque y las animaciones de adorno (css/ligero.css)
+    (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css'; document.head.appendChild(l); } })();
+  </script>
   <title>Level Up - Recargas Roblox Pro</title>
   <meta name="description" content="Compra Robux con Pago Móvil y recibe tu código en segundos. 1,5 % menos con código de creador.">
   <meta name="theme-color" content="#0f172a">
@@ -23,12 +27,14 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
   <!-- Lector de referencias con Tesseract (compartido entre juegos; Tesseract se descarga bajo demanda) -->
   <script src="/js/lector-referencia.js" defer></script>
   <!-- Código de descuento (compartido con Free Fire y Blood Strike) -->
   <script src="/js/descuento.js" defer></script>
   <script src="/js/ultimo-id.js" defer></script>
+  <script src="/js/datos-pago.js" defer></script>
   <script src="/js/aviso-codigo.js?v=3" defer></script>
   <style>
     :root {
@@ -880,21 +886,6 @@
   </div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyBIdEh_HzzB8dnzG8qkPQYOIo2kSb_F6xQ",
-      authDomain: "levelupstore-87d4d.firebaseapp.com",
-      projectId: "levelupstore-87d4d",
-      storageBucket: "levelupstore-87d4d.firebasestorage.app",
-      messagingSenderId: "948536026825",
-      appId: "1:948536026825:web:80520e4be7514a134d8f18",
-      measurementId: "G-3F8E5RCFS6"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
 
     let paqueteSeleccionado = null; 
     let usuarioVerificado = false;
@@ -919,9 +910,8 @@
 
     async function cargarDatosBancarios() {
       try {
-        const docSnap = await getDoc(doc(db, "configuracion", "pago_movil"));
-        if (docSnap.exists()) {
-          const data = docSnap.data(); 
+        const data = await DatosPago.leer();
+        if (data) {
           datosBancoGlobal = { banco: data.banco, telefono: data.telefono, cedula: data.cedula };
           document.getElementById('bankInfoContainer').innerHTML = `
             <div class="bank-row">Banco: <span class="bank-value">${datosBancoGlobal.banco}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('banco', this)" aria-label="Copiar banco">📋</button></div>

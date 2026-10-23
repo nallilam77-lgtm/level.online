@@ -102,6 +102,12 @@ La interfaz nunca debe verse amontonada:
 
 ---
 
+## 6. Modo ligero (celulares sencillos)
+
+`css/ligero.css` solo se carga cuando el script del `<head>` pone la clase `ligero` en `<html>`. Ahí, y solo ahí, se permite quitar el glass (`backdrop-filter`) y las animaciones de adorno: es la excepción al punto 3 para que la tienda no se trabe en teléfonos baratos. Toda página nueva de `public/` lleva ese script en el `<head>`.
+
+---
+
 ## Antes de entregar un cambio de estilos
 
 - [ ] Ningún color fuera de las variables de `:root`.

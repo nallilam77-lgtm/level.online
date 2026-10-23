@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <script>
+    // Modo ligero: en celulares sencillos, con ahorro de datos o "reducir movimiento" se quitan el desenfoque y las animaciones de adorno (css/ligero.css)
+    (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css'; document.head.appendChild(l); } })();
+  </script>
   <meta name="description" content="Level Up - Centro de Recargas de Free Fire, Roblox, Blood Strike y Mobile Legends. El servicio más rápido y seguro de Venezuela.">
   <meta name="theme-color" content="#0f172a">
   <title>Level Up - Centro de Recargas</title>
@@ -154,6 +158,10 @@
     .video-container iframe {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;
     }
+    .video-portada { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; background: var(--bg-deep); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .video-portada[hidden] { display: none; }
+    .video-portada img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.55; }
+    .video-play { position: relative; min-height: 48px; display: inline-flex; align-items: center; padding: 0 24px; border-radius: 50px; background: var(--cta-gradient); color: var(--on-cta); font-family: 'Montserrat', sans-serif; font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: var(--shadow-lg), var(--shadow-glow); }
     .tutorial-close-btn {
       position: absolute; top: 12px; right: 15px; font-size: 22px;
       cursor: pointer; color: #ff3333; transition: transform 0.3s;
@@ -451,6 +459,11 @@
       <div class="video-container">
         <!-- El video se carga al abrir el modal (data-src): así no gasta datos en cada visita -->
         <iframe id="youtubeShort" title="Cómo recargar en Level Up" data-src="https://www.youtube.com/embed/X5OnxF-ROe4?autoplay=1&mute=1&loop=1&playlist=X5OnxF-ROe4" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        <!-- Modo ligero: en la primera visita sale esta portada y el video (más de 1 MB) solo se carga si lo tocan -->
+        <button type="button" class="video-portada" id="videoPortada" hidden onclick="reproducirTutorial()">
+          <img data-src="https://i.ytimg.com/vi/X5OnxF-ROe4/hqdefault.jpg" alt="">
+          <span class="video-play">▶ Ver el video</span>
+        </button>
       </div>
     </div>
   </div>
@@ -484,7 +497,7 @@
   <aside class="sidebar" id="sidebarMenu">
     <div class="close-btn" onclick="toggleMenu()" aria-label="Cerrar menú">✖</div>
     <div class="sidebar-logo">
-      <img src="logo.png" alt="Logo Level Up"> LEVEL<span>UP</span>
+      <img src="logo-chico.png" alt="Logo Level Up" width="36" height="35"> LEVEL<span>UP</span>
     </div>
     
     <a href="index.html">🏠 Inicio</a>
@@ -501,7 +514,7 @@
   <nav>
     <div class="menu-toggle" onclick="toggleMenu()" aria-label="Abrir menú">☰</div>
     <a href="index.html" class="nav-logo">
-      <img src="logo.png" alt="Logo Level Up"> LEVEL<span>UP</span>
+      <img src="logo-chico.png" alt="Logo Level Up" width="36" height="35"> LEVEL<span>UP</span>
     </a>
   </nav>
 
@@ -627,11 +640,24 @@
     let urlDestinoPendiente = '';
 
     // --- FUNCIONES DEL MODAL TUTORIAL (SHORT YOUTUBE) ---
-    function abrirTutorial() {
-      const iframe = document.getElementById('youtubeShort');
-      iframe.src = iframe.dataset.src;
+    // "conPortada": en modo ligero, la apertura automática muestra la portada en vez de cargar el video
+    function abrirTutorial(conPortada = false) {
+      const portada = document.getElementById('videoPortada');
+      if (conPortada) {
+        const img = portada.querySelector('img');
+        if (!img.src) img.src = img.dataset.src;
+        portada.hidden = false;
+      } else {
+        reproducirTutorial();
+      }
       document.getElementById('tutorialModal').style.display = 'flex';
       body.classList.add('no-scroll');
+    }
+
+    function reproducirTutorial() {
+      const iframe = document.getElementById('youtubeShort');
+      iframe.src = iframe.dataset.src;
+      document.getElementById('videoPortada').hidden = true;
     }
 
     // Se abre solo en la primera visita; después, con el botón "¿Cómo recargar?".
@@ -639,7 +665,7 @@
     try {
       if (!localStorage.getItem('tutorial_visto')) {
         localStorage.setItem('tutorial_visto', '1');
-        abrirTutorial();
+        abrirTutorial(document.documentElement.classList.contains('ligero'));
       }
     } catch (e) { /* almacenamiento bloqueado: el botón sigue disponible */ }
 
@@ -648,6 +674,7 @@
       const iframe = document.getElementById('youtubeShort');
       // Limpiamos el src para detener el video al cerrar
       iframe.src = '';
+      document.getElementById('videoPortada').hidden = true;
       modal.style.display = 'none';
       body.classList.remove('no-scroll');
     }

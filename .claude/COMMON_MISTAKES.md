@@ -122,3 +122,9 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 **Síntoma**: en Free Fire, Blood Strike y Roblox la tarjeta salía angosta, con los precios cortados, y el pie legal a su derecha sin estilo.
 **Causa**: al insertar el bloque "TEMA …" antes de `</style>` se reemplazó también la línea `<link rel="stylesheet" href="css/pie-legal.css">` (es la que pone `flex-wrap` en `body.pagina-juego`).
 **Regla**: al tocar el final del `<style>` de una tienda, comprobar que siguen los tres `<link>` (pie-legal, descuento, aviso-codigo). Revisar a 360 y 390 px con capturas reales, no solo la sintaxis: Edge sin interfaz no baja de ~500 px de ventana, así que la página se mete en un iframe del ancho del celular.
+
+## 12. Tiendas lentas en celulares sencillos (2026-10-23)
+
+**Síntoma**: en teléfonos baratos o con datos lentos la tienda tardaba en mostrar los precios y se trababa al bajar.
+**Causa**: el `<script type="module">` de cada tienda importaba el SDK de Firebase (~300 KB) solo para leer los datos de Pago Móvil, y TODO el módulo (catálogo, chat, verificación) esperaba esa descarga; además, muchas capas con `backdrop-filter` (una dentro de otra) y animaciones sin fin.
+**Regla**: no volver a importar Firebase en las tiendas: usar `DatosPago.leer()` (`js/datos-pago.js`). Lo que sea solo adorno y cueste en un teléfono barato se apaga en `css/ligero.css`; si una clase nueva arranca con `opacity: 0` y aparece con una animación, agregarla ahí con `opacity: 1` (en modo ligero las animaciones duran 0,01 ms). Los indicadores de "cargando" se reactivan en ese mismo archivo. Caché de Vercel (`vercel.json`): imágenes 1 día, `css/` y `js/` 5 min; si cambias una imagen y debe verse ya, cámbiale el nombre.

@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    // Modo ligero: en celulares sencillos, con ahorro de datos o "reducir movimiento" se quitan el desenfoque y las animaciones de adorno (css/ligero.css)
+    (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css'; document.head.appendChild(l); } })();
+  </script>
   <meta name="description" content="Términos y Condiciones de Level Up, servicio independiente de recargas de videojuegos en Venezuela.">
   <meta name="theme-color" content="#0f172a">
   <title>Términos y Condiciones - Level Up</title>
@@ -38,7 +42,7 @@
   <aside class="sidebar" id="sidebarMenu">
     <button type="button" class="close-btn" onclick="toggleMenu()" aria-label="Cerrar menú">✖</button>
     <div class="sidebar-logo">
-      <img src="logo.png" alt="Logo Level Up"> LEVEL<span>UP</span>
+      <img src="logo-chico.png" alt="Logo Level Up" width="36" height="35"> LEVEL<span>UP</span>
     </div>
 
     <a href="index.html">🏠 Inicio</a>
@@ -55,7 +59,7 @@
   <div class="barra-superior">
     <button type="button" class="menu-toggle" onclick="toggleMenu()" aria-label="Abrir menú">☰</button>
     <a href="index.html" class="nav-logo">
-      <img src="logo.png" alt="Logo Level Up"> LEVEL<span>UP</span>
+      <img src="logo-chico.png" alt="Logo Level Up" width="36" height="35"> LEVEL<span>UP</span>
     </a>
   </div>
 
