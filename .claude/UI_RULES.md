@@ -104,7 +104,7 @@ La interfaz nunca debe verse amontonada:
 
 ## 6. Modo ligero (celulares sencillos)
 
-`css/ligero.css` solo se carga cuando el script del `<head>` pone la clase `ligero` en `<html>`. Ahí, y solo ahí, se permite quitar el glass (`backdrop-filter`) y las animaciones de adorno: es la excepción al punto 3 para que la tienda no se trabe en teléfonos baratos. Toda página nueva de `public/` lleva ese script en el `<head>`.
+`css/ligero.css` solo se carga cuando el script del `<head>` pone la clase `ligero` en `<html>`: **en todos los celulares y tablets** (`pointer: coarse`), con ahorro de datos, 2G o "reducir movimiento". Ahí, y solo ahí, se quitan el glass (`backdrop-filter`), animaciones, transiciones, filtros, `transform` de hover y las sombras grandes de tarjetas: es la excepción a los puntos 3 y 4, pedida por el dueño porque las animaciones trababan la tienda en los teléfonos. El glass y las sombras quedan para computadora. Toda página nueva de `public/` lleva ese script en el `<head>`.
 
 ---
 

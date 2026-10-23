@@ -44,7 +44,7 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 ├── admin.html            Panel (lee Firestore)
 ├── js/lector-referencia.js   Lee la referencia del comprobante (Tesseract)
 ├── js/datos-pago.js   Datos de Pago Móvil (Firestore configuracion/pago_movil) por la API REST: las tiendas ya NO cargan el SDK de Firebase
-├── css/ligero.css   Modo ligero: el script del <head> de cada página pone la clase "ligero" en <html> (≤2 GB de RAM, ≤4 núcleos, ahorro de datos, 2G o "reducir movimiento") y solo entonces carga este CSS: sin desenfoque ni animaciones de adorno; en inicio, el video del tutorial sale como portada
+├── css/ligero.css   Modo ligero: el script del <head> de cada página pone la clase "ligero" en <html> (todo celular/tablet con pantalla táctil, ≤2 GB de RAM, ≤4 núcleos, ahorro de datos, 2G o "reducir movimiento") y solo entonces carga este CSS (`?v=N`): sin desenfoque, animaciones, transiciones, filtros ni sombras grandes; en inicio, el video del tutorial sale como portada
 ├── logo-chico.png   Logo de 96 px para las barras (logo.png queda para el ícono de la pestaña)
 ├── js/ultimo-id.js   Último ID confirmado por juego en ESTE dispositivo (localStorage `levelup_ultimo_id`, 90 días; ML guarda también la zona, Roblox el usuario). Cada tienda lo escribe sola al cargar (el cliente lo confirma) y el chat ofrece "recargar a mi último ID"
 ├── js/descuento.js + css/descuento.css   Campo "código de descuento" (Free Fire, Blood Strike y Roblox)
