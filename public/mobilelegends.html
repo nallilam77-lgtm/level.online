@@ -616,8 +616,36 @@
     .chat-resumen { font-size: 12px; text-align: left; line-height: 1.6; margin: 6px 0 10px; }
     .chat-resumen strong { color: var(--game-text); }
 
+    /* Catálogo en grupos desplegables (Diamantes directos / Pases y membresías): filo dorado y piezas en hexágono */
+    .grupo-paquetes { grid-column: 1 / -1; position: relative; overflow: hidden; border-radius: var(--radius-card); border: 1px solid rgba(var(--game-accent-rgb), 0.25); background: linear-gradient(180deg, rgba(var(--game-accent-2-rgb), 0.08), var(--surface) 70%); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--shadow-lg), var(--shadow-glow); transition: border-color 0.25s ease, box-shadow 0.25s ease; }
+    .grupo-paquetes::before { content: ''; position: absolute; top: 0; left: 18%; right: 18%; height: 2px; background: linear-gradient(90deg, transparent, var(--game-accent), transparent); opacity: 0.6; transition: opacity 0.25s ease, left 0.25s ease, right 0.25s ease; }
+    .grupo-paquetes.abierto { border-color: rgba(var(--game-accent-rgb), 0.55); box-shadow: var(--shadow-lg), 0 0 18px rgba(var(--game-accent-rgb), 0.22); }
+    .grupo-paquetes.abierto::before { opacity: 1; left: 6%; right: 6%; }
+    .grupo-cabecera { width: 100%; min-height: 64px; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: none; border: 0; color: var(--text-main); font-family: 'Montserrat', sans-serif; text-align: left; cursor: pointer; border-radius: var(--radius-card); }
+    .grupo-cabecera:focus-visible { outline: 2px solid var(--game-accent); outline-offset: -2px; }
+    .grupo-icono { flex: 0 0 auto; width: 42px; height: 40px; display: flex; align-items: center; justify-content: center; background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.22), rgba(var(--game-accent-2-rgb), 0.10)); clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%); }
+    .grupo-icono svg { width: 24px; height: 24px; display: block; color: var(--ml-azul-noche); filter: drop-shadow(0 0 6px rgba(var(--game-accent-2-rgb), 0.5)); }
+    .grupo-textos { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .grupo-titulo { font-size: 14px; font-weight: 800; letter-spacing: 0.3px; text-transform: uppercase; }
+    .grupo-detalle { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    .grupo-detalle strong { color: var(--game-text); white-space: nowrap; }
+    .grupo-flecha { flex: 0 0 auto; width: 34px; height: 32px; display: flex; align-items: center; justify-content: center; background: rgba(var(--game-accent-rgb), 0.14); color: var(--game-text); clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%); transition: transform 0.3s ease, background 0.25s ease; }
+    .grupo-flecha svg { width: 16px; height: 16px; display: block; }
+    .grupo-cabecera:hover .grupo-flecha { background: rgba(var(--game-accent-rgb), 0.26); }
+    .grupo-paquetes.abierto .grupo-flecha { transform: rotate(180deg); }
+    .grupo-cuerpo { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease; }
+    .grupo-paquetes.abierto .grupo-cuerpo { grid-template-rows: 1fr; }
+    .grupo-cuerpo > .grupo-recorte { overflow: hidden; min-height: 0; }
+    .grupo-cuerpo .catalog-grid { margin: 0; padding: 6px 10px 16px; }
+    @media (max-width: 380px) {
+      .grupo-cabecera { gap: 10px; padding: 12px; }
+      .grupo-titulo { font-size: 12.5px; letter-spacing: 0; }
+      .grupo-detalle { font-size: 11px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .ml-emblema, .btn-submit-order::after, .btn-verify::after, .sticky-cta-btn.ready::after { animation: none; }
+      .grupo-cuerpo, .grupo-flecha { transition: none; }
     }
   </style>
   <link rel="stylesheet" href="css/pie-legal.css">
@@ -1028,7 +1056,45 @@
       window.catalogoGlobal = paquetes;
       const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.diamantes) : null;
 
-        container.innerHTML = '';
+      container.innerHTML = '';
+      // Dos grupos que se abren y cierran tocándolos; las tarjetas quedan en el mismo orden que catalogoGlobal
+      const grupos = GRUPOS_CATALOGO.map((g) => ({ ...g, lista: paquetes.filter((p) => esPase(p.diamantes) === g.pases) }))
+        .filter((g) => g.lista.length);
+      grupos.forEach((g) => {
+        const desde = g.lista.reduce((min, p) => (window.formatearMontoVES(p.precio) < window.formatearMontoVES(min.precio) ? p : min));
+        const grupo = document.createElement('section');
+        grupo.className = 'grupo-paquetes';
+        grupo.dataset.grupo = g.clave;
+        grupo.innerHTML = `
+          <button type="button" class="grupo-cabecera" aria-expanded="false" aria-controls="grupo-${g.clave}">
+            <span class="grupo-icono">${g.icono}</span>
+            <span class="grupo-textos"><span class="grupo-titulo">${g.titulo}</span><span class="grupo-detalle">${g.lista.length} ${g.lista.length === 1 ? 'opción' : 'opciones'} · desde <strong>${desde.precio} Bs</strong></span></span>
+            <span class="grupo-flecha"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </button>
+          <div class="grupo-cuerpo"><div class="grupo-recorte"><div class="catalog-grid" id="grupo-${g.clave}"></div></div></div>`;
+        grupo.querySelector('.grupo-cabecera').addEventListener('click', () => abrirGrupo(grupo, !grupo.classList.contains('abierto')));
+        container.appendChild(grupo);
+        abrirGrupo(grupo, gruposAbiertos.has(g.clave));
+        dibujarTarjetas(grupo.querySelector('.catalog-grid'), g.lista, elegido);
+      });
+    }
+
+    const GRUPOS_CATALOGO = [
+      { clave: 'diamantes', pases: false, titulo: 'Diamantes directos', icono: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10l5 6-10 12L2 9z" fill="url(#mlGema)"/><path d="M2 9h20M7 3l5 18 5-18M7 3l5 6 5-6" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/></svg>' },
+      { clave: 'pases', pases: true, titulo: 'Pases y membresías', icono: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5 21 6.75v10.5L12 22.5 3 17.25V6.75z" fill="url(#mlOro)"/><path d="M12 6.5l1.6 3.3 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z" fill="currentColor" opacity=".75"/></svg>' },
+    ];
+    // Grupos que el cliente dejó abiertos: se respetan al volver a dibujar (p. ej. al aplicar un código)
+    const gruposAbiertos = new Set();
+
+    function abrirGrupo(grupo, abrir) {
+      grupo.classList.toggle('abierto', abrir);
+      grupo.querySelector('.grupo-cabecera').setAttribute('aria-expanded', String(abrir));
+      // Cerrado: las tarjetas no reciben foco con el teclado
+      grupo.querySelector('.grupo-cuerpo').inert = !abrir;
+      if (abrir) gruposAbiertos.add(grupo.dataset.grupo); else gruposAbiertos.delete(grupo.dataset.grupo);
+    }
+
+    function dibujarTarjetas(container, paquetes, elegido) {
         paquetes.forEach((item, index) => {
           const card = document.createElement('div');
           const esUltimoImpar = (paquetes.length % 2 !== 0) && (index === paquetes.length - 1);
@@ -1058,6 +1124,9 @@
     function seleccionarProducto(cardElement, paquete) {
       document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
       cardElement.classList.add('selected'); paqueteSeleccionado = paquete;
+      // Si lo eligió el chat o el último pedido, su grupo se abre para que se vea
+      const grupo = cardElement.closest('.grupo-paquetes');
+      if (grupo && !grupo.classList.contains('abierto')) abrirGrupo(grupo, true);
       document.getElementById('montoPagar').innerText = `${paquete.precio} Bs`;
       verificarEstadoDesbloqueo();
     }

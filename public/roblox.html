@@ -575,8 +575,34 @@
     .product-card { border-radius: 12px; background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.10), var(--surface) 65%); }
     .product-card.selected { background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.20), rgba(var(--game-accent-2-rgb), 0.06)); box-shadow: var(--shadow-lg), 0 0 0 1px rgba(var(--game-accent-2-rgb), 0.4), 0 0 22px rgba(var(--game-accent-rgb), 0.4); }
 
+    /* Catálogo en grupos desplegables (por tamaño de tarjeta): piezas cuadradas como bloques */
+    .grupo-paquetes { grid-column: 1 / -1; border-radius: 12px; border: 1px solid rgba(var(--game-accent-rgb), 0.28); background: linear-gradient(180deg, rgba(var(--game-accent-rgb), 0.08), var(--surface) 70%); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--shadow-lg), var(--shadow-glow); transition: border-color 0.25s ease, box-shadow 0.25s ease; }
+    .grupo-paquetes.abierto { border-color: rgba(var(--game-accent-2-rgb), 0.6); box-shadow: var(--shadow-lg), 0 0 18px rgba(var(--game-accent-rgb), 0.3); }
+    .grupo-cabecera { width: 100%; min-height: 64px; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: none; border: 0; color: var(--text-main); font-family: 'Montserrat', sans-serif; text-align: left; cursor: pointer; border-radius: 12px; }
+    .grupo-cabecera:focus-visible { outline: 2px solid var(--game-accent-2); outline-offset: 2px; }
+    .grupo-icono { flex: 0 0 auto; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: rgba(var(--game-accent-rgb), 0.18); box-shadow: inset 0 -3px 0 rgba(var(--game-accent-rgb), 0.35); }
+    .grupo-icono svg { width: 24px; height: 24px; display: block; filter: drop-shadow(0 0 6px rgba(var(--game-accent-2-rgb), 0.45)); }
+    .grupo-textos { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .grupo-titulo { font-size: 14px; font-weight: 800; letter-spacing: 0.3px; text-transform: uppercase; }
+    .grupo-detalle { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    .grupo-detalle strong { color: var(--game-text); white-space: nowrap; }
+    .grupo-flecha { flex: 0 0 auto; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(var(--game-accent-rgb), 0.16); color: var(--game-text); transition: transform 0.3s ease, background 0.25s ease; }
+    .grupo-flecha svg { width: 16px; height: 16px; display: block; }
+    .grupo-cabecera:hover .grupo-flecha { background: rgba(var(--game-accent-rgb), 0.3); }
+    .grupo-paquetes.abierto .grupo-flecha { transform: rotate(180deg); }
+    .grupo-cuerpo { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease; }
+    .grupo-paquetes.abierto .grupo-cuerpo { grid-template-rows: 1fr; }
+    .grupo-cuerpo > .grupo-recorte { overflow: hidden; min-height: 0; }
+    .grupo-cuerpo .catalog-grid { margin: 0; padding: 6px 10px 16px; }
+    @media (max-width: 380px) {
+      .grupo-cabecera { gap: 10px; padding: 12px; }
+      .grupo-titulo { font-size: 12.5px; letter-spacing: 0; }
+      .grupo-detalle { font-size: 11px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .juego-emblema, .btn-submit-order::after, .btn-verify::after, .sticky-cta-btn.ready::after { animation: none; }
+      .grupo-cuerpo, .grupo-flecha { transition: none; }
     }
   </style>
   <link rel="stylesheet" href="css/pie-legal.css">
@@ -970,12 +996,64 @@
     // Los textos vienen de la hoja: se pintan con textContent, nunca como HTML.
     // item.stock: 'disponible' | 'pocos' | 'agotado' (sin dato = se vende normal).
     const ICONO_ROBUX = '<svg class="juego-icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 21 7v10l-9 5-9-5V7z" style="fill: var(--game-accent-2)"/><path d="M12 6.5 16.5 9v6L12 17.5 7.5 15V9z" style="fill: var(--rb-azul-oscuro)"/><rect x="10" y="10" width="4" height="4" rx=".8" style="fill: var(--rb-azul-claro)"/></svg>';
+    // Grupos por tamaño de la tarjeta; lo que no empieza con un número (p. ej. Premium) va en "Otras tarjetas"
+    const cantidadRobux = (producto) => { const m = String(producto).match(/^\s*([\d.,]+)\s+/); return m ? Number(m[1].replace(/\D/g, '')) : null; };
+    const GRUPOS_CATALOGO = [
+      { clave: 'chicos', titulo: 'Hasta 1.000 Robux', entra: (n) => n !== null && n <= 1000 },
+      { clave: 'grandes', titulo: 'Más de 1.000 Robux', entra: (n) => n !== null && n > 1000 },
+      { clave: 'otras', titulo: 'Otras tarjetas', entra: (n) => n === null },
+    ];
+    // Grupos que el cliente dejó abiertos: se respetan al volver a dibujar (p. ej. al aplicar un código)
+    const gruposAbiertos = new Set();
+
+    function abrirGrupo(grupo, abrir) {
+      grupo.classList.toggle('abierto', abrir);
+      grupo.querySelector('.grupo-cabecera').setAttribute('aria-expanded', String(abrir));
+      // Cerrado: las tarjetas no reciben foco con el teclado
+      grupo.querySelector('.grupo-cuerpo').inert = !abrir;
+      if (abrir) gruposAbiertos.add(grupo.dataset.grupo); else gruposAbiertos.delete(grupo.dataset.grupo);
+    }
+
     function renderizarCatalogo(lista) {
-      // El chat elige paquetes de esta misma lista (mismo orden que las tarjetas)
-      window.catalogoGlobal = lista;
+      const grupos = GRUPOS_CATALOGO.map((g) => ({ ...g, lista: lista.filter((p) => g.entra(cantidadRobux(p.producto))) }))
+        .filter((g) => g.lista.length);
+      // El chat elige paquetes de esta misma lista (mismo orden que las tarjetas, grupo por grupo)
+      window.catalogoGlobal = grupos.flatMap((g) => g.lista);
       const container = document.getElementById('catalogContainer');
       const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.producto) : null;
       container.replaceChildren();
+      grupos.forEach((g) => {
+        const grupo = document.createElement('section');
+        grupo.className = 'grupo-paquetes';
+        grupo.dataset.grupo = g.clave;
+        grupo.innerHTML = `
+          <button type="button" class="grupo-cabecera" aria-expanded="false" aria-controls="grupo-${g.clave}">
+            <span class="grupo-icono">${ICONO_ROBUX.replace('class="juego-icono" ', '')}</span>
+            <span class="grupo-textos"><span class="grupo-titulo"></span><span class="grupo-detalle"></span></span>
+            <span class="grupo-flecha"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </button>
+          <div class="grupo-cuerpo"><div class="grupo-recorte"><div class="catalog-grid" id="grupo-${g.clave}"></div></div></div>`;
+        // Precios de la hoja: como texto, nunca como HTML
+        grupo.querySelector('.grupo-titulo').textContent = g.titulo;
+        const detalle = grupo.querySelector('.grupo-detalle');
+        const conStock = g.lista.filter((p) => p.stock !== 'agotado');
+        if (conStock.length) {
+          const desde = conStock.reduce((min, p) => (montoANumero(p.precio) < montoANumero(min.precio) ? p : min));
+          const fuerte = document.createElement('strong');
+          fuerte.textContent = formatoBs(desde.precio);
+          detalle.append(`${conStock.length} ${conStock.length === 1 ? 'opción' : 'opciones'} · desde `, fuerte);
+        } else {
+          detalle.textContent = 'Agotado por ahora';
+        }
+        grupo.querySelector('.grupo-cabecera').addEventListener('click', () => abrirGrupo(grupo, !grupo.classList.contains('abierto')));
+        container.appendChild(grupo);
+        abrirGrupo(grupo, gruposAbiertos.has(g.clave));
+        dibujarTarjetas(grupo.querySelector('.catalog-grid'), g.lista, elegido);
+      });
+      pintarResumenStock(lista);
+    }
+
+    function dibujarTarjetas(container, lista, elegido) {
       const div = (clase, texto) => { const el = document.createElement('div'); el.className = clase; el.textContent = texto; return el; };
       lista.forEach((item, index) => {
         const card = document.createElement('div');
@@ -1015,7 +1093,6 @@
         card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, paquete); } });
         if (elegido !== null && String(item.producto) === elegido) seleccionarProducto(card, paquete);
       });
-      pintarResumenStock(lista);
     }
 
     // "✅ Hay Robux de: 400, 800 y 1.700 · ❌ Agotado: 4.500"
@@ -1048,8 +1125,11 @@
 
     function seleccionarProducto(cardElement, paquete) {
       document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
-      cardElement.classList.add('selected'); 
+      cardElement.classList.add('selected');
       paqueteSeleccionado = paquete;
+      // Si lo eligió el chat o el último pedido, su grupo se abre para que se vea
+      const grupo = cardElement.closest('.grupo-paquetes');
+      if (grupo && !grupo.classList.contains('abierto')) abrirGrupo(grupo, true);
       document.getElementById('montoPagar').innerText = formatoBs(paquete.precio);
       verificarEstadoDesbloqueo();
     }
