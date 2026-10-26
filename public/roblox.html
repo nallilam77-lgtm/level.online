@@ -355,6 +355,14 @@
     .tx-caja { background: #0b1120; border: 2px dashed var(--game-text); padding: 12px; border-radius: 12px; margin: 15px 0; font-size: 16px; font-weight: 900; color: var(--game-text); letter-spacing: 1px; user-select: all; word-break: break-all; }
     .tx-caja.warning { border-color: var(--warning); color: var(--warning); }
     .tx-caja.success { border-color: var(--success); color: var(--success); }
+    /* Pantalla de éxito: dejar claro que el código hay que canjearlo (los Robux no llegan solos) */
+    .aviso-canje { background: var(--warning-dark); border-left: 4px solid var(--warning); color: var(--warning); border-radius: 8px; padding: 10px 12px; margin: 4px 0 0; font-size: 13px; line-height: 1.4; text-align: left; }
+    .btn-copiar-codigo { width: 100%; min-height: 44px; margin: -4px 0 16px; border: none; border-radius: 10px; background: var(--success); color: var(--bg-base); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; cursor: pointer; }
+    .pasos-canje { list-style: none; counter-reset: paso; margin: 0 0 10px; padding: 0; display: grid; gap: 10px; text-align: left; }
+    .pasos-canje li { counter-increment: paso; display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: start; color: var(--text-main); font-size: 12.5px; line-height: 1.45; }
+    .pasos-canje li::before { content: counter(paso); width: 24px; height: 24px; border-radius: 50%; background: var(--game-accent); color: var(--on-cta); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+    .pasos-canje a { color: var(--game-text); font-weight: 800; }
+    .nota-guardar { color: var(--text-muted); font-size: 11.5px; margin: 0 0 16px; }
     
     .btn-volver-inicio { background: var(--primary-gradient); color: var(--on-cta); padding: 12px 20px; border-radius: 10px; font-weight: 900; text-decoration: none; display: inline-block; width: 100%; transition: 0.3s; font-family: 'Montserrat', sans-serif; font-size: 13px; }
     .btn-volver-inicio:hover { box-shadow: 0 8px 20px rgba(var(--game-accent-rgb), 0.5); }
@@ -703,15 +711,35 @@
   <!-- MODAL DE ÉXITO Y PIN GENERADO -->
   <div id="modalExitosa" class="overlay-pantalla">
     <div class="modal-content success-theme" id="pantallaExito">
-      <div style="font-size: 50px; margin-bottom: 8px; animation: floating 3s infinite;">✅</div>
-      <h2 class="modal-titulo" style="font-size: 20px;">¡CÓDIGO DE ROBLOX LISTO!</h2>
-      <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu PIN se ha obtenido exitosamente de la bóveda:</p>
+      <div style="font-size: 44px; margin-bottom: 4px; animation: floating 3s infinite;">✅</div>
+      <h2 class="modal-titulo" style="font-size: 20px;">¡COMPRA EXITOSA!</h2>
+      <p class="aviso-canje"><strong>Tus Robux todavía NO están en tu cuenta.</strong> No llegan solos: tienes que canjear este código.</p>
       <div class="tx-caja success" id="codigoPinRoblox">XXXX-XXXX-XXXX</div>
-      <p style="color: var(--game-text); font-size: 11px; font-weight: 700; margin-bottom: 18px; background: rgba(var(--game-accent-rgb),0.1); padding: 8px; border-radius: 8px;">⚠️ Cópialo y canjéalo directamente en roblox.com/redeem.</p>
-      
-      <button type="button" class="btn-confirmar" style="background: var(--game-gradient); color: var(--on-cta); margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(var(--game-accent-2-rgb), 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
-      
-      <a href="index.html" class="btn-volver-inicio" style="background: var(--success); color: #000;">NUEVA RECARGA</a>
+      <button type="button" class="btn-copiar-codigo" id="btnCopiarCodigo" onclick="copiarCodigoRoblox()">📋 COPIAR CÓDIGO</button>
+
+      <ol class="pasos-canje">
+        <li><span>Entra a <a href="https://www.roblox.com/redeem" target="_blank" rel="noopener">roblox.com/redeem</a> e inicia sesión con la cuenta que recibirá los Robux.</span></li>
+        <li><span>Pega el código y toca <strong>Canjear</strong>.</span></li>
+        <li><span>Si te aparece como saldo (Crédito de Roblox), toca <strong>Convertir crédito en Robux</strong> y confirma.</span></li>
+      </ol>
+      <p class="nota-guardar">📸 Toma captura de pantalla para no perder el código.</p>
+
+      <button type="button" class="btn-confirmar" style="background: var(--game-gradient); color: var(--on-cta); margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(var(--game-accent-2-rgb), 0.4); font-size: 14px;" onclick="salirDeExito(abrirRuletaAutomatica)">🎁 IR A LA RULETA DE LA SUERTE</button>
+
+      <button type="button" class="btn-volver-inicio" style="background: var(--success); color: var(--bg-base); border: none; cursor: pointer;" onclick="salirDeExito(() => { window.location.href = 'index.html'; })">NUEVA RECARGA</button>
+    </div>
+  </div>
+
+  <!-- AVISO AL SALIR DE LA PANTALLA DE ÉXITO: que el cliente confirme que guardó el código -->
+  <div id="modalGuardarCodigo" class="overlay-pantalla">
+    <div class="modal-content warning-theme">
+      <h2 class="modal-titulo">⚠️ ¿GUARDASTE TU CÓDIGO?</h2>
+      <p class="modal-texto">Al salir, el código ya no se muestra en esta página. <strong>Sin canjearlo no recibes los Robux.</strong></p>
+      <div class="tx-caja success" id="codigoPinRepetido">XXXX-XXXX-XXXX</div>
+      <div class="modal-botones">
+        <button type="button" class="btn-revisar" onclick="volverAlCodigo()">VER CÓDIGO</button>
+        <button type="button" class="btn-confirmar" onclick="confirmarCodigoGuardado()">SÍ, LO GUARDÉ</button>
+      </div>
     </div>
   </div>
 
@@ -1568,6 +1596,8 @@
           setTimeout(() => {
             document.getElementById('pantallaProcesando').style.display = 'none';
             document.getElementById('modalExitosa').style.display = 'flex';
+            // Hasta que confirme que guardó el código, cerrar la pestaña pide confirmación
+            window.addEventListener('beforeunload', avisoAntesDeSalir);
             isProcessing = false;
           }, 600);
 
@@ -1575,6 +1605,52 @@
           mostrarErrorGeneral("⚠️ ERROR DE CONEXIÓN", "Tuvimos inconvenientes al conectar con el servidor. Por favor intenta nuevamente.", "");
           isProcessing = false; btnConfirmar.disabled = false;
       }
+    };
+
+    // =======================================================
+    // 🎟️ CÓDIGO ENTREGADO: copiar y confirmar que lo guardó antes de salir
+    // Muchos clientes creían que los Robux llegaban solos y cerraban sin copiar el código.
+    // =======================================================
+    let codigoGuardado = false;
+    let salidaPendiente = null;
+    const avisoAntesDeSalir = (e) => { e.preventDefault(); e.returnValue = ''; };
+
+    window.copiarCodigoRoblox = function() {
+      const codigo = document.getElementById('codigoPinRoblox').textContent.trim();
+      const boton = document.getElementById('btnCopiarCodigo');
+      navigator.clipboard.writeText(codigo).then(() => {
+        mostrarBurbuja("✅ ¡Código copiado! Ahora pégalo en roblox.com/redeem", "var(--success)");
+        boton.textContent = "✅ ¡CÓDIGO COPIADO!";
+        setTimeout(() => { boton.textContent = "📋 COPIAR CÓDIGO"; }, 3000);
+      }).catch(() => {
+        // Sin permiso para el portapapeles: se selecciona el código para copiarlo a mano
+        window.getSelection().selectAllChildren(document.getElementById('codigoPinRoblox'));
+        mostrarBurbuja("Mantén presionado el código para copiarlo", "var(--warning)");
+      });
+    };
+
+    // Antes de salir de la pantalla del código (ruleta o nueva recarga) pregunta si lo guardó, una sola vez
+    window.salirDeExito = function(accion) {
+      if (codigoGuardado) return accion();
+      salidaPendiente = accion;
+      document.getElementById('codigoPinRepetido').textContent = document.getElementById('codigoPinRoblox').textContent;
+      document.getElementById('modalExitosa').style.display = 'none';
+      document.getElementById('modalGuardarCodigo').style.display = 'flex';
+    };
+
+    window.volverAlCodigo = function() {
+      salidaPendiente = null;
+      document.getElementById('modalGuardarCodigo').style.display = 'none';
+      document.getElementById('modalExitosa').style.display = 'flex';
+    };
+
+    window.confirmarCodigoGuardado = function() {
+      codigoGuardado = true;
+      window.removeEventListener('beforeunload', avisoAntesDeSalir);
+      document.getElementById('modalGuardarCodigo').style.display = 'none';
+      const accion = salidaPendiente;
+      salidaPendiente = null;
+      if (accion) accion();
     };
 
     // =======================================================
