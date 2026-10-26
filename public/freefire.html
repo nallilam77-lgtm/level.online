@@ -561,6 +561,8 @@
     .product-card.skeleton::before { display: none; }
     .juego-icono { width: 30px; height: 30px; display: block; margin: 0 auto 6px; filter: drop-shadow(0 0 8px rgba(var(--game-accent-rgb), 0.5)); transition: transform 0.25s ease; }
     .product-card:hover .juego-icono, .product-card.selected .juego-icono { transform: translateY(-2px) rotate(-6deg) scale(1.08); }
+    /* Imagen de pases y tarjetas (img/productos/freefire/): altura fija para que la tarjeta no salte al cargar */
+    .producto-imagen { display: block; height: 56px; width: auto; max-width: 100%; margin: 0 auto 8px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(var(--game-accent-rgb), 0.3)); }
 
     /* Botones con un destello que los cruza */
     .btn-submit-order, .btn-verify, .sticky-cta-btn { position: relative; overflow: hidden; letter-spacing: 0.8px; }
@@ -997,6 +999,17 @@
     const esTarjeta = (texto) => /[a-zñ]/i.test(String(texto).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/free\s*fire|latam|diamantes?|diamonds?/gi, ''));
     const etiquetaTarjeta = (texto) => (/semanal|weekly|mensual|monthly/i.test(String(texto)) ? 'Membresía' : 'Pase');
     const ICONO_PAQUETE = '<svg class="juego-icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10l5 6-10 12L2 9z" fill="url(#ffFuego)"/><path d="M2 9h20M7 3l5 18 5-18M7 3l5 6 5-6" fill="none" style="stroke: var(--ff-noche)" stroke-width="1" opacity=".45"/></svg>';
+    // Imagen de cada pase o tarjeta según su nombre en la hoja; si ninguno coincide, la tarjeta queda solo con texto
+    const IMAGENES_PRODUCTO = [
+      [/booyah/i, 'pase-booyah'],
+      [/semanal|weekly/i, 'tarjeta-semanal'],
+      [/mensual|monthly/i, 'tarjeta-mensual'],
+      [/subida\s*de\s*nivel/i, 'pase-subida-nivel'],
+    ];
+    const imagenProducto = (texto) => {
+      const coincide = IMAGENES_PRODUCTO.find(([patron]) => patron.test(String(texto)));
+      return coincide ? `<img class="producto-imagen" src="img/productos/freefire/${coincide[1]}.webp" alt="" loading="lazy" decoding="async">` : '';
+    };
     const nombrePaquete = (item) => {
       const texto = String(item.diamantes).trim();
       return esTarjeta(texto) ? texto : `${texto.replace(/diamantes/gi, '').trim()} Diamantes`;
@@ -1062,9 +1075,11 @@
         const precioTachado = item.precioOriginal !== undefined ? `<div class="price-original">${item.precioOriginal} Bs</div>` : '';
         // "etiqueta" es opcional en el catálogo (ej: "🔥 Más popular"); si no viene, no se muestra badge
         const titulo = esTarjeta(item.diamantes)
-          ? `<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="diamonds-label">${etiquetaTarjeta(item.diamantes)}</div>`
+          ? `${imagenProducto(item.diamantes)}<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="diamonds-label">${etiquetaTarjeta(item.diamantes)}</div>`
           : `${ICONO_PAQUETE}<div class="diamonds-count">${cantidad}</div><div class="diamonds-label">Diamantes</div>`;
         card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}${titulo}${precioTachado}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
+        // Si la imagen no carga (archivo borrado o renombrado), se quita y la tarjeta queda solo con texto
+        card.querySelector('.producto-imagen')?.addEventListener('error', (e) => e.target.remove());
         card.addEventListener('click', () => seleccionarProducto(card, item));
         card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, item); } });
         container.appendChild(card);
