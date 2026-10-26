@@ -548,6 +548,11 @@
     .juego-hero { display: grid; justify-items: center; gap: 4px; text-align: center; margin: 4px 0 18px; }
     .juego-emblema { width: 68px; height: 68px; filter: drop-shadow(0 0 14px rgba(var(--game-accent-rgb), 0.55)); animation: flotarEmblema 3.6s ease-in-out infinite; }
     .juego-emblema svg { width: 100%; height: 100%; display: block; }
+    /* Logo del juego en lugar del título de texto (img/juegos/); el <h1> conserva el nombre en el alt */
+    .title-banner--logo { background: none; line-height: 0; margin: 6px 0 4px; }
+    .title-banner--logo img { display: block; width: auto; height: auto; max-width: min(260px, 72vw); max-height: 64px; margin: 0 auto; }
+    /* SVG invisible que solo guarda los degradados de los íconos de paquetes y grupos */
+    .degradados-svg { position: absolute; width: 0; height: 0; overflow: hidden; }
     .juego-kicker { font-family: 'Montserrat', sans-serif; font-size: 10px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--game-text); }
     .title-banner {
       margin-bottom: 0; font-size: 28px; letter-spacing: 2px; text-shadow: none;
@@ -772,20 +777,10 @@
   <div class="main-card anim-slide-up">
     <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a></div>
     <header class="juego-hero anim-slide-up delay-1">
-      <div class="juego-emblema">
-        <svg viewBox="0 0 64 64" aria-hidden="true">
-          <defs>
-            <linearGradient id="bsRojo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--game-accent)"/><stop offset="1" style="stop-color: var(--bs-rojo-oscuro)"/></linearGradient>
-            <linearGradient id="bsOro" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--bs-oro-claro)"/><stop offset=".55" style="stop-color: var(--bs-oro)"/><stop offset="1" style="stop-color: var(--bs-oro-oscuro)"/></linearGradient>
-          </defs>
-          <path d="M32 4 56 18v28L32 60 8 46V18Z" style="fill: var(--bg-deep)" stroke="url(#bsRojo)" stroke-width="3"/>
-          <circle cx="32" cy="32" r="14" fill="none" style="stroke: var(--game-accent-2)" stroke-width="2.5"/>
-          <path d="M32 12v10M32 42v10M12 32h10M42 32h10" style="stroke: var(--game-accent-2)" stroke-width="2.5" stroke-linecap="round"/>
-          <circle cx="32" cy="32" r="3.5" fill="url(#bsRojo)"/>
-        </svg>
-      </div>
+      <!-- Degradados de los íconos de paquetes y grupos (url(#…)) -->
+      <svg class="degradados-svg" width="0" height="0" aria-hidden="true" focusable="false"><defs><linearGradient id="bsRojo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--game-accent)"/><stop offset="1" style="stop-color: var(--bs-rojo-oscuro)"/></linearGradient><linearGradient id="bsOro" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--bs-oro-claro)"/><stop offset=".55" style="stop-color: var(--bs-oro)"/><stop offset="1" style="stop-color: var(--bs-oro-oscuro)"/></linearGradient></defs></svg>
       <p class="juego-kicker">Shooter táctico · Servidor Global</p>
-      <h1 class="title-banner">Blood Strike</h1>
+      <h1 class="title-banner title-banner--logo"><img src="img/juegos/emblema-bloodstrike.webp?v=1" alt="Blood Strike" width="489" height="140" decoding="async"></h1>
       <p class="juego-sub">Oro y pases directo a tu cuenta con tu ID</p>
     </header>
 

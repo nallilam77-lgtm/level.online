@@ -559,6 +559,9 @@
     .ml-hero { display: grid; justify-items: center; gap: 4px; text-align: center; margin: 4px 0 18px; }
     .ml-emblema { width: 68px; height: 68px; filter: drop-shadow(0 0 14px rgba(var(--game-accent-rgb), 0.55)); animation: flotarEmblema 3.6s ease-in-out infinite; }
     .ml-emblema svg { width: 100%; height: 100%; display: block; }
+    .ml-emblema img { width: 100%; height: 100%; display: block; border-radius: 50%; }
+    /* SVG invisible que solo guarda los degradados de los íconos de paquetes y grupos */
+    .degradados-svg { position: absolute; width: 0; height: 0; overflow: hidden; }
     .ml-hero-kicker { font-family: 'Montserrat', sans-serif; font-size: 10px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--game-accent-2); }
     .title-banner {
       margin-bottom: 0; font-size: 28px; letter-spacing: 2px; text-shadow: none;
@@ -775,18 +778,9 @@
   <div class="main-card anim-slide-up">
     <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a></div>
     <header class="ml-hero anim-slide-up delay-1">
-      <div class="ml-emblema">
-        <svg viewBox="0 0 64 64" aria-hidden="true">
-          <defs>
-            <linearGradient id="mlOro" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--ml-oro-claro)"/><stop offset=".55" style="stop-color: var(--game-accent)"/><stop offset="1" style="stop-color: var(--ml-oro-oscuro)"/></linearGradient>
-            <linearGradient id="mlNoche" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: var(--game-accent-2)"/><stop offset="1" style="stop-color: var(--ml-azul-noche)"/></linearGradient>
-            <linearGradient id="mlGema" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--ml-gema-claro)"/><stop offset=".5" style="stop-color: var(--game-accent-2)"/><stop offset="1" style="stop-color: var(--ml-gema-oscuro)"/></linearGradient>
-          </defs>
-          <path d="M32 3 56 13v18c0 15-11 25-24 30C19 56 8 46 8 31V13Z" fill="url(#mlNoche)" stroke="url(#mlOro)" stroke-width="3"/>
-          <path d="M32 16 45 29 32 48 19 29Z" fill="url(#mlOro)"/>
-          <path d="M19 29h26M32 16l-4 13 4 19 4-19Z" fill="none" style="stroke: var(--ml-azul-noche)" stroke-width="1.2" opacity=".5"/>
-        </svg>
-      </div>
+      <!-- Degradados de los íconos de paquetes y grupos (url(#…)) -->
+      <svg class="degradados-svg" width="0" height="0" aria-hidden="true" focusable="false"><defs><linearGradient id="mlOro" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--ml-oro-claro)"/><stop offset=".55" style="stop-color: var(--game-accent)"/><stop offset="1" style="stop-color: var(--ml-oro-oscuro)"/></linearGradient><linearGradient id="mlNoche" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: var(--game-accent-2)"/><stop offset="1" style="stop-color: var(--ml-azul-noche)"/></linearGradient><linearGradient id="mlGema" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--ml-gema-claro)"/><stop offset=".5" style="stop-color: var(--game-accent-2)"/><stop offset="1" style="stop-color: var(--ml-gema-oscuro)"/></linearGradient></defs></svg>
+      <div class="ml-emblema"><img src="img/juegos/emblema-mobilelegends.webp?v=1" alt="Mobile Legends" width="144" height="144" decoding="async"></div>
       <p class="ml-hero-kicker">Tierra del Amanecer</p>
       <h1 class="title-banner">Mobile Legends</h1>
       <p class="ml-hero-sub">Diamantes directo a tu cuenta con tu ID y tu Zona</p>
