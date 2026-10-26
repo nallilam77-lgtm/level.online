@@ -566,6 +566,8 @@
     .product-card.skeleton::before { display: none; }
     .juego-icono { width: 30px; height: 30px; display: block; margin: 0 auto 6px; filter: drop-shadow(0 0 8px rgba(var(--game-accent-rgb), 0.5)); transition: transform 0.25s ease; }
     .product-card:hover .juego-icono, .product-card.selected .juego-icono { transform: translateY(-2px) rotate(-6deg) scale(1.08); }
+    /* Imagen de pases y bolsas (img/productos/bloodstrike/): altura fija para que la tarjeta no salte al cargar */
+    .producto-imagen { display: block; height: 56px; width: auto; max-width: 100%; margin: 0 auto 8px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(var(--game-accent-rgb), 0.3)); }
 
     /* Botones con un destello que los cruza */
     .btn-submit-order, .btn-verify, .sticky-cta-btn { position: relative; overflow: hidden; letter-spacing: 0.8px; }
@@ -1027,6 +1029,18 @@
     // se piden por su nombre; el oro, por su cantidad
     const esPase = (texto) => !/\d/.test(String(texto));
     const ICONO_PAQUETE = '<svg class="juego-icono" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="url(#bsOro)"/><circle cx="12" cy="12" r="6.5" fill="none" style="stroke: var(--bs-oro-oscuro)" stroke-width="1.4" opacity=".6"/><path d="M12 8.5v7M9.5 10.5l2.5-2 2.5 2" fill="none" style="stroke: var(--bs-oro-oscuro)" stroke-width="1.4" stroke-linecap="round" opacity=".7"/></svg>';
+    // Imagen de cada pase según su nombre en la hoja; si ninguno coincide, la tarjeta queda solo con texto.
+    // Agregar aquí un pase solo cuando su archivo ya esté en img/productos/bloodstrike/ (Cloudflare guarda un 404 un día)
+    const IMAGENES_PRODUCTO = [
+      [/[ée]lite/i, 'pase-strike-elite'],
+      [/premium/i, 'pase-strike-premium'],
+      [/nivel|level/i, 'pase-nivel'],
+      [/bolsa|lucky/i, 'bolsa-suerte-semanal'],
+    ];
+    const imagenProducto = (texto) => {
+      const coincide = IMAGENES_PRODUCTO.find(([patron]) => patron.test(String(texto)));
+      return coincide ? `<img class="producto-imagen" src="img/productos/bloodstrike/${coincide[1]}.webp?v=1" alt="" loading="lazy" decoding="async">` : '';
+    };
     const nombrePaquete = (item) => {
       const texto = String(item.diamantes).trim();
       return esPase(texto) ? texto : `${texto.replace(/diamantes|oro|monedas/gi, '').trim()} Oro`;
@@ -1090,7 +1104,9 @@
           card.setAttribute('tabindex', '0');
           const cantidad = String(item.diamantes).replace(/diamantes|oro|monedas/gi, '').trim();
           // "etiqueta" es opcional en el catálogo (ej: "🔥 Más popular"); si no viene, no se muestra badge
-          card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}${esPase(item.diamantes) ? `<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="product-label">Pase</div>` : `${ICONO_PAQUETE}<div class="diamonds-count">${cantidad}</div><div class="product-label">Oro</div>`}${item.precioOriginal !== undefined ? `<div class="price-original">${item.precioOriginal} Bs</div>` : ''}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
+          card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}${esPase(item.diamantes) ? `${imagenProducto(item.diamantes)}<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="product-label">Pase</div>` : `${ICONO_PAQUETE}<div class="diamonds-count">${cantidad}</div><div class="product-label">Oro</div>`}${item.precioOriginal !== undefined ? `<div class="price-original">${item.precioOriginal} Bs</div>` : ''}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
+          // Si la imagen no carga (archivo borrado o renombrado), se quita y la tarjeta queda solo con texto
+          card.querySelector('.producto-imagen')?.addEventListener('error', (e) => e.target.remove());
           card.addEventListener('click', () => seleccionarProducto(card, item));
           card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seleccionarProducto(card, item); } });
           container.appendChild(card);
