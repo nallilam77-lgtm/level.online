@@ -1008,7 +1008,7 @@
     ];
     const imagenProducto = (texto) => {
       const coincide = IMAGENES_PRODUCTO.find(([patron]) => patron.test(String(texto)));
-      return coincide ? `<img class="producto-imagen" src="img/productos/freefire/${coincide[1]}.webp" alt="" loading="lazy" decoding="async">` : '';
+      return coincide ? `<img class="producto-imagen" src="img/productos/freefire/${coincide[1]}.webp?v=1" alt="" loading="lazy" decoding="async">` : '';
     };
     const nombrePaquete = (item) => {
       const texto = String(item.diamantes).trim();
