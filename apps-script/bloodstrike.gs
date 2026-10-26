@@ -740,7 +740,7 @@ function limpiarMontoVES(valor) {
 // =====================================================================
 // 6. MENÚ: PRODUCTOS DE CENTRAL ONE EN LA PESTAÑA DE PRECIOS
 //    🔑 guarda la llave (propiedad del script, nunca en la hoja) · 🔄 reemplaza la pestaña de precios
-//    con los productos de Blood Strike de tu catálogo; el precio en Bs se calcula solo con el dólar y
+//    con el oro, los pases y las membresías de Blood Strike de tu catálogo (esProductoTiendaBlood); el precio en Bs se calcula solo con el dólar y
 //    la ganancia de la pestaña "tasa_dolar" (cambias el dólar y todos los precios cambian).
 // =====================================================================
 
@@ -803,6 +803,14 @@ function traerProductosCentralOne() {
       " (regiones que hay: " + regiones.join(", ") + "). No se cambió nada.");
     return;
   }
+  // Solo oro, pases y membresías: cofres, cupones, preventas y ofertas no se traen
+  var deRegion = productos.length;
+  productos = productos.filter(function (p) { return esProductoTiendaBlood(nombreCortoBlood(p.name)); });
+  var descartados = deRegion - productos.length;
+  if (!productos.length) {
+    ui.alert("Hay " + deRegion + " producto(s) de Blood Strike " + REGION_CENTRALONE + ", pero ninguno es oro, pase o membresía. No se cambió nada.");
+    return;
+  }
   productos.sort(function (a, b) { return Number(a.reseller_price) - Number(b.reseller_price); });
 
   // Un solo producto por paquete de la tienda (misma clave con la que Vercel reconoce el paquete): si
@@ -824,6 +832,7 @@ function traerProductosCentralOne() {
   var seguir = ui.alert("Traer productos de Central One",
     "Se reemplaza TODA la pestaña \"" + hoja.getName() + "\" con " + productos.length + " producto(s) de Blood Strike " + REGION_CENTRALONE +
     (repetidos.length ? " (se quitaron " + repetidos.length + " repetido(s))" : "") + ".\n\n" +
+    (descartados ? "Se dejan fuera " + descartados + " producto(s) que no son oro, pases ni membresías (cofres, cupones, preventas, ofertas).\n\n" : "") +
     "El precio en Bs se calcula solo: costo en USD × dólar (pestaña \"" + HOJA_TASA + "\", B1) + la ganancia (B2). " +
     "Los productos sin stock quedan sin precio y no se venden.\n\n¿Seguir?",
     ui.ButtonSet.YES_NO);
@@ -958,6 +967,13 @@ function nombreCortoBlood(nombre) {
   var numero = t.match(/\d[\d.,]*/);
   if (numero && /gold|oro|\bbc\b|coin|moneda/i.test(t)) return numero[0] + " Oro";
   return traducirNombreBlood(t) || original;
+}
+
+// Lo único que se trae con el 🔄 (nombre ya en español, de nombreCortoBlood): oro ("105 Oro"), pases
+// ("Pase de Temporada", "Pase Strike Élite"…, y la "Bolsa de la Suerte Semanal") y membresías ("Tarjeta Semanal")
+function esProductoTiendaBlood(nombreCorto) {
+  var n = String(nombreCorto || "").trim();
+  return /^\d[\d.,]*\s+Oro$/i.test(n) || /^(Pase|Bolsa de la Suerte)\b/i.test(n) || /^(Tarjeta|Membresía)\b/i.test(n);
 }
 
 // Clave con la que la tienda reconoce un paquete. DEBE ser igual a clavePaquete de
