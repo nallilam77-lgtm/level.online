@@ -38,3 +38,7 @@
 .ligero .typing-dot { animation: typingBounce 1.4s infinite ease-in-out both !important; }
 .ligero .typing-dot:nth-child(2) { animation-delay: -0.16s !important; }
 .ligero .typing-dot:nth-child(1) { animation-delay: -0.32s !important; }
+
+/* La ruleta SÍ gira: su vuelta es una transición de 4 s y sin ella saltaba al instante al resultado
+   (1440° = 4 vueltas exactas: parecía que no se movía). Es una sola rotación, no traba el teléfono. */
+.ligero #ruletaGiraAuto { transition: transform 4s cubic-bezier(0.15, 0.95, 0.15, 1) !important; }
