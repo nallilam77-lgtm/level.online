@@ -71,6 +71,7 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 - Precios que no se actualizan tras cambiar la hoja: la renovación en segundo plano de `conCache` necesita `waitUntil` (@vercel/functions); sin él Vercel congela la función al responder y la copia vieja dura hasta 6 h. No quitarlo.
 - Precios viejos con `x-vercel-cache: STALE`: no volver a poner `stale-while-revalidate` en `cabecerasCachePrecios`; la CDN servía la copia vieja varios minutos tras cambiar la hoja.
 - Aviso `DEP0169 url.parse()` en Vercel: no es nuestro código; se oculta con `NODE_OPTIONS=--disable-warning=DEP0169`.
+- Archivo nuevo de `public/` con 404 aunque ya está desplegado (2026-10-30, `whatsapp-cliente.js?v=1`): Cloudflare guardó el 404 de una consulta hecha ANTES de que Vercel terminara. No pedir la URL nueva hasta ver la página ya publicada; si pasó, subir el `?v=` en las páginas.
 - JS/CSS de `public/` que cambian y el cliente no ve: Vercel los sirve con caché de 4 h (el HTML no). Al cambiar un archivo compartido, subir el `?v=` con el que lo incluye cada página (p. ej. `aviso-codigo.js?v=3`).
 - Modelos `gemini-1.5-*` retirados (404). Por defecto `gemini-2.5-flash` vía `GEMINI_MODEL`.
 - `firebase-admin` se importa de forma perezosa en `_lib/limitador.js` para no alargar el cold start: no moverlo a un `import` estático.
