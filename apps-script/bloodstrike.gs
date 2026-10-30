@@ -52,7 +52,7 @@ const MENSAJE_ERROR_INTERNO = "Error interno en el sistema de recargas. Intenta 
 // Una fila por pedido. N = huella SHA-256 de la clave del cliente (la clave nunca llega a la hoja).
 const HOJA_POR_COMPLETAR = "por_completar";
 const COLUMNAS_POR_COMPLETAR = ["fecha-hora", "id pedido", "id jugador", "paquete", "precio (Bs)", "pagado (Bs)", "falta (Bs)",
-  "referencias", "código descuento", "comprobante", "estado", "pedido que completó", "actualizado", "clave (huella)", "vence"];
+  "referencias", "código descuento", "comprobante", "estado", "pedido que completó", "actualizado", "clave (huella)", "vence", "WhatsApp"];
 // Estado de "pagos" de un pago que no alcanzó: no es "Verificado", así que ningún otro pedido lo toma
 const ESTADO_PAGO_POR_COMPLETAR = "Por completar";
 const HORAS_PARA_COMPLETAR = 48;
@@ -62,15 +62,16 @@ const MAX_PAGOS_POR_PEDIDO = 4;
 const COMPARTIR_COMPROBANTES_CON_ENLACE = false;
 
 // Columnas de "errores" (A-D son las de siempre; E-H agregan el detalle que manda Vercel)
-const COLUMNAS_ERRORES = ["fecha-hora", "id", "producto", "informe completo", "fase del fallo", "motivo técnico", "estado del pago", "id pedido"];
-// "finalizados": A-E de siempre; F = orden de FazerCards
+const COLUMNAS_ERRORES = ["fecha-hora", "id", "producto", "informe completo", "fase del fallo", "motivo técnico", "estado del pago", "id pedido", "WhatsApp"];
+// "finalizados": A-E de siempre; F = orden de FazerCards; G = WhatsApp del cliente
 const TITULO_ORDEN_FINALIZADOS = "orden FazerCards";
+const COLUMNA_WHATSAPP_FINALIZADOS = 7;
 
 // --- FazerCards ---
 // Una fila por recarga enviada a la API. La columna J ("estado") la actualiza el webhook.
 const HOJA_FAZER = "fazer_card";
 const COLUMNAS_FAZER = ["fecha-hora", "id jugador", "paquete", "oferta FazerCards", "referencia", "cobrado (Bs)",
-  "comprobante", "id pedido", "orden FazerCards", "estado", "actualizado", "detalle"];
+  "comprobante", "id pedido", "orden FazerCards", "estado", "actualizado", "detalle", "WhatsApp"];
 const ORDEN_FAZER_VALIDA = /^[A-Za-z0-9_.:-]{1,80}$/;
 // processing/completed/failed/refund: FazerCards; confirmed/partially_completed/cancelled/refunded: Central One
 const TEXTO_ESTADO_FAZER = { processing: "⏳ EN PROCESO", confirmed: "⏳ EN PROCESO", completed: "✅ COMPLETADA", failed: "❌ FALLIDA",
@@ -280,7 +281,7 @@ function guardarPorCompletar(datos) {
     fechaHora, idPedido, textoSeguro(datos.idJugador), textoSeguro(datos.paquete), precio, pagado, falta,
     referencia, textoSeguro(datos.codigoDescuento || ""), textoSeguro(datos.comprobante || "Sin comprobante"),
     "PENDIENTE: faltan " + formatoBs(falta) + " Bs", "", fechaHora, claveHash,
-    new Date(Date.now() + HORAS_PARA_COMPLETAR * 3600 * 1000)
+    new Date(Date.now() + HORAS_PARA_COMPLETAR * 3600 * 1000), enlaceWhatsapp(datos.telefono)
   ]);
   SpreadsheetApp.flush();
   return responder({ status: "success", horas: HORAS_PARA_COMPLETAR });
@@ -346,7 +347,8 @@ function completarConPago(fila, ultimos5, idPedido) {
   return {
     status: "success", valido: true, encontrado: true, completo: true,
     idPedidoOriginal: String(v[1]), idJugador: String(v[2]), paquete: String(v[3]), precio: precio, pagadoTotal: pagado,
-    referencias: referencias, codigoDescuento: String(v[8] || ""), comprobante: String(v[9] || "")
+    referencias: referencias, codigoDescuento: String(v[8] || ""), comprobante: String(v[9] || ""),
+    telefono: String(v[15] || "")
   };
 }
 
@@ -367,6 +369,7 @@ function hojaPorCompletar() {
     hoja.getRange(1, 1, 1, COLUMNAS_POR_COMPLETAR.length).setFontWeight("bold");
     hoja.setFrozenRows(1);
   }
+  asegurarTituloWhatsapp(hoja, COLUMNAS_POR_COMPLETAR.length);
   return hoja;
 }
 
@@ -496,13 +499,15 @@ function registrarFinalizado(datos) {
   if (orden && !String(hojaFinalizados.getRange(1, 6).getValue() || "").trim()) {
     hojaFinalizados.getRange(1, 6).setValue(TITULO_ORDEN_FINALIZADOS);
   }
+  asegurarTituloWhatsapp(hojaFinalizados, COLUMNA_WHATSAPP_FINALIZADOS);
   hojaFinalizados.appendRow([
     fechaHora,
     textoSeguro(datos.idJugador),
     textoSeguro(datos.paquete),
     textoSeguro(datos.referencia || datos.referencias),
     textoSeguro(datos.urlImagen || "Sin comprobante"),
-    textoSeguro(orden)
+    textoSeguro(orden),
+    enlaceWhatsapp(datos.telefono)
   ]);
   if (orden) anotarOrdenFazer(datos, fechaHora);
   // Pedido que completó un pago insuficiente: su fila de "por_completar" queda cerrada
@@ -521,6 +526,7 @@ function registrarError(datos) {
   } else if (!String(hojaErrores.getRange(1, 5).getValue() || "").trim()) {
     hojaErrores.getRange(1, 5, 1, COLUMNAS_ERRORES.length - 4).setValues([COLUMNAS_ERRORES.slice(4)]);
   }
+  asegurarTituloWhatsapp(hojaErrores, COLUMNAS_ERRORES.length);
 
   hojaErrores.appendRow([
     ahora(),
@@ -530,7 +536,8 @@ function registrarError(datos) {
     textoSeguro(datos.fase || ""),
     textoSeguro(datos.motivo || ""),
     textoSeguro(datos.estadoPago || ""),
-    textoSeguro(datos.idPedido || "")
+    textoSeguro(datos.idPedido || ""),
+    enlaceWhatsapp(datos.telefono)
   ]);
   cerrarComplemento(String(datos.idPedido || ""), "❌ ERROR: ver pestaña errores (pagos ya \"Usado\")");
   SpreadsheetApp.flush();
@@ -573,7 +580,8 @@ function anotarOrdenFazer(datos, fechaHora) {
     textoSeguro(orden),
     textoEstadoFazer(datos.estadoFazer || "processing"),
     fechaHora,
-    "orden aceptada por el proveedor"
+    "orden aceptada por el proveedor",
+    enlaceWhatsapp(datos.telefono)
   ]);
   var cache = CacheService.getScriptCache();
   var guardado = cache.get("fazer_" + orden);
@@ -625,7 +633,7 @@ function aplicarEstadoFazer(fila, estado, evento) {
   if (fallo && !TEXTO_FALLO_FAZER.test(anterior)) {
     var motivo = "El proveedor marcó la orden " + valores[8] + " como " + estado + ": la recarga NO llegó (completa) al jugador";
     registrarError({
-      idJugador: valores[1], paquete: valores[2], idPedido: valores[7],
+      idJugador: valores[1], paquete: valores[2], idPedido: valores[7], telefono: valores[12],
       fase: "4. RECARGA EN LA API DEL PROVEEDOR - aviso posterior del webhook",
       motivo: motivo,
       estadoPago: "USADO: hacer la recarga a mano o devolver el pago",
@@ -637,7 +645,7 @@ function aplicarEstadoFazer(fila, estado, evento) {
   if (estado === "completed" && /FALLIDA|CANCELADA/.test(anterior)) {
     var aviso = "ATENCIÓN: la orden " + valores[8] + " figuraba como fallida y el proveedor la ENTREGÓ después: NO hacer la recarga a mano (si ya se hizo, el jugador recibió dos)";
     registrarError({
-      idJugador: valores[1], paquete: valores[2], idPedido: valores[7],
+      idJugador: valores[1], paquete: valores[2], idPedido: valores[7], telefono: valores[12],
       fase: "4. RECARGA EN LA API DEL PROVEEDOR - entrega posterior a un fallo",
       motivo: aviso,
       estadoPago: "USADO (correcto): la recarga sí llegó",
@@ -657,6 +665,7 @@ function hojaFazer() {
     hoja.getRange(1, 1, 1, COLUMNAS_FAZER.length).setFontWeight("bold");
     hoja.setFrozenRows(1);
   }
+  asegurarTituloWhatsapp(hoja, COLUMNAS_FAZER.length);
   return hoja;
 }
 
@@ -689,6 +698,21 @@ function ahora() {
 }
 
 // Acepta "errores" o "Errores". null si no existe.
+// WhatsApp del cliente (opcional; Vercel manda "+58…" ya validado o ""). En la hoja queda como enlace
+// https://wa.me/58… : un toque abre el chat con el cliente. Cualquier otra cosa queda vacía.
+function enlaceWhatsapp(telefono) {
+  var digitos = String(telefono || "").replace(/\D/g, "");
+  return /^584\d{9}$/.test(digitos) ? "https://wa.me/" + digitos : "";
+}
+
+// Pestaña creada antes de la columna "WhatsApp" (siempre la última): se agrega su título
+// (y la columna, si se habían borrado las columnas vacías)
+function asegurarTituloWhatsapp(hoja, columna) {
+  if (hoja.getMaxColumns() < columna) hoja.insertColumnsAfter(hoja.getMaxColumns(), columna - hoja.getMaxColumns());
+  var celda = hoja.getRange(1, columna);
+  if (!String(celda.getValue() || "").trim()) celda.setValue("WhatsApp").setFontWeight("bold");
+}
+
 function obtenerHojaLocal(nombre) {
   var libro = SpreadsheetApp.getActiveSpreadsheet();
   return libro.getSheetByName(nombre) || libro.getSheetByName(nombre.charAt(0).toUpperCase() + nombre.slice(1));

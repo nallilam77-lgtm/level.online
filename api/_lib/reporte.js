@@ -38,7 +38,7 @@ export function informeError({
   fase, motivo, idPedido, idJugador, paquete,
   referenciaCliente, referenciaCompleta,
   pinesUsados = [], pinesNoUsados = [], estadoNoUsados = null, sinPines = false, noAplica = false,
-  estadoPago, comprobante,
+  estadoPago, comprobante, telefono = '',
 }) {
   const partesPines = [];
   if (noAplica) partesPines.push(ESTADO_PINES.noAplica);
@@ -64,6 +64,7 @@ export function informeError({
     `REFERENCIA: ${referencia}`,
     `PEDIDO: ${idPedido}`,
     `COMPROBANTE: ${urlComprobante}`,
+    `WHATSAPP: ${telefono || 'no lo dejó'}`,
   ].join(' | ');
 
   return {
@@ -81,6 +82,8 @@ export function informeError({
     comprobante: urlComprobante,
     pinesUsados: lista(pinesUsados),
     pinesNoUsados: lista(pinesNoUsados),
+    // WhatsApp del cliente ("+58…" o vacío): columna "WhatsApp" de "errores"
+    telefono,
     // Columnas clásicas: C (códigos) y E (informe completo)
     codigosUsados: estadoPines,
     urlImagen: informe,

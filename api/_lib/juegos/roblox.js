@@ -5,7 +5,7 @@
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } from '../externo.js';
-import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
+import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 import { limpiarMontoVES } from '../recarga-comun.js';
 import { catalogo as catalogoCentralOne, datosParaPedido, crearPedidoCentralOne, esperarCodigo } from '../centralone.js';
@@ -211,6 +211,8 @@ export async function recargar(req, res) {
       tipo: 'compra', referencia: String(referencia), user: usuario, producto: String(producto),
       url_capture: textoParaHoja(url_capture || 'Sin comprobante'), idPedido, claveHash: huella(clave),
       ...(desc && { montoACobrar, codigoDescuento: desc.codigo }),
+      // WhatsApp opcional ("+58…" o vacío): roblox.gs lo anota en "Exitosas", "por_completar" y "pedidos_api"
+      telefono: telefonoCliente(req.body?.telefono),
       // Sin códigos guardados, roblox.gs reserva el pago y responde "comprar" (solo si hay llave)
       ...(llaveRoblox() && { api: true }),
     });
@@ -277,7 +279,11 @@ async function completarCompra(req, res, inicio) {
     const idPedido = `rbx-${randomUUID()}`;
     let data;
     try {
-      data = await llamarScript(scriptUrl, conToken({ tipo: 'completar', claveHash, referencia, idPedido, ...(llaveRoblox() && { api: true }) }), { tiempoMs: TIEMPO_COMPRA_MS });
+      data = await llamarScript(scriptUrl, conToken({
+        tipo: 'completar', claveHash, referencia, idPedido, ...(llaveRoblox() && { api: true }),
+        // Si en el primer pago no dejó WhatsApp, roblox.gs usa este
+        telefono: telefonoCliente(req.body?.telefono),
+      }), { tiempoMs: TIEMPO_COMPRA_MS });
     } catch (error) {
       if (!error.tiempoAgotado) throw error;
       console.error(`⚠️ Completar pago de Roblox sin respuesta a tiempo | REF: ${referencia} | pedido ${idPedido} | clave ${claveHash.slice(0, 12)}…: revisar "por_completar" y "Exitosas"`);

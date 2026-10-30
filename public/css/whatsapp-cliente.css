@@ -1,0 +1,211 @@
+/* WhatsApp opcional del cliente y avisos de la confirmación (js/whatsapp-cliente.js). Usa el acento
+   de cada tienda (--game-accent-rgb, --game-text) y sus variables; ver .claude/UI_RULES.md */
+
+:root {
+  --wa-warning-rgb: 255, 204, 0;
+  --wa-danger-rgb: 255, 59, 59;
+  --wa-success-rgb: 0, 204, 102;
+}
+
+/* ---------- Campo (al final del pago, antes del botón de compra) ---------- */
+.wa-cliente {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.wa-cliente-cabecera { display: flex; align-items: center; }
+.wa-cliente-titulo {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.wa-cliente-opcional {
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.wa-cliente-campo {
+  display: flex;
+  align-items: stretch;
+  min-height: 48px;
+  background: var(--card-bg);
+  border: 2px solid var(--card-border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.wa-cliente-campo:focus-within {
+  border-color: var(--game-accent);
+  box-shadow: 0 0 12px rgba(var(--game-accent-rgb), 0.2);
+}
+.wa-cliente.valido .wa-cliente-campo { border-color: var(--success); }
+.wa-cliente.invalido .wa-cliente-campo { border-color: var(--danger); box-shadow: 0 0 12px rgba(var(--wa-danger-rgb), 0.2); }
+
+.wa-cliente-prefijo {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 900;
+  font-size: 15px;
+  color: var(--text-muted);
+  background: rgba(var(--game-accent-rgb), 0.06);
+  border-right: 1px solid var(--card-border);
+  flex-shrink: 0;
+}
+.wa-cliente-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 12px 14px;
+  color: var(--game-text);
+  font-family: 'Poppins', sans-serif;
+  font-size: 16px; /* 16px: iOS no hace zoom al tocar */
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.wa-cliente-input::placeholder { color: var(--text-muted); opacity: 0.55; font-weight: 600; }
+
+.wa-cliente-error {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--danger);
+}
+
+/* "¿Por qué pedimos tu número?": letra pequeña; la explicación sale al pasar el mouse o al tocar */
+.wa-cliente-porque { position: relative; justify-self: start; }
+.wa-cliente-porque-btn {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  min-height: 28px;
+  cursor: help;
+  font-family: 'Poppins', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease;
+}
+.wa-cliente-porque-btn:hover,
+.wa-cliente-porque-btn:focus-visible { color: var(--game-text); outline: none; }
+
+.wa-cliente-burbuja {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  width: min(290px, calc(100vw - 48px));
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid rgba(var(--game-accent-rgb), 0.45);
+  box-shadow: var(--shadow-lg), 0 10px 25px -5px rgba(var(--game-accent-rgb), 0.25);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-main);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+}
+/* Fondo sólido detrás del glass: sobre el formulario, sin él el texto se mezcla con lo de abajo */
+.wa-cliente-burbuja::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--bg-deep);
+  opacity: 0.85;
+}
+@media (hover: hover) {
+  .wa-cliente-porque:hover .wa-cliente-burbuja { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+}
+.wa-cliente-porque.abierto .wa-cliente-burbuja,
+.wa-cliente-porque-btn:focus-visible + .wa-cliente-burbuja { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+
+/* ---------- Ventana "CONFIRMA TU PEDIDO" ---------- */
+/* .resumen-row es flex: sin esto, "hidden" no la escondería */
+.wa-resumen-fila[hidden], .wa-nota-exito[hidden] { display: none; }
+.wa-resumen-fila span { color: var(--success); }
+.wa-confirmacion { display: grid; gap: 10px; margin-bottom: 12px; }
+.wa-confirmacion:empty { display: none; }
+
+.wa-aviso {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-main);
+}
+.wa-aviso p { margin: 0; }
+.wa-aviso-sin-numero {
+  background: rgba(var(--wa-warning-rgb), 0.08);
+  border-left: 4px solid var(--warning);
+}
+.wa-aviso-sin-numero strong { color: var(--warning); }
+.wa-aviso-unico {
+  background: rgba(var(--wa-danger-rgb), 0.08);
+  border-left: 4px solid var(--danger);
+}
+.wa-aviso-unico > p strong { color: var(--danger); }
+
+.wa-aviso-agregar {
+  justify-self: start;
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--whatsapp);
+  background: rgba(var(--wa-success-rgb), 0.1);
+  color: var(--whatsapp);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.wa-aviso-agregar:hover,
+.wa-aviso-agregar:focus-visible { background: rgba(var(--wa-success-rgb), 0.2); box-shadow: 0 0 12px rgba(var(--wa-success-rgb), 0.3); outline: none; }
+
+.wa-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wa-check input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: var(--game-accent);
+  cursor: pointer;
+}
+
+/* ---------- Pantalla de éxito sin WhatsApp ---------- */
+.wa-nota-exito {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.wa-nota-exito strong { color: var(--text-main); }

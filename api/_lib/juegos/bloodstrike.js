@@ -3,7 +3,7 @@
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { pedirJSON, llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasCachePrecios, ErrorExterno } from '../externo.js';
-import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
+import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
@@ -156,7 +156,7 @@ export const acciones = { precios, verificar, descuento: crearAccionDescuento('B
  * La usan recargar (un pago) y completarPago (varios pagos que juntos cubren el precio).
  */
 async function entregarRecarga(res, {
-  CENTRALONE_API_KEY, idPedido, id, paquete, numeroOro, productId, precioReal, desc, comprobante, referencias, cierreIdempotente,
+  CENTRALONE_API_KEY, idPedido, id, paquete, numeroOro, productId, precioReal, desc, comprobante, telefono, referencias, cierreIdempotente,
   utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
 }) {
   // Texto para la hoja y los informes: "ref1" o "ref1 + ref2" (pago completado)
@@ -244,6 +244,7 @@ async function entregarRecarga(res, {
     referencia: referenciaCompleta,
     codigosUsados: `API Directa (Central One, pedido ${orden.orden.referencia})`,
     urlImagen: comprobante,
+    telefono,
     idPedido,
     // La hoja de Blood Strike anota el pedido en "fazer_card" (columna I = reference_code, que es lo que
     // trae el webhook); api/centralone-webhook.js actualiza su estado
@@ -280,6 +281,8 @@ export async function recargar(req, res) {
     const { id, paquete, referencia } = req.body || {};
     // El comprobante viaja a la hoja de cálculo: se limpia para que no pueda inyectar fórmulas
     const urlImagen = textoParaHoja(req.body?.urlImagen || "");
+    // WhatsApp opcional: inválido o vacío queda "" y la compra sigue igual
+    const telefono = telefonoCliente(req.body?.telefono);
 
     if (!id || !paquete || !referencia) {
       return res.status(400).json({ status: "error", message: "Faltan datos obligatorios para procesar la recarga." });
@@ -303,7 +306,7 @@ export async function recargar(req, res) {
 
     const { marcarReferencia, registrarEnHoja, informe, bloquearPago, bloquearPorError, cerrarEnSegundoPlano } = crearUtilidadesPedido({
       urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
-      datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, noAplica: true },
+      datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, telefono, noAplica: true },
     });
 
     // Antes de consultar la hoja de pagos: ¿esta IP o este jugador acumula demasiados fallos?
@@ -406,7 +409,7 @@ export async function recargar(req, res) {
       const clave = randomBytes(24).toString('base64url');
       const porCompletar = await llamarScript(URL_GOOGLE_SCRIPT, {
         accion: "pago_por_completar", idPedido, referencia: referenciaCompleta, idJugador: String(id),
-        paquete: textoParaHoja(String(paquete)), precio: precioReal, pagado, comprobante,
+        paquete: textoParaHoja(String(paquete)), precio: precioReal, pagado, comprobante, telefono,
         codigoDescuento: desc?.codigo || "", claveHash: huella(clave),
       }, { reintentos: 2, tiempoMs: TIEMPOS.incidente, reintentarTrasTimeout: true }).catch((e) => ({ status: 'error', message: e.message }));
       if (porCompletar?.status === 'success') {
@@ -441,7 +444,7 @@ export async function recargar(req, res) {
     }
 
     return await entregarRecarga(res, {
-      CENTRALONE_API_KEY, idPedido, id, paquete, numeroOro, productId, precioReal, desc, comprobante,
+      CENTRALONE_API_KEY, idPedido, id, paquete, numeroOro, productId, precioReal, desc, comprobante, telefono,
       referencias: [referenciaCompleta], cierreIdempotente,
       utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
     });
@@ -554,9 +557,11 @@ async function completarPago(req, res) {
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tus referencias." });
     }
     const comprobante = textoParaHoja(datos.comprobante || "Sin comprobante");
+    // El WhatsApp que dejó en el primer pago (guardado en "por_completar") o el de ahora
+    const telefono = telefonoCliente(datos.telefono) || telefonoCliente(req.body?.telefono);
     const utilidades = crearUtilidadesPedido({
       urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente, inicio,
-      datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, noAplica: true },
+      datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, telefono, noAplica: true },
     });
     pedido = { utilidades, referencias };
     console.info(`🧩 Pago de Blood Strike completado (${referencias.join(' + ')}) para el pedido ${datos.idPedidoOriginal} -> ${idPedido} (ID ${id})`);
@@ -577,7 +582,7 @@ async function completarPago(req, res) {
     return await entregarRecarga(res, {
       CENTRALONE_API_KEY, idPedido, id, paquete, numeroOro, productId, precioReal,
       desc: datos.codigoDescuento ? { codigo: String(datos.codigoDescuento) } : null,
-      comprobante, referencias, utilidades,
+      comprobante, telefono, referencias, utilidades,
       // usar_complemento de bloodstrike.gs v3 anuncia su versión
       cierreIdempotente: Number(datos.version) >= 3,
     });

@@ -36,6 +36,7 @@
   <script src="/js/ultimo-id.js" defer></script>
   <script src="/js/datos-pago.js" defer></script>
   <script src="/js/aviso-codigo.js?v=3" defer></script>
+  <script src="/js/whatsapp-cliente.js?v=1" defer></script>
   <style>
     :root {
       /* Acento del juego (Roblox: azul): bordes, botones, sombras y glows */
@@ -621,6 +622,7 @@
   <link rel="stylesheet" href="css/pie-legal.css">
   <link rel="stylesheet" href="css/descuento.css">
   <link rel="stylesheet" href="css/aviso-codigo.css?v=3">
+  <link rel="stylesheet" href="css/whatsapp-cliente.css?v=1">
 </head>
 <body class="pagina-juego">
 
@@ -861,6 +863,9 @@
       <div style="margin-bottom: 16px;">
         <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputReferencia" class="input-field" placeholder="Solo los últimos 5 dígitos" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
       </div>
+
+      <!-- WhatsApp opcional (js/whatsapp-cliente.js dibuja el campo) -->
+      <div id="campoWhatsapp"></div>
 
       <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🚀 OBTENER CÓDIGO DE ROBLOX</button>
       <p class="aviso-aceptacion">Al procesar tu pedido aceptas los <a href="terminos.html" target="_blank">Términos y Condiciones</a>, la <a href="privacidad.html" target="_blank">Política de Privacidad</a> y la <a href="reembolsos.html" target="_blank">Política de Reembolsos</a>.</p>
@@ -1374,9 +1379,14 @@
         return;
       }
 
+      // WhatsApp escrito a medias: se marca el campo (vacío sí se puede)
+      if (window.WhatsappCliente && !WhatsappCliente.revisar()) return;
+
       document.getElementById('resumenId').textContent = usuario;
       document.getElementById('resumenPaquete').textContent = `${paqueteSeleccionado.producto}`; 
       document.getElementById('resumenMonto').textContent = formatoBs(paqueteSeleccionado.precio);
+      // WhatsApp opcional: fila en el resumen o aviso si no lo dejó
+      window.WhatsappCliente?.prepararConfirmacion();
       document.getElementById('modalConfirmacion').style.display = 'flex';
     };
 
@@ -1503,13 +1513,15 @@
             headers: { 'Content-Type': 'application/json' },
             // Al completar solo van la clave y la nueva referencia: el usuario, el paquete y el precio
             // los toma el servidor de la compra original
-            body: JSON.stringify(datosComplemento ? { tokenComplemento: datosComplemento.token, referencia: referenciaUsuario } : {
+            body: JSON.stringify(datosComplemento ? { tokenComplemento: datosComplemento.token, referencia: referenciaUsuario, telefono: window.WhatsappCliente?.valor() || '' } : {
                 referencia: referenciaUsuario,
                 user: usuarioRoblox,
                 producto: paqueteSeleccionado.producto,
                 url_capture: captureUrl,
                 // Solo el código: el servidor recalcula el descuento y el precio a cobrar
-                ...(descuento.codigo() && { codigoDescuento: descuento.codigo() })
+                ...(descuento.codigo() && { codigoDescuento: descuento.codigo() }),
+                // WhatsApp opcional ("+58…" o ""): va a la hoja con el pedido
+                telefono: window.WhatsappCliente?.valor() || ''
             })
           });
           

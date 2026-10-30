@@ -51,6 +51,8 @@
 const ID_HOJA_PAGOS = "1FTjXo7sKybYVmyGO9HBlyla0T2LHBfCB8yHEV70JyOA";
 const sheetNameCodigos = "Codigos";
 const sheetNameExitosas = "Exitosas";
+// Columna K de "Exitosas": WhatsApp del cliente (opcional)
+const COLUMNA_WHATSAPP_EXITOSAS = 11;
 const sheetNamePreciosRoblox = "PreciosRoblox";
 
 // Vercel espera la compra hasta 45 s: el candado no debe esperar más que eso
@@ -67,7 +69,7 @@ const PREFIJO_USADO = "USADO-";
 // la hoja). El pago que no alcanzó queda "Por completar" en la hoja de pagos: ningún juego lo toma.
 const HOJA_POR_COMPLETAR = "por_completar";
 const COLUMNAS_POR_COMPLETAR = ["fecha-hora", "id pedido", "usuario", "paquete", "precio (Bs)", "pagado (Bs)", "falta (Bs)",
-  "referencias", "código descuento", "comprobante", "estado", "pedido que completó", "actualizado", "clave (huella)", "vence"];
+  "referencias", "código descuento", "comprobante", "estado", "pedido que completó", "actualizado", "clave (huella)", "vence", "WhatsApp"];
 const ESTADO_PAGO_POR_COMPLETAR = "Por completar";
 const HORAS_PARA_COMPLETAR = 48;
 const MAX_PAGOS_POR_PEDIDO = 4;
@@ -89,7 +91,9 @@ const PRODUCTO_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 const PEDIDO_API_VALIDO = /^rbx-[0-9a-f-]{36}$/;
 const HOJA_PEDIDOS_API = "pedidos_api";
 const COLUMNAS_PEDIDOS_API = ["fecha-hora", "id pedido", "usuario", "paquete", "cobrado (Bs)", "referencias", "código descuento",
-  "comprobante", "product_id", "estado", "pedido Central One", "código entregado", "actualizado", "datos internos (no tocar)"];
+  "comprobante", "product_id", "estado", "pedido Central One", "código entregado", "actualizado", "datos internos (no tocar)", "WhatsApp"];
+// Columna N (datos internos): "WhatsApp" (O) va después, así las filas anteriores no se mueven
+const COLUMNA_DATOS_INTERNOS_API = 14;
 // Columna J (estado). Empieza por ⏳ mientras se compra: solo entonces entregar_api y liberar_api cambian algo.
 const ESTADO_COMPRANDO = "⏳ COMPRANDO EN CENTRAL ONE";
 const ESTADO_ENTREGADO_PAGINA = "✅ ENTREGADO EN LA PÁGINA";
@@ -153,6 +157,8 @@ function procesarPagoYExtraerCodigo(datos) {
   var usuario = String(datos.user || datos.usuario || "").trim();
   var urlCapture = String(datos.url_capture || "Sin comprobante");
   var idPedido = String(datos.idPedido || "").slice(0, 60);
+  // WhatsApp del cliente (opcional): va a "Exitosas", "por_completar" y "pedidos_api"
+  var telefono = enlaceWhatsapp(datos.telefono);
 
   if (!/^\d{5}$/.test(referencia)) {
     return { status: "error", message: "⚠️ Ingresa una referencia válida de 5 dígitos." };
@@ -220,7 +226,7 @@ function procesarPagoYExtraerCodigo(datos) {
         hojaPorCompletar().appendRow([
           fechaHora, textoSeguro(idPedido), textoSeguro(usuario), textoSeguro(paquete), precioACobrar, montoPagado, falta,
           pago.referencia, textoSeguro(codigoDescuento), textoSeguro(urlCapture), "PENDIENTE: faltan " + formatoBs(falta), "",
-          fechaHora, claveHash, new Date(Date.now() + HORAS_PARA_COMPLETAR * 3600 * 1000)
+          fechaHora, claveHash, new Date(Date.now() + HORAS_PARA_COMPLETAR * 3600 * 1000), telefono
         ]);
         SpreadsheetApp.flush();
         insuficiente.porCompletar = true;
@@ -245,7 +251,7 @@ function procesarPagoYExtraerCodigo(datos) {
     return reservarParaCentralOne({
       hojaPagos: hojaPagos, filaPago: filaPago, idPedido: idPedido, usuario: usuario, paquete: paquete,
       precio: precioACobrar, codigoDescuento: codigoDescuento, urlCapture: urlCapture, productId: productoApi,
-      pagos: [pago.referencia], porCompletar: null
+      pagos: [pago.referencia], porCompletar: null, telefono: telefono
     });
   }
 
@@ -263,7 +269,7 @@ function procesarPagoYExtraerCodigo(datos) {
   entregarCodigo({
     hojaCodigos: hojaCodigos, hojaExitosas: hojaExitosas, col: col, filaCodigo: filaCodigo, codigo: codigo,
     usuario: usuario, paquete: paquete, referencia: referencia, urlCapture: urlCapture,
-    precioACobrar: precioACobrar, codigoDescuento: codigoDescuento, idPedido: idPedido
+    precioACobrar: precioACobrar, codigoDescuento: codigoDescuento, idPedido: idPedido, telefono: telefono
   });
   return { status: "success", code: codigo, message: "¡Código canjeado con éxito!" };
 }
@@ -297,11 +303,12 @@ function entregarCodigo(c) {
 }
 
 // Una fila de "Exitosas" por venta. Si falla, el cliente igual recibe su código: queda en el registro.
-// c: { usuario, paquete, referencia, codigo, urlCapture, precioACobrar, codigoDescuento, idPedido }
+// c: { usuario, paquete, referencia, codigo, urlCapture, precioACobrar, codigoDescuento, idPedido, telefono }
 function anotarExitosa(hojaExitosas, c, origen) {
   try {
     // La columna J es nueva: se le pone título la primera vez
     if (!String(hojaExitosas.getRange(1, 10).getValue()).trim()) hojaExitosas.getRange(1, 10).setValue("origen del código");
+    asegurarTituloWhatsapp(hojaExitosas, COLUMNA_WHATSAPP_EXITOSAS);
     hojaExitosas.appendRow([
       ahora(),                            // A: fecha
       textoSeguro(c.usuario),             // B: usuario
@@ -312,7 +319,8 @@ function anotarExitosa(hojaExitosas, c, origen) {
       c.precioACobrar,                    // G: cobrado (Bs)
       textoSeguro(c.codigoDescuento),     // H: código de descuento ("" si no usó)
       textoSeguro(c.idPedido),            // I: id del pedido en Vercel
-      textoSeguro(origen)                 // J: de dónde salió el código
+      textoSeguro(origen),                // J: de dónde salió el código
+      enlaceWhatsapp(c.telefono)          // K: WhatsApp del cliente (opcional)
     ]);
   } catch (err) {
     console.error("Roblox: venta entregada pero NO anotada en Exitosas | usuario " + c.usuario + " | " + c.paquete +
@@ -362,6 +370,8 @@ function completarCompra(datos) {
   if (pago.filaPago === -1) return { status: "error", message: mensajePagoNoDisponible(pago) };
 
   var usuario = String(v[2]), paquete = String(v[3]);
+  // El WhatsApp que dejó en el primer pago o, si no dejó, el que manda ahora
+  var telefono = enlaceWhatsapp(v[15]) || enlaceWhatsapp(datos.telefono);
   var precio = limpiarMontoVES(v[4]);
   var pagado = redondear2(limpiarMontoVES(v[5]) + pago.montoPagado);
   var falta = redondear2(Math.max(0, precio - pagado));
@@ -398,7 +408,8 @@ function completarCompra(datos) {
     var reserva = reservarParaCentralOne({
       hojaPagos: hojaPagos, filaPago: pago.filaPago, idPedido: idPedido, usuario: usuario, paquete: paquete,
       precio: precio, codigoDescuento: String(v[8] || ""), urlCapture: String(v[9] || "Sin comprobante"), productId: productoApi,
-      pagos: todas, porCompletar: { claveHash: claveHash, pagado: pagado, falta: falta, estadoAnterior: estadoAnterior }
+      pagos: todas, porCompletar: { claveHash: claveHash, pagado: pagado, falta: falta, estadoAnterior: estadoAnterior },
+      telefono: telefono
     });
     if (reserva.status === "comprar") {
       hojaPc.getRange(fila, 11).setValue("⏳ COMPRANDO EN CENTRAL ONE (pedido " + idPedido + ")");
@@ -424,7 +435,7 @@ function completarCompra(datos) {
   entregarCodigo({
     hojaCodigos: hojaCodigos, hojaExitosas: hojaExitosas, col: col, filaCodigo: libre.fila, codigo: libre.codigo,
     usuario: usuario, paquete: paquete, referencia: referencias.join(" + "), urlCapture: String(v[9] || "Sin comprobante"),
-    precioACobrar: precio, codigoDescuento: codigoDescuento, idPedido: idPedido
+    precioACobrar: precio, codigoDescuento: codigoDescuento, idPedido: idPedido, telefono: telefono
   });
   // usuario, precio y código de descuento: para que Vercel anote el uso del código (no llegan al cliente)
   return { status: "success", code: libre.codigo, message: "¡Código canjeado con éxito!", usuario: usuario, precio: precio, codigoDescuento: codigoDescuento };
@@ -436,7 +447,8 @@ function completarCompra(datos) {
 
 // Paso 1: el pago queda "En proceso" (ningún juego lo toma) y el pedido en "pedidos_api".
 // c: { hojaPagos, filaPago, idPedido, usuario, paquete, precio, codigoDescuento, urlCapture, productId,
-//      pagos (referencias completas que se gastan al entregar), porCompletar (null o datos del pago completado) }
+//      pagos (referencias completas que se gastan al entregar), porCompletar (null o datos del pago completado),
+//      telefono (enlace de WhatsApp o "") }
 function reservarParaCentralOne(c) {
   if (!PEDIDO_API_VALIDO.test(c.idPedido) || buscarFilaPedidoApi(c.idPedido)) {
     console.error("Roblox: idPedido inválido o repetido para comprar en Central One: " + c.idPedido);
@@ -454,7 +466,8 @@ function reservarParaCentralOne(c) {
   hojaPedidosApi().appendRow([
     ahora(), textoSeguro(c.idPedido), textoSeguro(c.usuario), textoSeguro(c.paquete), c.precio, c.pagos.join(" + "),
     textoSeguro(c.codigoDescuento), textoSeguro(c.urlCapture), textoSeguro(c.productId), ESTADO_COMPRANDO, "", "", ahora(),
-    JSON.stringify({ enProceso: enProceso, pagos: c.pagos, porCompletar: c.porCompletar })
+    JSON.stringify({ enProceso: enProceso, pagos: c.pagos, porCompletar: c.porCompletar }),
+    c.telefono || ""
   ]);
   SpreadsheetApp.flush();
   return { status: "comprar", productId: c.productId, idPedido: c.idPedido, usuario: c.usuario };
@@ -513,7 +526,7 @@ function entregarApi(datos) {
   }
   anotarExitosa(hojaExitosas, {
     usuario: v[2], paquete: v[3], referencia: v[5], codigo: codigo, urlCapture: v[7],
-    precioACobrar: v[4], codigoDescuento: v[6], idPedido: idPedido
+    precioACobrar: v[4], codigoDescuento: v[6], idPedido: idPedido, telefono: v[14]
   }, "Central One " + ordenCO);
   SpreadsheetApp.flush();
   return { status: "success", yaEntregado: false, code: codigo, usuario: resumen.usuario, precio: resumen.precio, codigoDescuento: resumen.codigoDescuento };
@@ -585,8 +598,9 @@ function hojaPedidosApi() {
     hoja.appendRow(COLUMNAS_PEDIDOS_API);
     hoja.getRange(1, 1, 1, COLUMNAS_PEDIDOS_API.length).setFontWeight("bold");
     hoja.setFrozenRows(1);
-    hoja.getRange(1, COLUMNAS_PEDIDOS_API.length).setNote("Lo usa el script para entregar o liberar el pago. No lo cambies.");
+    hoja.getRange(1, COLUMNA_DATOS_INTERNOS_API).setNote("Lo usa el script para entregar o liberar el pago. No lo cambies.");
   }
+  asegurarTituloWhatsapp(hoja, COLUMNAS_PEDIDOS_API.length);
   return hoja;
 }
 
@@ -713,7 +727,23 @@ function hojaPorCompletar() {
     hoja.getRange(1, 1, 1, COLUMNAS_POR_COMPLETAR.length).setFontWeight("bold");
     hoja.setFrozenRows(1);
   }
+  asegurarTituloWhatsapp(hoja, COLUMNAS_POR_COMPLETAR.length);
   return hoja;
+}
+
+// WhatsApp del cliente (opcional; Vercel manda "+58…" ya validado o ""). En la hoja queda como enlace
+// https://wa.me/58… : un toque abre el chat con el cliente. Cualquier otra cosa queda vacía.
+function enlaceWhatsapp(telefono) {
+  var digitos = String(telefono || "").replace(/\D/g, "");
+  return /^584\d{9}$/.test(digitos) ? "https://wa.me/" + digitos : "";
+}
+
+// Pestaña creada antes de la columna "WhatsApp" (siempre la última): se agrega su título
+// (y la columna, si se habían borrado las columnas vacías)
+function asegurarTituloWhatsapp(hoja, columna) {
+  if (hoja.getMaxColumns() < columna) hoja.insertColumnsAfter(hoja.getMaxColumns(), columna - hoja.getMaxColumns());
+  var celda = hoja.getRange(1, columna);
+  if (!String(celda.getValue() || "").trim()) celda.setValue("WhatsApp").setFontWeight("bold");
 }
 
 // Fila (la más reciente) de "por_completar" con ese valor exacto en esa columna (14 = huella de la clave)

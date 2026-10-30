@@ -35,6 +35,7 @@
   <script src="/js/ultimo-id.js" defer></script>
   <script src="/js/datos-pago.js" defer></script>
   <script src="/js/aviso-codigo.js?v=3" defer></script>
+  <script src="/js/whatsapp-cliente.js?v=1" defer></script>
   <style>
     :root {
       /* Acento del juego (Blood Strike: rojo intenso con detalles cian (la "X" del logo)): bordes, botones, sombras y glows */
@@ -653,6 +654,7 @@
   <link rel="stylesheet" href="css/pie-legal.css">
   <link rel="stylesheet" href="css/descuento.css">
   <link rel="stylesheet" href="css/aviso-codigo.css?v=3">
+  <link rel="stylesheet" href="css/whatsapp-cliente.css?v=1">
 </head>
 <body class="pagina-juego">
 
@@ -874,6 +876,9 @@
       <div style="margin-bottom: 16px;">
         <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputReferencia" class="input-field" placeholder="Solo los últimos 5 dígitos del pago" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
       </div>
+
+      <!-- WhatsApp opcional (js/whatsapp-cliente.js dibuja el campo) -->
+      <div id="campoWhatsapp"></div>
 
       <button type="button" id="btnProcesarPedido" class="btn-submit-order" onclick="abrirModal()">🪙 COMPRAR ORO</button>
       <p class="aviso-aceptacion">Al procesar tu pedido aceptas los <a href="terminos.html" target="_blank">Términos y Condiciones</a>, la <a href="privacidad.html" target="_blank">Política de Privacidad</a> y la <a href="reembolsos.html" target="_blank">Política de Reembolsos</a>.</p>
@@ -1397,6 +1402,9 @@
       }
       
       
+      // WhatsApp escrito a medias: se marca el campo (vacío sí se puede)
+      if (window.WhatsappCliente && !WhatsappCliente.revisar()) return;
+
       document.getElementById('resumenId').textContent = id; 
       document.getElementById('resumenNombreJugador').textContent = nombreJugadorVerificado;
       document.getElementById('resumenPaquete').textContent = `${nombrePaquete(paqueteSeleccionado)} (Blood Strike)`;
@@ -1411,6 +1419,8 @@
       const chatModalWindow = document.getElementById('chatModalWindow');
       if (chatModalWindow) chatModalWindow.classList.remove('active');
 
+      // WhatsApp opcional: fila en el resumen o aviso si no lo dejó (y, si es pase o membresía, confirmar que no lo tiene)
+      window.WhatsappCliente?.prepararConfirmacion({ productoUnico: esPase(paqueteSeleccionado.diamantes) });
       document.getElementById('modalConfirmacion').style.display = 'flex';
     };
 
@@ -1545,13 +1555,15 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             // Al completar solo van la clave y la nueva referencia: el ID, el paquete y el precio
             // los toma el servidor del pedido original
-            body: JSON.stringify(datosComplemento ? { tokenComplemento: datosComplemento.token, referencia: referenciaUsuario } : {
+            body: JSON.stringify(datosComplemento ? { tokenComplemento: datosComplemento.token, referencia: referenciaUsuario, telefono: window.WhatsappCliente?.valor() || '' } : {
                 id: playerId,
                 paquete: `${nombreDelPaquete} Blood Strike`,
                 referencia: referenciaUsuario, 
                 urlImagen: captureUrl,
                 // Solo el código: el servidor recalcula el descuento y el precio a cobrar
-                ...(descuento.codigo() && { codigoDescuento: descuento.codigo() })
+                ...(descuento.codigo() && { codigoDescuento: descuento.codigo() }),
+                // WhatsApp opcional ("+58…" o ""): va a la hoja con el pedido
+                telefono: window.WhatsappCliente?.valor() || ''
             })
           });
            
@@ -1637,6 +1649,7 @@
           setTimeout(() => {
             document.getElementById('pantallaProcesando').style.display = 'none';
             document.getElementById('codigoTxnExito').textContent = globalTxnCode;
+            window.WhatsappCliente?.notaExito();
             document.getElementById('modalExitosa').style.display = 'flex';
             isProcessing = false;
             if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');

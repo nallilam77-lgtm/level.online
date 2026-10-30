@@ -45,7 +45,7 @@ const ID_HOJA_PAGOS = "1FTjXo7sKybYVmyGO9HBlyla0T2LHBfCB8yHEV70JyOA"; // Hoja ce
 const ID_HOJA_FINALIZADOS = ID_HOJA_PAGOS;
 const HOJA_FINALIZADOS = "finalizados";
 // Columnas de "finalizados" de Free Fire (solo se usan si hubiera que crear la pestaña)
-const COLUMNAS_FINALIZADOS = ["fecha-hora", "id jugador", "paquete", "referencia", "códigos / orden", "comprobante"];
+const COLUMNAS_FINALIZADOS = ["fecha-hora", "id jugador", "paquete", "referencia", "códigos / orden", "comprobante", "WhatsApp"];
 
 // Versión que la tienda lee en obtener_precios (y usar_complemento). Vercel exige 3 o más: verificar_pago
 // idempotente (idPedido) y registrar_finalizado que ignora un idPedido ya anotado.
@@ -63,7 +63,7 @@ const MENSAJE_ERROR_INTERNO = "Error interno en el sistema de recargas. Intenta 
 const HOJA_POR_COMPLETAR = "por_completar";
 const COLUMNAS_POR_COMPLETAR = ["fecha-hora", "id pedido", "id jugador", "zona", "paquete", "precio (Bs)", "pagado (Bs)",
   "falta (Bs)", "referencias", "código descuento", "comprobante", "estado", "pedido que completó", "actualizado",
-  "clave (huella)", "vence"];
+  "clave (huella)", "vence", "WhatsApp"];
 // Columnas (1 = A) de "por_completar" que se buscan
 const PC_ID_PEDIDO = 2, PC_ESTADO = 12, PC_PEDIDO_QUE_COMPLETO = 13, PC_ACTUALIZADO = 14, PC_HUELLA = 15;
 // Estado de "pagos" de un pago que no alcanzó: no es "Verificado", así que ningún otro pedido lo toma
@@ -74,13 +74,13 @@ const MAX_PAGOS_POR_PEDIDO = 4;
 // --- Errores ---
 const HOJA_ERRORES = "errores";
 const COLUMNAS_ERRORES = ["fecha-hora", "id jugador (zona)", "paquete", "informe completo", "fase del fallo",
-  "motivo técnico", "estado del pago", "id pedido", "referencia"];
+  "motivo técnico", "estado del pago", "id pedido", "referencia", "WhatsApp"];
 
 // --- Pedidos de Central One ---
 // Una fila por recarga aceptada por la API. La columna L ("estado") la actualiza el webhook.
 const HOJA_PEDIDOS = "pedidos";
 const COLUMNAS_PEDIDOS = ["fecha-hora", "id jugador", "zona", "paquete", "producto Central One", "referencia",
-  "cobrado (Bs)", "código descuento", "comprobante", "id pedido", "orden Central One", "estado", "actualizado", "detalle"];
+  "cobrado (Bs)", "código descuento", "comprobante", "id pedido", "orden Central One", "estado", "actualizado", "detalle", "WhatsApp"];
 const PED_ORDEN = 11, PED_ESTADO = 12;
 const ORDEN_VALIDA = /^[A-Za-z0-9_.:-]{1,80}$/;
 const TEXTO_ESTADO = { confirmed: "⏳ EN PROCESO", processing: "⏳ EN PROCESO", completed: "✅ COMPLETADA", delivered: "✅ COMPLETADA",
@@ -296,7 +296,7 @@ function guardarPorCompletar(datos) {
     fechaHora, idPedido, textoSeguro(datos.idJugador), textoSeguro(datos.zona), textoSeguro(datos.paquete), precio, pagado, falta,
     referencia, textoSeguro(datos.codigoDescuento || ""), textoSeguro(datos.comprobante || "Sin comprobante"),
     "PENDIENTE: faltan " + formatoBs(falta) + " Bs", "", fechaHora, claveHash,
-    new Date(Date.now() + HORAS_PARA_COMPLETAR * 3600 * 1000)
+    new Date(Date.now() + HORAS_PARA_COMPLETAR * 3600 * 1000), enlaceWhatsapp(datos.telefono)
   ]);
   SpreadsheetApp.flush();
   return responder({ status: "success", horas: HORAS_PARA_COMPLETAR });
@@ -363,7 +363,8 @@ function completarConPago(fila, ultimos5, idPedido) {
   return {
     status: "success", valido: true, encontrado: true, completo: true,
     idPedidoOriginal: String(v[1]), idJugador: String(v[2]), zona: String(v[3]), paquete: String(v[4]), precio: precio,
-    pagadoTotal: pagado, referencias: referencias, codigoDescuento: String(v[9] || ""), comprobante: String(v[10] || "")
+    pagadoTotal: pagado, referencias: referencias, codigoDescuento: String(v[9] || ""), comprobante: String(v[10] || ""),
+    telefono: String(v[16] || "")
   };
 }
 
@@ -377,7 +378,9 @@ function cerrarComplemento(idPedido, estado) {
 }
 
 function hojaPorCompletar() {
-  return hojaConTitulos(HOJA_POR_COMPLETAR, COLUMNAS_POR_COMPLETAR);
+  var hoja = hojaConTitulos(HOJA_POR_COMPLETAR, COLUMNAS_POR_COMPLETAR);
+  asegurarTituloWhatsapp(hoja, COLUMNAS_POR_COMPLETAR.length);
+  return hoja;
 }
 
 // Fila (la más reciente) de "por_completar" con ese valor exacto en esa columna
@@ -507,7 +510,8 @@ function registrarFinalizado(datos) {
     textoSeguro(String(datos.paquete || "") + " · Zona " + String(datos.zona || "?")),
     textoSeguro(datos.referencia || datos.referencias),
     textoSeguro(orden ? "API Directa (Central One, pedido " + orden + ")" : "API Directa (Central One)"),
-    textoSeguro(datos.urlImagen || "Sin comprobante")
+    textoSeguro(datos.urlImagen || "Sin comprobante"),
+    enlaceWhatsapp(datos.telefono)
   ]);
   SpreadsheetApp.flush();
   // La fila ya está: desde aquí un reintento de Vercel NO la vuelve a anotar
@@ -532,7 +536,9 @@ function registrarFinalizado(datos) {
 
 // Fallo (proveedor, pago insuficiente...): fila en "errores". NO cambia el estado del pago.
 function registrarError(datos) {
-  hojaConTitulos(HOJA_ERRORES, COLUMNAS_ERRORES).appendRow([
+  var hojaErrores = hojaConTitulos(HOJA_ERRORES, COLUMNAS_ERRORES);
+  asegurarTituloWhatsapp(hojaErrores, COLUMNAS_ERRORES.length);
+  hojaErrores.appendRow([
     ahora(),
     textoSeguro(datos.idJugador || "Desconocido"),
     textoSeguro(datos.paquete || "Desconocido"),
@@ -541,7 +547,8 @@ function registrarError(datos) {
     textoSeguro(datos.motivo || ""),
     textoSeguro(datos.estadoPago || ""),
     textoSeguro(datos.idPedido || ""),
-    textoSeguro(datos.referencia || "")
+    textoSeguro(datos.referencia || ""),
+    enlaceWhatsapp(datos.telefono)
   ]);
   cerrarComplemento(String(datos.idPedido || ""), "❌ ERROR: ver pestaña errores (pagos ya \"Usado\")");
   SpreadsheetApp.flush();
@@ -569,7 +576,8 @@ function anotarPedidoApi(datos, fechaHora) {
     textoSeguro(orden),
     textoEstado(datos.estadoFazer || "confirmed"),
     fechaHora,
-    "pedido aceptado por Central One"
+    "pedido aceptado por Central One",
+    enlaceWhatsapp(datos.telefono)
   ]);
   var cache = CacheService.getScriptCache();
   var guardado = cache.get("aviso_" + orden);
@@ -623,7 +631,7 @@ function aplicarEstadoPedido(fila, estado, evento) {
   if (fallo && !TEXTO_FALLO.test(anterior)) {
     var motivo = "Central One marcó el pedido " + v[10] + " como " + estado + ": la recarga NO llegó (completa) al jugador";
     registrarError({
-      idJugador: cuenta, paquete: v[3], idPedido: v[9], referencia: v[5],
+      idJugador: cuenta, paquete: v[3], idPedido: v[9], referencia: v[5], telefono: v[14],
       fase: "4. RECARGA EN LA API DEL PROVEEDOR - aviso posterior del webhook",
       motivo: motivo,
       estadoPago: "USADO: hacer la recarga a mano o devolver el pago",
@@ -635,7 +643,7 @@ function aplicarEstadoPedido(fila, estado, evento) {
   if ((estado === "completed" || estado === "delivered") && /FALLIDA|CANCELADA/.test(anterior)) {
     var aviso = "ATENCIÓN: el pedido " + v[10] + " figuraba como fallido y Central One lo ENTREGÓ después: NO hacer la recarga a mano (si ya se hizo, el jugador recibió dos)";
     registrarError({
-      idJugador: cuenta, paquete: v[3], idPedido: v[9], referencia: v[5],
+      idJugador: cuenta, paquete: v[3], idPedido: v[9], referencia: v[5], telefono: v[14],
       fase: "4. RECARGA EN LA API DEL PROVEEDOR - entrega posterior a un fallo",
       motivo: aviso,
       estadoPago: "USADO (correcto): la recarga sí llegó",
@@ -652,6 +660,7 @@ function hojaPedidos() {
     hoja.getRange("A2:A").setNumberFormat("dd/MM/yyyy HH:mm:ss");
     hoja.getRange("G2:G").setNumberFormat("#,##0.00");
   }
+  asegurarTituloWhatsapp(hoja, COLUMNAS_PEDIDOS.length);
   return hoja;
 }
 
@@ -681,6 +690,21 @@ function obtenerHojaLocal(nombre) {
 }
 
 // Pestaña de esta hoja; si no existe se crea con sus títulos en negrita y la fila 1 fija
+// WhatsApp del cliente (opcional; Vercel manda "+58…" ya validado o ""). En la hoja queda como enlace
+// https://wa.me/58… : un toque abre el chat con el cliente. Cualquier otra cosa queda vacía.
+function enlaceWhatsapp(telefono) {
+  var digitos = String(telefono || "").replace(/\D/g, "");
+  return /^584\d{9}$/.test(digitos) ? "https://wa.me/" + digitos : "";
+}
+
+// Pestaña creada antes de la columna "WhatsApp" (siempre la última): se agrega su título
+// (y la columna, si se habían borrado las columnas vacías)
+function asegurarTituloWhatsapp(hoja, columna) {
+  if (hoja.getMaxColumns() < columna) hoja.insertColumnsAfter(hoja.getMaxColumns(), columna - hoja.getMaxColumns());
+  var celda = hoja.getRange(1, columna);
+  if (!String(celda.getValue() || "").trim()) celda.setValue("WhatsApp").setFontWeight("bold");
+}
+
 function hojaConTitulos(nombre, columnas) {
   var hoja = obtenerHojaLocal(nombre);
   if (!hoja) {
@@ -719,6 +743,7 @@ function hojaFinalizadosFreeFire() {
     hoja.getRange(1, 1, 1, COLUMNAS_FINALIZADOS.length).setFontWeight("bold");
     hoja.setFrozenRows(1);
   }
+  asegurarTituloWhatsapp(hoja, COLUMNAS_FINALIZADOS.length);
   return hoja;
 }
 

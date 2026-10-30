@@ -5,7 +5,7 @@
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasCachePrecios, ErrorExterno } from '../externo.js';
-import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion } from '../validacion.js';
+import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { FASES, ESTADO_PINES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
@@ -274,7 +274,7 @@ async function productoDelCatalogo(urlScript, clave) {
  */
 async function entregarRecarga(res, {
   URL_GOOGLE_SCRIPT, RAILWAY_SECRET, CENTRALONE_API_KEY, producto, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
-  comprobante, referencias, scriptV2, cierreIdempotente, opcionesCriticas,
+  comprobante, telefono, referencias, scriptV2, cierreIdempotente, opcionesCriticas,
   utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
 }) {
   // Texto para la hoja y los informes: "ref1" o "ref1 + ref2" (pago completado)
@@ -311,6 +311,7 @@ async function entregarRecarga(res, {
       ofertaFazer: textoProductos(api.productos || []),
       ...(api.motivo && { motivoSinApi: textoParaHoja(api.motivo, 300) }),
       ...(desc && { codigoDescuento: desc.codigo }),
+      telefono,
     }, opcionesCriticas);
   } catch (error) {
     console.error(`⚠️ [${FASES.codigos}] ${error.message} | REF: ${referenciaCompleta}`);
@@ -464,6 +465,7 @@ async function entregarRecarga(res, {
     // recargas.gs guarda la orden y su estado en la pestaña "fazer_card"
     ...(porApi && { ordenFazer: ordenFazer.id, estadoFazer: ordenFazer.status }),
     urlImagen: comprobante,
+    telefono,
     idPedido,
     // recargas.gs suma +1 uso y el monto cobrado al código en la pestaña "Descuentos"
     ...(desc && { codigoDescuento: desc.codigo, montoCobrado: precioReal })
@@ -506,6 +508,8 @@ export async function recargar(req, res) {
     const { id, paquete, referencia } = req.body || {};
     // El comprobante viaja a la hoja de cálculo: se limpia para que no pueda inyectar fórmulas
     const urlImagen = textoParaHoja(req.body?.urlImagen || "");
+    // WhatsApp opcional: inválido o vacío queda "" y la compra sigue igual
+    const telefono = telefonoCliente(req.body?.telefono);
 
     if (!id || !paquete || !referencia) {
       return res.status(400).json({ status: "error", message: "Faltan datos obligatorios para procesar la recarga." });
@@ -537,7 +541,7 @@ export async function recargar(req, res) {
 
     const { marcarReferencia, registrarEnHoja, informe, bloquearPago, bloquearPorError, cerrarEnSegundoPlano } = crearUtilidadesPedido({
       urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente,
-      datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante },
+      datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, telefono },
     });
 
     // Antes de consultar la hoja de pagos: ¿esta IP o este jugador acumula demasiados fallos?
@@ -636,7 +640,7 @@ export async function recargar(req, res) {
       const clave = randomBytes(24).toString('base64url');
       const porCompletar = await llamarScript(URL_GOOGLE_SCRIPT, {
         accion: "pago_por_completar", idPedido, referencia: referenciaCompleta, idJugador: String(id),
-        paquete: textoParaHoja(String(paquete)), precio: precioReal, pagado, comprobante,
+        paquete: textoParaHoja(String(paquete)), precio: precioReal, pagado, comprobante, telefono,
         codigoDescuento: desc?.codigo || "", claveHash: huella(clave),
       }, { reintentos: 2, tiempoMs: TIEMPOS.incidente, reintentarTrasTimeout: true }).catch((e) => ({ status: 'error', message: e.message }));
       if (porCompletar?.status === 'success') {
@@ -672,7 +676,7 @@ export async function recargar(req, res) {
 
     return await entregarRecarga(res, {
       URL_GOOGLE_SCRIPT, RAILWAY_SECRET, CENTRALONE_API_KEY, producto: paqueteGsheet.producto, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
-      comprobante, referencias: [referenciaCompleta], scriptV2, cierreIdempotente, opcionesCriticas,
+      comprobante, telefono, referencias: [referenciaCompleta], scriptV2, cierreIdempotente, opcionesCriticas,
       utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
     });
   } catch (error) {
@@ -785,9 +789,11 @@ async function completarPago(req, res) {
       return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago quedó registrado y la recarga está en revisión: escríbenos por WhatsApp con tus referencias." });
     }
     const comprobante = textoParaHoja(datos.comprobante || "Sin comprobante");
+    // El WhatsApp que dejó en el primer pago (recargas.gs lo guarda en "por_completar") o el de ahora
+    const telefono = telefonoCliente(datos.telefono) || telefonoCliente(req.body?.telefono);
     const utilidades = crearUtilidadesPedido({
       urlScript: URL_GOOGLE_SCRIPT, idPedido, tiempoIncidenteMs: TIEMPOS.incidente, inicio,
-      datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante },
+      datosInforme: { idPedido, idJugador: id, paquete, referenciaCliente: referencia, comprobante, telefono },
     });
     pedido = { utilidades, referencias };
     console.info(`🧩 Pago completado (${referencias.join(' + ')}) para el pedido ${datos.idPedidoOriginal} -> ${idPedido} (ID ${id})`);
@@ -796,7 +802,7 @@ async function completarPago(req, res) {
       URL_GOOGLE_SCRIPT, RAILWAY_SECRET, CENTRALONE_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal,
       producto: await productoDelCatalogo(URL_GOOGLE_SCRIPT, numeroDiamantes),
       desc: datos.codigoDescuento ? { codigo: String(datos.codigoDescuento) } : null,
-      comprobante, referencias, scriptV2: true, opcionesCriticas: TIEMPOS.idempotente, utilidades,
+      comprobante, telefono, referencias, scriptV2: true, opcionesCriticas: TIEMPOS.idempotente, utilidades,
       // usar_complemento de recargas.gs v3 anuncia su versión
       cierreIdempotente: Number(datos.version) >= 3,
     });
