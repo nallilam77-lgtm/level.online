@@ -1263,9 +1263,10 @@
         statusDiv.style.display = 'none';
         idVerificado = false; verificarEstadoDesbloqueo(); return;
       }
+      // Verificador lento, con error o sin datos: se avisa y el cliente decide (puede seguir si su ID está bien)
       const aceptarSinComprobar = () => {
-        idVerificado = true; nombreJugadorVerificado = "ID Validado";
-        statusDiv.style.color = 'var(--game-text)'; statusDiv.innerHTML = `✔️ <strong style="color: #fff;">ID Validado</strong>`;
+        idVerificado = true; nombreJugadorVerificado = "Sin verificar";
+        statusDiv.style.color = 'var(--warning)'; statusDiv.innerHTML = `⚠️ <strong>No pudimos verificar tu ID.</strong> Si estás seguro de que es correcto, puedes continuar; si no, inténtalo más tarde.`;
       };
       try {
         btnVerify.disabled = true; btnVerify.innerText = "BUSCANDO...";
@@ -1291,7 +1292,7 @@
         aceptarSinComprobar();
       } finally { btnVerify.disabled = false; btnVerify.innerText = "CONFIRMAR MI ID"; verificarEstadoDesbloqueo(); }
       // Se recuerda en este dispositivo para la próxima recarga (js/ultimo-id.js)
-      if (idVerificado) window.UltimoId?.guardar('mobilelegends', { id: idInput, zona: zonaInput, nombre: nombreJugadorVerificado === 'ID Validado' ? '' : nombreJugadorVerificado });
+      if (idVerificado) window.UltimoId?.guardar('mobilelegends', { id: idInput, zona: zonaInput, nombre: nombreJugadorVerificado === 'Sin verificar' ? '' : nombreJugadorVerificado });
       return idVerificado;
     };
     document.getElementById('btnVerifyId').addEventListener('click', verificarCuenta);
@@ -1864,7 +1865,7 @@
             <div class="chat-action-card">
                 <p style="color:var(--game-text); font-weight:900; font-size:13px;">🏦 TU PEDIDO</p>
                 <div class="chat-resumen">
-                    Cuenta: <strong>${escaparHtml(id)} (${escaparHtml(zona)})</strong>${nombreJugadorVerificado && nombreJugadorVerificado !== 'ID Validado' ? ` · ${escaparHtml(nombreJugadorVerificado)}` : ''}<br>
+                    Cuenta: <strong>${escaparHtml(id)} (${escaparHtml(zona)})</strong>${nombreJugadorVerificado && nombreJugadorVerificado !== 'Sin verificar' ? ` · ${escaparHtml(nombreJugadorVerificado)}` : ''}<br>
                     Paquete: <strong>${escaparHtml(nombrePaquete(paqueteSeleccionado))}</strong><br>
                     Total: <strong>${escaparHtml(paqueteSeleccionado.precio)} Bs</strong>
                 </div>
@@ -1898,8 +1899,10 @@
             burbujaBot('❌ No pude confirmar esa cuenta. Revisa tu <strong>ID</strong> y tu <strong>Zona</strong> (el número del paréntesis) y escríbelos de nuevo.');
             return;
         }
-        const jugador = nombreJugadorVerificado && nombreJugadorVerificado !== 'ID Validado' ? ` <strong>${escaparHtml(nombreJugadorVerificado)}</strong>` : '';
-        burbujaBot(`✅ Cuenta confirmada:${jugador} ${escaparHtml(id)} (${escaparHtml(zona)}).`);
+        const jugador = nombreJugadorVerificado && nombreJugadorVerificado !== 'Sin verificar' ? ` <strong>${escaparHtml(nombreJugadorVerificado)}</strong>` : '';
+        burbujaBot(jugador
+          ? `✅ Cuenta confirmada:${jugador} ${escaparHtml(id)} (${escaparHtml(zona)}).`
+          : `⚠️ No pudimos verificar el ID ${escaparHtml(id)} (${escaparHtml(zona)}). Si estás seguro de que es correcto, seguimos; si no, inténtalo más tarde.`);
         const paquete = buscarPaqueteDelChat(paqueteTexto);
         if (paquete) marcarPaquete(paquete);
         if (paqueteSeleccionado) mostrarTarjetaPago();
@@ -1955,7 +1958,7 @@
         const id = document.getElementById('inputPlayerId').value.trim();
         const zona = document.getElementById('inputZona').value.trim();
         return [
-            idVerificado ? `Cuenta confirmada: ${id} (${zona})${nombreJugadorVerificado && nombreJugadorVerificado !== 'ID Validado' ? `, jugador ${nombreJugadorVerificado}` : ''}` : (id ? `ID y Zona escritos sin confirmar: ${id} (${zona || 'sin zona'})` : 'Cuenta sin confirmar'),
+            idVerificado ? `Cuenta confirmada: ${id} (${zona})${nombreJugadorVerificado && nombreJugadorVerificado !== 'Sin verificar' ? `, jugador ${nombreJugadorVerificado}` : ' (sin verificar: el verificador falló y el cliente siguió)'}` : (id ? `ID y Zona escritos sin confirmar: ${id} (${zona || 'sin zona'})` : 'Cuenta sin confirmar'),
             paqueteSeleccionado ? `Paquete elegido: ${nombrePaquete(paqueteSeleccionado)} (${paqueteSeleccionado.precio} Bs)` : 'Sin paquete elegido',
             descuento.codigo() ? `Código de descuento aplicado: ${descuento.codigo()}` : '',
         ].filter(Boolean).join('. ').slice(0, 300);

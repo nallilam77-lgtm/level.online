@@ -1258,9 +1258,10 @@
         statusDiv.style.display = 'none';
         idVerificado = false; verificarEstadoDesbloqueo(); return;
       }
+      // Verificador lento, con error o sin datos: se avisa y el cliente decide (puede seguir si su ID está bien)
       const aceptarSinComprobar = () => {
-        idVerificado = true; nombreJugadorVerificado = "ID Validado";
-        statusDiv.style.color = 'var(--game-text)'; statusDiv.innerHTML = `✔️ <strong style="color: #fff;">ID Validado</strong>`;
+        idVerificado = true; nombreJugadorVerificado = "Sin verificar";
+        statusDiv.style.color = 'var(--warning)'; statusDiv.innerHTML = `⚠️ <strong>No pudimos verificar tu ID.</strong> Si estás seguro de que es correcto, puedes continuar; si no, inténtalo más tarde.`;
       };
       try {
         btnVerify.disabled = true; btnVerify.innerText = "BUSCANDO...";
@@ -1286,7 +1287,7 @@
         aceptarSinComprobar();
       } finally { btnVerify.disabled = false; btnVerify.innerText = "CONFIRMAR MI ID"; verificarEstadoDesbloqueo(); }
       // Se recuerda en este dispositivo para la próxima recarga (js/ultimo-id.js)
-      if (idVerificado) window.UltimoId?.guardar('bloodstrike', { id: idInput, nombre: nombreJugadorVerificado === 'ID Validado' ? '' : nombreJugadorVerificado });
+      if (idVerificado) window.UltimoId?.guardar('bloodstrike', { id: idInput, nombre: nombreJugadorVerificado === 'Sin verificar' ? '' : nombreJugadorVerificado });
       return idVerificado;
     };
     document.getElementById('btnVerifyId').addEventListener('click', verificarCuenta);
@@ -1787,7 +1788,7 @@
     const soloDigitos = (texto) => String(texto ?? '').replace(/[^0-9]/g, '');
     const contenedorMensajes = () => document.getElementById('chat-messages');
     const bajarChat = () => { const c = contenedorMensajes(); c.scrollTop = c.scrollHeight; };
-    const nombreReal = () => (nombreJugadorVerificado && nombreJugadorVerificado !== 'ID Validado' ? nombreJugadorVerificado : '');
+    const nombreReal = () => (nombreJugadorVerificado && nombreJugadorVerificado !== 'Sin verificar' ? nombreJugadorVerificado : '');
 
     function burbujaBot(html) {
         const msg = document.createElement('div');
@@ -1880,7 +1881,9 @@
             burbujaBot('❌ No pude confirmar ese ID. Revísalo y escríbelo de nuevo.');
             return;
         }
-        burbujaBot(`✅ Cuenta confirmada:${nombreReal() ? ` <strong>${escaparHtml(nombreReal())}</strong>` : ''} ${escaparHtml(id)}.`);
+        burbujaBot(nombreReal()
+          ? `✅ Cuenta confirmada: <strong>${escaparHtml(nombreReal())}</strong> ${escaparHtml(id)}.`
+          : `⚠️ No pudimos verificar el ID ${escaparHtml(id)}. Si estás seguro de que es correcto, seguimos; si no, inténtalo más tarde.`);
         const paquete = buscarPaqueteDelChat(paqueteTexto);
         if (paquete) marcarPaquete(paquete);
         if (paqueteSeleccionado) mostrarTarjetaPago();
@@ -1933,7 +1936,7 @@
     function estadoParaIA() {
         const id = document.getElementById('inputPlayerId').value.trim();
         return [
-            idVerificado ? `ID confirmado: ${id}${nombreReal() ? `, jugador ${nombreReal()}` : ''}` : (id ? `ID escrito sin confirmar: ${id}` : 'Sin ID'),
+            idVerificado ? `ID confirmado: ${id}${nombreReal() ? `, jugador ${nombreReal()}` : ' (sin verificar: el verificador falló y el cliente siguió)'}` : (id ? `ID escrito sin confirmar: ${id}` : 'Sin ID'),
             paqueteSeleccionado ? `Paquete elegido: ${nombrePaquete(paqueteSeleccionado)} (${paqueteSeleccionado.precio} Bs)` : 'Sin paquete elegido',
             descuento.codigo() ? `Código de descuento aplicado: ${descuento.codigo()}` : '',
         ].filter(Boolean).join('. ').slice(0, 300);
