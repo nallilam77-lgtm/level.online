@@ -58,6 +58,12 @@
       --text-muted: #94a3b8;
       --primary: var(--accent-cyan);
       --primary-glow: rgba(34, 211, 238, 0.4);
+      /* Ventana "Únete al canal" */
+      --accent-cyan-rgb: 34, 211, 238;
+      --accent-neon-rgb: 57, 255, 20;
+      --whatsapp: #25d366;
+      --whatsapp-rgb: 37, 211, 102;
+      --papel: #ffffff;   /* fondo del póster: rellena el marco si la imagen se achica en pantallas bajas */
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -133,6 +139,87 @@
       z-index: 1000; backdrop-filter: blur(4px); animation: fadeIn 0.4s;
     }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* --- VENTANA "ÚNETE AL CANAL DE WHATSAPP" (se abre en cada visita al inicio) --- */
+    .unete-overlay {
+      display: none; position: fixed; inset: 0; z-index: 99999;
+      align-items: center; justify-content: center; padding: 16px;
+      background: rgba(2, 6, 23, 0.85);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      animation: fadeIn 0.3s ease;
+    }
+    .unete-overlay.abierto { display: flex; }
+    .unete-modal {
+      position: relative; width: 100%; max-width: 360px;
+      display: grid; gap: 14px; justify-items: center;
+      padding: 28px 18px 16px;
+      background: var(--surface);
+      backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+      border: 1px solid rgba(var(--accent-cyan-rgb), 0.35); border-radius: 24px;
+      box-shadow: var(--shadow-lg), 0 20px 50px -10px rgba(var(--accent-cyan-rgb), 0.35);
+      animation: fadeUp 0.35s ease;
+    }
+    /* Fondo sólido detrás del glass para que el póster resalte */
+    .unete-modal::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--bg-deep); opacity: 0.9; }
+
+    /* Etiqueta sobre el marco */
+    .unete-etiqueta {
+      position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+      display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+      padding: 6px 14px; border-radius: 50px;
+      background: var(--cta-gradient); color: var(--on-cta);
+      font-family: 'Montserrat', sans-serif; font-size: 11px; font-weight: 900;
+      letter-spacing: 1px; text-transform: uppercase;
+      box-shadow: 0 6px 18px -4px rgba(var(--accent-cyan-rgb), 0.6);
+    }
+    .unete-etiqueta svg { width: 14px; height: 14px; }
+
+    /* En la esquina de la ventana (no sobre el póster) */
+    .unete-cerrar {
+      position: absolute; top: -14px; right: -12px; z-index: 2;
+      width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(var(--accent-cyan-rgb), 0.45); border-radius: 50%;
+      background: var(--bg-deep); color: var(--text-main);
+      box-shadow: var(--shadow-lg);
+      font-size: 18px; line-height: 1; cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    }
+    .unete-cerrar:hover, .unete-cerrar:focus-visible { border-color: var(--accent-cyan); box-shadow: var(--shadow-lg), 0 0 14px rgba(var(--accent-cyan-rgb), 0.5); transform: rotate(90deg); outline: none; }
+
+    /* Marco del póster: borde degradado cian → neón con brillo */
+    .unete-marco {
+      display: block; width: 100%; padding: 3px; border-radius: 18px;
+      background: linear-gradient(160deg, var(--accent-cyan), rgba(var(--accent-cyan-rgb), 0.25) 45%, var(--accent-neon));
+      box-shadow: 0 0 0 1px rgba(var(--accent-cyan-rgb), 0.15), 0 12px 32px -8px rgba(var(--accent-cyan-rgb), 0.55);
+      transition: box-shadow 0.25s ease, transform 0.25s ease;
+    }
+    .unete-marco:hover, .unete-marco:focus-visible {
+      box-shadow: 0 0 0 1px rgba(var(--accent-cyan-rgb), 0.3), 0 16px 40px -8px rgba(var(--accent-neon-rgb), 0.45);
+      transform: translateY(-2px); outline: none;
+    }
+    .unete-marco img {
+      display: block; width: 100%; height: auto;
+      /* Pantallas bajas: el póster se achica para que el botón siempre se vea sin desplazar */
+      max-height: calc(100vh - 230px); max-height: calc(100dvh - 230px);
+      object-fit: contain; border-radius: 15px; background: var(--papel);
+    }
+
+    .unete-boton {
+      width: 100%; min-height: 52px; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      border-radius: 14px; background: var(--whatsapp); color: var(--on-cta); text-decoration: none;
+      font-family: 'Montserrat', sans-serif; font-size: 15px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase;
+      box-shadow: 0 8px 22px -6px rgba(var(--whatsapp-rgb), 0.6);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .unete-boton svg { width: 22px; height: 22px; flex-shrink: 0; }
+    .unete-boton:hover, .unete-boton:focus-visible { transform: translateY(-2px); box-shadow: 0 12px 28px -6px rgba(var(--whatsapp-rgb), 0.8); outline: none; }
+
+    .unete-ahora-no {
+      min-height: 44px; padding: 0 16px; border: none; background: none; cursor: pointer;
+      color: var(--text-muted); font-family: 'Poppins', sans-serif; font-size: 12px; font-weight: 600;
+      text-decoration: underline; text-underline-offset: 3px; transition: color 0.2s ease;
+    }
+    .unete-ahora-no:hover, .unete-ahora-no:focus-visible { color: var(--text-main); outline: none; }
 
     /* --- MODAL TUTORIAL RECARGA (SHORT YOUTUBE) --- */
     .tutorial-modal-overlay {
@@ -453,7 +540,27 @@
 </head>
 <body>
 
-  <!-- MODAL TUTORIAL DE RECARGA (SHORT DE YOUTUBE): solo se abre solo en la primera visita -->
+  <!-- VENTANA "ÚNETE AL CANAL DE WHATSAPP": se abre en cada visita al inicio -->
+  <div class="unete-overlay" id="uneteModal" role="dialog" aria-modal="true" aria-label="Únete al canal de WhatsApp de Level Up" onclick="cerrarUneteAfuera(event)">
+    <div class="unete-modal" id="uneteCaja">
+      <span class="unete-etiqueta">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h2l5 4V5L6 9H4a1 1 0 0 0-1 1zm13.5 2a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
+        Canal oficial
+      </span>
+      <button type="button" class="unete-cerrar" onclick="cerrarUnete()" aria-label="Cerrar">✕</button>
+      <a class="unete-marco" href="https://whatsapp.com/channel/0029Vb82z5017En51RN1NH1v" target="_blank" rel="noopener noreferrer" onclick="cerrarUnete()">
+        <img src="img/unete.webp?v=1" width="680" height="962" decoding="async"
+          alt="Únete a Level Up: eventos, regalos y códigos de descuento para la comunidad en nuestro canal de WhatsApp">
+      </a>
+      <a class="unete-boton" href="https://whatsapp.com/channel/0029Vb82z5017En51RN1NH1v" target="_blank" rel="noopener noreferrer" onclick="cerrarUnete()">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.031 0C5.385 0 0 5.383 0 12.029c0 2.124.553 4.195 1.605 6.01L.036 24l6.11-1.603c1.737 1.002 3.738 1.531 5.885 1.531 6.643 0 12.028-5.381 12.028-12.027C24.059 5.383 18.675 0 12.031 0zm3.565 17.27c-.54.269-3.187.584-3.557.584-.37 0-1.802-.234-4.225-2.656-2.424-2.425-2.657-3.856-2.657-4.226 0-.37.316-3.018.584-3.557.269-.54.912-.767 1.451-.497.54.269 1.433 3.493 1.433 3.864 0 .37-.197.808-.466 1.077-.466.466.269.269-.538.448-.179 1.077.359.627 1.614 1.882 2.241 2.241.628.359.808.09 1.077-.179.269-.269.808-.466 1.077-.466.37 0 3.595.892 3.864 1.432.27.539.043 1.182-.497 1.451z"/></svg>
+        Unirme al canal
+      </a>
+      <button type="button" class="unete-ahora-no" onclick="cerrarUnete()">Ahora no</button>
+    </div>
+  </div>
+
+  <!-- MODAL TUTORIAL DE RECARGA (SHORT DE YOUTUBE): se abre con el botón "¿Cómo recargar?" -->
   <div class="tutorial-modal-overlay" id="tutorialModal" onclick="cerrarTutorialAfuera(event)">
     <div class="tutorial-modal" id="tutorialBox">
       <div class="tutorial-close-btn" onclick="cerrarTutorial()" aria-label="Cerrar">✖</div>
@@ -662,14 +769,27 @@
       document.getElementById('videoPortada').hidden = true;
     }
 
-    // Se abre solo en la primera visita; después, con el botón "¿Cómo recargar?".
-    // Si el navegador bloquea el almacenamiento, no se abre solo (mejor que en cada visita).
-    try {
-      if (!localStorage.getItem('tutorial_visto')) {
-        localStorage.setItem('tutorial_visto', '1');
-        abrirTutorial(document.documentElement.classList.contains('ligero'));
-      }
-    } catch (e) { /* almacenamiento bloqueado: el botón sigue disponible */ }
+    // --- VENTANA "ÚNETE AL CANAL" ---
+    // Se abre en cada visita al inicio (el video ya no sale solo: queda en el botón "¿Cómo recargar?")
+    function abrirUnete() {
+      document.getElementById('uneteModal').classList.add('abierto');
+      body.classList.add('no-scroll');
+      document.querySelector('.unete-cerrar').focus({ preventScroll: true });
+    }
+
+    function cerrarUnete() {
+      const modal = document.getElementById('uneteModal');
+      if (!modal.classList.contains('abierto')) return;
+      modal.classList.remove('abierto');
+      body.classList.remove('no-scroll');
+    }
+
+    function cerrarUneteAfuera(event) {
+      if (!document.getElementById('uneteCaja').contains(event.target)) cerrarUnete();
+    }
+
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarUnete(); });
+    abrirUnete();
 
     function cerrarTutorial() {
       const modal = document.getElementById('tutorialModal');
