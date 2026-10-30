@@ -158,12 +158,14 @@ async function catalogoFreeFire() {
 // Sin dato (Apps Script anterior o caído) responde total 0 y la página no muestra nada.
 async function estadisticas(req, res) {
   const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
-  res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=3600');
+  // Solo un dato real se guarda en la CDN: un 0 por fallo se volvería a pedir enseguida
+  res.setHeader('Cache-Control', 'no-store');
   if (!URL_GOOGLE_SCRIPT) return res.status(200).json({ total: 0 });
   try {
     const { datos } = await conCache('estadisticas:ff',
       () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "contar_finalizados" }, LECTURA_APPS_SCRIPT),
       { frescoMs: 60 * 60_000, respaldoMs: 24 * 60 * 60_000, esValido: (d) => d?.status === 'success' && Number.isFinite(Number(d.total)) });
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=3600');
     return res.status(200).json({ total: Math.max(0, Math.floor(Number(datos.total))) });
   } catch (error) {
     console.error("⚠️ estadisticas: no se pudo contar las recargas:", error.message);
