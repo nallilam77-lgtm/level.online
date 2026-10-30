@@ -312,6 +312,15 @@
     }
     @keyframes brilloFuego { to { background-position: 200% center; } }
     .subtitulo { color: var(--text-muted); font-size: 14px; font-weight: 400; margin-top: 5px; }
+    /* Contador real de recargas entregadas (pestaña "finalizados"); oculto si no hay dato */
+    .contador-recargas {
+      display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 8px 16px; border-radius: 50px;
+      background: rgba(var(--accent-neon-rgb), 0.08); border: 1px solid rgba(var(--accent-neon-rgb), 0.35);
+      color: var(--text-main); font-size: 13px; font-weight: 600;
+    }
+    .contador-recargas[hidden] { display: none; }
+    .contador-recargas strong { color: var(--accent-neon); font-family: 'Montserrat', sans-serif; font-weight: 900; }
+    .contador-recargas svg { width: 16px; height: 16px; color: var(--accent-neon); flex-shrink: 0; }
 
     /* Botón "INFLUENCERS" del hero: lleva al Panel de Creadores */
     .btn-influencers {
@@ -631,6 +640,10 @@
     <header class="animate-up">
       <h1 class="titulo-principal">LEVEL UP</h1>
       <p class="subtitulo">El centro de recargas más rápido de Venezuela</p>
+      <p class="contador-recargas" id="contadorRecargas" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <span>Más de <strong id="contadorNumero"></strong> recargas entregadas</span>
+      </p>
       <div class="acciones-hero">
         <a href="creadores.html" class="btn-influencers"><span aria-hidden="true">⭐</span> INFLUENCERS</a>
         <button type="button" class="btn-tutorial" onclick="abrirTutorial()"><span aria-hidden="true">▶</span> ¿Cómo recargar?</button>
@@ -988,6 +1001,19 @@
     function irAlAdmin() {
       window.location.href = 'admin.html';
     }
+
+    // Contador real de recargas entregadas: se redondea HACIA ABAJO ("más de 1.200") y con menos de
+    // 100 no se muestra. Se pide después de cargar la página para no competir con lo importante.
+    window.addEventListener('load', () => setTimeout(async () => {
+      try {
+        const respuesta = await fetch('/api/juego?juego=freefire&accion=estadisticas');
+        const total = Number((await respuesta.json()).total) || 0;
+        if (total < 100) return;
+        const redondeado = total >= 1000 ? Math.floor(total / 100) * 100 : Math.floor(total / 10) * 10;
+        document.getElementById('contadorNumero').textContent = redondeado.toLocaleString('es-VE');
+        document.getElementById('contadorRecargas').hidden = false;
+      } catch (e) { /* sin dato: el contador no aparece */ }
+    }, 1500));
   </script>
 
 </body>

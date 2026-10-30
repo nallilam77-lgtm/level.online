@@ -36,6 +36,7 @@
   <script src="/js/datos-pago.js" defer></script>
   <script src="/js/aviso-codigo.js?v=3" defer></script>
   <script src="/js/whatsapp-cliente.js?v=2" defer></script>
+  <script src="/js/canal.js?v=1" defer></script>
   <script src="/js/version-nueva.js?v=1" defer></script>
   <style>
     :root {
@@ -656,6 +657,7 @@
   <link rel="stylesheet" href="css/descuento.css">
   <link rel="stylesheet" href="css/aviso-codigo.css?v=3">
   <link rel="stylesheet" href="css/whatsapp-cliente.css?v=1">
+  <link rel="stylesheet" href="css/canal.css?v=1">
 </head>
 <body class="pagina-juego">
 
@@ -727,6 +729,8 @@
       <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado y el oro ya está en tu cuenta.</p>
       <div class="tx-caja success" id="codigoTxnExito">TXN-XXXXXX</div>
       <button type="button" class="btn-confirmar" style="background: var(--game-gradient); color: var(--on-cta); margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(var(--game-accent-rgb), 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
+      <!-- Invitación al canal de WhatsApp (js/canal.js) -->
+      <div data-canal="exito"></div>
       <a href="index.html" class="btn-volver-inicio" style="background: var(--success); color: #000;">NUEVA RECARGA</a>
     </div>
   </div>
@@ -743,6 +747,8 @@
           <span style="position: absolute; bottom: 25px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--game-text); text-shadow: 0 2px 5px #000; transform: rotate(180deg);">100 🪙</span>
         </div>
       </div>
+      <!-- Invitación al canal si sale "Vacío" (js/canal.js) -->
+      <div data-canal="ruleta" hidden></div>
       <button class="btn-cerrar-dark" id="btnCerrarRuleta" style="display: none; width: 100%; background: var(--game-accent); color: var(--on-cta); border-color: var(--game-accent);" onclick="cerrarRuletaAuto()">ENTENDIDO, VOLVER AL INICIO</button>
     </div>
   </div>
@@ -886,6 +892,9 @@
     </div> 
   </div> 
   <!-- FIN DE MAIN-CARD -->
+
+  <!-- Invitación al canal de WhatsApp, fuera del paso de pago (js/canal.js) -->
+  <div data-canal="tienda"></div>
 
   <footer class="pie-legal">
     <div class="pie-legal-enlaces" role="navigation" aria-label="Información legal">
@@ -1704,6 +1713,7 @@
                   } else {
                       textoEstado.style.color = "var(--danger)";
                       textoEstado.innerText = "❌ No hubo suerte esta vez. ¡Gracias por participar!";
+                      window.Canal?.mostrar('ruleta');
                   }
                   btnCerrar.style.display = 'block';
               }, 4000);

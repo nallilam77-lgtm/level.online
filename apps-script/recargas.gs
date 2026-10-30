@@ -181,7 +181,8 @@ function doPost(e) {
     consultar_ruleta: consultarRuleta,
     registrar_premio_ruleta: registrarPremioRuleta,
     validar_descuento: validarDescuento,
-    consultar_creador: consultarCreador
+    consultar_creador: consultarCreador,
+    contar_finalizados: contarFinalizados
   };
   // Cambian pagos, pines o contadores: una a la vez
   var conCandadoAcciones = {
@@ -2321,6 +2322,13 @@ function asegurarTituloWhatsapp(hoja, columna) {
   if (hoja.getMaxColumns() < columna) hoja.insertColumnsAfter(hoja.getMaxColumns(), columna - hoja.getMaxColumns());
   var celda = hoja.getRange(1, columna);
   if (!String(celda.getValue() || "").trim()) celda.setValue("WhatsApp").setFontWeight("bold");
+}
+
+// Recargas entregadas (filas de "finalizados": Free Fire y Mobile Legends) para el contador del inicio.
+// Solo lee el número de la última fila: no recorre la pestaña ni usa el candado.
+function contarFinalizados() {
+  var hoja = obtenerHoja("finalizados", true);
+  return responder({ status: "success", total: hoja ? Math.max(0, hoja.getLastRow() - 1) : 0 });
 }
 
 // La pestaña con ese nombre; si no existe, la crea con su fila de títulos

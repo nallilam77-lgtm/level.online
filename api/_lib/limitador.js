@@ -5,6 +5,7 @@
 // Sin ella cae a memoria local: protección débil, porque cada instancia cuenta por separado.
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 import { createHash } from 'node:crypto';
+import { waitUntil } from '@vercel/functions';
 
 const COLECCION = 'limites_recarga';
 const VENTANA_MS = 30 * 60 * 1000;  // los fallos se cuentan dentro de 30 minutos
@@ -17,7 +18,10 @@ const MAX_CLAVES_EN_MEMORIA = 10000;
 // muchos clientes móviles comparten IP (CGNAT de las operadoras).
 // "descuento": códigos de descuento inválidos por IP (frena que se adivinen probando).
 // "panel" / "panelcodigo": PIN incorrecto en el panel de creadores, por IP y por código.
-const MAX_FALLOS = { ip: 15, jugador: 5, descuento: 10, panel: 8, panelcodigo: 20 };
+// Límites de USO (permitirUso: cuenta cada llamada, no solo los fallos), por IP en 30 minutos.
+// Holgados: una compra normal sube 1-3 comprobantes y una conversación usa 10-20 mensajes.
+// "subida": comprobantes a Drive · "chat": mensajes a Gemini · "consulta": consultar órdenes por ID.
+const MAX_FALLOS = { ip: 15, jugador: 5, descuento: 10, panel: 8, panelcodigo: 20, subida: 30, chat: 60, consulta: 30 };
 
 let promesaDb = null;
 let avisoSinFirestore = false;
@@ -134,4 +138,14 @@ export async function registrarFallo(claves) {
     }
     guardarEnMemoria(clave, siguienteEstado(memoria.get(clave), clave, ahora));
   }));
+}
+
+// Límite de USO para lo que gasta recursos (Drive, cuota de Gemini) o deja consultar datos: cada llamada
+// cuenta. Devuelve los minutos de bloqueo (0 = adelante). El conteo se anota después de responder
+// (waitUntil) para no sumar la escritura de Firestore a la espera del cliente.
+export async function permitirUso(clave) {
+  const minutos = await minutosBloqueado([clave]);
+  if (minutos > 0) return minutos;
+  waitUntil(registrarFallo([clave]).catch((error) => console.error("❌ limitador: no se pudo contar el uso:", error.message)));
+  return 0;
 }

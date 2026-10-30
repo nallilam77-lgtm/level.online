@@ -1,0 +1,8 @@
+# Level Up: las tiendas y páginas públicas se pueden indexar; el panel de administración no
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /mantenimiento.html
+Disallow: /api/
+
+Sitemap: https://www.levelupstore.online/sitemap.xml

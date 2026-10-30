@@ -1,0 +1,66 @@
+/* Invitaciones al canal de WhatsApp (js/canal.js). Usa el acento de cada tienda y --whatsapp;
+   ver .claude/UI_RULES.md */
+
+:root { --canal-whatsapp-rgb: 29, 185, 84; }
+
+.canal-cta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  text-align: left;
+  background: rgba(var(--canal-whatsapp-rgb), 0.08);
+  border: 1px solid rgba(var(--canal-whatsapp-rgb), 0.4);
+  box-shadow: 0 10px 25px -8px rgba(var(--canal-whatsapp-rgb), 0.25);
+}
+.canal-cta[hidden] { display: none; }
+
+.canal-cta-texto { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.canal-cta-texto strong {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.canal-cta-texto span { font-size: 12px; line-height: 1.4; color: var(--text-muted); }
+
+.canal-cta-boton {
+  flex-shrink: 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: var(--whatsapp);
+  color: var(--bg-base);
+  text-decoration: none;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px -4px rgba(var(--canal-whatsapp-rgb), 0.6);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.canal-cta-boton svg { width: 18px; height: 18px; }
+.canal-cta-boton:hover,
+.canal-cta-boton:focus-visible { transform: translateY(-2px); box-shadow: 0 10px 22px -4px rgba(var(--canal-whatsapp-rgb), 0.8); outline: none; }
+
+/* Dentro de las ventanas (éxito, ruleta): texto arriba y botón a todo el ancho */
+.canal-cta--exito,
+.canal-cta--ruleta { flex-direction: column; align-items: stretch; text-align: center; margin-bottom: 12px; }
+.canal-cta--exito .canal-cta-boton,
+.canal-cta--ruleta .canal-cta-boton { width: 100%; }
+.canal-cta--ruleta { margin-top: 4px; }
+
+/* Franja de la tienda: al final, fuera del paso de pago */
+.canal-cta--tienda { max-width: 600px; margin: 24px auto 0; }
+@media (max-width: 400px) {
+  .canal-cta--tienda { flex-direction: column; align-items: stretch; text-align: center; }
+  .canal-cta--tienda .canal-cta-boton { width: 100%; }
+}

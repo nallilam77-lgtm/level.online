@@ -1,5 +1,6 @@
 import { pedirJSON, LECTURA_APPS_SCRIPT } from './_lib/externo.js';
 import { faltaConfiguracion } from './_lib/validacion.js';
+import { obtenerIp, permitirUso } from './_lib/limitador.js';
 
 export default async function handler(req, res) {
     // Headers de CORS: solo el dominio de la tienda (igual que vercel.json)
@@ -26,6 +27,12 @@ export default async function handler(req, res) {
         // IDs de Free Fire / Blood Strike (números) o usuarios de Roblox (letras, números y _)
         if (!/^[A-Za-z0-9_]{2,30}$/.test(String(playerId))) {
             return res.status(400).json({ success: false, message: "ID de jugador con formato inválido." });
+        }
+
+        // Frena que alguien pruebe IDs uno tras otro para ver las recargas de otros
+        const minutosEspera = await permitirUso(`consulta:${obtenerIp(req)}`);
+        if (minutosEspera > 0) {
+            return res.status(429).json({ success: false, message: `Hiciste demasiadas consultas. Espera ${minutosEspera} minutos e intenta de nuevo.` });
         }
 
         // Llamamos a tu NUEVA variable de entorno en Vercel
