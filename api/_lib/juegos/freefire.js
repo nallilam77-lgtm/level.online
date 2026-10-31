@@ -162,11 +162,16 @@ async function estadisticas(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (!URL_GOOGLE_SCRIPT) return res.status(200).json({ total: 0 });
   try {
-    const { datos } = await conCache('estadisticas:ff',
-      () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "contar_finalizados" }, LECTURA_APPS_SCRIPT),
-      { frescoMs: 60 * 60_000, respaldoMs: 24 * 60 * 60_000, esValido: (d) => d?.status === 'success' && Number.isFinite(Number(d.total)) });
-    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=3600');
-    return res.status(200).json({ total: Math.max(0, Math.floor(Number(datos.total))) });
+    // Recargas de HOY (hora de Venezuela, UTC-4 todo el año). La fecha va en la clave de la caché y la CDN
+    // no guarda la respuesta más allá de la medianoche: nunca se muestra el número de ayer
+    const ahoraVenezuela = new Date(Date.now() - 4 * 60 * 60_000);
+    const hoy = ahoraVenezuela.toISOString().slice(0, 10);
+    const segundosHastaMedianoche = 86_400 - Math.floor((ahoraVenezuela.getTime() % 86_400_000) / 1000);
+    const { datos } = await conCache(`estadisticas:ff:${hoy}`,
+      () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "contar_finalizados_hoy" }, LECTURA_APPS_SCRIPT),
+      { frescoMs: 10 * 60_000, respaldoMs: 60 * 60_000, esValido: (d) => d?.status === 'success' && Number.isFinite(Number(d.hoy)) });
+    res.setHeader('Cache-Control', `public, max-age=0, s-maxage=${Math.max(1, Math.min(600, segundosHastaMedianoche))}`);
+    return res.status(200).json({ total: Math.max(0, Math.floor(Number(datos.hoy))) });
   } catch (error) {
     console.error("⚠️ estadisticas: no se pudo contar las recargas:", error.message);
     return res.status(200).json({ total: 0 });

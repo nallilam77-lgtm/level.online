@@ -78,10 +78,10 @@ const MAX_PAGOS_POR_PEDIDO = 4;
 const URL_CENTRALONE = "https://portal.centraloneglobal.com/api/v1";
 // Llave SOLO con catalog:read, para el menú 🔄 (la que compra vive en Vercel, variable roblox_nuevo)
 const PROPIEDAD_LLAVE_CENTRALONE = "CENTRALONE_API_KEY";
-// Regiones de las tarjetas que se traen: solo Estados Unidos (las GLOBAL ya no). Central One puede escribirla
-// de varias formas; si no es ninguna, el 🔄 avisa qué regiones hay sin tocar la hoja. Solo tarjetas de Robux
+// Regiones de las tarjetas que se traen: solo GLOBAL (Central One quitó las de Estados Unidos). Si no hay
+// ninguna, el 🔄 avisa qué regiones hay sin tocar la hoja. Solo tarjetas de Robux
 // con stock: las de saldo en USD y las agotadas no se traen
-const REGIONES_ROBLOX = ["US", "USA", "UNITED STATES"];
+const REGIONES_ROBLOX = ["GLOBAL"];
 const FILA_PRODUCTO = 3;
 const FILA_COSTO = 4;
 const HOJA_TASA = "tasa_dolar";
@@ -900,7 +900,7 @@ function limpiarMontoVES(valor) {
 //   🔑 guarda la llave (propiedad del script, nunca en la hoja; basta con catalog:read) · 🔄 trae las
 //   tarjetas de Roblox de tu catálogo y les pone el precio en Bs con el dólar y la ganancia de la pestaña
 //   "tasa_dolar" (cambias el dólar y todos los precios cambian). Reemplaza toda la pestaña: solo quedan las
-//   tarjetas de Robux de Estados Unidos (REGIONES_ROBLOX) que Central One tiene en stock (las agotadas y las de saldo en USD no se traen).
+//   tarjetas de Robux GLOBAL (REGIONES_ROBLOX) que Central One tiene en stock (las agotadas y las de saldo en USD no se traen).
 // =====================================================================
 
 function onOpen() {

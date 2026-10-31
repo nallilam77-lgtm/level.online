@@ -182,7 +182,7 @@ function doPost(e) {
     registrar_premio_ruleta: registrarPremioRuleta,
     validar_descuento: validarDescuento,
     consultar_creador: consultarCreador,
-    contar_finalizados: contarFinalizados
+    contar_finalizados_hoy: contarFinalizadosHoy
   };
   // Cambian pagos, pines o contadores: una a la vez
   var conCandadoAcciones = {
@@ -2324,11 +2324,23 @@ function asegurarTituloWhatsapp(hoja, columna) {
   if (!String(celda.getValue() || "").trim()) celda.setValue("WhatsApp").setFontWeight("bold");
 }
 
-// Recargas entregadas (filas de "finalizados": Free Fire y Mobile Legends) para el contador del inicio.
-// Solo lee el número de la última fila: no recorre la pestaña ni usa el candado.
-function contarFinalizados() {
+// Recargas entregadas HOY (hora de Venezuela) en "finalizados" (Free Fire y Mobile Legends), para el
+// contador del inicio. Lee la fecha (columna A) desde el final y para en la primera fila de otro día:
+// solo recorre las filas de hoy. Sin candado (solo lee).
+function contarFinalizadosHoy() {
   var hoja = obtenerHoja("finalizados", true);
-  return responder({ status: "success", total: hoja ? Math.max(0, hoja.getLastRow() - 1) : 0 });
+  var hoy = Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy");
+  var total = 0;
+  if (hoja) {
+    recorrerDesdeElFinal(hoja, 1, function (fila) {
+      // La hoja puede haber convertido el texto "dd/MM/yyyy HH:mm:ss" en fecha
+      var fecha = fila[0] instanceof Date ? Utilities.formatDate(fila[0], "America/Caracas", "dd/MM/yyyy") : String(fila[0]).slice(0, 10);
+      if (fecha !== hoy) return true;
+      total++;
+      return false;
+    });
+  }
+  return responder({ status: "success", hoy: total });
 }
 
 // La pestaña con ese nombre; si no existe, la crea con su fila de títulos

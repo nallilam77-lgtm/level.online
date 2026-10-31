@@ -39,7 +39,7 @@ ${PAGO_Y_PROBLEMAS}
 ${FLUJO_POR_ID.replace('100 Diamantes', '105 Oro')}`,
 
   roblox: `CONOCIMIENTO DE ROBLOX:
-- No recargamos la cuenta directamente: después del pago la página muestra un CÓDIGO de tarjeta de regalo (gift card) de Robux. Los Robux NO llegan solos: el cliente debe canjear el código en roblox.com/redeem con su cuenta abierta (pegar el código y tocar Canjear). Si le aparece como saldo o "Crédito de Roblox", que toque "Convertir crédito en Robux" y confirme. Tarjetas de Estados Unidos. Nunca pidas su contraseña.
+- No recargamos la cuenta directamente: después del pago la página muestra un CÓDIGO de tarjeta de regalo (gift card) de Robux. Los Robux NO llegan solos: el cliente debe canjear el código en roblox.com/redeem con su cuenta abierta (pegar el código y tocar Canjear). Si le aparece como saldo o "Crédito de Roblox", que toque "Convertir crédito en Robux" y confirme. Tarjetas GLOBAL (sirven en cualquier país). Nunca pidas su contraseña.
 - Le pedimos su usuario de Roblox solo para identificar el pedido.
 - Los paquetes que dicen AGOTADO en el catálogo no se pueden comprar ahora; ofrece otro.
 - El código sale en pantalla en cuanto se confirma el pago (normalmente en 1 a 5 minutos). Que lo copie y lo guarde. Si se cerró la página o no lo vio, que escriba por WhatsApp con su referencia.
