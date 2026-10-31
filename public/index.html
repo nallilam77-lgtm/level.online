@@ -1002,13 +1002,13 @@
       window.location.href = 'admin.html';
     }
 
-    // Contador real de recargas entregadas HOY (número exacto); con menos de 5 no se muestra.
+    // Contador real de recargas entregadas HOY (número exacto, también 0); sin dato no se muestra.
     // Se pide después de cargar la página para no competir con lo importante.
     window.addEventListener('load', () => setTimeout(async () => {
       try {
         const respuesta = await fetch('/api/juego?juego=freefire&accion=estadisticas');
-        const total = Number((await respuesta.json()).total) || 0;
-        if (total < 5) return;
+        const { total } = await respuesta.json();
+        if (!Number.isFinite(total) || total < 0) return;
         document.getElementById('contadorNumero').textContent = total.toLocaleString('es-VE');
         document.getElementById('contadorRecargas').hidden = false;
       } catch (e) { /* sin dato: el contador no aparece */ }

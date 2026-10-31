@@ -160,7 +160,8 @@ async function estadisticas(req, res) {
   const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
   // Solo un dato real se guarda en la CDN: un 0 por fallo se volvería a pedir enseguida
   res.setHeader('Cache-Control', 'no-store');
-  if (!URL_GOOGLE_SCRIPT) return res.status(200).json({ total: 0 });
+  // Sin dato: total null (un 0 se mostraría como "0 recargas hoy")
+  if (!URL_GOOGLE_SCRIPT) return res.status(200).json({ total: null });
   try {
     // Recargas de HOY (hora de Venezuela, UTC-4 todo el año). La fecha va en la clave de la caché y la CDN
     // no guarda la respuesta más allá de la medianoche: nunca se muestra el número de ayer
@@ -174,7 +175,7 @@ async function estadisticas(req, res) {
     return res.status(200).json({ total: Math.max(0, Math.floor(Number(datos.hoy))) });
   } catch (error) {
     console.error("⚠️ estadisticas: no se pudo contar las recargas:", error.message);
-    return res.status(200).json({ total: 0 });
+    return res.status(200).json({ total: null });
   }
 }
 
