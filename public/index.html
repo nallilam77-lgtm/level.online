@@ -312,15 +312,17 @@
     }
     @keyframes brilloFuego { to { background-position: 200% center; } }
     .subtitulo { color: var(--text-muted); font-size: 14px; font-weight: 400; margin-top: 5px; }
-    /* Contador real de recargas entregadas hoy (pestaña "finalizados"); oculto si no hay dato */
+    /* Contador real de recargas hechas hoy (pestaña "finalizados"): lo primero del inicio, encima del
+       título. Sale con "…" mientras llega el dato (no empuja el título después) y se oculta si no hay dato */
     .contador-recargas {
-      display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 8px 16px; border-radius: 50px;
+      display: inline-flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 10px 20px; border-radius: 50px;
       background: rgba(var(--accent-neon-rgb), 0.08); border: 1px solid rgba(var(--accent-neon-rgb), 0.35);
-      color: var(--text-main); font-size: 13px; font-weight: 600;
+      box-shadow: 0 8px 22px -8px rgba(var(--accent-neon-rgb), 0.45);
+      color: var(--text-main); font-size: 15px; font-weight: 600;
     }
     .contador-recargas[hidden] { display: none; }
-    .contador-recargas strong { color: var(--accent-neon); font-family: 'Montserrat', sans-serif; font-weight: 900; }
-    .contador-recargas svg { width: 16px; height: 16px; color: var(--accent-neon); flex-shrink: 0; }
+    .contador-recargas strong { color: var(--accent-neon); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 20px; }
+    .contador-recargas svg { width: 18px; height: 18px; color: var(--accent-neon); flex-shrink: 0; }
 
     /* Botón "INFLUENCERS" del hero: lleva al Panel de Creadores */
     .btn-influencers {
@@ -638,12 +640,12 @@
 
   <main>
     <header class="animate-up">
+      <p class="contador-recargas" id="contadorRecargas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <span><strong id="contadorNumero">…</strong> recargas hechas el día de hoy</span>
+      </p>
       <h1 class="titulo-principal">LEVEL UP</h1>
       <p class="subtitulo">El centro de recargas más rápido de Venezuela</p>
-      <p class="contador-recargas" id="contadorRecargas" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-        <span><strong id="contadorNumero"></strong> recargas hechas el día de hoy</span>
-      </p>
       <div class="acciones-hero">
         <a href="creadores.html" class="btn-influencers"><span aria-hidden="true">⭐</span> INFLUENCERS</a>
         <button type="button" class="btn-tutorial" onclick="abrirTutorial()"><span aria-hidden="true">▶</span> ¿Cómo recargar?</button>
@@ -1002,17 +1004,17 @@
       window.location.href = 'admin.html';
     }
 
-    // Contador real de recargas entregadas HOY (número exacto, también 0); sin dato no se muestra.
-    // Se pide después de cargar la página para no competir con lo importante.
-    window.addEventListener('load', () => setTimeout(async () => {
+    // Contador real de recargas hechas HOY (número exacto, también 0): es lo primero del inicio, así que
+    // se pide en cuanto carga el script. Sin dato se oculta (nunca un 0 falso).
+    (async () => {
+      const contador = document.getElementById('contadorRecargas');
       try {
         const respuesta = await fetch('/api/juego?juego=freefire&accion=estadisticas');
         const { total } = await respuesta.json();
-        if (!Number.isFinite(total) || total < 0) return;
+        if (!Number.isFinite(total) || total < 0) throw new Error('sin dato');
         document.getElementById('contadorNumero').textContent = total.toLocaleString('es-VE');
-        document.getElementById('contadorRecargas').hidden = false;
-      } catch (e) { /* sin dato: el contador no aparece */ }
-    }, 1500));
+      } catch (e) { contador.hidden = true; }
+    })();
   </script>
 
 </body>
