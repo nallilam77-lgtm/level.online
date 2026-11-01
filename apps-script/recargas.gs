@@ -2333,8 +2333,14 @@ function contarFinalizadosHoy() {
   var total = 0;
   if (hoja) {
     recorrerDesdeElFinal(hoja, 1, function (fila) {
-      // La hoja puede haber convertido el texto "dd/MM/yyyy HH:mm:ss" en fecha
-      var fecha = fila[0] instanceof Date ? Utilities.formatDate(fila[0], "America/Caracas", "dd/MM/yyyy") : String(fila[0]).slice(0, 10);
+      // La hoja puede haber convertido el texto "dd/MM/yyyy HH:mm:ss" en fecha. Con la configuración
+      // regional de EE. UU. lee "01/11/2026" como 11 de enero (día y mes al revés): se aceptan los dos
+      // órdenes. Los días 13 a 31 no se convierten (no hay mes 13) y quedan como texto.
+      var fecha = String(fila[0]).slice(0, 10);
+      if (fila[0] instanceof Date) {
+        fecha = Utilities.formatDate(fila[0], "America/Caracas", "dd/MM/yyyy");
+        if (fecha !== hoy) fecha = Utilities.formatDate(fila[0], "America/Caracas", "MM/dd/yyyy");
+      }
       if (fecha !== hoy) return true;
       total++;
       return false;
