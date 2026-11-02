@@ -25,7 +25,7 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 
 **Síntoma**: recargas en "finalizados" cuyo pago sigue "En proceso"/"Verificado" y sin aviso en "errores".
 **Causa**: `marcar_usado` y `registrar_finalizado` iban en paralelo y compiten por el candado de recargas.gs (8 s); el perdedor recibía `{status:"error", ocupado:true}` con HTTP 200 y `marcarReferencia` lo daba por bueno.
-**Regla**: `marcarReferencia`/`registrarEnHoja` (`_lib/recarga-comun.js`) solo cuentan como éxito lo que no trae `status:"error"` y repiten si viene `ocupado`. Las llamadas a recargas.gs del cierre van en orden. Reparar los ya afectados: menú "🖐️ Recargas Free Fire" → 🧹 Marcar como Usado los pagos ya finalizados.
+**Regla**: `marcarReferencia`/`registrarEnHoja` (`_lib/recarga-comun.js`) solo cuentan como éxito lo que no trae `status:"error"` y repiten si viene `ocupado`. Las llamadas a recargas.gs del cierre van en orden. Reparar los ya afectados: menú "🖐️ Recargas Free Fire" → 🧰 Mantenimiento → ✅ Marcar como Usado los pagos ya finalizados.
 
 ## 2c. Devolver un pago a "Verificado"
 
@@ -63,7 +63,7 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 
 ## 7b. Mudarse a una hoja nueva
 
-**Regla**: la hoja nueva es otro proyecto de Apps Script: URL `/exec` nueva y propiedades vacías. `ID_HOJA_PAGOS` de bloodstrike.gs, roblox.gs y ruleta.gs apunta a la pestaña "pagos" de la hoja de Free Fire: cambiarlo en los tres EL MISMO DÍA, con la tienda cerrada, junto con `SCRIPT_RECARGAS_URL` (Vercel) y la URL de MacroDroid; si no, un pago puede gastarse en las dos hojas. Copiar con el menú 🚚 de recargas.gs (fija `saldos_por_venta` y `retroactivo_<%>` para que los saldos de los creadores no se recalculen), crear TOKEN_VERCEL/MACRODROID_CLAVE y copiar `appsscript.json` (permisos de Firestore).
+**Regla**: la hoja nueva es otro proyecto de Apps Script: URL `/exec` nueva y propiedades vacías. `ID_HOJA_PAGOS` de bloodstrike.gs, roblox.gs y ruleta.gs apunta a la pestaña "pagos" de la hoja de Free Fire: cambiarlo en los tres EL MISMO DÍA, con la tienda cerrada, junto con `SCRIPT_RECARGAS_URL` (Vercel) y la URL de MacroDroid; si no, un pago puede gastarse en las dos hojas. La herramienta de copia (menú 🚚, `copiarDesdeHojaVieja`) se quitó el 2026-11-02 porque la mudanza ya se hizo: si hace falta otra vez, recuperarla del historial de git (commit 2929afb) y recordar que fija `saldos_por_venta` y `retroactivo_<%>` para que los saldos de los creadores no se recalculen, crear TOKEN_VERCEL/MACRODROID_CLAVE y copiar `appsscript.json` (permisos de Firestore).
 
 ## 8. Otros
 
@@ -137,3 +137,7 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 ## 11. Columnas nuevas en pestañas que ya existen
 
 **Regla** (desde 2026-10-30, columna "WhatsApp"): una columna nueva va SIEMPRE al final, nunca en medio (las filas viejas se correrían). Si una función usa `COLUMNAS_X.length` como "la última columna" (la casilla de "sin_codigo", la nota de "pedidos_api"), cambiarla por una constante con su número antes de agregar la columna. Antes de leer o escribir esa columna, `asegurarTituloWhatsapp` (o similar) amplía la pestaña: "✂️ Quitar filas y columnas vacías" puede haberla recortado y `getRange` fuera del límite lanza error.
+
+## 13. Borrar pestañas de la hoja de Free Fire (2026-11-02)
+
+**Regla**: solo con el menú "🖐️ Recargas Free Fire" → 🧰 Mantenimiento → 🧹 Ordenar pestañas (`ordenarPestanas`): nunca borra las de `GRUPOS_DE_PESTANAS` (pagos, finalizados, errores, precios, descuentos, config, codigos, sin_codigo, fazer_card, por_completar, ruleta, asignaciones_pines, movimientos_descuentos, pagos_creadores), guarda antes una copia completa en Drive y deja las que una fórmula de otra pestaña usa. Si una función nueva de recargas.gs (o de otro script que abre esta hoja con `openById`, como mobilelegends.gs con "finalizados") empieza a usar una pestaña nueva, agregarla a `GRUPOS_DE_PESTANAS` ANTES de volver a usar el botón; si no, la borra. También quita los activadores cuya función no está en `ACTIVADORES_VALIDOS`: un activador nuevo va en esa lista.

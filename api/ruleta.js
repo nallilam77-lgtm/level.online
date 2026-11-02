@@ -6,6 +6,8 @@ const JUEGOS_PERMITIDOS = ['Free Fire', 'Blood Strike', 'Roblox', 'Mobile Legend
 const MENSAJE_NO_DISPONIBLE = "La ruleta no está disponible en este momento. Tu recarga no se ve afectada; intenta girar más tarde.";
 const PREMIO_GANADOR = "100 Diamantes 💎";
 const PREMIO_VACIO = "Vacío ❌";
+// Probabilidad de ganar en cada giro, en % (se sortea solo en el servidor)
+const PROBABILIDAD_GANAR = 1;
 
 // URL del Apps Script de la ruleta (trim: al pegarla en Vercel se cuelan espacios o saltos de línea)
 function obtenerUrlRuleta() {
@@ -45,9 +47,8 @@ export default async function handler(req, res) {
             return res.status(503).json({ status: "error", message: MENSAJE_NO_DISPONIBLE });
         }
 
-        // NOTA: Aquí evaluamos la probabilidad del 2% de forma estricta en servidor
-        const numeroAleatorio = Math.random() * 100;
-        let ganoPremio = numeroAleatorio <= 2; // Exactamente el 2% (de 0 a 2)
+        // El premio se sortea en el servidor: Math.random() * 100 va de 0 a 99,99…, así que "< 1" es el 1 %
+        let ganoPremio = Math.random() * 100 < PROBABILIDAD_GANAR;
         let premioStr = ganoPremio ? PREMIO_GANADOR : PREMIO_VACIO;
 
         // apps-script/ruleta.gs es idempotente: si la misma referencia y el mismo jugador repiten

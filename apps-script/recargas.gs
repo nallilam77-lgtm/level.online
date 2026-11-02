@@ -558,7 +558,7 @@ function bloquearPagosAtascados() {
   }
 }
 
-// Menú "🖐️ Recargas Free Fire" > "🧹 Marcar como Usado...": repara los pagos cuya recarga está en
+// Menú "🖐️ Recargas Free Fire" > 🧰 > "✅ Marcar como Usado...": repara los pagos cuya recarga está en
 // "finalizados" pero que siguen "En proceso" o "Verificado" (antes Vercel podía no marcarlos si el
 // candado estaba ocupado). Pide confirmación con la lista y toma el candado.
 function marcarUsadosLosFinalizados() {
@@ -1754,14 +1754,6 @@ function activarRecalculoHorario() {
   SpreadsheetApp.getUi().alert("Listo: las comisiones se recalcularán solas cada hora.");
 }
 
-// Las metas semanales se eliminaron. Si quedó activo el activador de los lunes, al ejecutarse
-// se borra solo (así no llegan correos de error por una función que ya no existe).
-function revisarMetasSemanales() {
-  ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === "revisarMetasSemanales") ScriptApp.deleteTrigger(t);
-  });
-}
-
 
 // =====================================================================
 // 7. MENÚS Y DISPARADORES DE LA HOJA
@@ -1769,23 +1761,27 @@ function revisarMetasSemanales() {
 
 // Menús "🖐️ Recargas Free Fire" y "⭐ Creadores" (aparecen al abrir la hoja)
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu("🖐️ Recargas Free Fire")
-    .addItem("🖐️ Todas manuales (pestaña sin_codigo)", "activarModoManual")
-    .addItem("⚡ Bot con códigos de canjeo (pines)", "activarModoAutomatico")
-    .addItem("🛒 API de Central One (pestaña fazer_card)", "activarModoApi")
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu("🖐️ Recargas Free Fire")
+    .addSubMenu(ui.createMenu("🔀 Modo de recarga")
+      .addItem("🖐️ Todas manuales (pestaña sin_codigo)", "activarModoManual")
+      .addItem("⚡ Bot con códigos de canjeo (pines)", "activarModoAutomatico")
+      .addItem("🛒 API de Central One (pestaña fazer_card)", "activarModoApi")
+      .addSeparator()
+      .addItem("❓ Ver modo actual", "verModoRecarga"))
     .addSeparator()
     .addItem("🔄 Traer productos de Central One", "traerProductosCentralOne")
     .addItem("🔑 Guardar llave de Central One", "guardarLlaveCentralOne")
     .addSeparator()
-    .addItem("❓ Ver modo actual", "verModoRecarga")
-    .addItem("🧹 Marcar como Usado los pagos ya finalizados", "marcarUsadosLosFinalizados")
-    .addSeparator()
-    .addItem("🩺 Diagnóstico de la hoja (qué la hace lenta)", "diagnosticarHoja")
-    .addItem("✂️ Quitar filas y columnas vacías", "quitarFilasYColumnasVacias")
-    .addItem("🗄️ Archivar filas antiguas (" + DIAS_PARA_ARCHIVAR + " días)", "archivarFilasAntiguas")
-    .addItem("🚚 Copiar datos desde la hoja vieja (mudanza)", "copiarDesdeHojaVieja")
+    .addSubMenu(ui.createMenu("🧰 Mantenimiento de la hoja")
+      .addItem("🧹 Ordenar pestañas y borrar las que no se usan", "ordenarPestanas")
+      .addItem("🩺 Diagnóstico (qué la hace lenta)", "diagnosticarHoja")
+      .addItem("✂️ Quitar filas y columnas vacías", "quitarFilasYColumnasVacias")
+      .addItem("🗄️ Archivar filas antiguas (" + DIAS_PARA_ARCHIVAR + " días)", "archivarFilasAntiguas")
+      .addSeparator()
+      .addItem("✅ Marcar como Usado los pagos ya finalizados", "marcarUsadosLosFinalizados"))
     .addToUi();
-  SpreadsheetApp.getUi().createMenu("⭐ Creadores")
+  ui.createMenu("⭐ Creadores")
     .addItem("💵 Registrar pago del creador seleccionado", "registrarPagoCreador")
     .addItem("🔄 Actualizar % de comisión", "recalcularComisiones")
     .addItem("♻️ Pasar ventas anteriores al % actual", "pasarVentasAnterioresAlPorcentaje")
@@ -1810,9 +1806,9 @@ function onEdit(e) {
 }
 
 
-// --- Mantenimiento (menú "🖐️ Recargas Free Fire"): la hoja se vuelve lenta al crecer ---
+// --- Mantenimiento (menú "🖐️ Recargas Free Fire" > 🧰): la hoja se vuelve lenta al crecer ---
 // Cada operación de Vercel corre con el candado: si la hoja tarda, todas las demás esperan y agotan
-// su tiempo. Estas tres acciones la aligeran sin tocar pagos ni pedidos pendientes.
+// su tiempo. Estas acciones la ordenan y aligeran sin tocar pagos ni pedidos pendientes.
 
 // Qué se archiva: filas con más de DIAS_PARA_ARCHIVAR días (columna A) que ya están cerradas.
 // Lo pendiente (pagos sin usar, pines asignados, órdenes en proceso, recargas manuales sin hacer,
@@ -1829,6 +1825,119 @@ const REGLAS_ARCHIVO = {
   por_completar: function (f) { return !/^PENDIENTE|COMPLETO: entregando/.test(String(f[10])); },
   movimientos_descuentos: function () { return true; }
 };
+
+// Pestañas que usa el sistema, en el orden y con el color con que las deja 🧹 Ordenar pestañas.
+// NUNCA se borran (si falta una, el script la crea cuando la necesita). titulos: fila 1 = títulos
+// (se inmoviliza y va en negrita); precios y config no, porque su fila 1 es de datos.
+const GRUPOS_DE_PESTANAS = [
+  { grupo: "Para hacer a mano", color: "#e06666", titulos: true,
+    pestanas: [HOJA_SIN_CODIGO, HOJA_FAZER, HOJA_POR_COMPLETAR, "errores", HOJA_RULETA] },
+  { grupo: "Ventas", color: "#6aa84f", titulos: true, pestanas: ["pagos", "finalizados"] },
+  { grupo: "Configuración", color: "#3c78d8", titulos: false, pestanas: ["precios", HOJA_DESCUENTOS, HOJA_CONFIG] },
+  { grupo: "Inventario y registros", color: "#999999", titulos: true,
+    pestanas: ["codigos", HOJA_ASIGNACIONES, HOJA_MOVIMIENTOS_DESCUENTOS, HOJA_PAGOS_CREADORES] }
+];
+// Activadores que este script puede tener (los demás apuntan a funciones que ya no existen)
+const ACTIVADORES_VALIDOS = ["recalcularComisiones"];
+
+// 🧹 Deja la hoja ordenada: borra las pestañas que el sistema no usa (con un respaldo completo antes),
+// ordena y colorea las del sistema y quita los activadores viejos o repetidos. Una pestaña que no es
+// del sistema pero que una fórmula de otra pestaña usa NO se borra (quedaría #REF!).
+function ordenarPestanas() {
+  var ui = SpreadsheetApp.getUi();
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var clave = function (nombre) { return String(nombre).trim().toLowerCase(); };
+
+  // Pestañas del sistema que existen, en su orden ("Pagos" o "pagos " también cuentan)
+  var porNombre = {};
+  libro.getSheets().forEach(function (h) { if (!porNombre[clave(h.getName())]) porNombre[clave(h.getName())] = h; });
+  var delSistema = [], idsDelSistema = {};
+  GRUPOS_DE_PESTANAS.forEach(function (g) {
+    g.pestanas.forEach(function (nombre) {
+      var hoja = porNombre[clave(nombre)];
+      if (!hoja) return;
+      delSistema.push({ hoja: hoja, grupo: g });
+      idsDelSistema[hoja.getSheetId()] = true;
+    });
+  });
+  var sobrantes = libro.getSheets().filter(function (h) { return !idsDelSistema[h.getSheetId()]; });
+
+  // Fórmulas de todo el libro, para no borrar una pestaña que otra usa
+  var formulas = [];
+  libro.getSheets().forEach(function (h) {
+    if (h.getLastRow() < 1 || h.getLastColumn() < 1) return;
+    h.getDataRange().getFormulas().forEach(function (fila) {
+      fila.forEach(function (f) { if (f) formulas.push({ hoja: h.getName(), texto: f.toLowerCase() }); });
+    });
+  });
+  var usadas = [], borrar = [];
+  sobrantes.forEach(function (h) {
+    var nombre = h.getName().toLowerCase();
+    var uso = formulas.filter(function (f) {
+      return f.hoja !== h.getName() && (f.texto.indexOf("'" + nombre + "'!") !== -1 || f.texto.indexOf(nombre + "!") !== -1);
+    })[0];
+    if (uso) usadas.push({ hoja: h, texto: h.getName() + " (la usa una fórmula de " + uso.hoja + ")" });
+    else borrar.push({ hoja: h, texto: h.getName() + (h.getLastRow() ? " (" + h.getLastRow() + " filas)" : " (vacía)") });
+  });
+
+  var lista = function (items) { return items.map(function (x) { return "  • " + x.texto; }).join("\n"); };
+  var mensaje = (borrar.length
+      ? "Se BORRAN estas pestañas que el sistema no usa:\n" + lista(borrar) +
+        "\n\nAntes se guarda una copia completa del archivo en tu Drive (por si necesitas algo de ellas).\n\n"
+      : "No hay pestañas sobrantes para borrar.\n\n") +
+    (usadas.length ? "Se quedan (al final) porque una fórmula las usa:\n" + lista(usadas) + "\n\n" : "") +
+    "Las pestañas del sistema se ordenan por color:\n" +
+    GRUPOS_DE_PESTANAS.map(function (g) { return "  • " + g.grupo + ": " + g.pestanas.join(", "); }).join("\n") +
+    "\n\nNo se toca ningún dato, precio, descuento ni pago. ¿Continuar?";
+  if (ui.alert("Ordenar pestañas", mensaje, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+
+  var respaldo = "";
+  if (borrar.length) {
+    respaldo = "RESPALDO " + libro.getName() + " " + Utilities.formatDate(new Date(), "America/Caracas", "yyyy-MM-dd HH.mm");
+    DriveApp.getFileById(libro.getId()).makeCopy(respaldo);
+  }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { ui.alert("El sistema está procesando una recarga. Intenta de nuevo en unos segundos."); return; }
+  var activadoresQuitados = 0;
+  try {
+    borrar.forEach(function (b) { libro.deleteSheet(b.hoja); });
+
+    // Orden y color: primero las del sistema, al final las que se quedaron por una fórmula
+    delSistema.concat(usadas.map(function (u) { return { hoja: u.hoja, grupo: null }; })).forEach(function (d, i) {
+      libro.setActiveSheet(d.hoja);
+      libro.moveActiveSheet(i + 1);
+      d.hoja.setTabColor(d.grupo ? d.grupo.color : null);
+      if (d.grupo && d.grupo.titulos && d.hoja.getLastColumn() > 0) {
+        d.hoja.setFrozenRows(1);
+        d.hoja.getRange(1, 1, 1, d.hoja.getLastColumn()).setFontWeight("bold");
+      }
+    });
+
+    // Activadores de funciones que ya no existen (p. ej. el de las metas semanales) o repetidos
+    var vistos = {};
+    ScriptApp.getProjectTriggers().forEach(function (t) {
+      var id = t.getHandlerFunction() + "|" + t.getEventType();
+      if (ACTIVADORES_VALIDOS.indexOf(t.getHandlerFunction()) === -1 || vistos[id]) {
+        ScriptApp.deleteTrigger(t);
+        activadoresQuitados++;
+      } else {
+        vistos[id] = true;
+      }
+    });
+    if (delSistema.length) libro.setActiveSheet(delSistema[0].hoja);
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  console.log("Ordenar pestañas: borradas [" + borrar.map(function (b) { return b.texto; }).join(", ") +
+    "]; activadores quitados: " + activadoresQuitados);
+  ui.alert("Listo",
+    (borrar.length ? "Pestañas borradas: " + borrar.length + ". Respaldo: \"" + respaldo + "\" (en tu Drive).\n" : "") +
+    "Pestañas ordenadas: " + delSistema.length + "." +
+    (activadoresQuitados ? "\nActivadores viejos o repetidos quitados: " + activadoresQuitados + "." : ""),
+    ui.ButtonSet.OK);
+}
 
 // Muestra el tamaño de cada pestaña, el total de celdas (límite de Google: 10 millones) y los activadores
 function diagnosticarHoja() {
@@ -1946,135 +2055,6 @@ function momentoDeFila(valor) {
   return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime() : 0;
 }
 
-
-// --- Mudanza a una hoja nueva (menú "🖐️ Recargas Free Fire" > 🚚, se ejecuta EN LA HOJA NUEVA) ---
-// Copia desde la hoja vieja solo valores y formatos (sin fórmulas, formato condicional ni filas vacías):
-// completas las pestañas de PESTANAS_COMPLETAS y las que el script no conoce; de las de REGLAS_ARCHIVO,
-// lo pendiente y lo de los últimos DIAS_PARA_ARCHIVAR días. Se puede repetir: una pestaña que ya tiene
-// datos no se toca, salvo "pagos", que solo recibe los pagos nuevos y el estado que avanzó en la vieja.
-const PESTANAS_COMPLETAS = ["precios", "codigos", "descuentos", "config", "pagos_creadores", "movimientos_descuentos"];
-
-function copiarDesdeHojaVieja() {
-  var ui = SpreadsheetApp.getUi();
-  var libro = SpreadsheetApp.getActiveSpreadsheet();
-  var pedido = ui.prompt("Copiar desde la hoja vieja",
-    "Pega el enlace (o el ID) de la hoja VIEJA.\n\nSe copian completos: precios, códigos, descuentos, config y creadores. " +
-    "De pagos, pedidos y registros: lo pendiente y lo de los últimos " + DIAS_PARA_ARCHIVAR + " días.\n" +
-    "Se puede repetir: la segunda vez solo trae los pagos nuevos y actualiza su estado.", ui.ButtonSet.OK_CANCEL);
-  if (pedido.getSelectedButton() !== ui.Button.OK) return;
-  var texto = pedido.getResponseText().trim();
-  var enlace = texto.match(/\/d\/([A-Za-z0-9_-]{20,})/);
-  var id = enlace ? enlace[1] : texto;
-  if (!/^[A-Za-z0-9_-]{20,}$/.test(id) || id === libro.getId()) { ui.alert("Ese no es el enlace de la hoja vieja."); return; }
-  var vieja;
-  try {
-    vieja = SpreadsheetApp.openById(id);
-  } catch (err) {
-    ui.alert("No se pudo abrir la hoja vieja: " + err.message);
-    return;
-  }
-
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) { ui.alert("El sistema está procesando una recarga. Intenta de nuevo en unos segundos."); return; }
-  var limite = Date.now() - DIAS_PARA_ARCHIVAR * 24 * 3600 * 1000;
-  var resumen = [];
-  try {
-    vieja.getSheets().forEach(function (origen) {
-      var nombre = origen.getName();
-      var clave = nombre.trim().toLowerCase();
-      var columnas = origen.getLastColumn();
-      var ultima = origen.getLastRow();
-      if (!columnas || !ultima) return;
-      var rango = origen.getRange(1, 1, ultima, columnas);
-      var valores = rango.getValues();
-      var formatos = rango.getNumberFormats();
-      var regla = PESTANAS_COMPLETAS.indexOf(clave) === -1 ? REGLAS_ARCHIVO[clave] : null;
-      var elegidas = [];
-      for (var i = 1; i < valores.length; i++) {
-        if (regla) {
-          var momento = momentoDeFila(valores[i][0]);
-          if (momento && momento < limite && regla(valores[i])) continue; // cerrada y vieja: se queda en la hoja vieja
-        }
-        elegidas.push(i);
-      }
-
-      var destino = libro.getSheetByName(nombre);
-      if (destino && destino.getLastRow() > 1) {
-        resumen.push(nombre + ": " + (clave === "pagos" ? sincronizarPagos(destino, valores, formatos, elegidas) : "ya tenía datos, no se tocó"));
-        return;
-      }
-      if (!destino) destino = libro.insertSheet(nombre);
-      var filas = [0].concat(elegidas); // 0 = títulos
-      escribirFilasCopiadas(destino, 1, filas, valores, formatos);
-      destino.setFrozenRows(1);
-      destino.getRange(1, 1, 1, columnas).setFontWeight("bold");
-      if (clave === HOJA_SIN_CODIGO && filas.length > 1) {
-        destino.getRange(2, COLUMNA_HECHA_SIN_CODIGO, filas.length - 1, 1)
-          .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
-      }
-      resumen.push(nombre + ": " + elegidas.length + " filas");
-    });
-
-    // Los saldos H y J de los creadores vienen copiados: que nunca se vuelvan a calcular desde cero
-    var props = PropertiesService.getScriptProperties();
-    if (!props.getProperty("saldos_por_venta")) props.setProperty("saldos_por_venta", "copiado de la hoja vieja " + ahora());
-    var claveRetroactivo = "retroactivo_" + PORCENTAJE_CREADOR;
-    if (!props.getProperty(claveRetroactivo)) props.setProperty(claveRetroactivo, "copiado de la hoja vieja " + ahora());
-    SpreadsheetApp.flush();
-  } finally {
-    lock.releaseLock();
-  }
-  leerTasaUsd();
-  // La pestaña vacía que trae un archivo nuevo ("Hoja 1")
-  libro.getSheets().forEach(function (h) {
-    if (!vieja.getSheetByName(h.getName()) && h.getLastRow() === 0 && libro.getSheets().length > 1) libro.deleteSheet(h);
-  });
-  ui.alert("Copia terminada", resumen.join("\n") +
-    "\n\nAhora: elige el modo en este menú, crea TOKEN_VERCEL y MACRODROID_CLAVE en las propiedades del script y cambia las URL e ID (ver los pasos).",
-    ui.ButtonSet.OK);
-}
-
-// Escribe las filas `filas` (índices de valores) desde la fila `desde` del destino, con sus formatos
-function escribirFilasCopiadas(destino, desde, filas, valores, formatos) {
-  var columnas = valores[0].length;
-  asegurarColumnas(destino, columnas);
-  var hasta = desde + filas.length - 1;
-  if (destino.getMaxRows() < hasta) destino.insertRowsAfter(destino.getMaxRows(), hasta - destino.getMaxRows());
-  var celdas = destino.getRange(desde, 1, filas.length, columnas);
-  celdas.setNumberFormats(filas.map(function (i) { return formatos[i]; }));
-  celdas.setValues(filas.map(function (i) {
-    return valores[i].map(function (v) { return typeof v === "string" ? textoSeguro(v) : v; });
-  }));
-}
-
-// Segunda copia de "pagos": agrega los que no están y pasa al estado de la hoja vieja los que avanzaron
-// allí. Un pago nunca retrocede: "Usado" en la hoja nueva no se toca.
-function sincronizarPagos(destino, valores, formatos, elegidas) {
-  var ultima = destino.getLastRow();
-  var actuales = destino.getRange(2, 3, ultima - 1, 3).getValues(); // C referencia .. E estado
-  var filaDe = {};
-  actuales.forEach(function (f, i) {
-    var ref = String(f[0]).replace(/\s+/g, "");
-    if (ref) filaDe[ref] = i + 2;
-  });
-  var nuevas = [];
-  var cambiados = 0;
-  elegidas.forEach(function (i) {
-    var ref = String(valores[i][2]).replace(/\s+/g, "");
-    if (!ref) return;
-    var fila = filaDe[ref];
-    if (!fila) { nuevas.push(i); return; }
-    var estadoViejo = String(valores[i][4]).trim();
-    var estadoNuevo = String(actuales[fila - 2][2]).trim().toLowerCase();
-    if (estadoViejo.toLowerCase() === estadoNuevo || estadoNuevo === "usado") return;
-    if (estadoViejo.toLowerCase() === "usado" || estadoNuevo === "" || estadoNuevo === "verificado") {
-      destino.getRange(fila, 5).setValue(estadoViejo);
-      cambiados++;
-    }
-  });
-  if (nuevas.length) escribirFilasCopiadas(destino, ultima + 1, nuevas, valores, formatos);
-  return nuevas.length + " pagos nuevos, " + cambiados + " estados actualizados";
-}
 
 
 // =====================================================================
@@ -2254,7 +2234,7 @@ function traerProductosCentralOne() {
   SpreadsheetApp.flush();
   ui.alert("✅ Listo: " + total + " producto(s) de Free Fire LATAM." +
     (total - conPrecio ? " ⚠️ " + (total - conPrecio) + " sin precio: escríbelo en la fila 2 (celdas amarillas) para venderlos." : "") +
-    " La tienda tarda hasta ~2 minutos en mostrar los cambios. Para vender por Central One, elige 🛒 API de Central One en este menú.");
+    " La tienda tarda hasta ~2 minutos en mostrar los cambios. Para vender por Central One, elige 🔀 Modo de recarga → 🛒 API de Central One en este menú.");
 }
 
 // Nombres de Central One (en inglés) como los muestra la tienda: "Free Fire LATAM 100+10 Diamonds" ->
@@ -2413,9 +2393,4 @@ function redondear2(n) {
 
 function redondear4(n) {
   return Math.round(Number(n) * 10000) / 10000;
-}
-
-function forzarPermisos() {
-  UrlFetchApp.fetch("https://www.google.com");
-  Logger.log("Permisos concedidos con éxito");
 }
