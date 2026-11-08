@@ -9,11 +9,11 @@
 // Implementar > Gestionar implementaciones > editar (lápiz) > Versión: "Nueva versión" > Implementar.
 // Así la URL /exec NO cambia y no hay que tocar Vercel.
 //
-// Seguridad (Configuración del proyecto > Propiedades del script), las dos OBLIGATORIAS desde 2026-11-08:
-//   TOKEN_VERCEL     = el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel.
-//   MACRODROID_CLAVE = clave que MacroDroid envía en el campo "clave" del JSON.
-// Si falta una, se rechaza todo lo que dependa de ella (sin TOKEN_VERCEL la tienda no funciona; sin
-// MACRODROID_CLAVE no se guardan los pagos). Crear las dos ANTES de implementar esta versión.
+// Seguridad (Configuración del proyecto > Propiedades del script):
+//   TOKEN_VERCEL     = el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel. OBLIGATORIA desde 2026-11-08:
+//                      sin ella se rechaza todo lo que no sea MacroDroid. Crearla ANTES de implementar.
+//   MACRODROID_CLAVE = (opcional) clave que MacroDroid envía en el campo "clave" del JSON. Mientras no
+//                      exista, no se comprueba. ORDEN: primero configurar MacroDroid, después la propiedad.
 //
 // Reglas que no se deben romper:
 //   - Cada pedido trae un idPedido: repetir verificar_pago u obtener_codigo devuelve el mismo
@@ -161,8 +161,7 @@ function doPost(e) {
   // MacroDroid: no envía "accion"
   if (!accion && (datos.referencia || datos.monto || datos.telefono)) {
     var claveMacro = props.getProperty("MACRODROID_CLAVE");
-    if (!claveMacro) console.error("Falta la propiedad del script MACRODROID_CLAVE: se rechazan los pagos de MacroDroid");
-    if (!claveMacro || !mismoTexto(String(datos.clave || ""), claveMacro)) {
+    if (claveMacro && !mismoTexto(String(datos.clave || ""), claveMacro)) {
       return responder({ status: "error", message: "No autorizado" });
     }
     return conCandado(function () { return guardarPagoMacroDroid(datos); }, ESPERA_CANDADO_MACRODROID_MS);
