@@ -37,17 +37,10 @@ function cabecerasCors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-// El Apps Script de Roblox exige el token si tiene la propiedad TOKEN_VERCEL (es el mismo secreto
-// que el de recargas). llamarScript solo lo añade solo para SCRIPT_RECARGAS_URL, así que va aquí.
-function conToken(cuerpo) {
-  const token = (process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
-  return token ? { ...cuerpo, token } : cuerpo;
-}
-
 // Precios de la hoja { "50 Robux": 1100, ... }, con caché en memoria (instantánea y con respaldo)
 async function obtenerPreciosRoblox(scriptUrl) {
   const { datos } = await conCache('precios:roblox',
-    () => llamarScript(scriptUrl, conToken({ tipo: 'obtener_precios' }), LECTURA_APPS_SCRIPT),
+    () => llamarScript(scriptUrl, { tipo: 'obtener_precios' }, LECTURA_APPS_SCRIPT),
     { esValido: (d) => d?.status === 'success' && d.precios && typeof d.precios === 'object' });
   return datos;
 }
@@ -207,7 +200,7 @@ export async function recargar(req, res) {
     // Si el pago no alcanza, roblox.gs guarda el pedido "por completar" con la huella de esta clave
     // (la clave solo la recibe el cliente, y solo si se guardó)
     const clave = randomBytes(24).toString('base64url');
-    const payload = conToken({
+    const payload = {
       tipo: 'compra', referencia: String(referencia), user: usuario, producto: String(producto),
       url_capture: textoParaHoja(url_capture || 'Sin comprobante'), idPedido, claveHash: huella(clave),
       ...(desc && { montoACobrar, codigoDescuento: desc.codigo }),
@@ -215,7 +208,7 @@ export async function recargar(req, res) {
       telefono: telefonoCliente(req.body?.telefono),
       // Sin códigos guardados, roblox.gs reserva el pago y responde "comprar" (solo si hay llave)
       ...(llaveRoblox() && { api: true }),
-    });
+    };
 
     // Apps Script verifica el pago y la entrega, puede tardar más. Sin reintento
     // (podría duplicar la compra). Si se agota el tiempo, la compra sigue en Apps Script.
@@ -279,11 +272,11 @@ async function completarCompra(req, res, inicio) {
     const idPedido = `rbx-${randomUUID()}`;
     let data;
     try {
-      data = await llamarScript(scriptUrl, conToken({
+      data = await llamarScript(scriptUrl, {
         tipo: 'completar', claveHash, referencia, idPedido, ...(llaveRoblox() && { api: true }),
         // Si en el primer pago no dejó WhatsApp, roblox.gs usa este
         telefono: telefonoCliente(req.body?.telefono),
-      }), { tiempoMs: TIEMPO_COMPRA_MS });
+      }, { tiempoMs: TIEMPO_COMPRA_MS });
     } catch (error) {
       if (!error.tiempoAgotado) throw error;
       console.error(`⚠️ Completar pago de Roblox sin respuesta a tiempo | REF: ${referencia} | pedido ${idPedido} | clave ${claveHash.slice(0, 12)}…: revisar "por_completar" y "Exitosas"`);
@@ -323,7 +316,7 @@ async function completarCompra(req, res, inicio) {
  */
 async function comprarEnCentralOne({ scriptUrl, idPedido, productId, usuario, inicio }) {
   const apiKey = llaveRoblox();
-  const avisar = (tipo, datos) => llamarScript(scriptUrl, conToken({ tipo, idPedido, ...datos }), ESCRITURA_IDEMPOTENTE)
+  const avisar = (tipo, datos) => llamarScript(scriptUrl, { tipo, idPedido, ...datos }, ESCRITURA_IDEMPOTENTE)
     .catch((error) => ({ status: 'error', message: error.message }));
   const enProceso = async (nota) => {
     const r = await avisar('nota_api', { texto: textoParaHoja(nota, 400) });

@@ -11,6 +11,8 @@
 //
 // Llave: Configuración del proyecto (⚙️) > Propiedades del script. NUNCA en el código:
 //   CENTRALONE_API_KEY  llave de Central One con el permiso catalog:read (basta con ese)
+//   TOKEN_VERCEL        OBLIGATORIA desde 2026-11-08: el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel.
+//                       Sin ella responde "No autorizado" (así nadie más gasta las consultas de la llave).
 // (FAZER_API_KEY ya no se usa: se puede borrar)
 //
 // Cómo actualizarlo: pega este archivo y luego Implementar > Gestionar implementaciones > editar (lápiz) >
@@ -37,6 +39,7 @@ const CAMPO_ZONA = /zone|zona|server|servidor/i;
 function doPost(e) {
   try {
     var datos = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+    if (!tokenVercelValido(datos)) return responder({ valid: false, message: "No autorizado" });
     var idJugador = String(datos.id || "").trim();
     if (!/^\d{5,15}$/.test(idJugador)) return responder({ valid: false, message: "ID con formato inválido" });
 
@@ -143,4 +146,23 @@ function esCampoZona(campo) {
 
 function responder(objeto) {
   return ContentService.createTextOutput(JSON.stringify(objeto)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Token de Vercel OBLIGATORIO (desde 2026-11-08): la propiedad del script TOKEN_VERCEL debe existir y
+// coincidir con SCRIPT_RECARGAS_TOKEN de Vercel. Sin la propiedad, el script no atiende a nadie.
+function tokenVercelValido(datos) {
+  var esperado = PropertiesService.getScriptProperties().getProperty("TOKEN_VERCEL");
+  if (!esperado) {
+    console.error("Falta la propiedad del script TOKEN_VERCEL: se rechazan todas las peticiones");
+    return false;
+  }
+  return mismoTexto(String((datos && datos.token) || ""), esperado);
+}
+
+// Compara sin cortar en la primera diferencia (no revela por el tiempo cuántos caracteres acertó)
+function mismoTexto(a, b) {
+  if (a.length !== b.length) return false;
+  var diferencia = 0;
+  for (var i = 0; i < a.length; i++) diferencia |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diferencia === 0;
 }

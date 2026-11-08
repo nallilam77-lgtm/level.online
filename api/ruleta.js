@@ -54,15 +54,13 @@ export default async function handler(req, res) {
         // apps-script/ruleta.gs es idempotente: si la misma referencia y el mismo jugador repiten
         // el giro, devuelve el premio ya anotado. Por eso se puede reintentar cuando Google falla o
         // tarda al despertar (antes, un solo fallo dejaba al cliente sin su giro).
-        // El token es opcional: el script solo lo exige si tiene la propiedad TOKEN_VERCEL.
-        const token = (process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
+        // llamarScript añade el token (SCRIPT_RECARGAS_TOKEN), que ruleta.gs exige
         const cuerpo = {
             accion: "girar_ruleta",
             referencia: String(referencia),
             id_jugador: String(id),
             juego: juego || "Free Fire",
-            premio: premioStr,
-            ...(token && { token })
+            premio: premioStr
         };
         const inicio = Date.now();
         let resultadoGAS = await llamarScript(URL_GOOGLE_SCRIPT, cuerpo, LECTURA_APPS_SCRIPT);

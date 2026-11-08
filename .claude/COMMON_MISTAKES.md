@@ -60,6 +60,11 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 
 **Síntoma**: la tienda deja de funcionar porque la URL `/exec` cambió.
 **Regla**: Implementar → Gestionar implementaciones → editar la existente → "Nueva versión". Y para el token: primero `SCRIPT_RECARGAS_TOKEN` en Vercel (y redesplegar), **después** la propiedad `TOKEN_VERCEL` en Apps Script.
+**Token obligatorio** (desde 2026-11-08): los 6 scripts (recargas, bloodstrike, mobilelegends, roblox, ruleta, validador) rechazan TODO lo que llegue por POST sin `TOKEN_VERCEL` correcto, y recargas.gs rechaza a MacroDroid sin `MACRODROID_CLAVE`. Si la tienda responde "No autorizado" en todo, falta la propiedad en ese script o no coincide con `SCRIPT_RECARGAS_TOKEN`. `llamarScript` (`_lib/externo.js`) manda el token a cualquier Apps Script: no volver a añadirlo a mano ni limitarlo a unas URLs (antes solo iba a Free Fire y Blood Strike, y Mobile Legends y el validador quedaban sin él).
+
+## 7c. IP del cliente detrás de Cloudflare
+
+**Regla** (2026-11-08): `obtenerIp` (`_lib/limitador.js`) usa `cf-connecting-ip` SOLO si la conexión viene de un rango de Cloudflare (`RANGOS_CLOUDFLARE`); si no, cualquiera inventaría esa cabecera para saltarse los límites. Sin esto, todos los clientes de un mismo nodo de Cloudflare compartían el contador.
 
 ## 7b. Mudarse a una hoja nueva
 

@@ -20,7 +20,8 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 │   ├── externo.js        pedirJSON/llamarScript: timeouts, reintentos, caché en memoria (conCache)
 │   ├── fazer.js          firmaFazerValida (webhook de FazerCards, solo órdenes anteriores a Central One)
 │   ├── centralone.js     Central One (Free Fire, Blood Strike, Mobile Legends y códigos de Roblox): catalogo, esperarCodigo/leerCodigos (GET /orders/{id} y /codes), datosParaPedido (catálogo 15 min; target_payload según target_schema, stock; con `zona` exige dos campos de texto y pone la zona en el que se llama zone/server), crearPedidoCentralOne (POST /orders, Idempotency-Key = idPedido, 1 reintento si es incierto) y firmaCentralOneValida (webhook)
-│   ├── limitador.js      Límite de intentos fallidos (Firestore o memoria)
+│   ├── limitador.js      Límite de intentos fallidos (Firestore o memoria); IP real con cf-connecting-ip solo si llega desde Cloudflare
+│   (firestore.rules)      Reglas de Firestore para pegar en la consola: configuracion legible por todos, lo demás solo el admin (UID)
 │   ├── reporte.js        informeError(), FASES, ESTADO_PINES → pestaña "errores"
 │   └── validacion.js     PAQUETE_VALIDO, textoParaHoja(), faltaConfiguracion()
 ├── juego.js              GET/POST ?juego=<freefire|bloodstrike|roblox|mobilelegends>&accion=<precios|verificar|descuento> (30 s)
@@ -90,8 +91,8 @@ public/                   Frontend estático; cada página lleva su CSS/JS en l�
 | Apps Script recargas | `SCRIPT_RECARGAS_URL`, `SCRIPT_RECARGAS_TOKEN` | juegos/freefire (precios, recarga), subir-imagen |
 | Apps Script órdenes | `SCRIPT_RECARGAS_VERIFICACION` | consultar-ordenes |
 | Apps Script validador (`apps-script/validador.gs`) | `SCRIPT_VALIDADOR_URL` | juegos/freefire y juegos/bloodstrike (verificar) |
-| Apps Script ruleta (`apps-script/ruleta.gs`) | `SCRIPT_RULETA_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | ruleta |
-| Apps Script Roblox (`apps-script/roblox.gs`) | `GAS_URL` (+ `SCRIPT_RECARGAS_TOKEN` opcional) | juegos/roblox |
+| Apps Script ruleta (`apps-script/ruleta.gs`) | `SCRIPT_RULETA_URL` (+ `SCRIPT_RECARGAS_TOKEN`, obligatorio) | ruleta |
+| Apps Script Roblox (`apps-script/roblox.gs`) | `GAS_URL` (+ `SCRIPT_RECARGAS_TOKEN`, obligatorio) | juegos/roblox |
 | Apps Script Blood Strike + Central One | `SCRIPT_BLOOD` (+ `SCRIPT_RECARGAS_TOKEN`, que llamarScript también le envía), `blood_nuevo` | juegos/bloodstrike |
 | Apps Script Mobile Legends + Central One | `SCRIPT_MLBB` (+ `SCRIPT_RECARGAS_TOKEN`), `blood_nuevo` (o `mlbb_nuevo`) | juegos/mobilelegends, centralone-webhook |
 | Webhook Central One | `CENTRALONE_WEBHOOK_SECRET` (+ `SCRIPT_BLOOD`, `SCRIPT_RECARGAS_URL`, `GAS_URL`, `roblox_nuevo`) | centralone-webhook |
@@ -119,6 +120,7 @@ Detalle de cada variable: `.env.example`.
 
 ## Códigos de descuento y Panel de Creadores (hoja de Free Fire)
 
+- **pagos** (hoja CENTRAL, la de Free Fire): A fecha · B teléfono · C referencia · D monto (lo manda MacroDroid tal cual) · E estado · F marca de la ruleta vieja · G fecha y hora en que pasó a "Usado" (`anotarHoraUsado`, en recargas/bloodstrike/mobilelegends/roblox.gs; texto, para que Sheets no voltee día y mes).
 - **Descuentos**: A código · B descuento en % (solo promos; los de creador dan siempre `PORCENTAJE_CREADOR`) · C usos · D dinero movido (Bs) · E creador (vacío = promo normal) · F PIN · G % actual (= descuento del cliente) · H comisión total (USD) · I liquidado (Bs, referencia) · J pendiente (USD) · K sin uso (eran los niveles bajados) · L comisión por convertir (Bs, ventas sin tasa). **Comisión por venta**: cada venta guarda su comisión (% y tasa de ese día) en "movimientos_descuentos" y la SUMA a H y J; H y J son saldos, no se recalculan (cambiar el % o la tasa no toca lo ganado). Registrar pago (menú ⭐ Creadores) deja J en 0; pagos en "pagos_creadores". Arranque: `iniciarSaldosPorVenta` fija una vez H/J con el cálculo anterior (propiedad `saldos_por_venta`).
 - **movimientos_descuentos** (se crea sola): cada venta con código; historial de cada venta (el panel calcula la comisión con el % y la tasa actuales).
 - **config!B1**: tasa Bs por 1 USD (actualizarla a mano).

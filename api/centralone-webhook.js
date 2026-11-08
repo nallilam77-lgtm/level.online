@@ -144,9 +144,8 @@ async function avisoRoblox(res, { aviso, evento, ordenCentralOne, idPedido }) {
     console.error('🚨 centralone-webhook: falta GAS_URL en Vercel (aviso de un pedido de Roblox)');
     return res.status(503).json({ ok: false });
   }
-  // roblox.gs exige el token si tiene la propiedad TOKEN_VERCEL (igual que conToken de juegos/roblox.js)
-  const token = (process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
-  const enviar = (cuerpo) => llamarScript(URL_ROBLOX, { ...cuerpo, idPedido, aviso: true, ...(token && { token }) }, AL_SCRIPT);
+  // llamarScript añade el token (SCRIPT_RECARGAS_TOKEN), que roblox.gs exige
+  const enviar = (cuerpo) => llamarScript(URL_ROBLOX, { ...cuerpo, idPedido, aviso: true }, AL_SCRIPT);
 
   try {
     let r;

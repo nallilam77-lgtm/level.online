@@ -21,8 +21,9 @@
 // Cómo actualizarlo después: Implementar > Gestionar implementaciones > editar (lápiz) > Versión: "Nueva
 // versión" > Implementar. Así la URL /exec NO cambia y no hay que tocar Vercel.
 //
-// Seguridad: propiedad del script TOKEN_VERCEL = el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel (si
-// existe la variable en Vercel, crear la propiedad; mientras no exista, no se comprueba).
+// Seguridad: propiedad del script TOKEN_VERCEL = el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel.
+// OBLIGATORIA desde 2026-11-08: sin ella el script responde "No autorizado" a todo (salvo leer precios
+// por GET, que son públicos). Crearla ANTES de implementar esta versión.
 //
 // Reglas que no se deben romper (las mismas de Blood Strike):
 //   - Un pago encontrado NUNCA vuelve a "Verificado": ante cualquier error queda "Usado" y el pedido se
@@ -139,9 +140,8 @@ function doPost(e) {
   }
   var accion = String(datos.accion || "");
 
-  // Solo Vercel (si la propiedad TOKEN_VERCEL existe)
-  var tokenVercel = PropertiesService.getScriptProperties().getProperty("TOKEN_VERCEL");
-  if (tokenVercel && String(datos.token || "") !== tokenVercel) {
+  // Solo Vercel
+  if (!tokenVercelValido(datos)) {
     return responder({ status: "error", message: "No autorizado" });
   }
 
@@ -404,6 +404,7 @@ function cambiarEstadoPago(referencia, nuevoEstado, soloSiEstado) {
   if (!fila) return false;
   if (soloSiEstado && String(hoja.getRange(fila, 5).getValue()).trim().toLowerCase() !== soloSiEstado) return false;
   hoja.getRange(fila, 5).setValue(nuevoEstado);
+  if (nuevoEstado === "Usado") anotarHoraUsado(hoja, fila);
   SpreadsheetApp.flush();
   olvidarPedidoDePago(refBuscada);
   actualizarEstadoFirebase(refBuscada, nuevoEstado);
@@ -676,6 +677,13 @@ function textoEstado(estado) {
 
 function responder(objeto) {
   return ContentService.createTextOutput(JSON.stringify(objeto)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Columna G de "pagos": fecha y hora en que el pago pasó a "Usado" (la F es la marca de la ruleta).
+// Se escribe como texto para que Sheets no la convierta en fecha con el día y el mes al revés.
+const COLUMNA_HORA_USADO = 7;
+function anotarHoraUsado(hoja, fila) {
+  hoja.getRange(fila, COLUMNA_HORA_USADO).setNumberFormat("@").setValue(ahora());
 }
 
 // Fecha y hora de Venezuela con el formato de todas las pestañas
@@ -1064,4 +1072,23 @@ function clavePaqueteML(texto) {
   var base = nombre.replace(/ /g, "_");
   for (var i = 0; i < pases.length; i++) if (pases[i][0].test(nombre)) { base = pases[i][1]; break; }
   return numero ? base + "_" + numero : base;
+}
+
+// Token de Vercel OBLIGATORIO (desde 2026-11-08): la propiedad del script TOKEN_VERCEL debe existir y
+// coincidir con SCRIPT_RECARGAS_TOKEN de Vercel. Sin la propiedad, el script no atiende a nadie.
+function tokenVercelValido(datos) {
+  var esperado = PropertiesService.getScriptProperties().getProperty("TOKEN_VERCEL");
+  if (!esperado) {
+    console.error("Falta la propiedad del script TOKEN_VERCEL: se rechazan todas las peticiones");
+    return false;
+  }
+  return mismoTexto(String((datos && datos.token) || ""), esperado);
+}
+
+// Compara sin cortar en la primera diferencia (no revela por el tiempo cuántos caracteres acertó)
+function mismoTexto(a, b) {
+  if (a.length !== b.length) return false;
+  var diferencia = 0;
+  for (var i = 0; i < a.length; i++) diferencia |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diferencia === 0;
 }

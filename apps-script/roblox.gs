@@ -22,10 +22,9 @@
 // Los pagos se leen de la hoja de pagos compartida (ID_HOJA_PAGOS: C referencia, D monto, E estado).
 //
 // Seguridad (Configuración del proyecto > Propiedades del script):
-//   TOKEN_VERCEL = el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel. MUY RECOMENDADO: sin él,
-//   cualquiera que conociera la URL /exec podría pedir códigos sin pasar por la tienda (ni por sus
-//   límites de intentos) y mandar un precio con descuento inventado. Mientras no exista, no se
-//   comprueba (y queda un aviso en el registro de ejecuciones).
+//   TOKEN_VERCEL = el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel. OBLIGATORIA desde 2026-11-08:
+//   sin ella el script responde "No autorizado" a todo (si no, cualquiera con la URL /exec podría
+//   pedir códigos sin pasar por la tienda y mandar un precio con descuento inventado).
 //
 // Descuentos: Vercel valida el código del cliente y manda "montoACobrar" (precio ya descontado).
 // Solo se acepta si es menor que el precio de la hoja y no baja de DESCUENTO_MAXIMO; si no, se
@@ -115,14 +114,9 @@ function doPost(e) {
     return responder({ status: "error", message: "No se recibieron datos válidos." });
   }
 
-  // Solo Vercel puede pedir precios o comprar (si la propiedad TOKEN_VERCEL existe)
-  var token = PropertiesService.getScriptProperties().getProperty("TOKEN_VERCEL");
-  if (token) {
-    if (!mismoTexto(String(datos.token || ""), token)) {
-      return responder({ status: "error", message: "No autorizado" });
-    }
-  } else {
-    console.warn("Roblox: falta la propiedad TOKEN_VERCEL; cualquiera con la URL /exec puede usar este script");
+  // Solo Vercel puede pedir precios o comprar
+  if (!tokenVercelValido(datos)) {
+    return responder({ status: "error", message: "No autorizado" });
   }
 
   try {
@@ -266,6 +260,7 @@ function procesarPagoYExtraerCodigo(datos) {
     return { status: "error", message: "⚠️ Ese pago se acaba de usar en otra recarga." };
   }
   celdaEstado.setValue("Usado");
+  anotarHoraUsado(hojaPagos, filaPago);
   SpreadsheetApp.flush();
 
   entregarCodigo({
@@ -427,6 +422,7 @@ function completarCompra(datos) {
 
   // Gastar TODOS los pagos de esta compra
   celdaPago.setValue("Usado");
+  anotarHoraUsado(hojaPagos, pago.filaPago);
   referencias.forEach(function (ref) { marcarPagoUsado(hojaPagos, ref); });
   referencias.push(pago.referencia);
   SpreadsheetApp.flush();
@@ -633,6 +629,7 @@ function cambiarEstadoPago(hojaPagos, referencia, desde, hacia) {
     if (String(filas[i][0]).replace(/\s+/g, "") !== referencia) continue;
     if (String(filas[i][2]).trim().toLowerCase() !== desde) return false;
     hojaPagos.getRange(i + 2, 5).setValue(hacia);
+    if (hacia === "Usado") anotarHoraUsado(hojaPagos, i + 2);
     SpreadsheetApp.flush();
     return true;
   }
@@ -715,6 +712,7 @@ function marcarPagoUsado(hojaPagos, referencia) {
   for (var i = refs.length - 1; i >= 0; i--) {
     if (String(refs[i][0]).replace(/\s+/g, "") === referencia) {
       hojaPagos.getRange(i + 2, 5).setValue("Usado");
+      anotarHoraUsado(hojaPagos, i + 2);
       return;
     }
   }
@@ -755,6 +753,13 @@ function buscarFilaPorCompletar(columna, valor) {
   var celdas = hoja.getRange(2, columna, hoja.getLastRow() - 1, 1)
     .createTextFinder(String(valor)).matchEntireCell(true).matchCase(true).findAll();
   return celdas.length ? celdas[celdas.length - 1].getRow() : 0;
+}
+
+// Columna G de "pagos": fecha y hora en que el pago pasó a "Usado" (la F es la marca de la ruleta).
+// Se escribe como texto para que Sheets no la convierta en fecha con el día y el mes al revés.
+const COLUMNA_HORA_USADO = 7;
+function anotarHoraUsado(hoja, fila) {
+  hoja.getRange(fila, COLUMNA_HORA_USADO).setNumberFormat("@").setValue(ahora());
 }
 
 // Fecha y hora de Venezuela con el formato de las pestañas
@@ -1095,4 +1100,15 @@ function claveDePaquete(nombre) {
   var numero = String(nombre || "").replace(/[^0-9]/g, "");
   if (!numero) return "";
   return esDeEEUU(nombre) ? numero + "-EEUU" : numero;
+}
+
+// Token de Vercel OBLIGATORIO (desde 2026-11-08): la propiedad del script TOKEN_VERCEL debe existir y
+// coincidir con SCRIPT_RECARGAS_TOKEN de Vercel. Sin la propiedad, el script no atiende a nadie.
+function tokenVercelValido(datos) {
+  var esperado = PropertiesService.getScriptProperties().getProperty("TOKEN_VERCEL");
+  if (!esperado) {
+    console.error("Falta la propiedad del script TOKEN_VERCEL: se rechazan todas las peticiones");
+    return false;
+  }
+  return mismoTexto(String((datos && datos.token) || ""), esperado);
 }

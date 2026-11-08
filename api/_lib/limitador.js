@@ -5,6 +5,7 @@
 // Sin ella cae a memoria local: protección débil, porque cada instancia cuenta por separado.
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 import { createHash } from 'node:crypto';
+import { BlockList, isIP } from 'node:net';
 import { waitUntil } from '@vercel/functions';
 
 const COLECCION = 'limites_recarga';
@@ -75,12 +76,36 @@ function guardarEnMemoria(clave, registro) {
 const idDocumento = (clave) => createHash('sha256').update(clave).digest('hex');
 const maximoPara = (clave) => MAX_FALLOS[clave.split(':')[0]] || 5;
 
+// Cloudflare está delante del dominio: Vercel ve la IP del nodo de Cloudflare (x-real-ip), no la del
+// cliente, y todos los clientes de ese nodo compartirían el mismo contador. La IP real viene en
+// cf-connecting-ip, pero esa cabecera la puede inventar cualquiera que llame a Vercel saltándose
+// Cloudflare: solo se cree si la petición llegó DESDE una IP de Cloudflare.
+// Rangos oficiales: https://www.cloudflare.com/ips/ (cambian muy rara vez; revisar una vez al año).
+const RANGOS_CLOUDFLARE = new BlockList();
+[
+  '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18',
+  '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17',
+  '162.158.0.0/15', '104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+].forEach((r) => { const [red, bits] = r.split('/'); RANGOS_CLOUDFLARE.addSubnet(red, Number(bits), 'ipv4'); });
+[
+  '2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32',
+  '2a06:98c0::/29', '2c0f:f248::/32',
+].forEach((r) => { const [red, bits] = r.split('/'); RANGOS_CLOUDFLARE.addSubnet(red, Number(bits), 'ipv6'); });
+
+function esDeCloudflare(ip) {
+  const tipo = isIP(ip);
+  return tipo !== 0 && RANGOS_CLOUDFLARE.check(ip, tipo === 6 ? 'ipv6' : 'ipv4');
+}
+
 export function obtenerIp(req) {
   const reenviada = req.headers['x-forwarded-for'];
-  return req.headers['x-real-ip']
+  const ipConexion = String(req.headers['x-real-ip']
     || (reenviada ? String(reenviada).split(',')[0].trim() : '')
     || req.socket?.remoteAddress
-    || 'desconocida';
+    || '').trim();
+  const ipCloudflare = String(req.headers['cf-connecting-ip'] || '').trim();
+  if (ipCloudflare && isIP(ipCloudflare) && esDeCloudflare(ipConexion)) return ipCloudflare;
+  return ipConexion || 'desconocida';
 }
 
 async function leerRegistro(clave) {

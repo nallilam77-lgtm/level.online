@@ -96,14 +96,18 @@ export async function pedirJSON(url, { metodo = 'POST', cuerpo, reintentos = 0, 
 }
 
 // Atajo para Apps Script: POST con { accion, ... }
-// A los Apps Script de recargas (Free Fire) y de Blood Strike se les añade SCRIPT_RECARGAS_TOKEN en el
-// cuerpo (Apps Script no puede leer cabeceras): así solo Vercel puede pedir pines o cambiar pagos
-// aunque la URL se filtre. Cada script lo exige solo si tiene la propiedad TOKEN_VERCEL.
+// A TODOS los Apps Script (recargas, Blood Strike, Mobile Legends, Roblox, ruleta y validador) se les
+// añade SCRIPT_RECARGAS_TOKEN en el cuerpo (Apps Script no puede leer cabeceras). Desde 2026-11-08 cada
+// script lo EXIGE: sin la propiedad TOKEN_VERCEL, o con un token distinto, responde "No autorizado".
+// Así solo Vercel puede pedir pines, comprar o cambiar pagos aunque la URL /exec se filtre.
+let avisoSinToken = false;
 export function llamarScript(url, cuerpo, opciones = {}) {
   const token = (process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
-  const destino = String(url || '').trim();
-  const conToken = Boolean(destino) && ['SCRIPT_RECARGAS_URL', 'SCRIPT_BLOOD'].some((v) => destino === (process.env[v] || '').trim());
-  return pedirJSON(url, { ...opciones, cuerpo: token && conToken ? { ...cuerpo, token } : cuerpo });
+  if (!token && !avisoSinToken) {
+    console.error('🚨 Falta SCRIPT_RECARGAS_TOKEN en Vercel: todos los Apps Script responderán "No autorizado".');
+    avisoSinToken = true;
+  }
+  return pedirJSON(url, { ...opciones, cuerpo: token ? { ...cuerpo, token } : cuerpo });
 }
 
 // =========================================================================

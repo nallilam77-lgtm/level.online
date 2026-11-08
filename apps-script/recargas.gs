@@ -9,11 +9,11 @@
 // Implementar > Gestionar implementaciones > editar (lápiz) > Versión: "Nueva versión" > Implementar.
 // Así la URL /exec NO cambia y no hay que tocar Vercel.
 //
-// Seguridad (Configuración del proyecto > Propiedades del script), ambas opcionales:
+// Seguridad (Configuración del proyecto > Propiedades del script), las dos OBLIGATORIAS desde 2026-11-08:
 //   TOKEN_VERCEL     = el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel.
 //   MACRODROID_CLAVE = clave que MacroDroid envía en el campo "clave" del JSON.
-// Mientras una propiedad no exista, esa comprobación se omite.
-// ORDEN: primero configura Vercel/MacroDroid, después crea la propiedad.
+// Si falta una, se rechaza todo lo que dependa de ella (sin TOKEN_VERCEL la tienda no funciona; sin
+// MACRODROID_CLAVE no se guardan los pagos). Crear las dos ANTES de implementar esta versión.
 //
 // Reglas que no se deben romper:
 //   - Cada pedido trae un idPedido: repetir verificar_pago u obtener_codigo devuelve el mismo
@@ -161,15 +161,15 @@ function doPost(e) {
   // MacroDroid: no envía "accion"
   if (!accion && (datos.referencia || datos.monto || datos.telefono)) {
     var claveMacro = props.getProperty("MACRODROID_CLAVE");
-    if (claveMacro && String(datos.clave || "") !== claveMacro) {
+    if (!claveMacro) console.error("Falta la propiedad del script MACRODROID_CLAVE: se rechazan los pagos de MacroDroid");
+    if (!claveMacro || !mismoTexto(String(datos.clave || ""), claveMacro)) {
       return responder({ status: "error", message: "No autorizado" });
     }
     return conCandado(function () { return guardarPagoMacroDroid(datos); }, ESPERA_CANDADO_MACRODROID_MS);
   }
 
   // Todas las demás acciones solo las puede pedir Vercel
-  var tokenVercel = props.getProperty("TOKEN_VERCEL");
-  if (tokenVercel && String(datos.token || "") !== tokenVercel) {
+  if (!tokenVercelValido(datos)) {
     return responder({ status: "error", message: "No autorizado" });
   }
 
@@ -232,7 +232,7 @@ function conCandado(operacion, esperaMs) {
 
 
 // =====================================================================
-// 3. PAGOS (pestaña "pagos": A fecha · B teléfono · C referencia · D monto · E estado)
+// 3. PAGOS (pestaña "pagos": A fecha · B teléfono · C referencia · D monto · E estado · F ruleta · G hora en que pasó a "Usado")
 //    Estados: Verificado -> En proceso (lo tomó un pedido) -> Usado. Nunca vuelve atrás.
 // =====================================================================
 
@@ -485,6 +485,7 @@ function cambiarEstadoPago(referencia, nuevoEstado, soloSiEstado) {
   if (!fila) return false;
   if (soloSiEstado && String(hoja.getRange(fila, 5).getValue()).trim().toLowerCase() !== soloSiEstado) return false;
   hoja.getRange(fila, 5).setValue(nuevoEstado);
+  if (nuevoEstado === "Usado") anotarHoraUsado(hoja, fila);
   SpreadsheetApp.flush();
   olvidarPedidoDePago(refBuscada);
   actualizarEstadoFirebase(refBuscada, nuevoEstado);
@@ -548,6 +549,7 @@ function bloquearPagosAtascados() {
       if (String(rows[i][4]).trim().toLowerCase() === "en proceso") {
         var ref = String(rows[i][2]).replace(/\s+/g, "");
         hoja.getRange(i + 1, 5).setValue("Usado");
+        anotarHoraUsado(hoja, i + 1);
         olvidarPedidoDePago(ref);
         actualizarEstadoFirebase(ref, "Usado");
       }
@@ -602,6 +604,7 @@ function marcarUsadosLosFinalizados() {
     // Se vuelve a leer dentro del candado: una fila pudo cambiar o moverse mientras confirmabas
     sinMarcar().forEach(function (p) {
       hoja.getRange(p.fila, 5).setValue("Usado");
+      anotarHoraUsado(hoja, p.fila);
       olvidarPedidoDePago(p.ref);
       actualizarEstadoFirebase(p.ref, "Usado");
       reparadas.push(p.ref);
@@ -2276,6 +2279,13 @@ function responder(objeto) {
   return ContentService.createTextOutput(JSON.stringify(objeto)).setMimeType(ContentService.MimeType.JSON);
 }
 
+// Columna G de "pagos": fecha y hora en que el pago pasó a "Usado" (la F es la marca de la ruleta).
+// Se escribe como texto para que Sheets no la convierta en fecha con el día y el mes al revés.
+const COLUMNA_HORA_USADO = 7;
+function anotarHoraUsado(hoja, fila) {
+  hoja.getRange(fila, COLUMNA_HORA_USADO).setNumberFormat("@").setValue(ahora());
+}
+
 // Fecha y hora de Venezuela con el formato de todas las pestañas
 function ahora() {
   return Utilities.formatDate(new Date(), "America/Caracas", "dd/MM/yyyy HH:mm:ss");
@@ -2393,4 +2403,23 @@ function redondear2(n) {
 
 function redondear4(n) {
   return Math.round(Number(n) * 10000) / 10000;
+}
+
+// Token de Vercel OBLIGATORIO (desde 2026-11-08): la propiedad del script TOKEN_VERCEL debe existir y
+// coincidir con SCRIPT_RECARGAS_TOKEN de Vercel. Sin la propiedad, el script no atiende a nadie.
+function tokenVercelValido(datos) {
+  var esperado = PropertiesService.getScriptProperties().getProperty("TOKEN_VERCEL");
+  if (!esperado) {
+    console.error("Falta la propiedad del script TOKEN_VERCEL: se rechazan todas las peticiones");
+    return false;
+  }
+  return mismoTexto(String((datos && datos.token) || ""), esperado);
+}
+
+// Compara sin cortar en la primera diferencia (no revela por el tiempo cuántos caracteres acertó)
+function mismoTexto(a, b) {
+  if (a.length !== b.length) return false;
+  var diferencia = 0;
+  for (var i = 0; i < a.length; i++) diferencia |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diferencia === 0;
 }

@@ -10,9 +10,9 @@
 // ("Usado") que todavía no giró, escribe "listo" en F y anota el premio en la primera pestaña
 // del libro donde está instalado este script.
 //
-// Seguridad (Configuración del proyecto > Propiedades del script), opcional:
-//   TOKEN_VERCEL = el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel. Sin él, cualquiera que
-//   conociera la URL /exec podría anotarse un premio. Mientras no exista, no se comprueba.
+// Seguridad (Configuración del proyecto > Propiedades del script), OBLIGATORIA desde 2026-11-08:
+//   TOKEN_VERCEL = el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel. Sin ella el script responde
+//   "No autorizado" a todo (si no, cualquiera con la URL /exec podría anotarse un premio).
 //
 // Reintentos: si la misma referencia y el mismo jugador vuelven a pedir el giro (Vercel reintenta
 // cuando Google falla o tarda), se devuelve el premio ya anotado. Nunca se gira dos veces y el
@@ -29,8 +29,7 @@ function doPost(e) {
   try {
     var datos = JSON.parse((e && e.postData && e.postData.contents) || "{}");
 
-    var token = PropertiesService.getScriptProperties().getProperty("TOKEN_VERCEL");
-    if (token && String(datos.token || "") !== token) {
+    if (!tokenVercelValido(datos)) {
       return responder({ status: "error", message: "No autorizado" });
     }
 
@@ -139,4 +138,23 @@ function responder(objeto) {
 function textoSeguro(valor) {
   var texto = String(valor === undefined || valor === null ? "" : valor).slice(0, 300);
   return /^[=+\-@]/.test(texto) ? "'" + texto : texto;
+}
+
+// Token de Vercel OBLIGATORIO (desde 2026-11-08): la propiedad del script TOKEN_VERCEL debe existir y
+// coincidir con SCRIPT_RECARGAS_TOKEN de Vercel. Sin la propiedad, el script no atiende a nadie.
+function tokenVercelValido(datos) {
+  var esperado = PropertiesService.getScriptProperties().getProperty("TOKEN_VERCEL");
+  if (!esperado) {
+    console.error("Falta la propiedad del script TOKEN_VERCEL: se rechazan todas las peticiones");
+    return false;
+  }
+  return mismoTexto(String((datos && datos.token) || ""), esperado);
+}
+
+// Compara sin cortar en la primera diferencia (no revela por el tiempo cuántos caracteres acertó)
+function mismoTexto(a, b) {
+  if (a.length !== b.length) return false;
+  var diferencia = 0;
+  for (var i = 0; i < a.length; i++) diferencia |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diferencia === 0;
 }
