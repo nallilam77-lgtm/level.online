@@ -117,6 +117,9 @@ const REGIONES_CENTRALONE = ["GLOBAL"];
 // El 🔄 solo trae diamantes normales (nada de pases, membresías, doble diamante, eventos ni Mobile Legends:
 // Adventure, que es otro juego) y solo los MAX_PRODUCTOS más baratos con stock.
 const MAX_PRODUCTOS = 10;
+// Familia de Central One que se vende: solo la normal ("Mobile Legends" o "Mobile Legends: Bang Bang").
+// Cualquier otra (Mobile Legends Especial, Adventure…) se ignora aunque sus productos se llamen igual.
+const FAMILIA_NORMAL_ML = "mobilelegends";
 const PRODUCTO_ESPECIAL = /adventure|pass|pase|member|starlight|twilight|weekly|semanal|double|doble|2x|x2|first|primera|special|especial|promo|event|evento|limited|limitad|bundle|pack|skin|gift|regalo/i;
 
 
@@ -878,6 +881,16 @@ function traerProductosCentralOne() {
     ui.alert("Tu catálogo de Central One no tiene productos de Mobile Legends habilitados. No se cambió nada.");
     return;
   }
+  // Solo la familia normal: "Mobile Legends Especial" (y cualquier otra variante) queda fuera
+  var normales = delJuego.filter(esFamiliaNormalML);
+  if (!normales.length) {
+    var familias = delJuego.map(function (p) { return String(p.product_family_name || "sin familia"); })
+      .filter(function (f, i, lista) { return lista.indexOf(f) === i; });
+    ui.alert("Hay " + delJuego.length + " producto(s) de Mobile Legends, pero ninguno de la familia normal \"Mobile Legends\"" +
+      " (familias que hay: " + familias.join(", ") + "). No se cambió nada.");
+    return;
+  }
+  delJuego = normales;
   var productos = delJuego.filter(function (p) { return REGIONES_CENTRALONE.indexOf(String(p.region || "").trim().toUpperCase()) !== -1; });
   if (!productos.length) {
     var regiones = delJuego.map(function (p) { return String(p.region || "sin región"); })
@@ -1058,6 +1071,13 @@ function nombreCortoML(nombre) {
   var esPase = /pass|pase|member|starlight|twilight|weekly|semanal/i.test(t);
   if (numero && !esPase && /diamond|diamante/i.test(t)) return numero[0].replace(/[.,]/g, "") + " Diamantes";
   return traducirNombreML(t) || original;
+}
+
+// true si el producto es de la familia normal de Mobile Legends (no Especial, Adventure ni otra variante).
+// Igual que esFamiliaNormalML de validador.gs.
+function esFamiliaNormalML(p) {
+  var familia = String(p.product_family_name || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "").replace(/bangbang$/, "");
+  return familia === FAMILIA_NORMAL_ML;
 }
 
 // Clave con la que la tienda reconoce un paquete. DEBE ser igual a clavePaquete de

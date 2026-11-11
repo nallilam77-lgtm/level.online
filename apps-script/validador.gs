@@ -31,10 +31,16 @@ const JUEGOS = {
   freefire: { nombre: "Free Fire", familia: "freefire", region: /latam|latin/i, preferido: /diamond|diamante/i, prefijo: "ff" },
   bloodstrike: { nombre: "Blood Strike", familia: "bloodstrike", region: /^global$/i, preferido: /gold|oro/i, prefijo: "bs" },
   // conZona: el producto pide dos datos de texto (ID y Zona ID). Cualquier región sirve para comprobar la cuenta.
-  mobilelegends: { nombre: "Mobile Legends", familia: "mobilelegends", region: /.*/, preferido: /diamond|diamante/i, prefijo: "ml", conZona: true }
+  mobilelegends: { nombre: "Mobile Legends", familia: "mobilelegends", region: /.*/, preferido: /diamond|diamante/i, prefijo: "ml", conZona: true, soloFamiliaExacta: true }
 };
 // Campo del producto donde va la Zona ID (igual que CAMPO_ZONA de api/_lib/centralone.js)
 const CAMPO_ZONA = /zone|zona|server|servidor/i;
+
+// true si la familia del producto es exactamente la del juego ("Mobile Legends: Bang Bang" cuenta como
+// "mobilelegends"); "Mobile Legends Especial" no. Igual que esFamiliaNormalML de mobilelegends.gs.
+function esFamiliaExacta(p, familia) {
+  return String(p.product_family_name || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "").replace(/bangbang$/, "") === familia;
+}
 
 function doPost(e) {
   try {
@@ -121,6 +127,8 @@ function productoParaValidar(juego, llave) {
     var encaja = juego.conZona
       ? campos.length === 2 && campos.every(function (c) { return c.type !== "select"; }) && campos.filter(esCampoZona).length === 1
       : campos.length === 1 && campos[0].type !== "select";
+    // Mobile Legends: solo la familia normal (no "Mobile Legends Especial"), igual que el 🔄 de mobilelegends.gs
+    if (juego.soloFamiliaExacta && !esFamiliaExacta(p, juego.familia)) return false;
     return familia.indexOf(juego.familia) !== -1 && p.requires_target && juego.region.test(region.trim()) && p.in_stock !== false && encaja;
   });
   if (!candidatos.length) return null;
