@@ -11,6 +11,10 @@
 // F comprobante, G cobrado Bs, H código de descuento, I id del pedido, J origen del código),
 // "pedidos_api" (compras en Central One) y "tasa_dolar" (B1 dólar en Bs, B2 ganancia %).
 //
+// Desde 2026-11-10: SOLO paquetes fijos (PAQUETES_ROBLOX: 50, 100, 270 y 355 Robux) con precio y códigos
+// puestos a mano; COMPRAR_EN_CENTRAL_ONE = false (sin códigos → "Agotado" y el pago no se toca). Lo de
+// Central One de abajo solo aplica si se vuelve a poner en true.
+//
 // Códigos: primero se entregan los guardados en "Codigos". Si no queda ninguno y el paquete tiene
 // product_id (fila 3), con Vercel nuevo (manda api: true) se compra en Central One:
 //   1. Aquí: el pago queda "En proceso" y el pedido en "pedidos_api"; se responde status "comprar".
@@ -53,6 +57,17 @@ const sheetNameExitosas = "Exitosas";
 // Columna K de "Exitosas": WhatsApp del cliente (opcional)
 const COLUMNA_WHATSAPP_EXITOSAS = 11;
 const sheetNamePreciosRoblox = "PreciosRoblox";
+
+// --- Paquetes fijos (desde 2026-11-10) ---
+// La tienda vende SOLO estos paquetes. Tú pones el precio en "PreciosRoblox" (fila 2) y los códigos en
+// "Codigos" (debajo del título de cada paquete). Si no quedan códigos, el paquete sale "Agotado" en la
+// tienda y, si alguien intenta comprarlo, se le avisa sin tocar su pago (la referencia le sigue sirviendo).
+// Para crear o reordenar las dos pestañas: menú 🎮 Roblox → 📋 Preparar pestañas de precios y códigos.
+const PAQUETES_ROBLOX = ["50 Robux", "100 Robux", "270 Robux", "355 Robux"];
+// false = nunca se compra en Central One: solo se entregan los códigos que tú pones en "Codigos".
+// (Para volver a usar Central One: true, y el menú 🔄 vuelve a aparecer.)
+const COMPRAR_EN_CENTRAL_ONE = false;
+const MENSAJE_AGOTADO = "⚠️ Ya no quedan códigos de este paquete. Tu pago NO se usó: elige otro paquete o escríbenos por WhatsApp y te avisamos cuando haya.";
 
 // Vercel espera la compra hasta 45 s: el candado no debe esperar más que eso
 const ESPERA_CANDADO_MS = 25000;
@@ -165,7 +180,7 @@ function procesarPagoYExtraerCodigo(datos) {
 
   var libro = SpreadsheetApp.getActiveSpreadsheet();
   var numeroPaquete = claveDePaquete(paquete);
-  if (!numeroPaquete) return { status: "error", message: "⚠️ Paquete no reconocido." };
+  if (!numeroPaquete || !esPaqueteDeLaTienda(numeroPaquete)) return { status: "error", message: "⚠️ Paquete no reconocido." };
 
   // ---- Precio del paquete (obligatorio: sin precio en la hoja no se vende) ----
   var precioOficial = precioDePaquete(libro, numeroPaquete);
@@ -241,9 +256,12 @@ function procesarPagoYExtraerCodigo(datos) {
   var codigo = libre.codigo, filaCodigo = libre.fila;
   if (!codigo) {
     // Sin códigos guardados: se compra en Central One (si Vercel puede y el paquete tiene product_id)
-    var productoApi = datos.api === true ? productoDePaquete(libro, numeroPaquete) : "";
-    if (!productoApi && col === -1) return { status: "error", message: "⚠️ Paquete no reconocido en el inventario de códigos." };
-    if (!productoApi) return { status: "error", agotado: true, message: "⚠️ Este paquete se acaba de agotar. Elige otro o escríbenos por WhatsApp." };
+    var productoApi = COMPRAR_EN_CENTRAL_ONE && datos.api === true ? productoDePaquete(libro, numeroPaquete) : "";
+    // Sin códigos: se avisa al cliente y su pago queda como estaba
+    if (!productoApi) {
+      console.warn("Roblox: sin códigos de '" + paquete + "' en la pestaña " + sheetNameCodigos + (col === -1 ? " (no tiene columna)" : ""));
+      return { status: "error", agotado: true, message: MENSAJE_AGOTADO };
+    }
     return reservarParaCentralOne({
       hojaPagos: hojaPagos, filaPago: filaPago, idPedido: idPedido, usuario: usuario, paquete: paquete,
       precio: precioACobrar, codigoDescuento: codigoDescuento, urlCapture: urlCapture, productId: productoApi,
@@ -396,7 +414,7 @@ function completarCompra(datos) {
   // Alcanza: primero el código (si se agotó, el pago nuevo NO se toca y la compra sigue pendiente)
   var col = columnaDePaquete(hojaCodigos, claveDePaquete(paquete));
   var libre = col === -1 ? { codigo: null } : buscarCodigoLibre(hojaCodigos, col);
-  var productoApi = !libre.codigo && datos.api === true ? productoDePaquete(libro, claveDePaquete(paquete)) : "";
+  var productoApi = !libre.codigo && COMPRAR_EN_CENTRAL_ONE && datos.api === true ? productoDePaquete(libro, claveDePaquete(paquete)) : "";
   if (productoApi) {
     // Sin códigos guardados: se compra en Central One. La fila de "por_completar" queda "⏳" (no se puede
     // completar dos veces) y entregar_api la cierra; si no se compra, liberar_api le devuelve su estado.
@@ -831,11 +849,13 @@ function obtenerPrecios() {
     var filas = hoja.getRange(1, 1, FILA_PRODUCTO, ultimaColumna).getValues();
     for (var i = 0; i < filas[0].length; i++) {
       var titulo = String(filas[0][i]).trim();
-      if (!titulo || !(limpiarMontoVES(filas[1][i]) > 0)) continue;
+      // Solo los paquetes fijos (PAQUETES_ROBLOX) y con precio
+      if (!titulo || !esPaqueteDeLaTienda(claveDePaquete(titulo)) || !(limpiarMontoVES(filas[1][i]) > 0)) continue;
       precios[titulo] = filas[1][i];
       stock[titulo] = libresPorNumero[claveDePaquete(titulo)] || 0;
+      // Sin Central One no se manda product_id: sin códigos, Vercel lo muestra "Agotado"
       var producto = String(filas[FILA_PRODUCTO - 1][i]).trim();
-      if (PRODUCTO_VALIDO.test(producto)) productos[titulo] = producto;
+      if (COMPRAR_EN_CENTRAL_ONE && PRODUCTO_VALIDO.test(producto)) productos[titulo] = producto;
     }
   }
   return responder({ status: "success", precios: precios, stock: stock, productos: productos });
@@ -912,10 +932,79 @@ function limpiarMontoVES(valor) {
 // =====================================================================
 
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu("🎮 Roblox")
-    .addItem("🔄 Traer productos de Central One", "traerProductosCentralOne")
-    .addItem("🔑 Guardar llave de Central One", "guardarLlaveCentralOne")
-    .addToUi();
+  var menu = SpreadsheetApp.getUi().createMenu("🎮 Roblox")
+    .addItem("📋 Preparar pestañas de precios y códigos", "prepararPestanasRoblox");
+  // Con Central One apagado, el 🔄 no aparece: borraría los precios que pusiste a mano
+  if (COMPRAR_EN_CENTRAL_ONE) {
+    menu.addItem("🔄 Traer productos de Central One", "traerProductosCentralOne")
+      .addItem("🔑 Guardar llave de Central One", "guardarLlaveCentralOne");
+  }
+  menu.addToUi();
+}
+
+// ¿Es uno de los paquetes que vende la tienda? (clave = números del nombre, ver claveDePaquete)
+function esPaqueteDeLaTienda(clave) {
+  return PAQUETES_ROBLOX.some(function (p) { return claveDePaquete(p) === clave; });
+}
+
+// Menú 📋: deja "PreciosRoblox" con SOLO los paquetes fijos (conserva los precios que ya tenían) y
+// agrega a "Codigos" la columna de cada paquete que falte. Nunca borra códigos.
+function prepararPestanasRoblox() {
+  var ui = SpreadsheetApp.getUi();
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var total = PAQUETES_ROBLOX.length;
+
+  // ---- PreciosRoblox: fila 1 paquete · fila 2 precio en Bs (lo escribes tú) ----
+  var hojaPrecios = libro.getSheetByName(sheetNamePreciosRoblox) || libro.insertSheet(sheetNamePreciosRoblox);
+  var precioAnterior = {};
+  if (hojaPrecios.getLastColumn() > 0 && hojaPrecios.getLastRow() >= 2) {
+    var viejas = hojaPrecios.getRange(1, 1, 2, hojaPrecios.getLastColumn()).getValues();
+    viejas[0].forEach(function (titulo, i) {
+      var clave = claveDePaquete(titulo);
+      // Solo un precio puesto a mano (número); una fórmula del 🔄 de Central One no se conserva
+      if (clave && typeof viejas[1][i] === "number" && viejas[1][i] > 0) precioAnterior[clave] = viejas[1][i];
+    });
+  }
+  var seguir = ui.alert("Preparar pestañas de Roblox",
+    "\"" + sheetNamePreciosRoblox + "\" quedará SOLO con: " + PAQUETES_ROBLOX.join(", ") + " (se conservan sus precios si ya los tenían; " +
+    "los demás paquetes se quitan).\n\nEn \"" + sheetNameCodigos + "\" se agrega la columna de cada paquete que falte. No se borra ningún código.\n\n¿Seguir?",
+    ui.ButtonSet.YES_NO);
+  if (seguir !== ui.Button.YES) return;
+
+  hojaPrecios.clear();
+  hojaPrecios.clearNotes();
+  hojaPrecios.getRange(1, 1, 2, total).setValues([
+    PAQUETES_ROBLOX.map(textoSeguro),
+    PAQUETES_ROBLOX.map(function (p) { return precioAnterior[claveDePaquete(p)] || ""; })
+  ]);
+  hojaPrecios.getRange(1, 1, 1, total).setFontWeight("bold");
+  hojaPrecios.getRange(2, 1, 1, total).setNumberFormat("#,##0.00").setBackground("#fff2cc");
+  hojaPrecios.getRange(2, 1).setNote("Fila 2: precio en Bs de cada paquete. Sin precio (o en 0), el paquete no se muestra en la tienda. " +
+    "No cambies los números de la fila 1.");
+  hojaPrecios.setFrozenRows(1);
+
+  // ---- Codigos: un título por paquete; los códigos van debajo, uno por celda ----
+  var hojaCodigos = libro.getSheetByName(sheetNameCodigos) || libro.insertSheet(sheetNameCodigos);
+  var agregadas = [];
+  PAQUETES_ROBLOX.forEach(function (p) {
+    if (columnaDePaquete(hojaCodigos, claveDePaquete(p)) !== -1) return;
+    var col = hojaCodigos.getLastColumn() + 1;
+    if (hojaCodigos.getMaxColumns() < col) hojaCodigos.insertColumnsAfter(hojaCodigos.getMaxColumns(), col - hojaCodigos.getMaxColumns());
+    hojaCodigos.getRange(1, col).setValue(textoSeguro(p)).setFontWeight("bold");
+    agregadas.push(p);
+  });
+  // Los códigos son texto: así Sheets no les quita ceros ni los vuelve números
+  hojaCodigos.getRange(2, 1, Math.max(hojaCodigos.getMaxRows() - 1, 1), hojaCodigos.getLastColumn()).setNumberFormat("@");
+  hojaCodigos.getRange(1, 1).setNote("Pega los códigos debajo del título de su paquete, uno por celda. Al venderse, el código se quita solo " +
+    "y queda anotado en \"" + sheetNameExitosas + "\". Sin códigos, la tienda muestra el paquete \"Agotado\".");
+  hojaCodigos.setFrozenRows(1);
+  SpreadsheetApp.flush();
+
+  var sinPrecio = PAQUETES_ROBLOX.filter(function (p) { return !precioAnterior[claveDePaquete(p)]; });
+  ui.alert("✅ Listo." +
+    (agregadas.length ? " Columnas nuevas en \"" + sheetNameCodigos + "\": " + agregadas.join(", ") + "." : "") +
+    (sinPrecio.length ? "\n\n✏️ Escribe el precio en Bs (fila 2 de \"" + sheetNamePreciosRoblox + "\") de: " + sinPrecio.join(", ") + "." : "") +
+    "\n\nLuego pega los códigos en \"" + sheetNameCodigos + "\". La tienda tarda hasta ~2 minutos en mostrar los cambios.");
 }
 
 function guardarLlaveCentralOne() {
