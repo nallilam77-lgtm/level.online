@@ -6,12 +6,25 @@
 // manuales.gs verifica el pago (lo deja "Usado") y anota el pedido en la pestaña del juego; la recarga la
 // hace el equipo a mano. Aquí no se compra nada en ningún proveedor.
 //
+// Códigos de descuento: la misma tabla "Descuentos" de la hoja de Free Fire que las otras tiendas
+// (_lib/descuentos.js). El precio con descuento se calcula aquí sobre el precio de la hoja y manuales.gs
+// solo lo acepta si es menor que su precio. Si el pago alcanzó, el uso (+1 uso y la comisión del creador)
+// se anota con registrar_uso_descuento; si no alcanzó, la nota del pedido avisa que hay que anotarlo a mano.
+//
 // SEGURIDAD: el cuerpo trae la CONTRASEÑA del cliente. Nunca se escribe en los logs (ni req.body ni el
 // payload) y solo viaja a manuales.gs.
 import { randomUUID } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
+import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
+import { limpiarMontoVES } from '../recarga-comun.js';
+
+// Nombre con el que cada venta con código se anota en "movimientos_descuentos" (y se ve en el panel del creador)
+const NOMBRES = { fcmobile: 'FC Mobile', codmobile: 'COD Mobile', clashroyale: 'Clash Royale' };
+// manuales.gs acepta montoACobrar desde la versión 2: con una anterior cobraría el precio completo
+const VERSION_CON_DESCUENTO = 2;
+const MENSAJE_SIN_DESCUENTO = 'Los códigos de descuento aún no están disponibles en esta tienda. Quita el código para comprar.';
 
 const MENSAJE_SIN_CONFIGURAR = 'Esta tienda no está disponible en este momento. Intenta más tarde.';
 // registrar_pedido es idempotente en manuales.gs (el mismo idPedido no duplica la fila ni toma otro pago),
@@ -75,7 +88,34 @@ async function precios(req, res) {
   }
 }
 
-export const acciones = { precios };
+// Catálogo del juego ya limpio + la versión de manuales.gs (misma caché que la acción precios)
+async function catalogoConVersion(scriptUrl, juego) {
+  const datos = await leerCatalogos(scriptUrl);
+  const delJuego = datos.juegos[juego];
+  return { version: Number(datos.version) || 0, catalogo: delJuego && typeof delJuego === 'object' ? juegoParaCliente(delJuego).catalogo : [] };
+}
+
+// POST { codigo } -> catálogo del juego con los precios ya descontados (js/descuento.js)
+async function descuento(req, res) {
+  cabecerasCors(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  const juego = String(req.query.juego);
+  const scriptUrl = process.env.SCRIPT_MANUALES;
+  if (!scriptUrl) return faltaConfiguracion(res, ['SCRIPT_MANUALES'], { status: 'error', valido: false, message: MENSAJE_SIN_CONFIGURAR });
+  try {
+    const { version } = await catalogoConVersion(scriptUrl, juego);
+    if (version < VERSION_CON_DESCUENTO) {
+      console.error(`Manuales: manuales.gs v${version} no acepta códigos de descuento: publicarlo como Nueva versión (v${VERSION_CON_DESCUENTO})`);
+      return res.status(200).json({ status: 'success', valido: false, message: 'Los códigos de descuento aún no están disponibles en esta tienda.' });
+    }
+  } catch (error) {
+    console.error(`Error al leer el catálogo de ${juego} para un código:`, error.message);
+    return res.status(503).json({ status: 'error', valido: false, message: 'No pudimos validar el código. Intenta de nuevo en unos segundos.' });
+  }
+  return crearAccionDescuento(NOMBRES[juego], async () => (await catalogoConVersion(scriptUrl, juego)).catalogo)(req, res);
+}
+
+export const acciones = { precios, descuento };
 
 // =========================================================================
 // PEDIDO (api/recargar.js)
@@ -117,20 +157,47 @@ export async function recargar(req, res) {
       return res.status(429).json({ status: 'error', message: `Demasiados intentos fallidos. Espera ${minutosEspera} minutos para volver a intentar.` });
     }
 
+    // Código de descuento (opcional): se vuelve a consultar la tabla y el precio sale del de la hoja,
+    // ANTES de tocar el pago. Sin código, manuales.gs cobra su precio.
+    let desc = null;
+    let montoACobrar = null;
+    if (req.body?.codigoDescuento) {
+      let catalogo;
+      try {
+        catalogo = await catalogoConVersion(scriptUrl, juego);
+      } catch (error) {
+        console.error(`Manuales: no se pudieron leer los precios de ${juego} para el descuento:`, error.message);
+        return res.status(503).json({ status: 'error', message: 'No pudimos aplicar tu código de descuento ahora. Intenta de nuevo en un momento.' });
+      }
+      if (catalogo.version < VERSION_CON_DESCUENTO) return res.status(400).json({ status: 'error', message: MENSAJE_SIN_DESCUENTO });
+      const item = catalogo.catalogo.find((p) => p.paquete === String(paquete));
+      const precioLista = item ? limpiarMontoVES(item.precio) : 0;
+      if (!(precioLista > 0)) {
+        return res.status(400).json({ status: 'error', message: 'Ese paquete ya no está disponible. Recarga la página.' });
+      }
+      const resultado = await aplicarDescuentoARecarga(req.body.codigoDescuento, precioLista);
+      if (resultado.error) return res.status(resultado.error.codigo).json(resultado.error.cuerpo);
+      // Un monto fijo mayor que el precio no se aplica a ese paquete: se cobra completo y no cuenta como uso
+      if (resultado.desc && resultado.precio < precioLista) ({ desc, precio: montoACobrar } = resultado);
+    }
+
     const idPedido = `man-${randomUUID()}`;
     let data;
     try {
       data = await llamarScript(scriptUrl, {
         accion: 'registrar_pedido', juego, idPedido, paquete: String(paquete), referencia: String(referencia),
         metodo: String(metodo), usuario, clave, telefono, comprobante: textoParaHoja(url_capture || 'Sin comprobante'),
+        ...(desc && { montoACobrar, codigoDescuento: desc.codigo }),
       }, REGISTRO_PEDIDO);
     } catch (error) {
       if (!error.tiempoAgotado) throw error;
-      console.error(`⚠️ Pedido manual de ${juego} sin respuesta a tiempo | REF: ${referencia} | pedido ${idPedido}: revisar la pestaña del juego`);
+      console.error(`⚠️ Pedido manual de ${juego} sin respuesta a tiempo | REF: ${referencia} | pedido ${idPedido}: revisar la pestaña del juego` +
+        (desc ? ` | código ${desc.codigo} (${montoACobrar} Bs): si el pedido se anotó, anotar el uso a mano en "Descuentos"` : ''));
       return res.status(202).json({ status: 'error', message: 'Fallo técnico momentáneo: tu pedido quedó en revisión. Si en 10 minutos no te escribimos, escríbenos por WhatsApp con tu referencia.' });
     }
 
     if (data?.status === 'success' && data.registrado) {
+      await anotarUsoDelCodigo({ scriptUrl, juego, idPedido, telefono, data });
       return res.status(200).json({
         status: 'success', insuficiente: data.insuficiente === true,
         precio: String(data.precio || ''), pagado: String(data.pagado || ''), falta: String(data.falta || ''),
@@ -147,5 +214,26 @@ export async function recargar(req, res) {
   } catch (error) {
     console.error(`Error en el pedido manual de ${juego}:`, error.message);
     return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
+  }
+}
+
+// Pedido anotado con código: +1 uso y la comisión del creador en la hoja de Free Fire (registrar_uso_descuento
+// no repite un pedido ya anotado). Solo si el pago alcanzó (si no, manuales.gs ya dejó el aviso en la nota)
+// y si manuales.gs aceptó el precio con descuento (data.codigoDescuento). Si falla, el aviso va a la nota del
+// pedido para anotarlo a mano. Nunca cambia la respuesta al cliente: su pedido ya está guardado.
+async function anotarUsoDelCodigo({ scriptUrl, juego, idPedido, telefono, data }) {
+  const codigo = String(data.codigoDescuento || '');
+  if (!codigo || data.insuficiente === true) return;
+  const montoCobrado = limpiarMontoVES(data.precio);
+  const anotado = await registrarUsoDescuento({ codigo, montoCobrado, idPedido, idJugador: `WhatsApp ${telefono}`, juego: NOMBRES[juego] });
+  if (anotado) return;
+  console.error(`🚨 Manuales: no se anotó el uso del código ${codigo} (${montoCobrado} Bs, ${juego}, pedido ${idPedido}). Anotarlo a mano en "Descuentos".`);
+  try {
+    await llamarScript(scriptUrl, {
+      accion: 'nota_pedido', juego, idPedido,
+      nota: `El uso del código ${codigo} NO se pudo anotar en "Descuentos": anótalo a mano (venta de ${data.precio} Bs)`,
+    }, { tiempoMs: 15000, reintentos: 1, reintentarTrasTimeout: true });
+  } catch (error) {
+    console.error(`Manuales: tampoco se pudo dejar la nota en el pedido ${idPedido}:`, error.message);
   }
 }

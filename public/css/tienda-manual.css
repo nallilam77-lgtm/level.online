@@ -99,6 +99,9 @@ body.modal-abierto { overflow: hidden; }
 .step-title.done .step-num { background: var(--game-gradient); color: var(--on-game-cta); border-color: transparent; }
 .obligatorio { color: var(--danger); }
 
+/* Código de descuento (css/descuento.css): la separación ya la da el grid de .main-card */
+.main-card > .descuento-section { margin-bottom: 0; }
+
 /* ---------- Paquetes ---------- */
 .catalog-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
 .product-card {

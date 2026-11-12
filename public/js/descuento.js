@@ -1,5 +1,6 @@
 // =========================================================================
-// CÓDIGO DE DESCUENTO EN LAS TIENDAS (Free Fire, Blood Strike y Roblox)
+// CÓDIGO DE DESCUENTO EN LAS TIENDAS (Free Fire, Blood Strike, Roblox, Mobile Legends y las manuales:
+// FC Mobile, COD Mobile y Clash Royale)
 // Solo se envía el código: el servidor devuelve el catálogo con los precios ya descontados y,
 // al recargar, vuelve a calcular el descuento por su cuenta (el navegador nunca decide el precio).
 //

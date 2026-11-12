@@ -36,6 +36,11 @@
 //     "⚠️ PAGO INCOMPLETO" y se completa por WhatsApp.
 //   - registrar_pedido se puede repetir con el mismo idPedido (Vercel lo hace si no recibió la respuesta):
 //     no duplica la fila ni toma otro pago.
+//   - Códigos de descuento (desde v2): Vercel valida el código en la tabla "Descuentos" de la hoja de Free
+//     Fire y manda "montoACobrar" (precio ya descontado) y "codigoDescuento". Aquí solo se acepta un monto
+//     MENOR que el precio de la hoja y no menor que su mitad; si no, se cobra el precio completo. El uso
+//     del código (+1 uso y la comisión del creador) lo anota Vercel en la hoja de Free Fire, solo si el pago
+//     alcanzó; si no alcanzó, la nota del pedido avisa que hay que anotarlo a mano al completarlo.
 // =====================================================================
 
 
@@ -48,7 +53,9 @@ const COLLECTION_NAME = "Pagos";
 const ID_HOJA_PAGOS = "1FTjXo7sKybYVmyGO9HBlyla0T2LHBfCB8yHEV70JyOA"; // Hoja central de pagos (la de Free Fire)
 
 // Versión que la tienda lee en obtener_precios
-const VERSION_SCRIPT = 1;
+// v2: códigos de descuento (montoACobrar + codigoDescuento, columna "código descuento" y acción nota_pedido).
+// Vercel solo acepta códigos con la versión 2 o más.
+const VERSION_SCRIPT = 2;
 
 // Vercel espera hasta 15 s por intento: si el candado tarda más, mejor responder "ocupado"
 const ESPERA_CANDADO_MS = 8000;
@@ -56,6 +63,9 @@ const MENSAJE_ERROR_INTERNO = "Error interno en el sistema de recargas. Intenta 
 
 // Margen para pagos que llegan con céntimos de menos (igual que los otros juegos)
 const MARGEN_PAGO_BS = 0.50;
+// Un precio con descuento por debajo de esta fracción del precio de la hoja no se acepta (se cobra completo)
+const MINIMO_CON_DESCUENTO = 0.5;
+const CODIGO_DESCUENTO_VALIDO = /^[A-Z0-9_-]{2,30}$/;
 
 // Formas de iniciar sesión. "clave": pide contraseña · "telefono": acepta número de teléfono en vez de correo
 const METODOS = {
@@ -86,8 +96,9 @@ const JUEGOS = {
 
 // Pestañas de pedidos (una por juego, todas con las mismas columnas)
 const COLUMNAS_PEDIDOS = ["fecha-hora", "id pedido", "paquete", "precio (Bs)", "pagado (Bs)", "referencia",
-  "inicio de sesión", "correo / usuario", "contraseña", "WhatsApp", "estado", "nota", "comprobante"];
-const COL_ID_PEDIDO = 2, COL_CLAVE = 9, COL_ESTADO = 11;
+  "inicio de sesión", "correo / usuario", "contraseña", "WhatsApp", "estado", "nota", "comprobante", "código descuento"];
+// D "precio (Bs)" = lo que se cobró (con descuento si hubo código; el precio de la hoja queda en la nota)
+const COL_ID_PEDIDO = 2, COL_CLAVE = 9, COL_ESTADO = 11, COL_NOTA = 12;
 const ESTADOS = ["⏳ PENDIENTE", "🔄 EN PROCESO", "✅ COMPLETADO", "⚠️ PAGO INCOMPLETO", "❌ PROBLEMA"];
 const COLOR_ESTADO = { "⏳ PENDIENTE": "#fff4c2", "🔄 EN PROCESO": "#cfe2ff", "✅ COMPLETADO": "#d1f2d9",
   "⚠️ PAGO INCOMPLETO": "#ffe0b3", "❌ PROBLEMA": "#f8d0d0" };
@@ -132,6 +143,7 @@ function doPost(e) {
     if (accion === "obtener_precios") return responder(obtenerPrecios());
     // Toca pagos: una a la vez
     if (accion === "registrar_pedido") return conCandado(function () { return registrarPedido(datos); });
+    if (accion === "nota_pedido") return conCandado(function () { return notaPedido(datos); });
     return responder({ status: "error", message: "Acción no válida" });
   } catch (error) {
     console.error("Error en acción " + accion + ": " + (error && error.stack || error));
@@ -211,7 +223,8 @@ function precioDolar() {
 //    Estados del pago: Verificado -> Usado. Nunca vuelve a "Verificado".
 // =====================================================================
 
-// Vercel (con candado). datos: { juego, paquete, referencia (últimos 5), metodo, usuario, clave, telefono, idPedido, comprobante }
+// Vercel (con candado). datos: { juego, paquete, referencia (últimos 5), metodo, usuario, clave, telefono, idPedido, comprobante,
+//                               montoACobrar y codigoDescuento (opcionales, los dos juntos) }
 // Respuesta: { status: "success", registrado: true, insuficiente, precio, pagado, falta, repetido }
 //         o  { status: "success", registrado: false, message }  (no se tocó ningún pago)
 function registrarPedido(datos) {
@@ -234,6 +247,19 @@ function registrarPedido(datos) {
   if (!paquete) return rechazo("Ese paquete ya no está disponible. Recarga la página y elige de nuevo.");
   // Si el dólar cambió mientras el cliente pagaba, se cobra el precio nuevo: lo que falte queda como
   // ⚠️ PAGO INCOMPLETO y se resuelve por WhatsApp (MARGEN_PAGO_BS cubre los céntimos)
+
+  // Código de descuento: Vercel ya lo validó y calculó el precio; aquí solo se comprueba que tenga sentido
+  var precioACobrar = paquete.precio, codigoDescuento = "";
+  if (datos.montoACobrar !== undefined && datos.montoACobrar !== null && datos.montoACobrar !== "") {
+    var conDescuento = redondear2(limpiarMontoVES(datos.montoACobrar));
+    var codigo = String(datos.codigoDescuento || "").trim().toUpperCase();
+    if (conDescuento > 0 && conDescuento < paquete.precio && conDescuento >= paquete.precio * MINIMO_CON_DESCUENTO && CODIGO_DESCUENTO_VALIDO.test(codigo)) {
+      precioACobrar = conDescuento;
+      codigoDescuento = codigo;
+    } else {
+      console.error("Manuales: montoACobrar fuera de rango (" + datos.montoACobrar + " para " + paquete.precio + ", código " + codigo + "); se cobra el precio completo");
+    }
+  }
 
   var idMetodo = String(datos.metodo || "");
   if (juego.metodos.indexOf(idMetodo) === -1) return rechazo("Elige cómo inicias sesión en " + juego.nombre + ".");
@@ -260,19 +286,45 @@ function registrarPedido(datos) {
   var pago = tomarPago(ultimos5, idPedido);
   if (!pago.encontrado) return rechazo(pago.message);
 
-  var insuficiente = pago.montoPagado < paquete.precio - MARGEN_PAGO_BS;
-  var falta = insuficiente ? redondear2(paquete.precio - pago.montoPagado) : 0;
+  var insuficiente = pago.montoPagado < precioACobrar - MARGEN_PAGO_BS;
+  var falta = insuficiente ? redondear2(precioACobrar - pago.montoPagado) : 0;
+  var notas = [];
+  if (codigoDescuento) notas.push("Código " + codigoDescuento + " (precio de la hoja: " + formatoBs(paquete.precio) + " Bs)");
+  if (insuficiente) notas.push("Faltan " + formatoBs(falta) + " Bs: escribir al cliente");
+  if (insuficiente && codigoDescuento) notas.push("El uso del código NO se anotó en \"Descuentos\": anótalo a mano al completar el pago");
+  if (!metodo.clave) notas.push("Pedir por WhatsApp el código que llega al correo");
   hoja.appendRow([
-    ahora(), idPedido, textoSeguro(paquete.paquete), paquete.precio, pago.montoPagado, textoSeguro(pago.referencia),
+    ahora(), idPedido, textoSeguro(paquete.paquete), precioACobrar, pago.montoPagado, textoSeguro(pago.referencia),
     metodo.nombre, textoSeguro(usuario), textoSeguro(clave), whatsapp,
     insuficiente ? "⚠️ PAGO INCOMPLETO" : "⏳ PENDIENTE",
-    insuficiente ? "Faltan " + formatoBs(falta) + " Bs: escribir al cliente" : (metodo.clave ? "" : "Pedir por WhatsApp el código que llega al correo"),
-    textoSeguro(datos.comprobante || "Sin comprobante")
+    textoSeguro(notas.join(" · ")),
+    textoSeguro(datos.comprobante || "Sin comprobante"),
+    textoSeguro(codigoDescuento)
   ]);
   SpreadsheetApp.flush();
   PropertiesService.getScriptProperties().deleteProperty("man_" + pago.referencia);
   return { status: "success", registrado: true, repetido: false, insuficiente: insuficiente,
-    precio: formatoBs(paquete.precio), pagado: formatoBs(pago.montoPagado), falta: formatoBs(falta) };
+    precio: formatoBs(precioACobrar), pagado: formatoBs(pago.montoPagado), falta: formatoBs(falta), codigoDescuento: codigoDescuento };
+}
+
+// Vercel (con candado): agrega un aviso a la nota del pedido (p. ej. "el uso del código no se pudo anotar").
+// datos: { juego, idPedido, nota }
+function notaPedido(datos) {
+  var idJuego = String(datos.juego || "");
+  var idPedido = String(datos.idPedido || "");
+  var nota = String(datos.nota || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 300);
+  if (!JUEGOS.hasOwnProperty(idJuego) || !/^[A-Za-z0-9-]{8,64}$/.test(idPedido) || !nota) {
+    return { status: "error", message: "Datos inválidos para la nota" };
+  }
+  var hoja = hojaPedidos(JUEGOS[idJuego]);
+  var fila = buscarFila(hoja, COL_ID_PEDIDO, idPedido);
+  if (!fila) return { status: "error", message: "Pedido no encontrado" };
+  var celda = hoja.getRange(fila, COL_NOTA);
+  var actual = String(celda.getValue() || "");
+  // Repetir la misma nota (reintento de Vercel) no la duplica
+  if (actual.indexOf(nota) === -1) celda.setValue(textoSeguro(actual ? actual + " · " + nota : nota));
+  SpreadsheetApp.flush();
+  return { status: "success" };
 }
 
 // Respuesta de un pedido ya anotado (reintento con el mismo idPedido)
@@ -281,7 +333,8 @@ function respuestaDeFila(hoja, fila, repetido) {
   var precio = limpiarMontoVES(v[3]), pagado = limpiarMontoVES(v[4]);
   var insuficiente = pagado < precio - MARGEN_PAGO_BS;
   return { status: "success", registrado: true, repetido: repetido, insuficiente: insuficiente,
-    precio: formatoBs(precio), pagado: formatoBs(pagado), falta: formatoBs(insuficiente ? redondear2(precio - pagado) : 0) };
+    precio: formatoBs(precio), pagado: formatoBs(pagado), falta: formatoBs(insuficiente ? redondear2(precio - pagado) : 0),
+    codigoDescuento: String(v[COLUMNAS_PEDIDOS.length - 1] || "") };
 }
 
 // Busca el pago "Verificado" más reciente con esos últimos 5 dígitos y lo deja "Usado" para este pedido.
@@ -377,7 +430,16 @@ function enlaceWhatsapp(telefono) {
 // Pestaña de pedidos del juego (se crea con títulos, lista de estados y colores si falta)
 function hojaPedidos(juego) {
   var hoja = obtenerHojaLocal(juego.hojaPedidos);
-  if (hoja) return hoja;
+  if (hoja) {
+    // Pestaña creada con una versión anterior: se agregan los títulos de las columnas nuevas
+    var titulos = hoja.getRange(1, 1, 1, COLUMNAS_PEDIDOS.length);
+    var actuales = titulos.getValues()[0];
+    if (actuales.some(function (t) { return t === ""; })) {
+      titulos.setValues([COLUMNAS_PEDIDOS.map(function (t, i) { return actuales[i] || t; })])
+        .setFontWeight("bold").setBackground("#1f2937").setFontColor("#ffffff");
+    }
+    return hoja;
+  }
   hoja = SpreadsheetApp.getActiveSpreadsheet().insertSheet(juego.hojaPedidos);
   hoja.appendRow(COLUMNAS_PEDIDOS);
   hoja.getRange(1, 1, 1, COLUMNAS_PEDIDOS.length).setFontWeight("bold").setBackground("#1f2937").setFontColor("#ffffff");

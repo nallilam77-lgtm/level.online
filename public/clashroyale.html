@@ -26,8 +26,11 @@
   <script src="/js/datos-pago.js" defer></script>
   <script src="/js/canal.js?v=1" defer></script>
   <script src="/js/version-nueva.js?v=1" defer></script>
+  <!-- Código de descuento (compartido con las otras tiendas; antes de tienda-manual.js) -->
+  <script src="/js/descuento.js?v=2" defer></script>
+  <script src="/js/aviso-codigo.js?v=3" defer></script>
   <!-- Lógica de las tiendas manuales (FC Mobile, COD Mobile, Clash Royale) -->
-  <script src="/js/tienda-manual.js?v=1" defer></script>
+  <script src="/js/tienda-manual.js?v=2" defer></script>
   <style>
     /* Acento del juego (Clash Royale: magenta del elixir): bordes, botones, sombras y glows. Ver .claude/UI_RULES.md */
     :root {
@@ -40,9 +43,11 @@
       --emblema-alto: 96px;
     }
   </style>
-  <link rel="stylesheet" href="css/tienda-manual.css?v=2">
+  <link rel="stylesheet" href="css/tienda-manual.css?v=3">
   <link rel="stylesheet" href="css/pie-legal.css">
   <link rel="stylesheet" href="css/canal.css?v=1">
+  <link rel="stylesheet" href="css/descuento.css">
+  <link rel="stylesheet" href="css/aviso-codigo.css?v=3">
 </head>
 <body class="pagina-juego" data-juego="clashroyale">
 
@@ -92,6 +97,7 @@
         <div class="resumen-row">Paquete <strong id="resumenPaquete"></strong></div>
         <div class="resumen-row">Tu pago <strong id="resumenMonto"></strong></div>
         <div class="resumen-row">Referencia <strong id="resumenReferencia"></strong></div>
+        <div class="resumen-row" id="filaResumenCodigo" hidden>Código de descuento <strong id="resumenCodigo"></strong></div>
       </div>
 
       <div class="modal-botones">
@@ -159,6 +165,16 @@
       <li><span><strong>Déjanos los datos de tu cuenta</strong> y tu WhatsApp.</span></li>
       <li><span><strong>Entramos y hacemos la recarga</strong>; si hace falta un código, te escribimos.</span></li>
     </ol>
+
+    <!-- CÓDIGO DE DESCUENTO (opcional): lo verifica el servidor; lógica en js/descuento.js -->
+    <div class="descuento-section">
+      <label class="descuento-label" for="inputDescuento">🎟️ ¿Tienes un código de descuento? Pégalo o escríbelo aquí</label>
+      <div class="descuento-grupo">
+        <input type="text" id="inputDescuento" class="input-field descuento-input" placeholder="Ej: LEVELUP10" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+        <button type="button" id="btnVerificarDescuento" class="btn-descuento">VERIFICAR</button>
+      </div>
+      <div id="descuentoEstado" class="descuento-estado" role="status" aria-live="polite"></div>
+    </div>
 
     <section class="seccion anim-slide-up delay-1">
       <h2 class="step-title" id="stepTitlePaquete"><span class="step-num">1</span> Elige tu paquete</h2>

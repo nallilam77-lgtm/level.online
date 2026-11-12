@@ -149,6 +149,14 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 
 ---
 
+## Códigos de descuento en las tiendas manuales (desde 2026-11-12)
+
+**Reglas**: el precio con descuento lo calcula `api/_lib/juegos/manuales.js` sobre el precio de la caché de precios y lo manda como `montoACobrar`; `manuales.gs` (v2) lo acepta solo si es menor que su precio y no menor que la mitad. El uso (+1 y la comisión del creador) se anota en la hoja de Free Fire SOLO si el pago alcanzó: con pago incompleto la nota del pedido dice "El uso del código NO se anotó…" y hay que anotarlo a mano al completar (o no, si se devuelve el dinero). En "movimientos_descuentos" el jugador va como `WhatsApp +58…`: nunca mandar el correo de la cuenta (va junto a la contraseña).
+**Despliegue**: con manuales.gs v1 publicado, Vercel responde "Los códigos de descuento aún no están disponibles" y no toca el pago; al publicar la v2 (Nueva versión) se activan solos en ~1 minuto (caché de precios).
+**Caché**: un código desactivado en "Descuentos" sigue valiendo hasta 60 s (conCache de `obtenerDescuento`, igual en todas las tiendas).
+
+---
+
 ## Imagen pedida antes de subirla: Cloudflare guarda el 404 un día
 
 **Síntoma** (2026-11-12): las tarjetas de FC Mobile, COD Mobile y Clash Royale del inicio salían "a veces" sin foto.

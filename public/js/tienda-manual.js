@@ -17,6 +17,15 @@
   let metodos = [];
   let paqueteSeleccionado = null;
   let enviando = false;
+  // Catálogo con los precios normales (para volver a ellos al quitar el código)
+  let catalogoSinDescuento = null;
+
+  // Código de descuento (js/descuento.js): el servidor devuelve el catálogo con los precios ya descontados
+  const descuento = window.CodigoDescuento?.iniciar({
+    juego: JUEGO,
+    alAplicar: (catalogo) => dibujarPaquetes(catalogo),
+    alQuitar: () => { if (catalogoSinDescuento) dibujarPaquetes(catalogoSinDescuento); },
+  });
 
   // ---------- Utilidades ----------
   function burbuja(mensaje, error) {
@@ -84,7 +93,9 @@
       if (data.status !== 'success') return mensaje(data.message || 'No pudimos cargar los paquetes.', true);
       metodos = data.metodos || [];
       if (!data.catalogo?.length) return mensaje('Por ahora no hay paquetes disponibles. Vuelve en un rato o escríbenos por WhatsApp.');
-      dibujarPaquetes(data.catalogo);
+      catalogoSinDescuento = data.catalogo;
+      // Si el cliente aplicó un código antes de que cargara el catálogo, se dejan sus precios con descuento
+      if (!descuento?.codigo()) dibujarPaquetes(data.catalogo);
     } catch (e) {
       mensaje('Fallo de conexión al cargar los paquetes. Revisa tu internet y recarga la página.', true);
     }
@@ -92,8 +103,11 @@
 
   // "105 de oro" → número grande "105" + "de oro" pequeño; otros nombres, completos. Siempre como texto.
   const ICONO = '<svg class="paquete-icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 21 7v10l-9 5-9-5V7z" style="fill: var(--game-accent)"/><path d="M12 6.5 16.5 9v6L12 17.5 7.5 15V9z" style="fill: var(--bg-deep)"/><circle cx="12" cy="12" r="2.2" style="fill: var(--game-text)"/></svg>';
+  // Con un código aplicado, cada paquete trae "precioOriginal" (tachado) y "precio" ya descontado por el
+  // servidor. El paquete elegido se vuelve a elegir con su precio nuevo.
   function dibujarPaquetes(lista) {
     const contenedor = $('catalogContainer');
+    const elegido = paqueteSeleccionado ? paqueteSeleccionado.paquete : null;
     contenedor.replaceChildren();
     const div = (clase, texto) => { const el = document.createElement('div'); el.className = clase; el.textContent = texto; return el; };
     lista.forEach((item, i) => {
@@ -105,6 +119,7 @@
       const partes = String(item.paquete).match(/^\s*([\d.,]+)\s+(.+)$/);
       if (partes) card.append(div('paquete-cantidad', partes[1]), div('paquete-nombre', partes[2]));
       else card.append(div('paquete-cantidad', item.paquete));
+      if (item.precioOriginal !== undefined) card.appendChild(div('price-original', textoBs(item.precioOriginal)));
       const caja = div('price-box', '');
       caja.appendChild(div('price-text', textoBs(item.precio)));
       card.appendChild(caja);
@@ -113,11 +128,19 @@
       card.addEventListener('click', elegir);
       card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); elegir(); } });
       contenedor.appendChild(card);
+      if (elegido === item.paquete) seleccionar(card, item, true);
     });
+    // El paquete elegido ya no está en la lista nueva: hay que elegir otro
+    if (elegido && !lista.some((p) => p.paquete === elegido)) {
+      paqueteSeleccionado = null;
+      $('montoPagar').textContent = '0,00 Bs';
+      $('stepTitlePaquete').classList.remove('done');
+    }
   }
 
   let pagoMostrado = false;
-  function seleccionar(card, item) {
+  // redibujo: el mismo paquete con otro precio (código aplicado o quitado), sin mover la pantalla
+  function seleccionar(card, item, redibujo) {
     document.querySelectorAll('.product-card').forEach((c) => c.classList.remove('selected'));
     card.classList.add('selected');
     paqueteSeleccionado = item;
@@ -125,6 +148,7 @@
     $('stepTitlePaquete').classList.add('done');
     const pago = $('checkoutSection');
     pago.classList.add('active');
+    if (redibujo) return;
     if (!pagoMostrado) {
       pagoMostrado = true;
       setTimeout(() => pago.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
@@ -240,6 +264,9 @@
     $('resumenPaquete').textContent = paqueteSeleccionado.paquete;
     $('resumenMonto').textContent = textoBs(paqueteSeleccionado.precio);
     $('resumenReferencia').textContent = $('inputReferencia').value.trim();
+    const codigo = descuento?.codigo();
+    $('filaResumenCodigo').hidden = !codigo;
+    $('resumenCodigo').textContent = codigo || '';
     $('btnEnviarPedido').disabled = false;
     $('modalCuenta').style.display = 'flex';
     setTimeout(() => $('inputUsuario').focus({ preventScroll: true }), 50);
@@ -279,6 +306,8 @@
       usuario: $('inputUsuario').value.trim(),
       clave: m.clave ? $('inputClave').value : '',
       telefono,
+      // Solo el código: el precio con descuento lo calcula el servidor
+      ...(descuento?.codigo() && { codigoDescuento: descuento.codigo() }),
     };
     $('modalCuenta').style.display = 'none';
     $('pantallaProcesando').style.display = 'flex';
