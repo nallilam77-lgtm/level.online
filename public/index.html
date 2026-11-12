@@ -457,6 +457,9 @@
     .card--bloodstrike { --card-accent: #ff0000; --card-accent-rgb: 255, 0, 0; }
     .card--roblox { --card-accent: #0066ff; --card-accent-rgb: 0, 102, 255; }
     .card--mobilelegends { --card-accent: #f5b800; --card-accent-rgb: 245, 184, 0; }
+    .card--fcmobile { --card-accent: #00e676; --card-accent-rgb: 0, 230, 118; }
+    .card--codmobile { --card-accent: #d4b46a; --card-accent-rgb: 212, 180, 106; }
+    .card--clashroyale { --card-accent: #e040fb; --card-accent-rgb: 224, 64, 251; }
     
     .img-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
     .img-container::after {
@@ -625,6 +628,9 @@
     <a href="roblox.html">🧱 Roblox</a>
     <a href="bloodstrike.html">🎯 Blood Strike</a>
     <a href="mobilelegends.html">💎 Mobile Legends</a>
+    <a href="fcmobile.html">⚽ FC Mobile</a>
+    <a href="codmobile.html">🎖️ COD Mobile</a>
+    <a href="clashroyale.html">👑 Clash Royale</a>
     <a href="creadores.html">⭐ Panel de Creadores</a>
     <a href="terminos.html">📜 Términos y Condiciones</a>
     <a href="privacidad.html">🔒 Política de Privacidad</a>
@@ -690,6 +696,19 @@
         <a href="#" class="card card--mobilelegends" onclick="interceptarJuego(event, 'mobilelegends.html')">
           <div class="img-container"><img src="mobilelegends.jpg" alt="Mobile Legends" loading="lazy" onerror="this.remove()"></div>
           <h3>Mobile Legends</h3>
+        </a>
+        <!-- Recargas manuales (imágenes: public/fcmobile.jpg, codmobile.jpg y clashroyale.jpg; sin ellas la tarjeta se ve sin foto) -->
+        <a href="#" class="card card--fcmobile" onclick="interceptarJuego(event, 'fcmobile.html')">
+          <div class="img-container"><img src="fcmobile.jpg" alt="FC Mobile" loading="lazy" onerror="this.remove()"></div>
+          <h3>FC Mobile</h3>
+        </a>
+        <a href="#" class="card card--codmobile" onclick="interceptarJuego(event, 'codmobile.html')">
+          <div class="img-container"><img src="codmobile.jpg" alt="COD Mobile" loading="lazy" onerror="this.remove()"></div>
+          <h3>COD Mobile</h3>
+        </a>
+        <a href="#" class="card card--clashroyale" onclick="interceptarJuego(event, 'clashroyale.html')">
+          <div class="img-container"><img src="clashroyale.jpg" alt="Clash Royale" loading="lazy" onerror="this.remove()"></div>
+          <h3>Clash Royale</h3>
         </a>
       </div>
     </div>

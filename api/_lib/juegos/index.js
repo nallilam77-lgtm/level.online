@@ -8,6 +8,10 @@ const JUEGOS = {
   bloodstrike: () => import('./bloodstrike.js'),
   roblox: () => import('./roblox.js'),
   mobilelegends: () => import('./mobilelegends.js'),
+  // Recargas manuales: los tres comparten módulo y hoja (apps-script/manuales.gs)
+  fcmobile: () => import('./manuales.js'),
+  codmobile: () => import('./manuales.js'),
+  clashroyale: () => import('./manuales.js'),
 };
 
 // Devuelve el módulo del juego, o null si el nombre no es válido

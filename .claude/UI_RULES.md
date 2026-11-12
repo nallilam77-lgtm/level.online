@@ -43,11 +43,15 @@ Cada tienda (y su tarjeta en el catálogo de inicio) usa el acento de su logo en
 | Blood Strike | `#ff0000` | `#22d3ee` (la "X" del logo) | `#8b0000 → #ff1a1a` | `#ffffff` |
 | Roblox | `#0066ff` | `#4d94ff` | `#003fbf → #0066ff` | `#ffffff` |
 | Mobile Legends | `#f5b800` | `#ffc94a` | `#b8860b → #ffc94a` | `#0f172a` |
+| FC Mobile | `#00e676` | `#3dff9a` | `#00a854 → #3dff9a` | `#0f172a` |
+| COD Mobile | `#d4b46a` | `#e3c98a` | `#8a7340 → #e3c98a` | `#0f172a` |
+| Clash Royale | `#e040fb` | `#ee8bff` | `#7b1fa2 → #c724e0` | `#ffffff` |
 
 - Hover de tarjetas: `box-shadow: 0 0 20px rgba(<acento>, 0.4)`.
 - Roblox: `#0066ff` no llega a 4.5:1 sobre slate, así que el texto usa `#4d94ff`.
 - Blood Strike: los textos destacados van en cian para no confundirse con los mensajes de error (rojos).
-- En inicio, cada tarjeta de juego lleva su clase (`card--freefire`, `card--bloodstrike`, `card--roblox`, `card--mobilelegends`) con el mismo acento.
+- En inicio, cada tarjeta de juego lleva su clase (`card--freefire`, `card--bloodstrike`, `card--roblox`, `card--mobilelegends`, `card--fcmobile`, `card--codmobile`, `card--clashroyale`) con el mismo acento.
+- Tiendas manuales (FC Mobile, COD Mobile, Clash Royale): la página solo define `--game-*` en su `:root`; todo lo demás está en `css/tienda-manual.css` (compartido). Se generan iguales: un cambio de estructura va en las tres.
 - Contraste de texto mínimo WCAG AA (4.5:1) sobre el fondo.
 
 ## 3. Glassmorphism en navegación y tarjetas de producto

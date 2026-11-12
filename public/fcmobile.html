@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <script>
+    // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque, animaciones ni transiciones (css/ligero.css)
+    (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css?v=3'; document.head.appendChild(l); } })();
+  </script>
+  <title>Level Up - Recargas FC Mobile</title>
+  <meta name="description" content="Recarga FC Points de FC Mobile con Pago Móvil. Nosotros hacemos la recarga en tu cuenta EA o Facebook.">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="canonical" href="https://www.levelupstore.online/fcmobile.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Level Up">
+  <meta property="og:locale" content="es_VE">
+  <meta property="og:url" content="https://www.levelupstore.online/fcmobile.html">
+  <meta property="og:title" content="Recargas de FC Mobile con Pago Móvil · Level Up">
+  <meta property="og:description" content="Recarga FC Points de FC Mobile con Pago Móvil. Nosotros hacemos la recarga en tu cuenta EA o Facebook.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <!-- Compartidos con las otras tiendas -->
+  <script src="/js/lector-referencia.js" defer></script>
+  <script src="/js/datos-pago.js" defer></script>
+  <script src="/js/canal.js?v=1" defer></script>
+  <script src="/js/version-nueva.js?v=1" defer></script>
+  <!-- Lógica de las tiendas manuales (FC Mobile, COD Mobile, Clash Royale) -->
+  <script src="/js/tienda-manual.js?v=1" defer></script>
+  <style>
+    /* Acento del juego (FC Mobile: verde de cancha): bordes, botones, sombras y glows. Ver .claude/UI_RULES.md */
+    :root {
+      --game-accent: #00e676;
+      --game-accent-rgb: 0, 230, 118;
+      --game-text: #3dff9a;
+      --game-gradient: linear-gradient(135deg, #00a854, #3dff9a);
+      --on-game-cta: #0f172a;
+    }
+  </style>
+  <link rel="stylesheet" href="css/tienda-manual.css?v=1">
+  <link rel="stylesheet" href="css/pie-legal.css">
+  <link rel="stylesheet" href="css/canal.css?v=1">
+</head>
+<body class="pagina-juego" data-juego="fcmobile">
+
+  <div id="toastBubble" class="toast-bubble" role="status" aria-live="polite"></div>
+
+  <!-- VENTANA: DATOS DE LA CUENTA (se abre con "COMPRAR") -->
+  <div id="modalCuenta" class="overlay-pantalla" role="dialog" aria-modal="true" aria-labelledby="tituloCuenta">
+    <div class="modal-content">
+      <h2 class="modal-titulo" id="tituloCuenta">Datos de tu cuenta</h2>
+      <p class="modal-texto">Con estos datos entramos a tu cuenta de FC Mobile y hacemos la recarga.</p>
+
+      <div class="campo" id="campoMetodo">
+        <span class="campo-label" id="labelMetodo">¿Cómo inicias sesión?</span>
+        <div class="metodos" id="metodosLogin" role="radiogroup" aria-labelledby="labelMetodo"></div>
+      </div>
+
+      <div class="campo">
+        <label class="campo-label" id="labelUsuario" for="inputUsuario">Correo</label>
+        <input type="text" id="inputUsuario" class="input-field" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="100">
+      </div>
+
+      <div class="campo" id="campoClave">
+        <label class="campo-label" id="labelClave" for="inputClave">Contraseña</label>
+        <div class="grupo-clave">
+          <input type="password" id="inputClave" class="input-field" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="100">
+          <button type="button" class="btn-ver-clave" id="btnVerClave" aria-pressed="false" aria-label="Mostrar u ocultar la contraseña">Ver</button>
+        </div>
+      </div>
+
+      <div class="aviso-cuenta" id="avisoClave">
+        🔒 <strong>Tus datos solo se usan para esta recarga</strong> y los borramos al terminar. Si tienes verificación en dos pasos, ten tu teléfono a mano: te escribiremos por WhatsApp si llega un código. Te recomendamos cambiar tu contraseña cuando te confirmemos la recarga.
+      </div>
+      <div class="aviso-cuenta aviso-supercell" id="avisoSupercell">
+        📧 <strong>Supercell ID no usa contraseña:</strong> al entrar, a tu correo llega un código. Te escribiremos por WhatsApp para que nos lo pases, así que ten tu correo a mano.
+      </div>
+
+      <div class="campo">
+        <label class="campo-label" for="inputWhatsapp">Tu WhatsApp <span class="obligatorio">*</span></label>
+        <div class="grupo-telefono">
+          <span class="prefijo-telefono">+58</span>
+          <input type="tel" id="inputWhatsapp" class="input-field" inputmode="tel" autocomplete="tel-national" placeholder="414 1234567" maxlength="16">
+        </div>
+        <p class="campo-ayuda">Si algo falla o necesitamos un código, te escribimos a este número.</p>
+      </div>
+
+      <div class="resumen-box">
+        <div class="resumen-row">Paquete <strong id="resumenPaquete"></strong></div>
+        <div class="resumen-row">Tu pago <strong id="resumenMonto"></strong></div>
+        <div class="resumen-row">Referencia <strong id="resumenReferencia"></strong></div>
+      </div>
+
+      <div class="modal-botones">
+        <button type="button" class="btn-revisar" id="btnVolverCuenta">Volver</button>
+        <button type="button" class="btn-confirmar" id="btnEnviarPedido">Enviar pedido</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROCESANDO -->
+  <div id="pantallaProcesando" class="overlay-pantalla" role="alertdialog" aria-modal="true" aria-labelledby="textoProcesando">
+    <div class="modal-content">
+      <div class="loader-spinner"></div>
+      <p class="modal-texto" id="textoProcesando">Verificando tu pago...</p>
+    </div>
+  </div>
+
+  <!-- PEDIDO RECIBIDO -->
+  <div id="modalExito" class="overlay-pantalla" role="dialog" aria-modal="true" aria-labelledby="tituloExito">
+    <div class="modal-content success-theme">
+      <div class="modal-icono" aria-hidden="true">✅</div>
+      <h2 class="modal-titulo" id="tituloExito">¡PEDIDO RECIBIDO!</h2>
+      <p class="modal-texto">Tu pedido de <strong id="exitoPaquete"></strong> ya está registrado. Nuestro equipo hará la recarga en tu cuenta.</p>
+      <div class="nota-incompleto" id="notaIncompleto">
+        ⚠️ <strong>Tu pago no alcanzó:</strong> recibimos <span id="pagadoMonto"></span> y faltan <strong id="faltaMonto"></strong>. Te escribiremos por WhatsApp para completarlo; tu pedido queda guardado.
+      </div>
+      <div class="nota-exito">
+        📲 Te escribiremos al <strong id="exitoWhatsapp"></strong> si necesitamos un código o algo falla. <strong>No cambies tu contraseña ni cierres sesión</strong> hasta que te confirmemos la recarga.
+      </div>
+      <!-- Invitación al canal de WhatsApp (js/canal.js) -->
+      <div data-canal="exito"></div>
+      <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20hice%20un%20pedido%20de%20FC%20Mobile." target="_blank" rel="noopener noreferrer" class="btn-whatsapp">💬 Escribir a soporte</a>
+      <a href="index.html" class="btn-volver-inicio">Volver al inicio</a>
+    </div>
+  </div>
+
+  <!-- ERROR -->
+  <div id="modalError" class="overlay-pantalla" role="alertdialog" aria-modal="true" aria-labelledby="tituloError">
+    <div class="modal-content error-theme">
+      <h2 class="modal-titulo" id="tituloError">❌ No pudimos registrar tu pedido</h2>
+      <p class="modal-texto" id="textoError"></p>
+      <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20mi%20pedido%20de%20FC%20Mobile." target="_blank" rel="noopener noreferrer" class="btn-whatsapp">💬 Escribir a soporte</a>
+      <button type="button" class="btn-cerrar-dark" id="btnCerrarError">Entendido</button>
+    </div>
+  </div>
+
+  <main class="main-card anim-slide-up">
+    <a href="index.html" class="btn-back">◄ Volver al inicio</a>
+
+    <header class="juego-hero">
+      <span class="etiqueta-manual">👤 Recarga manual</span>
+      <p class="juego-kicker">FC Points para tu equipo</p>
+      <h1 class="juego-titulo">FC Mobile</h1>
+      <p class="juego-sub">Recargamos FC Points en tu cuenta por ti</p>
+    </header>
+
+    <div class="trust-strip">
+      <span class="trust-chip">👤 La hace nuestro equipo</span>
+      <span class="trust-chip">🔒 Pago verificado</span>
+      <span class="trust-chip">💬 Te avisamos por WhatsApp</span>
+    </div>
+
+    <ol class="como-funciona" aria-label="Cómo funciona">
+      <li><span><strong>Elige tu paquete</strong> y paga por Pago Móvil.</span></li>
+      <li><span><strong>Déjanos los datos de tu cuenta</strong> y tu WhatsApp.</span></li>
+      <li><span><strong>Entramos y hacemos la recarga</strong>; si hace falta un código, te escribimos.</span></li>
+    </ol>
+
+    <section class="seccion anim-slide-up delay-1">
+      <h2 class="step-title" id="stepTitlePaquete"><span class="step-num">1</span> Elige tu paquete</h2>
+      <div class="catalog-grid" id="catalogContainer" aria-live="polite">
+        <div class="product-card skeleton"></div><div class="product-card skeleton"></div>
+        <div class="product-card skeleton"></div><div class="product-card skeleton"></div>
+      </div>
+    </section>
+
+    <section class="checkout-section" id="checkoutSection">
+      <h2 class="step-title" id="stepTitlePago"><span class="step-num">2</span> Realiza el Pago Móvil</h2>
+      <div class="bank-card">
+        <div id="bankInfoContainer" style="display: grid; gap: 10px;">
+          <div class="bank-row">Banco: <span class="bank-value">Cargando...</span></div>
+          <div class="bank-row">Teléfono: <span class="bank-value">Cargando...</span></div>
+          <div class="bank-row">Cédula: <span class="bank-value">Cargando...</span></div>
+        </div>
+        <div class="bank-total">
+          <span class="bank-total-label">Total a pagar</span>
+          <span id="montoPagar" class="bank-total-amount">0,00 Bs</span>
+          <button type="button" class="btn-mini-copy" id="btnCopiarMonto" aria-label="Copiar monto">📋</button>
+        </div>
+      </div>
+      <button type="button" id="btnCopiarDatos" class="btn-copy">📋 Copiar todos los datos</button>
+
+      <div class="seccion">
+        <h2 class="step-title" id="stepTitleComprobante"><span class="step-num">3</span> Sube tu comprobante <span class="obligatorio">*</span></h2>
+        <input type="file" id="inputComprobante" class="visually-hidden" accept="image/*">
+        <label for="inputComprobante" class="upload-drop" id="uploadDrop">
+          <span class="upload-drop-icon" aria-hidden="true">📸</span>
+          <span class="upload-drop-title">Toca para subir tu capture</span>
+          <span class="upload-drop-hint">Imagen del Pago Móvil realizado</span>
+        </label>
+        <div class="upload-preview" id="uploadPreview">
+          <img id="uploadPreviewImg" alt="Vista previa del comprobante">
+          <div class="upload-preview-info">
+            <div class="upload-preview-name" id="uploadPreviewName"></div>
+            <div class="upload-preview-ok">✓ Comprobante cargado</div>
+          </div>
+          <label for="inputComprobante" class="btn-change-file">Cambiar</label>
+        </div>
+        <div id="cajaIA" class="ia-box" aria-live="polite">
+          <div id="cargandoIA" class="ia-loading">Leyendo comprobante...</div>
+          <div id="resultadoIA" class="ia-result">
+            ✓ Detectamos la referencia <strong id="refIA"></strong>
+            <small>La colocamos abajo. Revisa que coincida con tu capture; puedes editarla.</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="seccion">
+        <label class="step-title" id="stepTitleReferencia" for="inputReferencia"><span class="step-num">4</span> Últimos 5 dígitos de la referencia</label>
+        <input type="text" id="inputReferencia" class="input-field input-centro" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" placeholder="Ej. 12345" maxlength="5">
+      </div>
+
+      <button type="button" id="btnComprar" class="btn-submit-order">Comprar</button>
+      <p class="aviso-aceptacion">Al comprar aceptas los <a href="terminos.html" target="_blank">Términos y Condiciones</a>, la <a href="privacidad.html" target="_blank">Política de Privacidad</a> y la <a href="reembolsos.html" target="_blank">Política de Reembolsos</a>.</p>
+    </section>
+  </main>
+
+  <!-- Invitación al canal de WhatsApp, fuera del paso de pago (js/canal.js) -->
+  <div data-canal="tienda"></div>
+
+  <footer class="pie-legal">
+    <div class="pie-legal-enlaces" role="navigation" aria-label="Información legal">
+      <a href="terminos.html">Términos y Condiciones</a>
+      <a href="privacidad.html">Política de Privacidad</a>
+      <a href="reembolsos.html">Política de Reembolsos</a>
+    </div>
+    <p class="pie-legal-aviso">Level Up es un servicio de recarga independiente. No está afiliado, patrocinado ni respaldado por Electronic Arts (EA SPORTS FC Mobile), Activision (Call of Duty: Mobile) ni Supercell (Clash Royale). Todas las marcas y logotipos pertenecen a sus respectivos dueños.</p>
+    <p class="pie-legal-copy">&copy; 2026 <strong>Level Up</strong>. Todos los derechos reservados.</p>
+  </footer>
+
+  <!-- Soporte oficial por WhatsApp, siempre visible -->
+  <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20necesito%20ayuda%20con%20una%20recarga%20de%20FC%20Mobile." target="_blank" rel="noopener noreferrer" class="whatsapp-soporte" aria-label="Escribir a Soporte por WhatsApp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.031 0C5.385 0 0 5.383 0 12.029c0 2.124.553 4.195 1.605 6.01L.036 24l6.11-1.603c1.737 1.002 3.738 1.531 5.885 1.531 6.643 0 12.028-5.381 12.028-12.027C24.059 5.383 18.675 0 12.031 0zm3.565 17.27c-.54.269-3.187.584-3.557.584-.37 0-1.802-.234-4.225-2.656-2.424-2.425-2.657-3.856-2.657-4.226 0-.37.316-3.018.584-3.557.269-.54.912-.767 1.451-.497.54.269 1.433 3.493 1.433 3.864 0 .37-.197.808-.466 1.077-.466.466.269.269-.538.448-.179 1.077.359.627 1.614 1.882 2.241 2.241.628.359.808.09 1.077-.179.269-.269.808-.466 1.077-.466.37 0 3.595.892 3.864 1.432.27.539.043 1.182-.497 1.451z"/></svg></a>
+</body>
+</html>

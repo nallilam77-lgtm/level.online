@@ -1,0 +1,237 @@
+/* Tiendas de recarga MANUAL (fcmobile.html, codmobile.html, clashroyale.html) · lógica en js/tienda-manual.js.
+   Reglas: .claude/UI_RULES.md. El acento de cada juego (--game-*) va en el :root de su página;
+   aquí solo la paleta de Level Up y los componentes. */
+:root {
+  --bg-base: #0f172a;
+  --bg-deep: #0b1120;
+  --surface: rgba(15, 23, 42, 0.6);
+  --surface-card: rgba(30, 41, 59, 0.55);
+  --border-glass: rgba(148, 163, 184, 0.15);
+  --border-campo: #334155;
+  --text-main: #f1f5f9;
+  --text-soft: #cbd5e1;
+  --text-muted: #94a3b8;
+  --danger: #ff5c5c;
+  --danger-rgb: 255, 92, 92;
+  --warning: #ffcc00;
+  --warning-rgb: 255, 204, 0;
+  --success: #39ff14;
+  --success-rgb: 57, 255, 20;
+  --whatsapp: #1db954;
+  --on-light: #0f172a;
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 10px 25px -5px rgba(var(--game-accent-rgb), 0.2);
+  --shadow-glow-hover: 0 12px 30px -5px rgba(var(--game-accent-rgb), 0.4);
+  --glass-blur: 12px;
+  --radius-card: 16px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { background: var(--bg-deep); }
+body {
+  font-family: 'Poppins', sans-serif;
+  color: var(--text-main);
+  background: var(--bg-deep);
+  background-image:
+    radial-gradient(circle at 15% 0%, rgba(var(--game-accent-rgb), 0.16), transparent 45%),
+    radial-gradient(circle at 100% 100%, rgba(var(--game-accent-rgb), 0.08), transparent 40%),
+    radial-gradient(circle at top, var(--bg-base) 0%, var(--bg-deep) 70%);
+  background-attachment: fixed;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 96px;
+  overflow-x: hidden;
+}
+body.modal-abierto { overflow: hidden; }
+
+@keyframes slideInUp { from { opacity: 0; transform: translateY(32px); } to { opacity: 1; transform: none; } }
+@keyframes popIn { 0% { opacity: 0; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.anim-slide-up { opacity: 0; animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.2s; }
+.delay-3 { animation-delay: 0.3s; }
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Tarjeta principal ---------- */
+.main-card {
+  width: 100%; max-width: 480px;
+  background: var(--surface);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-glass);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  display: grid; gap: 24px;
+  margin-bottom: 24px;
+}
+@media (max-width: 400px) { .main-card { padding: 24px 16px; } }
+
+.btn-back { color: var(--game-text); text-decoration: none; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; transition: color 0.25s, transform 0.25s; }
+.btn-back:hover { color: var(--text-main); transform: translateX(-4px); }
+
+.juego-hero { text-align: center; display: grid; gap: 8px; }
+.juego-kicker { font-size: 11px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); }
+.juego-titulo { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 30px; line-height: 1.1; letter-spacing: 1px; text-transform: uppercase; color: var(--game-text); text-shadow: 0 0 22px rgba(var(--game-accent-rgb), 0.45); }
+.juego-sub { font-size: 13px; color: var(--text-soft); }
+.etiqueta-manual { justify-self: center; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--game-text); background: rgba(var(--game-accent-rgb), 0.1); border: 1px solid rgba(var(--game-accent-rgb), 0.35); border-radius: 999px; padding: 6px 12px; }
+
+.trust-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.trust-chip { font-size: 11px; font-weight: 700; color: var(--text-soft); background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-glass); border-radius: 999px; padding: 6px 12px; }
+
+/* ---------- Cómo funciona ---------- */
+.como-funciona { list-style: none; display: grid; gap: 12px; counter-reset: paso; background: rgba(var(--game-accent-rgb), 0.05); border: 1px solid rgba(var(--game-accent-rgb), 0.2); border-radius: var(--radius-card); padding: 20px; }
+.como-funciona li { counter-increment: paso; display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; font-size: 13px; color: var(--text-soft); }
+.como-funciona li::before { content: counter(paso); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; color: var(--on-game-cta); background: var(--game-gradient); }
+.como-funciona strong { color: var(--text-main); }
+
+/* ---------- Pasos ---------- */
+.seccion { display: grid; gap: 12px; }
+.step-title { font-size: 12px; font-weight: 800; color: var(--text-main); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
+.step-num { width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 900; color: var(--game-text); border: 2px solid var(--game-accent); }
+.step-title.done .step-num { background: var(--game-gradient); color: var(--on-game-cta); border-color: transparent; }
+.obligatorio { color: var(--danger); }
+
+/* ---------- Paquetes ---------- */
+.catalog-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+.product-card {
+  background: var(--surface-card);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-card);
+  padding: 24px 12px;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  text-align: center; cursor: pointer;
+  display: grid; gap: 10px; justify-items: center; align-content: center;
+  min-height: 120px;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.product-card:hover, .product-card:focus-visible { border-color: var(--game-accent); transform: translateY(-3px); box-shadow: var(--shadow-lg), var(--shadow-glow-hover); outline: none; }
+.product-card.selected { border-color: var(--game-accent); background: linear-gradient(160deg, rgba(var(--game-accent-rgb), 0.18), rgba(var(--game-accent-rgb), 0.04)); box-shadow: var(--shadow-lg), 0 0 20px rgba(var(--game-accent-rgb), 0.4); }
+.product-card.full-width { grid-column: span 2; }
+.product-card.skeleton { cursor: default; min-height: 120px; background: linear-gradient(90deg, rgba(30, 41, 59, 0.5), rgba(51, 65, 85, 0.5), rgba(30, 41, 59, 0.5)); }
+.paquete-icono { width: 30px; height: 30px; }
+.paquete-cantidad { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 22px; line-height: 1.1; color: var(--text-main); }
+.paquete-nombre { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.price-box { background: rgba(var(--game-accent-rgb), 0.1); border: 1px solid rgba(var(--game-accent-rgb), 0.3); border-radius: 999px; padding: 6px 12px; }
+.price-text { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--game-text); white-space: nowrap; }
+.catalog-message { grid-column: 1 / -1; text-align: center; font-size: 13px; color: var(--text-soft); background: rgba(15, 23, 42, 0.7); border: 1px dashed var(--border-glass); border-radius: var(--radius-card); padding: 24px; }
+.catalog-message.error { color: var(--danger); border-color: rgba(var(--danger-rgb), 0.4); }
+
+/* Excepción de UI_RULES (punto 5): paquetes en móvil */
+@media (max-width: 480px) {
+  .catalog-grid { gap: 16px; }
+  .product-card { padding: 20px 8px; }
+}
+@media (max-width: 380px) { .price-text { font-size: 13px; } }
+
+/* ---------- Pago ---------- */
+.checkout-section { display: none; gap: 16px; background: rgba(0, 0, 0, 0.25); border: 1px dashed rgba(var(--game-accent-rgb), 0.4); border-radius: var(--radius-card); padding: 24px 16px; scroll-margin-top: 12px; }
+.checkout-section.active { display: grid; animation: slideInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+.bank-card { background: linear-gradient(135deg, rgba(var(--game-accent-rgb), 0.1), rgba(var(--game-accent-rgb), 0.02)); border: 1px solid var(--game-accent); border-radius: 14px; padding: 16px; display: grid; gap: 10px; }
+.bank-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); font-weight: 600; }
+.bank-value { color: var(--game-text); font-weight: 900; font-size: 14px; margin-left: auto; text-align: right; word-break: break-word; }
+/* Total: el título arriba y el monto con su botón debajo (en 360 px no caben en una línea) */
+.bank-total { border-top: 1px solid rgba(var(--game-accent-rgb), 0.25); padding-top: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px; }
+.bank-total-label { flex-basis: 100%; }
+.bank-total-label { font-size: 12px; font-weight: 800; text-transform: uppercase; color: var(--text-muted); }
+.bank-total-amount { font-family: 'Montserrat', sans-serif; font-size: 22px; font-weight: 900; color: var(--game-text); white-space: nowrap; }
+.btn-mini-copy { min-width: 44px; min-height: 44px; border-radius: 10px; border: 1px solid var(--border-campo); background: var(--bg-deep); color: var(--text-main); cursor: pointer; font-size: 14px; transition: border-color 0.2s; }
+.btn-mini-copy:hover, .btn-mini-copy.copied { border-color: var(--game-accent); }
+.btn-copy { min-height: 44px; border-radius: 12px; border: 1px solid var(--border-campo); background: var(--bg-deep); color: var(--text-main); font-family: inherit; font-weight: 700; font-size: 13px; cursor: pointer; transition: border-color 0.25s, color 0.25s; }
+.btn-copy:hover { border-color: var(--game-accent); color: var(--game-text); }
+
+.upload-drop { display: grid; justify-items: center; gap: 4px; text-align: center; padding: 24px 16px; border: 2px dashed var(--border-campo); border-radius: 14px; background: var(--bg-deep); cursor: pointer; transition: border-color 0.25s, background 0.25s; }
+.upload-drop:hover { border-color: var(--game-accent); background: rgba(var(--game-accent-rgb), 0.04); }
+.upload-drop-icon { font-size: 26px; }
+.upload-drop-title { font-weight: 800; font-size: 14px; color: var(--text-main); }
+.upload-drop-hint { font-size: 12px; color: var(--text-muted); }
+.upload-preview { display: none; align-items: center; gap: 12px; padding: 12px; border: 1px solid rgba(var(--game-accent-rgb), 0.4); border-radius: 14px; background: var(--bg-deep); }
+.upload-preview.active { display: flex; }
+.upload-preview img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; }
+.upload-preview-info { flex: 1; min-width: 0; }
+.upload-preview-name { font-size: 12px; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upload-preview-ok { font-size: 12px; font-weight: 800; color: var(--success); }
+.btn-change-file { min-height: 44px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 10px; border: 1px solid var(--border-campo); color: var(--game-text); font-weight: 800; font-size: 12px; cursor: pointer; }
+.ia-box { display: none; font-size: 12px; color: var(--text-soft); background: rgba(var(--game-accent-rgb), 0.06); border: 1px solid rgba(var(--game-accent-rgb), 0.25); border-radius: 12px; padding: 12px; }
+.ia-loading { display: flex; align-items: center; gap: 8px; }
+.ia-loading::before { content: ''; width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(var(--game-accent-rgb), 0.3); border-top-color: var(--game-accent); animation: spin 0.8s linear infinite; }
+.ia-result { display: none; }
+.ia-result strong { color: var(--game-text); }
+.ia-result small { display: block; color: var(--text-muted); margin-top: 4px; }
+
+/* ---------- Campos ---------- */
+.input-field { width: 100%; min-height: 48px; background: var(--bg-deep); border: 2px solid var(--border-campo); border-radius: 12px; padding: 12px 14px; color: var(--text-main); font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 600; outline: none; transition: border-color 0.25s, box-shadow 0.25s; }
+.input-field::placeholder { color: var(--text-muted); font-weight: 400; }
+.input-field:focus { border-color: var(--game-accent); box-shadow: 0 0 12px rgba(var(--game-accent-rgb), 0.3); }
+.input-field.con-error { border-color: var(--danger); }
+.input-centro { text-align: center; font-weight: 800; letter-spacing: 2px; color: var(--game-text); }
+
+.btn-submit-order { width: 100%; min-height: 52px; border: none; border-radius: 14px; background: var(--game-gradient); color: var(--on-game-cta); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; box-shadow: 0 6px 20px rgba(var(--game-accent-rgb), 0.35); transition: transform 0.25s, box-shadow 0.25s; }
+.btn-submit-order:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(var(--game-accent-rgb), 0.55); }
+.btn-submit-order:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.aviso-aceptacion { font-size: 11px; color: var(--text-muted); text-align: center; }
+.aviso-aceptacion a { color: var(--game-text); }
+
+/* ---------- Ventanas ---------- */
+.overlay-pantalla { display: none; position: fixed; inset: 0; z-index: 10000; background: rgba(2, 6, 23, 0.85); align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; }
+.modal-content { width: 100%; max-width: 440px; margin: auto; background: var(--bg-base); border: 1px solid rgba(var(--game-accent-rgb), 0.5); border-radius: 20px; padding: 24px; display: grid; gap: 16px; box-shadow: var(--shadow-lg), 0 0 40px rgba(var(--game-accent-rgb), 0.2); animation: popIn 0.25s ease; }
+@media (max-width: 400px) { .modal-content { padding: 24px 16px; } }
+.modal-titulo { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 19px; text-align: center; color: var(--game-text); text-transform: uppercase; }
+.modal-texto { font-size: 13px; color: var(--text-soft); text-align: center; line-height: 1.5; }
+.modal-content.error-theme { border-color: rgba(var(--danger-rgb), 0.6); }
+.modal-content.error-theme .modal-titulo { color: var(--danger); }
+.modal-content.success-theme { border-color: rgba(var(--success-rgb), 0.5); }
+.modal-content.success-theme .modal-titulo { color: var(--success); }
+.modal-content.warning-theme { border-color: rgba(var(--warning-rgb), 0.6); }
+.modal-content.warning-theme .modal-titulo { color: var(--warning); }
+.modal-icono { font-size: 42px; text-align: center; }
+.modal-botones { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; }
+.btn-revisar, .btn-cerrar-dark { min-height: 48px; border-radius: 12px; border: 1px solid var(--border-campo); background: var(--bg-deep); color: var(--text-main); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; text-transform: uppercase; cursor: pointer; transition: border-color 0.25s; }
+.btn-revisar:hover, .btn-cerrar-dark:hover { border-color: var(--game-accent); }
+.btn-confirmar { min-height: 48px; border: none; border-radius: 12px; background: var(--game-gradient); color: var(--on-game-cta); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; text-transform: uppercase; cursor: pointer; box-shadow: 0 6px 18px rgba(var(--game-accent-rgb), 0.35); }
+.btn-confirmar:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-whatsapp { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; background: var(--whatsapp); color: var(--on-light); font-weight: 900; font-size: 13px; text-decoration: none; text-transform: uppercase; }
+.btn-volver-inicio { min-height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--game-gradient); color: var(--on-game-cta); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; text-decoration: none; text-transform: uppercase; }
+
+/* Datos de la cuenta */
+.campo { display: grid; gap: 8px; }
+.campo-label { font-size: 12px; font-weight: 800; color: var(--text-main); text-transform: uppercase; letter-spacing: 0.5px; }
+.campo-ayuda { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.metodos { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; border: none; }
+.metodo-opcion { position: relative; }
+.metodo-opcion input { position: absolute; opacity: 0; pointer-events: none; }
+.metodo-opcion span { min-height: 48px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 8px 12px; border-radius: 12px; border: 2px solid var(--border-campo); background: var(--bg-deep); font-size: 13px; font-weight: 800; color: var(--text-soft); cursor: pointer; transition: border-color 0.2s, color 0.2s, background 0.2s; }
+.metodo-opcion input:checked + span { border-color: var(--game-accent); color: var(--game-text); background: rgba(var(--game-accent-rgb), 0.1); }
+.metodo-opcion input:focus-visible + span { box-shadow: 0 0 0 3px rgba(var(--game-accent-rgb), 0.4); }
+.grupo-clave { position: relative; }
+.grupo-clave .input-field { padding-right: 60px; }
+.btn-ver-clave { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); min-width: 44px; min-height: 44px; border: none; background: none; color: var(--text-muted); font-size: 12px; font-weight: 800; cursor: pointer; }
+.btn-ver-clave:hover { color: var(--game-text); }
+.grupo-telefono { display: flex; align-items: stretch; }
+.prefijo-telefono { display: flex; align-items: center; padding: 0 12px; border: 2px solid var(--border-campo); border-right: none; border-radius: 12px 0 0 12px; background: var(--bg-base); font-weight: 800; color: var(--text-soft); }
+.grupo-telefono .input-field { border-radius: 0 12px 12px 0; }
+.aviso-cuenta { font-size: 12px; line-height: 1.5; color: var(--text-soft); background: rgba(var(--warning-rgb), 0.07); border: 1px solid rgba(var(--warning-rgb), 0.3); border-radius: 12px; padding: 12px; }
+.aviso-cuenta strong { color: var(--warning); }
+.aviso-supercell { display: none; }
+.resumen-box { display: grid; gap: 8px; background: var(--bg-deep); border: 1px solid var(--border-glass); border-radius: 12px; padding: 16px; font-size: 13px; color: var(--text-soft); }
+.resumen-row { display: flex; justify-content: space-between; gap: 12px; }
+.resumen-row strong { color: var(--game-text); text-align: right; word-break: break-word; }
+
+.loader-spinner { width: 54px; height: 54px; margin: 0 auto; border-radius: 50%; border: 4px solid rgba(var(--game-accent-rgb), 0.2); border-top-color: var(--game-accent); animation: spin 1s linear infinite; }
+.nota-exito { font-size: 13px; line-height: 1.5; color: var(--text-soft); background: rgba(var(--success-rgb), 0.06); border: 1px solid rgba(var(--success-rgb), 0.25); border-radius: 12px; padding: 12px; }
+.nota-exito strong { color: var(--text-main); }
+.nota-incompleto { display: none; font-size: 13px; line-height: 1.5; color: var(--text-soft); background: rgba(var(--warning-rgb), 0.08); border: 1px solid rgba(var(--warning-rgb), 0.35); border-radius: 12px; padding: 12px; }
+.nota-incompleto strong { color: var(--warning); }
+
+/* ---------- Avisos ---------- */
+.toast-bubble { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translate(-50%, 140%); visibility: hidden; z-index: 10001; max-width: calc(100vw - 32px); background: var(--bg-base); border: 1px solid var(--game-accent); color: var(--text-main); font-size: 13px; font-weight: 700; border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow-lg); transition: transform 0.3s ease; text-align: center; }
+.toast-bubble.show { transform: translate(-50%, 0); visibility: visible; }
+.toast-bubble.error { border-color: var(--danger); }
+
+/* El botón flotante de WhatsApp (.whatsapp-soporte) lo dibuja css/pie-legal.css, igual que en las otras tiendas */
