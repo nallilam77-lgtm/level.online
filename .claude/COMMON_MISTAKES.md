@@ -146,3 +146,11 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 ## 13. Borrar pestañas de la hoja de Free Fire (2026-11-02)
 
 **Regla**: solo con el menú "🖐️ Recargas Free Fire" → 🧰 Mantenimiento → 🧹 Ordenar pestañas (`ordenarPestanas`): nunca borra las de `GRUPOS_DE_PESTANAS` (pagos, finalizados, errores, precios, descuentos, config, codigos, sin_codigo, fazer_card, por_completar, ruleta, asignaciones_pines, movimientos_descuentos, pagos_creadores), guarda antes una copia completa en Drive y deja las que una fórmula de otra pestaña usa. Si una función nueva de recargas.gs (o de otro script que abre esta hoja con `openById`, como mobilelegends.gs con "finalizados") empieza a usar una pestaña nueva, agregarla a `GRUPOS_DE_PESTANAS` ANTES de volver a usar el botón; si no, la borra. También quita los activadores cuya función no está en `ACTIVADORES_VALIDOS`: un activador nuevo va en esa lista.
+
+---
+
+## Imagen pedida antes de subirla: Cloudflare guarda el 404 un día
+
+**Síntoma** (2026-11-12): las tarjetas de FC Mobile, COD Mobile y Clash Royale del inicio salían "a veces" sin foto.
+**Causa**: el inicio pedía `fcmobile.jpg` desde un despliegue en el que la imagen aún no existía. `vercel.json` pone `max-age=86400` a TODO `.jpg/.png/.webp/...` (también a la respuesta 404) y Cloudflare guardó ese 404 un día; según el servidor de Cloudflare que respondiera, salía o no la foto (`onerror="this.remove()"` la quita).
+**Regla**: nunca enlazar una imagen que todavía no está en el repositorio; subirla en el mismo commit que la usa. Si ya pasó, cambiar la URL (`?v=N`), porque el 404 guardado no se borra desde aquí. Comprobar con `curl -sI https://www.levelupstore.online/<imagen>` (`HTTP 404` + `cf-cache-status: HIT` = 404 guardado).

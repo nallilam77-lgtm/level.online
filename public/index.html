@@ -697,17 +697,18 @@
           <div class="img-container"><img src="mobilelegends.jpg" alt="Mobile Legends" loading="lazy" onerror="this.remove()"></div>
           <h3>Mobile Legends</h3>
         </a>
-        <!-- Recargas manuales (imágenes: public/fcmobile.jpg, codmobile.jpg y clashroyale.jpg; sin ellas la tarjeta se ve sin foto) -->
+        <!-- Recargas manuales (public/fcmobile.jpg, codmobile.jpg y clashroyale.jpg). ?v=1: Cloudflare guardó un día el 404 de
+             antes de que existieran; si cambias una imagen, sube el número. -->
         <a href="#" class="card card--fcmobile" onclick="interceptarJuego(event, 'fcmobile.html')">
-          <div class="img-container"><img src="fcmobile.jpg" alt="FC Mobile" loading="lazy" onerror="this.remove()"></div>
+          <div class="img-container"><img src="fcmobile.jpg?v=1" alt="FC Mobile" loading="lazy" onerror="this.remove()"></div>
           <h3>FC Mobile</h3>
         </a>
         <a href="#" class="card card--codmobile" onclick="interceptarJuego(event, 'codmobile.html')">
-          <div class="img-container"><img src="codmobile.jpg" alt="COD Mobile" loading="lazy" onerror="this.remove()"></div>
+          <div class="img-container"><img src="codmobile.jpg?v=1" alt="COD Mobile" loading="lazy" onerror="this.remove()"></div>
           <h3>COD Mobile</h3>
         </a>
         <a href="#" class="card card--clashroyale" onclick="interceptarJuego(event, 'clashroyale.html')">
-          <div class="img-container"><img src="clashroyale.jpg" alt="Clash Royale" loading="lazy" onerror="this.remove()"></div>
+          <div class="img-container"><img src="clashroyale.jpg?v=1" alt="Clash Royale" loading="lazy" onerror="this.remove()"></div>
           <h3>Clash Royale</h3>
         </a>
       </div>
