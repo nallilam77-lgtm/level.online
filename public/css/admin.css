@@ -63,7 +63,7 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .campo { display: grid; gap: 6px; font-size: 12px; color: var(--text-muted); font-weight: 600; }
 .campo--linea { grid-template-columns: 1fr 140px; align-items: center; }
 
-.pestanas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 4px; border-radius: 999px; background: var(--bg-deep); }
+.pestanas { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; padding: 4px; border-radius: 24px; background: var(--bg-deep); }
 .pestanas button {
   min-height: 44px; border: 0; border-radius: 999px; cursor: pointer; background: transparent; color: var(--text-muted);
   font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;
@@ -98,6 +98,12 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .etiqueta--problema, .etiqueta--reembolsado { color: var(--peligro); }
 .etiqueta--revisar { color: var(--peligro); }
 .vacio { padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+.medidor { height: 12px; border-radius: 999px; background: var(--bg-deep); border: 1px solid var(--border-glass); overflow: hidden; }
+.medidor span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--cta-gradient); }
+.medidor--alto span { background: var(--aviso); }
+.borrar-fila { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.btn--peligro { min-height: 44px; padding: 0 16px; font-size: 12px; background: transparent; color: var(--peligro); border: 1px solid var(--peligro); }
 
 .punto-vivo { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-neon); vertical-align: middle; }
 

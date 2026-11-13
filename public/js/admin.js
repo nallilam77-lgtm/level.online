@@ -1,10 +1,10 @@
 // =========================================================================
-// PANEL ADMIN (admin.html) sobre Supabase (desde 2026-11-13; antes Firebase).
+// PANEL (panel.html) sobre Supabase (desde 2026-11-13). Pago Móvil sigue en Firebase: se cambia en admin.html.
 // Entra con la sesión de Google de la tienda (js/sesion.js) y solo funciona si la cuenta está en la tabla
 // "administradores": la base lo comprueba en cada consulta (RLS y es_admin(), supabase/tienda.sql), así
 // que esta página no protege nada por sí sola. Secciones: resumen de ventas (admin_resumen), pedidos en
-// vivo (tabla "recargas"), datos de Pago Móvil (tabla "configuracion") y ranking del minijuego
-// (juego_revision). Todo lo que viene de la base se pinta con textContent.
+// vivo (tabla "recargas"), ranking del minijuego
+// (juego_revision) y espacio de la base con limpieza de semanas viejas (admin_espacio / admin_borrar_viejo). Todo lo que viene de la base se pinta con textContent.
 // =========================================================================
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -51,6 +51,7 @@
     document.querySelectorAll('[data-seccion]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
     document.querySelectorAll('.seccion').forEach((s) => { s.hidden = s.id !== 'seccion-' + b.dataset.seccion; });
     if (b.dataset.seccion === 'juego') cargarJuego();
+    if (b.dataset.seccion === 'espacio') cargarEspacio();
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -143,29 +144,6 @@
       .subscribe();
   }
 
-  // ---------------------------------------------------------------- Pago Móvil
-  async function cargarPago() {
-    const { data, error } = await cliente.from('configuracion').select('valor').eq('clave', 'pago_movil').maybeSingle();
-    if (error) { $('pagoMensaje').textContent = 'No se pudieron leer los datos.'; return; }
-    const v = (data && data.valor) || {};
-    $('pagoBanco').value = v.banco || '';
-    $('pagoTelefono').value = v.telefono || '';
-    $('pagoCedula').value = v.cedula || '';
-  }
-
-  $('formPago').addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const valor = { banco: $('pagoBanco').value.trim(), telefono: $('pagoTelefono').value.trim(), cedula: $('pagoCedula').value.trim() };
-    if (!valor.banco || !valor.telefono || !valor.cedula) return;
-    if (!confirm(`¿Guardar estos datos? Los clientes pagarán aquí:\n\n${valor.banco}\n${valor.telefono}\n${valor.cedula}`)) return;
-    const boton = ev.submitter || ev.target.querySelector('button');
-    boton.disabled = true;
-    const { error } = await cliente.from('configuracion')
-      .upsert({ clave: 'pago_movil', valor, publico: true, actualizado: new Date().toISOString() }, { onConflict: 'clave' });
-    boton.disabled = false;
-    $('pagoMensaje').textContent = error ? 'No se pudo guardar: ' + error.message : '✅ Guardado. Las tiendas ya muestran los datos nuevos.';
-  });
-
   // ---------------------------------------------------------------- minijuego
   async function cargarJuego() {
     const s = iniciosVE();
@@ -191,6 +169,78 @@
   }
   $('semanaJuego').addEventListener('change', cargarJuego);
 
+  // ---------------------------------------------------------------- espacio
+  // La base decide qué se puede borrar y protege esta semana y la pasada (supabase/tienda.sql)
+  const LIMITE_PLAN = 500 * 1024 * 1024;
+  const TABLAS = {
+    recargas: 'Pedidos', fidelidad: 'Fidelidad', fidelidad_usos: 'Usos de fidelidad', ventas_paquetes: 'Ventas por paquete',
+    juego_partidas: 'Partidas del minijuego', juego_movimientos: 'Movimientos de fichas', juego_fichas: 'Saldos de fichas',
+    juego_ajustes: 'Ajustes del minijuego', limites: 'Bloqueos por intentos', configuracion: 'Configuración',
+    administradores: 'Administradores', pagos_recibidos: 'Pagos recibidos (sin uso)',
+  };
+  const BORRABLES = {
+    juego_partidas: 'Partidas terminadas del minijuego',
+    juego_movimientos: 'Gasto de fichas en partidas',
+    limites: 'Bloqueos por intentos ya vencidos',
+  };
+  const tamano = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' kB');
+
+  function fechaCorte() {
+    return new Date(iniciosVE().semanaPasada.getTime() - Number($('antesDe').value) * 7 * 864e5);
+  }
+
+  async function cargarEspacio() {
+    const { data, error } = await cliente.rpc('admin_espacio', { p_antes: fechaCorte().toISOString() });
+    const lista = $('listaBorrar');
+    if (error || !data) {
+      console.error(error);
+      $('textoEspacio').textContent = 'No se pudo leer';
+      lista.replaceChildren(el('li', 'vacio', 'No se pudo leer el espacio.'));
+      return;
+    }
+    const pct = Math.min(100, (Number(data.total) / LIMITE_PLAN) * 100);
+    $('barraEspacio').style.width = pct.toFixed(1) + '%';
+    $('medidorEspacio').setAttribute('aria-valuenow', pct.toFixed(1));
+    $('medidorEspacio').classList.toggle('medidor--alto', pct >= 80);
+    $('textoEspacio').textContent = `${tamano(Number(data.total))} usados (${pct.toFixed(1)} %)`;
+
+    const cuerpo = $('tablaEspacio');
+    cuerpo.replaceChildren();
+    (data.tablas || []).forEach((t) => {
+      const tr = el('tr');
+      tr.append(el('td', '', TABLAS[t.tabla] || t.tabla), el('td', '', tamano(Number(t.bytes))), el('td', '', Number(t.filas).toLocaleString('es-VE')));
+      cuerpo.append(tr);
+    });
+
+    lista.replaceChildren();
+    Object.keys(BORRABLES).forEach((tabla) => {
+      const n = Number((data.borrables || {})[tabla]) || 0;
+      const li = el('li', 'pedido');
+      const fila = el('div', 'borrar-fila');
+      const texto = el('div', 'pedido-cabeza');
+      texto.append(el('strong', '', `${BORRABLES[tabla]} · ${n.toLocaleString('es-VE')}`));
+      const boton = el('button', 'btn btn--peligro', 'Borrar');
+      boton.type = 'button';
+      boton.disabled = n === 0;
+      boton.addEventListener('click', () => borrarViejo(tabla, n, boton));
+      fila.append(texto, boton);
+      li.append(fila);
+      lista.append(li);
+    });
+  }
+
+  async function borrarViejo(tabla, n, boton) {
+    if (!confirm(`¿Borrar ${n.toLocaleString('es-VE')} filas de "${BORRABLES[tabla]}"?\n\nNo se puede deshacer.`)) return;
+    boton.disabled = true;
+    const { data, error } = await cliente.rpc('admin_borrar_viejo', { p_tabla: tabla, p_antes: fechaCorte().toISOString() });
+    if (error) console.error(error);
+    $('espacioMensaje').textContent = error
+      ? 'No se pudo borrar. Intenta de nuevo.'
+      : `✅ Borradas ${Number(data || 0).toLocaleString('es-VE')} filas. El tamaño baja poco a poco: Supabase reutiliza ese espacio.`;
+    cargarEspacio();
+  }
+  $('antesDe').addEventListener('change', cargarEspacio);
+
   // "Entrar con Google": si había otra cuenta (no administradora), primero se cierra
   $('btnEntrarAdmin').addEventListener('click', async (ev) => {
     ev.preventDefault();
@@ -209,7 +259,7 @@
     if (error || esAdmin !== true) return estado('Esta cuenta no es administradora. Entra con la cuenta correcta.', true);
     $('panelEstado').hidden = true;
     $('panel').hidden = false;
-    await Promise.all([cargarResumen(), cargarPedidos(), cargarPago()]);
+    await Promise.all([cargarResumen(), cargarPedidos()]);
     escuchar();
   })();
 })();

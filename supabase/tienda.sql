@@ -10,6 +10,7 @@
 --     configuracion    datos de Pago Móvil (y otros ajustes). Lo marcado "publico" lo lee cualquiera
 --                      (las tiendas: public/js/datos-pago.js); solo los administradores lo cambian.
 --     administradores  quién entra a public/admin.html (con su cuenta de Google).
+--                      Panel: pestaña Espacio (admin_espacio / admin_borrar_viejo, al final del archivo).
 --   Fase 2 (todos los pedidos):
 --     recargas         ahora guarda TODOS los pedidos (usuario vacío si el cliente no inició sesión).
 --                      Cada cliente sigue viendo solo los suyos; los administradores, todos.
@@ -257,3 +258,92 @@ as $$
 $$;
 revoke execute on function public.juego_revision(timestamptz, timestamptz, integer) from public, anon;
 grant execute on function public.juego_revision(timestamptz, timestamptz, integer) to authenticated, service_role;
+
+-- ---------------------------------------------------------------------
+-- Panel admin.html · Espacio: cuánto ocupa la base y borrar lo de semanas viejas
+-- (solo administradores; el plan gratis de Supabase da 500 MB de base de datos)
+-- Se puede borrar:
+--   juego_partidas     partidas terminadas (nunca una "abierta")
+--   juego_movimientos  solo el gasto de fichas por partida ("partida"). Los de "recarga" y "reembolso"
+--                      NO: son los que impiden dar dos veces las fichas de un mismo pedido.
+--   limites            bloqueos ya vencidos (sin importar la fecha)
+-- No se borra nunca: recargas (historial de clientes, contador del inicio), fidelidad, ventas_paquetes,
+-- juego_fichas (saldos), configuracion, administradores. La semana actual y la pasada (premio por pagar)
+-- quedan protegidas aunque la página pida otra fecha.
+-- ---------------------------------------------------------------------
+create or replace function public.admin_limite_borrado()
+returns timestamptz
+language sql
+stable
+set search_path = public
+as $$
+  -- Lunes 00:00 (Venezuela) de la semana pasada
+  select (date_trunc('week', now() at time zone 'America/Caracas') - interval '7 days') at time zone 'America/Caracas';
+$$;
+
+create or replace function public.admin_espacio(p_antes timestamptz)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_antes timestamptz := least(p_antes, admin_limite_borrado());
+begin
+  if not ((select auth.role()) is null or (select auth.role()) = 'service_role' or (select es_admin())) then
+    raise exception 'solo administradores' using errcode = '42501';
+  end if;
+  return jsonb_build_object(
+    'total', pg_database_size(current_database()),
+    'limite', admin_limite_borrado(),
+    'tablas', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+               'tabla', c.relname,
+               'bytes', pg_total_relation_size(c.oid),
+               'filas', greatest(c.reltuples, 0)::bigint
+             ) order by pg_total_relation_size(c.oid) desc), '[]'::jsonb)
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relkind = 'r'
+    ),
+    'borrables', jsonb_build_object(
+      'juego_partidas', (select count(*) from juego_partidas
+                          where estado <> 'abierta' and coalesce(terminada, creada) < v_antes),
+      'juego_movimientos', (select count(*) from juego_movimientos where motivo = 'partida' and creado < v_antes),
+      'limites', (select count(*) from limites where expira < now())
+    )
+  );
+end;
+$$;
+revoke execute on function public.admin_espacio(timestamptz) from public, anon;
+grant execute on function public.admin_espacio(timestamptz) to authenticated, service_role;
+
+-- Devuelve cuántas filas borró
+create or replace function public.admin_borrar_viejo(p_tabla text, p_antes timestamptz)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_antes timestamptz := least(p_antes, admin_limite_borrado());
+  v_filas integer := 0;
+begin
+  if not ((select auth.role()) is null or (select auth.role()) = 'service_role' or (select es_admin())) then
+    raise exception 'solo administradores' using errcode = '42501';
+  end if;
+  if p_tabla = 'juego_partidas' then
+    delete from juego_partidas where estado <> 'abierta' and coalesce(terminada, creada) < v_antes;
+  elsif p_tabla = 'juego_movimientos' then
+    delete from juego_movimientos where motivo = 'partida' and creado < v_antes;
+  elsif p_tabla = 'limites' then
+    delete from limites where expira < now();
+  else
+    raise exception 'esa tabla no se puede limpiar' using errcode = '22023';
+  end if;
+  get diagnostics v_filas = row_count;
+  return v_filas;
+end;
+$$;
+revoke execute on function public.admin_borrar_viejo(text, timestamptz) from public, anon;
+grant execute on function public.admin_borrar_viejo(text, timestamptz) to authenticated, service_role;
