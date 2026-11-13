@@ -122,8 +122,11 @@
   }
 
   async function cargarRecargas() {
+    // Siempre filtrar por la cuenta: un administrador puede LEER todas las recargas (RLS de admin.html)
+    // y sin este filtro vería en su perfil las de otros clientes
     const { data, error } = await cliente.from('recargas')
       .select('id_pedido,juego,cuenta,id_jugador,zona,paquete,precio,referencia,estado,codigo,creado')
+      .eq('usuario', usuario.id)
       .order('creado', { ascending: false }).limit(MAX_RECARGAS);
     if (error) throw error;
     recargas = data || [];
