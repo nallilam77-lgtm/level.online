@@ -14,7 +14,8 @@
 // SEGURIDAD: el cuerpo trae la CONTRASEÑA del cliente. Nunca se escribe en los logs (ni req.body ni el
 // payload) y solo viaja a manuales.gs.
 import { randomUUID } from 'node:crypto';
-import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
+import { obtenerIp, minutosBloqueado, registrarFallo, permitirUso } from '../limitador.js';
+import { anotarRecarga, conDestacados } from '../fidelidad.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
@@ -81,7 +82,9 @@ async function precios(req, res) {
       return res.status(503).json({ status: 'error', message: MENSAJE_SIN_CONFIGURAR });
     }
     cabecerasCachePrecios(res);
-    return res.status(200).json({ status: 'success', ...juegoParaCliente(juego) });
+    const cliente = juegoParaCliente(juego);
+    // "⭐ Más vendido" / "💰 Mejor precio" (_lib/fidelidad.js)
+    return res.status(200).json({ status: 'success', ...cliente, catalogo: await conDestacados(String(req.query.juego), cliente.catalogo) });
   } catch (error) {
     console.error(`Error al obtener precios de ${req.query.juego}:`, error.message);
     return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
@@ -112,10 +115,49 @@ async function descuento(req, res) {
     console.error(`Error al leer el catálogo de ${juego} para un código:`, error.message);
     return res.status(503).json({ status: 'error', valido: false, message: 'No pudimos validar el código. Intenta de nuevo en unos segundos.' });
   }
-  return crearAccionDescuento(NOMBRES[juego], async () => (await catalogoConVersion(scriptUrl, juego)).catalogo)(req, res);
+  return crearAccionDescuento(NOMBRES[juego], async () => conDestacados(juego, (await catalogoConVersion(scriptUrl, juego)).catalogo))(req, res);
 }
 
-export const acciones = { precios, descuento };
+// Estado de cada pedido para la página (columna "estado" de la pestaña del juego)
+const ESTADOS_PEDIDO = ['pendiente', 'en_proceso', 'completado', 'incompleto', 'problema'];
+const ID_PEDIDO_MANUAL = /^man-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// manuales.gs responde estado_pedido desde la versión 3
+const VERSION_CON_ESTADO = 3;
+
+/**
+ * Seguimiento del pedido (js/mis-recargas.js lo consulta cada 30 s mientras la página está abierta):
+ * POST { idPedido } -> { status, estado } con estado = pendiente | en_proceso | completado | incompleto |
+ * problema | desconocido. El idPedido (UUID que solo recibió el cliente) hace de llave: no expone nada más.
+ */
+async function estado(req, res) {
+  cabecerasCors(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
+  const juego = String(req.query.juego);
+  const idPedido = String(req.body?.idPedido ?? '');
+  if (!ID_PEDIDO_MANUAL.test(idPedido)) return res.status(400).json({ status: 'error', message: 'Pedido inválido.' });
+  const scriptUrl = process.env.SCRIPT_MANUALES;
+  if (!scriptUrl) return faltaConfiguracion(res, ['SCRIPT_MANUALES'], { status: 'error', message: MENSAJE_SIN_CONFIGURAR });
+
+  const minutos = await permitirUso(`estado:${obtenerIp(req)}`);
+  if (minutos > 0) return res.status(429).json({ status: 'error', message: `Espera ${minutos} minutos.` });
+
+  try {
+    const { version } = await catalogoConVersion(scriptUrl, juego);
+    if (version < VERSION_CON_ESTADO) return res.status(200).json({ status: 'success', estado: 'desconocido' });
+    // Copia de 20 s por pedido: dos pestañas abiertas no duplican la consulta
+    const { datos } = await conCache(`estado:${idPedido}`,
+      () => llamarScript(scriptUrl, { accion: 'estado_pedido', juego, idPedido }, LECTURA_APPS_SCRIPT),
+      { frescoMs: 20000, respaldoMs: 0, esValido: (d) => d?.status === 'success' });
+    const valor = String(datos.estado || '');
+    return res.status(200).json({ status: 'success', estado: datos.encontrado && ESTADOS_PEDIDO.includes(valor) ? valor : 'desconocido' });
+  } catch (error) {
+    console.error(`Manuales: no se pudo leer el estado del pedido (${juego}):`, error.message);
+    return res.status(503).json({ status: 'error', message: 'No pudimos consultar tu pedido ahora.' });
+  }
+}
+
+export const acciones = { precios, descuento, estado };
 
 // =========================================================================
 // PEDIDO (api/recargar.js)
@@ -198,9 +240,13 @@ export async function recargar(req, res) {
 
     if (data?.status === 'success' && data.registrado) {
       await anotarUsoDelCodigo({ scriptUrl, juego, idPedido, telefono, data });
+      // +1 venta del paquete ("Más vendido"); sin cuenta: las tiendas manuales no tienen premio de cliente fiel
+      if (!data.repetido) anotarRecarga({ juego, cuenta: null, paquete: String(paquete), idPedido });
       return res.status(200).json({
         status: 'success', insuficiente: data.insuficiente === true,
         precio: String(data.precio || ''), pagado: String(data.pagado || ''), falta: String(data.falta || ''),
+        // Para seguir el estado del pedido desde la página (js/mis-recargas.js)
+        idPedido,
       });
     }
     // Pago no encontrado, ya usado, paquete que ya no existe...: cuenta como intento fallido

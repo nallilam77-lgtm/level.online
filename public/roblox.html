@@ -10,6 +10,7 @@
   <title>Level Up - Recargas Roblox Pro</title>
   <meta name="description" content="Compra Robux con Pago Móvil y recibe tu código en segundos. 1,5 % menos con código de creador.">
   <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="/manifest.webmanifest">
   <!-- Vista previa al compartir el enlace (WhatsApp, Facebook, Telegram, X) -->
   <link rel="canonical" href="https://www.levelupstore.online/roblox.html">
   <meta property="og:type" content="website">
@@ -33,6 +34,9 @@
   <script src="/js/lector-referencia.js" defer></script>
   <!-- Pago por completar: lo recuerda en este equipo, lee la captura y arma el WhatsApp -->
   <script src="/js/pago-pendiente.js?v=1" defer></script>
+  <!-- Historial del equipo (repetir y comprobante) y premio de cliente fiel -->
+  <script src="/js/mis-recargas.js?v=1" defer></script>
+  <script src="/js/fidelidad.js?v=1" defer></script>
   <!-- Código de descuento (compartido con Free Fire y Blood Strike) -->
   <script src="/js/descuento.js" defer></script>
   <script src="/js/ultimo-id.js" defer></script>
@@ -628,6 +632,8 @@
   <link rel="stylesheet" href="css/aviso-codigo.css?v=3">
   <link rel="stylesheet" href="css/whatsapp-cliente.css?v=1">
   <link rel="stylesheet" href="css/pago-pendiente.css?v=1">
+  <link rel="stylesheet" href="css/mis-recargas.css?v=1">
+  <link rel="stylesheet" href="css/fidelidad.css?v=1">
   <link rel="stylesheet" href="css/canal.css?v=1">
 </head>
 <body class="pagina-juego">
@@ -731,6 +737,8 @@
       <p class="aviso-canje"><strong>Tus Robux todavía NO están en tu cuenta.</strong> No llegan solos: tienes que canjear este código.</p>
       <div class="tx-caja success" id="codigoPinRoblox">XXXX-XXXX-XXXX</div>
       <button type="button" class="btn-copiar-codigo" id="btnCopiarCodigo" onclick="copiarCodigoRoblox()">📋 COPIAR CÓDIGO</button>
+      <!-- El comprobante NO lleva el código (se comparte); el código queda en "Mis recargas" de este equipo -->
+      <button type="button" class="btn-comprobante" data-comprobante-ultimo><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>GUARDAR COMPROBANTE</button>
 
       <ol class="pasos-canje">
         <li><span>Entra a <a href="https://www.roblox.com/redeem" target="_blank" rel="noopener">roblox.com/redeem</a> e inicia sesión con la cuenta que recibirá los Robux.</span></li>
@@ -1027,9 +1035,9 @@
 
         if (data.status === "success" && data.precios) {
           const stock = data.stock || {};
-          catalogoSinDescuento = Object.entries(data.precios).map(([producto, precio]) => ({ producto, precio, stock: stock[producto] }));
+          catalogoSinDescuento = Object.entries(data.precios).map(([producto, precio]) => ({ producto, precio, stock: stock[producto], etiqueta: (data.destacados || {})[producto] }));
           // Si el cliente ya aplicó un código antes de que cargara el catálogo, se mantiene
-          if (!descuento.codigo()) renderizarCatalogo(catalogoSinDescuento);
+          if (!descuento.codigo()) renderizarCatalogo(Fidelidad.catalogo() || catalogoSinDescuento);
         } else {
             container.innerHTML = '<div class="catalog-message error">Error al cargar el catálogo de Roblox.</div>';
         }
@@ -1118,6 +1126,10 @@
         if (agotado || item.stock === 'pocos') {
           card.classList.add('has-badge');
           card.appendChild(div(`product-badge ${item.stock}`, agotado ? 'Agotado' : '¡Últimos!'));
+        } else if (item.etiqueta) {
+          // "⭐ Más vendido" / "💰 Mejor precio" (lo decide el servidor)
+          card.classList.add('has-badge');
+          card.appendChild(div('product-badge', item.etiqueta));
         }
         // "800 Robux" → número grande + "Robux" pequeño; otros nombres se muestran completos.
         // La región ya la dice la sección: "800 Robux EE. UU." se ve como "800 Robux".
@@ -1170,9 +1182,25 @@
     let catalogoSinDescuento = null;
     const descuento = CodigoDescuento.iniciar({
       juego: 'roblox',
-      alAplicar: (catalogo) => renderizarCatalogo(catalogo),
-      alQuitar: () => { if (catalogoSinDescuento) renderizarCatalogo(catalogoSinDescuento); },
+      alAplicar: (catalogo) => { renderizarCatalogo(catalogo); Fidelidad.mostrar(); },
+      // Sin código vuelven los precios con el premio de cliente fiel (si lo tiene) o los normales
+      alQuitar: () => { const base = Fidelidad.catalogo() || catalogoSinDescuento; if (base) renderizarCatalogo(base); Fidelidad.mostrar(); },
     });
+    // Premio de cliente fiel (js/fidelidad.js): se consulta al confirmar la cuenta
+    Fidelidad.iniciar({ juego: 'roblox', codigoActivo: () => !!descuento.codigo(),
+      dibujar: (catalogo) => { const base = catalogo || catalogoSinDescuento; if (base) renderizarCatalogo(base); } });
+    // "Mis recargas" de este equipo (js/mis-recargas.js): repetir deja la cuenta y el paquete listos
+    MisRecargas.iniciar({ juego: 'roblox', nombreJuego: 'Roblox', repetir: async (r) => {
+        const input = document.getElementById('inputPlayerId');
+        input.value = r.idJugador; input.dispatchEvent(new Event('input'));
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.getElementById('btnVerifyId').click();
+        await MisRecargas.esperarCatalogo();
+        const lista = window.catalogoGlobal || [];
+        const indice = lista.findIndex((p) => p.producto === r.paquete && p.stock !== 'agotado');
+        const tarjeta = document.querySelectorAll('#catalogContainer .product-card')[indice];
+        if (indice >= 0 && tarjeta) seleccionarProducto(tarjeta, lista[indice]); else mostrarBurbuja('Ese paquete ya no está disponible: elige otro.', 'var(--warning)');
+      } });
 
     function seleccionarProducto(cardElement, paquete) {
       document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
@@ -1311,6 +1339,7 @@
       usuarioVerificado = true;
       // Se recuerda en este dispositivo para la próxima compra (js/ultimo-id.js)
       if (/^[A-Za-z0-9_]{3,20}$/.test(usuarioInput)) window.UltimoId?.guardar('roblox', { id: usuarioInput });
+      Fidelidad.consultar({ id: usuarioInput });
       statusDiv.style.display = 'block';
       statusDiv.style.color = 'var(--game-text)'; 
       statusDiv.innerHTML = `✔️ Usuario verificado: <strong style="color: #fff;">${escaparHtml(usuarioInput)}</strong>`;
@@ -1320,6 +1349,7 @@
     document.getElementById('inputPlayerId').addEventListener('input', () => { 
       usuarioVerificado = false; 
       document.getElementById('idStatus').style.display = 'none'; 
+      Fidelidad.limpiar();
       verificarEstadoDesbloqueo(); 
     });
 
@@ -1543,6 +1573,8 @@
                 url_capture: captureUrl,
                 // Solo el código: el servidor recalcula el descuento y el precio a cobrar
                 ...(descuento.codigo() && { codigoDescuento: descuento.codigo() }),
+                // Premio de cliente fiel que vio el cliente (firmado por el servidor; manda Firestore)
+                premioFidelidad: Fidelidad.firma(),
                 // WhatsApp opcional ("+58…" o ""): va a la hoja con el pedido
                 telefono: window.WhatsappCliente?.valor() || ''
             })
@@ -1554,6 +1586,7 @@
              if(resultado.message && resultado.message.toLowerCase().includes("fallo técnico")) {
                 document.getElementById('pantallaProcesando').style.display = 'none';
                 document.getElementById('codigoTxnProceso').textContent = globalTxnCode;
+                MisRecargas.guardar({ paquete: (datosComplemento && datosComplemento.paquete) || (paqueteSeleccionado ? paqueteSeleccionado.producto : ''), cuenta: (datosComplemento && datosComplemento.cuenta) || `usuario ${usuarioRoblox}`, idJugador: usuarioRoblox, precio: datosComplemento ? (PagoPendiente.leer()?.precio || '') : (paqueteSeleccionado ? paqueteSeleccionado.precio : ''), referencia: referenciaUsuario, txn: globalTxnCode, repetible: !datosComplemento, estado: 'en_revision' });
                 document.getElementById('modalEnProceso').style.display = 'flex';
                 isProcessing = false; btnConfirmar.disabled = false;
                 return;
@@ -1620,6 +1653,8 @@
           localStorage.setItem('intentos_recarga_roblox', '0');
           localStorage.setItem('tiempo_bloqueo_roblox', '0');
           // Pago completado: ya no hay nada pendiente en este equipo
+          // Historial de este equipo: "Mis recargas" (repetir y comprobante)
+          MisRecargas.guardar({ paquete: (datosComplemento && datosComplemento.paquete) || (paqueteSeleccionado ? paqueteSeleccionado.producto : ''), cuenta: (datosComplemento && datosComplemento.cuenta) || `usuario ${usuarioRoblox}`, idJugador: usuarioRoblox, precio: datosComplemento ? (PagoPendiente.leer()?.precio || '') : (paqueteSeleccionado ? paqueteSeleccionado.precio : ''), referencia: referenciaUsuario, txn: globalTxnCode, repetible: !datosComplemento, codigo: resultado.code });
           if (datosComplemento) PagoPendiente.borrar();
 
           textoElem.innerHTML = "💎 ¡Bot ejecutándose y asignando PIN...";

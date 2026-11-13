@@ -36,6 +36,9 @@
 //     "⚠️ PAGO INCOMPLETO" y se completa por WhatsApp.
 //   - registrar_pedido se puede repetir con el mismo idPedido (Vercel lo hace si no recibió la respuesta):
 //     no duplica la fila ni toma otro pago.
+//   - Seguimiento (desde v3): la página pregunta el estado del pedido con estado_pedido (solo lectura, por
+//     idPedido) y muestra "Recibido / En proceso / Entregado" sola: basta con cambiar la columna "estado".
+//     La columna O "avisar al cliente" abre WhatsApp con el mensaje de "tu recarga está lista" ya escrito.
 //   - Códigos de descuento (desde v2): Vercel valida el código en la tabla "Descuentos" de la hoja de Free
 //     Fire y manda "montoACobrar" (precio ya descontado) y "codigoDescuento". Aquí solo se acepta un monto
 //     MENOR que el precio de la hoja y no menor que su mitad; si no, se cobra el precio completo. El uso
@@ -55,7 +58,8 @@ const ID_HOJA_PAGOS = "1FTjXo7sKybYVmyGO9HBlyla0T2LHBfCB8yHEV70JyOA"; // Hoja ce
 // Versión que la tienda lee en obtener_precios
 // v2: códigos de descuento (montoACobrar + codigoDescuento, columna "código descuento" y acción nota_pedido).
 // Vercel solo acepta códigos con la versión 2 o más.
-const VERSION_SCRIPT = 2;
+// v3: acción estado_pedido (seguimiento en la página) y columna "avisar al cliente" (enlace de WhatsApp).
+const VERSION_SCRIPT = 3;
 
 // Vercel espera hasta 15 s por intento: si el candado tarda más, mejor responder "ocupado"
 const ESPERA_CANDADO_MS = 8000;
@@ -96,9 +100,10 @@ const JUEGOS = {
 
 // Pestañas de pedidos (una por juego, todas con las mismas columnas)
 const COLUMNAS_PEDIDOS = ["fecha-hora", "id pedido", "paquete", "precio (Bs)", "pagado (Bs)", "referencia",
-  "inicio de sesión", "correo / usuario", "contraseña", "WhatsApp", "estado", "nota", "comprobante", "código descuento"];
+  "inicio de sesión", "correo / usuario", "contraseña", "WhatsApp", "estado", "nota", "comprobante", "código descuento",
+  "avisar al cliente"];
 // D "precio (Bs)" = lo que se cobró (con descuento si hubo código; el precio de la hoja queda en la nota)
-const COL_ID_PEDIDO = 2, COL_CLAVE = 9, COL_ESTADO = 11, COL_NOTA = 12;
+const COL_ID_PEDIDO = 2, COL_CLAVE = 9, COL_ESTADO = 11, COL_NOTA = 12, COL_CODIGO = 14, COL_AVISAR = 15;
 const ESTADOS = ["⏳ PENDIENTE", "🔄 EN PROCESO", "✅ COMPLETADO", "⚠️ PAGO INCOMPLETO", "❌ PROBLEMA"];
 const COLOR_ESTADO = { "⏳ PENDIENTE": "#fff4c2", "🔄 EN PROCESO": "#cfe2ff", "✅ COMPLETADO": "#d1f2d9",
   "⚠️ PAGO INCOMPLETO": "#ffe0b3", "❌ PROBLEMA": "#f8d0d0" };
@@ -141,6 +146,8 @@ function doPost(e) {
 
   try {
     if (accion === "obtener_precios") return responder(obtenerPrecios());
+    // Solo lectura: sin candado
+    if (accion === "estado_pedido") return responder(estadoPedido(datos));
     // Toca pagos: una a la vez
     if (accion === "registrar_pedido") return conCandado(function () { return registrarPedido(datos); });
     if (accion === "nota_pedido") return conCandado(function () { return notaPedido(datos); });
@@ -301,6 +308,8 @@ function registrarPedido(datos) {
     textoSeguro(datos.comprobante || "Sin comprobante"),
     textoSeguro(codigoDescuento)
   ]);
+  // Enlace para avisarle al cliente cuando la recarga esté hecha (un toque abre WhatsApp con el mensaje)
+  hoja.getRange(hoja.getLastRow(), COL_AVISAR).setFormula(formulaAvisar(whatsapp, juego.nombre, paquete.paquete));
   SpreadsheetApp.flush();
   PropertiesService.getScriptProperties().deleteProperty("man_" + pago.referencia);
   return { status: "success", registrado: true, repetido: false, insuficiente: insuficiente,
@@ -334,7 +343,35 @@ function respuestaDeFila(hoja, fila, repetido) {
   var insuficiente = pagado < precio - MARGEN_PAGO_BS;
   return { status: "success", registrado: true, repetido: repetido, insuficiente: insuficiente,
     precio: formatoBs(precio), pagado: formatoBs(pagado), falta: formatoBs(insuficiente ? redondear2(precio - pagado) : 0),
-    codigoDescuento: String(v[COLUMNAS_PEDIDOS.length - 1] || "") };
+    codigoDescuento: String(v[COL_CODIGO - 1] || "") };
+}
+
+// Vercel (sin candado, solo lectura): estado de un pedido para la página. datos: { juego, idPedido }
+// -> { status, encontrado, estado: pendiente | en_proceso | completado | incompleto | problema | otro }
+function estadoPedido(datos) {
+  var idJuego = String(datos.juego || "");
+  var idPedido = String(datos.idPedido || "");
+  if (!JUEGOS.hasOwnProperty(idJuego) || !/^[A-Za-z0-9-]{8,64}$/.test(idPedido)) {
+    return { status: "error", message: "Datos inválidos" };
+  }
+  var hoja = obtenerHojaLocal(JUEGOS[idJuego].hojaPedidos);
+  var fila = hoja ? buscarFila(hoja, COL_ID_PEDIDO, idPedido) : 0;
+  if (!fila) return { status: "success", encontrado: false };
+  var texto = String(hoja.getRange(fila, COL_ESTADO).getValue() || "").toUpperCase();
+  var estado = texto.indexOf("COMPLETADO") !== -1 ? "completado"
+    : texto.indexOf("EN PROCESO") !== -1 ? "en_proceso"
+    : texto.indexOf("INCOMPLETO") !== -1 ? "incompleto"
+    : texto.indexOf("PROBLEMA") !== -1 ? "problema"
+    : texto.indexOf("PENDIENTE") !== -1 ? "pendiente" : "otro";
+  return { status: "success", encontrado: true, estado: estado };
+}
+
+// =HYPERLINK con el chat del cliente y el mensaje de "recarga lista" ya escrito
+function formulaAvisar(enlace, nombreJuego, paquete) {
+  var mensaje = "Hola 👋 Te escribimos de Level Up: tu recarga de " + paquete + " en " + nombreJuego +
+    " ya está lista ✅. Entra al juego para verla. ¡Gracias por comprar con nosotros!";
+  var url = enlace + "?text=" + encodeURIComponent(mensaje);
+  return '=HYPERLINK("' + url.replace(/"/g, '""') + '","💬 Avisar que está lista")';
 }
 
 // Busca el pago "Verificado" más reciente con esos últimos 5 dígitos y lo deja "Usado" para este pedido.
@@ -455,7 +492,7 @@ function hojaPedidos(juego) {
     return SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(estado).setBackground(COLOR_ESTADO[estado]).setRanges([columnaEstado]).build();
   }));
   hoja.setColumnWidth(COL_ESTADO, 170);
-  hoja.setColumnWidth(COLUMNAS_PEDIDOS.length, 260);
+  hoja.setColumnWidth(COL_CODIGO, 260);
   return hoja;
 }
 

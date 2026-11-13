@@ -3,8 +3,11 @@
 // ventana con los datos de la cuenta (forma de iniciar sesión, correo, contraseña) y el WhatsApp
 // obligatorio → /api/recargar?juego=... (api/_lib/juegos/manuales.js → apps-script/manuales.gs).
 // La contraseña solo vive en el campo de la ventana: no se guarda en el equipo y se borra al terminar.
+// "Mis recargas" (js/mis-recargas.js): cada pedido queda en el equipo (sin correo ni contraseña) y su estado
+// (Recibido → En proceso → Entregada) se actualiza solo mientras la página está abierta.
 (function () {
   const JUEGO = document.body.dataset.juego;
+  const NOMBRES = { fcmobile: 'FC Mobile', codmobile: 'COD Mobile', clashroyale: 'Clash Royale' };
   const API_PRECIOS = `/api/juego?juego=${encodeURIComponent(JUEGO)}&accion=precios`;
   const API_PEDIDO = `/api/recargar?juego=${encodeURIComponent(JUEGO)}`;
   // Mismo número que recuerda js/whatsapp-cliente.js en las otras tiendas (10 dígitos: 4141234567)
@@ -25,6 +28,19 @@
     juego: JUEGO,
     alAplicar: (catalogo) => dibujarPaquetes(catalogo),
     alQuitar: () => { if (catalogoSinDescuento) dibujarPaquetes(catalogoSinDescuento); },
+  });
+
+  // Repetir: deja elegido el mismo paquete (los datos de la cuenta se vuelven a escribir: no se guardan)
+  window.MisRecargas?.iniciar({
+    juego: JUEGO, nombreJuego: NOMBRES[JUEGO] || JUEGO,
+    repetir: async (r) => {
+      await window.MisRecargas.esperarCatalogo();
+      const lista = window.catalogoGlobal || [];
+      const indice = lista.findIndex((p) => p.paquete === r.paquete);
+      const tarjeta = $('catalogContainer').querySelectorAll('.product-card')[indice];
+      if (indice >= 0 && tarjeta) seleccionar(tarjeta, lista[indice]);
+      else { burbuja('Ese paquete ya no está disponible: elige otro.', true); $('catalogContainer').scrollIntoView({ behavior: 'smooth' }); }
+    },
   });
 
   // ---------- Utilidades ----------
@@ -108,6 +124,8 @@
   function dibujarPaquetes(lista) {
     const contenedor = $('catalogContainer');
     const elegido = paqueteSeleccionado ? paqueteSeleccionado.paquete : null;
+    // Para "Repetir" de Mis recargas (mismo orden que las tarjetas)
+    window.catalogoGlobal = lista;
     contenedor.replaceChildren();
     const div = (clase, texto) => { const el = document.createElement('div'); el.className = clase; el.textContent = texto; return el; };
     lista.forEach((item, i) => {
@@ -115,6 +133,8 @@
       card.className = 'product-card' + (lista.length % 2 && i === lista.length - 1 ? ' full-width' : '');
       card.setAttribute('role', 'button');
       card.setAttribute('tabindex', '0');
+      // "⭐ Más vendido" / "💰 Mejor precio" (lo decide el servidor)
+      if (item.etiqueta) { card.classList.add('has-badge'); card.appendChild(div('product-badge', item.etiqueta)); }
       card.insertAdjacentHTML('beforeend', ICONO);
       const partes = String(item.paquete).match(/^\s*([\d.,]+)\s+(.+)$/);
       if (partes) card.append(div('paquete-cantidad', partes[1]), div('paquete-nombre', partes[2]));
@@ -345,6 +365,12 @@
       $('pagadoMonto').textContent = textoBs(data.pagado);
     }
     $('tituloExito').textContent = incompleto ? '¡PEDIDO RECIBIDO, PAGO INCOMPLETO!' : '¡PEDIDO RECIBIDO!';
+    // Mis recargas: sin correo ni contraseña; con idPedido la página sigue su estado
+    window.MisRecargas?.guardar({
+      paquete: paqueteSeleccionado.paquete, cuenta: `WhatsApp +58 ${telefono.slice(0, 3)}-${telefono.slice(3)}`,
+      precio: data.precio || paqueteSeleccionado.precio, referencia: $('inputReferencia').value.trim(),
+      idPedido: data.idPedido || '', estado: incompleto ? 'incompleto' : 'pendiente',
+    });
     $('modalExito').style.display = 'flex';
   }
 

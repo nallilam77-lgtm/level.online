@@ -10,6 +10,7 @@
   <title>Level Up - Recargas FC Mobile</title>
   <meta name="description" content="Recarga FC Points de FC Mobile con Pago Móvil. Nosotros hacemos la recarga en tu cuenta EA o Facebook.">
   <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="canonical" href="https://www.levelupstore.online/fcmobile.html">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Level Up">
@@ -30,7 +31,9 @@
   <script src="/js/descuento.js?v=2" defer></script>
   <script src="/js/aviso-codigo.js?v=3" defer></script>
   <!-- Lógica de las tiendas manuales (FC Mobile, COD Mobile, Clash Royale) -->
-  <script src="/js/tienda-manual.js?v=2" defer></script>
+  <!-- Historial del equipo con el estado del pedido (antes de tienda-manual.js) -->
+  <script src="/js/mis-recargas.js?v=1" defer></script>
+  <script src="/js/tienda-manual.js?v=3" defer></script>
   <style>
     /* Acento del juego (FC Mobile: verde de cancha): bordes, botones, sombras y glows. Ver .claude/UI_RULES.md */
     :root {
@@ -43,7 +46,8 @@
       --emblema-alto: 84px;
     }
   </style>
-  <link rel="stylesheet" href="css/tienda-manual.css?v=3">
+  <link rel="stylesheet" href="css/tienda-manual.css?v=4">
+  <link rel="stylesheet" href="css/mis-recargas.css?v=1">
   <link rel="stylesheet" href="css/pie-legal.css">
   <link rel="stylesheet" href="css/canal.css?v=1">
   <link rel="stylesheet" href="css/descuento.css">
@@ -127,6 +131,8 @@
       <div class="nota-exito">
         📲 Te escribiremos al <strong id="exitoWhatsapp"></strong> si necesitamos un código o algo falla. <strong>No cambies tu contraseña ni cierres sesión</strong> hasta que te confirmemos la recarga.
       </div>
+      <div class="nota-seguimiento">🔄 Vuelve a esta página cuando quieras: en <strong>Mis recargas</strong> verás si tu recarga ya está lista. Se actualiza sola.</div>
+      <button type="button" class="btn-comprobante" data-comprobante-ultimo><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>GUARDAR COMPROBANTE</button>
       <!-- Invitación al canal de WhatsApp (js/canal.js) -->
       <div data-canal="exito"></div>
       <a href="https://wa.me/584141916377?text=Hola%20Level%20Up,%20hice%20un%20pedido%20de%20FC%20Mobile." target="_blank" rel="noopener noreferrer" class="btn-whatsapp">💬 Escribir a soporte</a>

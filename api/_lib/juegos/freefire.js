@@ -9,6 +9,7 @@ import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } fr
 import { FASES, ESTADO_PINES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
+import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con fallo del bot:
@@ -94,7 +95,7 @@ async function precios(req, res) {
       () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT),
       { esValido: catalogoValido });
     cabecerasCachePrecios(res);
-    return res.status(200).json({ ...datos, catalogo: datos.catalogo.map(sinProducto) });
+    return res.status(200).json({ ...datos, catalogo: await conDestacados('freefire', datos.catalogo.map(sinProducto)) });
   } catch (error) {
     console.error("Error al obtener precios de Free Fire:", error.message);
     return res.status(503).json({ status: "error", message: "Error al conectar con la hoja de precios." });
@@ -179,7 +180,11 @@ async function estadisticas(req, res) {
   }
 }
 
-export const acciones = { precios, verificar, estadisticas, descuento: crearAccionDescuento('Free Fire', catalogoFreeFire) };
+const catalogoDestacado = async () => conDestacados('freefire', await catalogoFreeFire());
+export const acciones = {
+  precios, verificar, estadisticas, descuento: crearAccionDescuento('Free Fire', catalogoDestacado),
+  fidelidad: crearAccionFidelidad('freefire', catalogoDestacado, (b) => (/^\d{5,15}$/.test(String(b.id ?? '')) ? String(b.id) : null)),
+};
 
 // =========================================================================
 // RECARGA (api/recargar.js)
@@ -610,7 +615,10 @@ export async function recargar(req, res) {
     // Descuento opcional: se vuelve a consultar el código (pudo desactivarse) antes de tocar el pago
     const descuento = await aplicarDescuentoARecarga(req.body?.codigoDescuento, precioLista);
     if (descuento.error) return res.status(descuento.error.codigo).json(descuento.error.cuerpo);
-    const { desc, precio: precioReal } = descuento;
+    const { desc } = descuento;
+    // Premio de cliente fiel (_lib/fidelidad.js): solo sin código; la página manda la firma del que mostró
+    const fiel = await premioParaRecarga({ juego: 'freefire', cuenta: String(id), firma: req.body?.premioFidelidad, desc, precio: descuento.precio });
+    const precioReal = fiel.precio;
 
     // ==========================================
     // FASE 2: BUSCAR PAGO Y VERIFICAR
@@ -654,6 +662,8 @@ export async function recargar(req, res) {
     }
     const referenciaCompleta = dataVerificacion.referencia;
     pedido.referencias = [referenciaCompleta];
+    // Pago encontrado (alcance o no): +1 recarga de la cuenta, el premio se gasta y +1 venta del paquete
+    anotarRecarga({ juego: 'freefire', cuenta: String(id), paquete: paqueteGsheet.diamantes, idPedido, premio: fiel.porcentaje, precioLista, precio: precioReal });
 
     if (dataVerificacion.insuficiente) {
       await registrarFallo(clavesLimite);

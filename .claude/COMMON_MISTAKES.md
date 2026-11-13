@@ -149,6 +149,15 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 
 ---
 
+## Premio de cliente fiel, Mis recargas y seguimiento manual (desde 2026-11-12)
+
+**Precio con premio**: lo decide SIEMPRE el servidor (_lib/fidelidad.js). La página solo muestra el catálogo que devolvió `accion=fidelidad` y manda la firma; si se cambia la regla del premio, cambia a la vez lo que ve la página y lo que se cobra (si no, el cliente paga de menos y sale "Pago insuficiente").
+**Roblox**: el premio va como `montoACobrar` SIN `codigoDescuento`. Si se mandara un código inventado ("FIDELIDAD"), al completar un pago Vercel intentaría anotar su uso en "Descuentos".
+**manuales.gs v3**: la columna "código descuento" ya NO es la última (después va "avisar al cliente"): leerla con `COL_CODIGO`, nunca con `COLUMNAS_PEDIDOS.length - 1`.
+**Comprobante**: nunca agregar el código de Roblox ni datos de la cuenta manual (correo/contraseña) a la imagen: se comparte por WhatsApp.
+
+---
+
 ## Apps Script sin TOKEN_VERCEL: validador y Mobile Legends (2026-11-12)
 
 **Síntoma**: Free Fire siempre decía "⚠️ No pudimos verificar tu ID" (con cualquier ID, real o no); Blood Strike y Mobile Legends dejaban seguir sin comprobar nada.

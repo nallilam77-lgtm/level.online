@@ -1,0 +1,47 @@
+/* Tarjeta "Instala Level Up en tu teléfono" del inicio (js/instalar-app.js) */
+.instalar-app {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
+  /* 16 px de margen a cada lado en el teléfono */
+  width: min(640px, calc(100% - 32px));
+  box-sizing: border-box;
+  margin: 0 auto 32px;
+  padding: 16px;
+  background: var(--surface);
+  backdrop-filter: blur(var(--glass-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 12px));
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-card, 16px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  font-family: 'Montserrat', sans-serif;
+  text-align: left;
+}
+.instalar-app[hidden] { display: none; }
+.instalar-app__icono { flex-shrink: 0; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: rgba(var(--accent-cyan-rgb), 0.15); color: var(--accent-cyan); }
+.instalar-app__icono svg { width: 24px; height: 24px; }
+.instalar-app__texto { flex: 1 1 200px; display: grid; gap: 3px; font-size: 13px; line-height: 1.4; color: var(--text-muted); }
+.instalar-app__texto strong { color: var(--text-main); font-size: 14px; }
+.instalar-app__texto b { color: var(--text-main); }
+.instalar-app__botones { display: flex; gap: 8px; margin-left: auto; }
+.instalar-app__btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-main);
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, filter 0.2s ease;
+}
+.instalar-app__btn:hover, .instalar-app__btn:focus-visible { border-color: var(--accent-cyan); }
+.instalar-app__btn--principal { background: var(--cta-gradient); color: var(--on-cta); border-color: transparent; }
+.instalar-app__btn--principal:hover, .instalar-app__btn--principal:focus-visible { filter: brightness(1.1); }
+@media (max-width: 420px) {
+  .instalar-app__botones { width: 100%; }
+  .instalar-app__btn { flex: 1; }
+}

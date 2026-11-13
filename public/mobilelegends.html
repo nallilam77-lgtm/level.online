@@ -10,6 +10,7 @@
   <title>Level Up - Recargas Mobile Legends</title>
   <meta name="description" content="Recarga diamantes de Mobile Legends con Pago Móvil y recíbelos en minutos. Solo necesitas tu ID y tu Zona ID. 1,5 % menos con código de creador.">
   <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="/manifest.webmanifest">
   <!-- Vista previa al compartir el enlace (WhatsApp, Facebook, Telegram, X) -->
   <link rel="canonical" href="https://www.levelupstore.online/mobilelegends.html">
   <meta property="og:type" content="website">
@@ -33,6 +34,9 @@
   <script src="/js/lector-referencia.js" defer></script>
   <!-- Pago por completar: lo recuerda en este equipo, lee la captura y arma el WhatsApp -->
   <script src="/js/pago-pendiente.js?v=1" defer></script>
+  <!-- Historial del equipo (repetir y comprobante) y premio de cliente fiel -->
+  <script src="/js/mis-recargas.js?v=1" defer></script>
+  <script src="/js/fidelidad.js?v=1" defer></script>
   <script src="/js/descuento.js" defer></script>
   <script src="/js/ultimo-id.js" defer></script>
   <script src="/js/datos-pago.js" defer></script>
@@ -661,6 +665,8 @@
   <link rel="stylesheet" href="css/aviso-codigo.css?v=3">
   <link rel="stylesheet" href="css/whatsapp-cliente.css?v=1">
   <link rel="stylesheet" href="css/pago-pendiente.css?v=1">
+  <link rel="stylesheet" href="css/mis-recargas.css?v=1">
+  <link rel="stylesheet" href="css/fidelidad.css?v=1">
   <link rel="stylesheet" href="css/canal.css?v=1">
 </head>
 <body class="pagina-juego">
@@ -734,6 +740,7 @@
       <h2 class="modal-titulo" style="font-size: 20px;">¡VICTORIA! RECARGA EXITOSA</h2>
       <p style="color: var(--text-main); font-size: 13px; margin-top: 8px;">Tu pedido ha sido procesado y los diamantes llegarán a tu cuenta en unos minutos.</p>
       <div class="tx-caja success" id="codigoTxnExito">TXN-XXXXXX</div>
+      <button type="button" class="btn-comprobante" data-comprobante-ultimo><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>GUARDAR COMPROBANTE</button>
       <button type="button" class="btn-confirmar" style="background: var(--game-gradient); color: var(--on-cta); margin-top: 10px; margin-bottom: 12px; width: 100%; box-shadow: 0 0 20px rgba(var(--game-accent-rgb), 0.4); font-size: 14px;" onclick="abrirRuletaAutomatica()">🎁 IR A LA RULETA DE LA SUERTE</button>
       <!-- Invitación al canal de WhatsApp (js/canal.js) -->
       <div data-canal="exito"></div>
@@ -1045,7 +1052,7 @@
 
         catalogoSinDescuento = data.catalogo;
         // Si el cliente ya aplicó un código antes de que cargara el catálogo, se mantiene
-        if (!descuento.codigo()) renderizarCatalogo(catalogoSinDescuento);
+        if (!descuento.codigo()) renderizarCatalogo(Fidelidad.catalogo() || catalogoSinDescuento);
 
       } catch (e) {
         container.innerHTML = '<div class="catalog-message error">Error de conexión al cargar el catálogo.</div>';
@@ -1134,9 +1141,23 @@
     let catalogoSinDescuento = null;
     const descuento = CodigoDescuento.iniciar({
       juego: 'mobilelegends',
-      alAplicar: (catalogo) => renderizarCatalogo(catalogo),
-      alQuitar: () => { if (catalogoSinDescuento) renderizarCatalogo(catalogoSinDescuento); },
+      alAplicar: (catalogo) => { renderizarCatalogo(catalogo); Fidelidad.mostrar(); },
+      // Sin código vuelven los precios con el premio de cliente fiel (si lo tiene) o los normales
+      alQuitar: () => { const base = Fidelidad.catalogo() || catalogoSinDescuento; if (base) renderizarCatalogo(base); Fidelidad.mostrar(); },
     });
+    // Premio de cliente fiel (js/fidelidad.js): se consulta al confirmar la cuenta
+    Fidelidad.iniciar({ juego: 'mobilelegends', codigoActivo: () => !!descuento.codigo(),
+      dibujar: (catalogo) => { const base = catalogo || catalogoSinDescuento; if (base) renderizarCatalogo(base); } });
+    // "Mis recargas" de este equipo (js/mis-recargas.js): repetir deja la cuenta y el paquete listos
+    MisRecargas.iniciar({ juego: 'mobilelegends', nombreJuego: 'Mobile Legends', repetir: async (r) => {
+        const input = document.getElementById('inputPlayerId');
+        document.getElementById('inputZona').value = r.zona; input.value = r.idJugador; input.dispatchEvent(new Event('input'));
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await verificarCuenta();
+        await MisRecargas.esperarCatalogo();
+        const paquete = (window.catalogoGlobal || []).find((p) => nombrePaquete(p) === r.paquete);
+        if (paquete) marcarPaquete(paquete); else mostrarBurbuja('Ese paquete ya no está disponible: elige otro.', 'var(--warning)');
+      } });
 
     function seleccionarProducto(cardElement, paquete) {
       document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
@@ -1310,12 +1331,13 @@
       } finally { btnVerify.disabled = false; btnVerify.innerText = "CONFIRMAR MI ID"; verificarEstadoDesbloqueo(); }
       // Se recuerda en este dispositivo para la próxima recarga (js/ultimo-id.js)
       if (idVerificado) window.UltimoId?.guardar('mobilelegends', { id: idInput, zona: zonaInput, nombre: nombreJugadorVerificado === 'Sin verificar' ? '' : nombreJugadorVerificado });
+      if (idVerificado) Fidelidad.consultar({ id: idInput, zona: zonaInput });
       return idVerificado;
     };
     document.getElementById('btnVerifyId').addEventListener('click', verificarCuenta);
 
     // Cambiar el ID o la Zona obliga a confirmar de nuevo
-    const reiniciarVerificacion = () => { idVerificado = false; nombreJugadorVerificado = ""; document.getElementById('idStatus').style.display = 'none'; verificarEstadoDesbloqueo(); };
+    const reiniciarVerificacion = () => { idVerificado = false; nombreJugadorVerificado = ""; document.getElementById('idStatus').style.display = 'none'; Fidelidad.limpiar(); verificarEstadoDesbloqueo(); };
     // Si pegan "123456789 (1234)" en el campo del ID, se reparte entre ID y Zona
     document.getElementById('inputPlayerId').addEventListener('input', (e) => {
       const campo = e.target;
@@ -1602,6 +1624,8 @@
                 urlImagen: captureUrl,
                 // Solo el código: el servidor recalcula el descuento y el precio a cobrar
                 ...(descuento.codigo() && { codigoDescuento: descuento.codigo() }),
+                // Premio de cliente fiel que vio el cliente (firmado por el servidor; manda Firestore)
+                premioFidelidad: Fidelidad.firma(),
                 // WhatsApp opcional ("+58…" o ""): va a la hoja con el pedido
                 telefono: window.WhatsappCliente?.valor() || ''
             })
@@ -1613,6 +1637,7 @@
              if(resultado.message && resultado.message.toLowerCase().includes("fallo técnico")) {
                 document.getElementById('pantallaProcesando').style.display = 'none';
                 document.getElementById('codigoTxnProceso').textContent = globalTxnCode;
+                MisRecargas.guardar({ paquete: nombreDelPaquete, cuenta: cuentaCliente, idJugador: playerId, zona: zonaJugador, precio: datosComplemento ? (PagoPendiente.leer()?.precio || '') : (paqueteSeleccionado ? paqueteSeleccionado.precio : ''), referencia: referenciaUsuario, txn: globalTxnCode, repetible: !datosComplemento, estado: 'en_revision' });
                 document.getElementById('modalEnProceso').style.display = 'flex';
                 isProcessing = false; btnConfirmar.disabled = false;
                 if (chatBtnFlotante) chatBtnFlotante.classList.remove('disabled');
@@ -1675,6 +1700,8 @@
           localStorage.setItem('intentos_recarga', '0');
           localStorage.setItem('tiempo_bloqueo', '0');
           // Pago completado: ya no hay nada pendiente en este equipo
+          // Historial de este equipo: "Mis recargas" (repetir y comprobante)
+          MisRecargas.guardar({ paquete: nombreDelPaquete, cuenta: cuentaCliente, idJugador: playerId, zona: zonaJugador, precio: datosComplemento ? (PagoPendiente.leer()?.precio || '') : (paqueteSeleccionado ? paqueteSeleccionado.precio : ''), referencia: referenciaUsuario, txn: globalTxnCode, repetible: !datosComplemento });
           if (datosComplemento) PagoPendiente.borrar();
 
           textoElem.innerHTML = "🛡️ Pago confirmado: abriendo portal a la Tierra del Amanecer...";

@@ -22,14 +22,16 @@ const MAX_CLAVES_EN_MEMORIA = 10000;
 // Límites de USO (permitirUso: cuenta cada llamada, no solo los fallos), por IP en 30 minutos.
 // Holgados: una compra normal sube 1-3 comprobantes y una conversación usa 10-20 mensajes.
 // "subida": comprobantes a Drive · "chat": mensajes a Gemini · "consulta": consultar órdenes por ID.
-const MAX_FALLOS = { ip: 15, jugador: 5, descuento: 10, panel: 8, panelcodigo: 20, subida: 30, chat: 60, consulta: 30 };
+// "fidelidad": consultas del premio de cliente fiel · "estado": seguimiento de pedidos manuales (cada 30 s).
+const MAX_FALLOS = { ip: 15, jugador: 5, descuento: 10, panel: 8, panelcodigo: 20, subida: 30, chat: 60, consulta: 30, fidelidad: 60, estado: 150 };
 
 let promesaDb = null;
 let avisoSinFirestore = false;
 
 // firebase-admin pesa: se importa solo si hay credenciales y solo la primera vez que se usa,
 // para no alargar el arranque en frío de las funciones.
-function obtenerDb() {
+// También la usa _lib/fidelidad.js (premio de cliente fiel y paquetes más vendidos)
+export function obtenerDb() {
   const cuenta = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!cuenta) {
     if (!avisoSinFirestore) {
@@ -56,7 +58,7 @@ function obtenerDb() {
   return promesaDb;
 }
 
-function conTiempoLimite(promesa) {
+export function conTiempoLimite(promesa) {
   let temporizador;
   const limite = new Promise((_, rechazar) => {
     temporizador = setTimeout(() => rechazar(new Error(`Firestore tardó más de ${TIEMPO_FIRESTORE_MS} ms`)), TIEMPO_FIRESTORE_MS);

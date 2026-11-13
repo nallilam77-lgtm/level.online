@@ -1,0 +1,32 @@
+/* Premio de cliente fiel (js/fidelidad.js): aviso bajo el estado del ID */
+
+.fidelidad {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-glass);
+  border-radius: 12px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.fidelidad[hidden] { display: none; }
+.fidelidad strong { color: var(--text-main); }
+
+.fidelidad--premio {
+  border-style: solid;
+  border-color: var(--game-accent);
+  background: rgba(var(--game-accent-rgb), 0.12);
+  color: var(--text-main);
+}
+.fidelidad--premio strong { color: var(--game-text); }
+.fidelidad__icono { flex-shrink: 0; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--game-gradient); color: var(--on-game-cta); }
+.fidelidad__icono svg { width: 17px; height: 17px; }
+
+.fidelidad__puntos { flex-shrink: 0; display: flex; gap: 4px; }
+.fidelidad__punto { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--border-glass); }
+.fidelidad__punto--lleno { background: var(--game-accent); border-color: var(--game-accent); }
+.fidelidad__punto--premio { border-color: var(--game-accent); border-style: dashed; }

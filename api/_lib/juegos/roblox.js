@@ -6,7 +6,8 @@ import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
-import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
+import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento, precioConDescuento } from '../descuentos.js';
+import { porcentajePremio, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { limpiarMontoVES } from '../recarga-comun.js';
 import { catalogo as catalogoCentralOne, datosParaPedido, crearPedidoCentralOne, esperarCodigo } from '../centralone.js';
 
@@ -105,14 +106,24 @@ async function precios(req, res) {
     const datos = await obtenerPreciosRoblox(scriptUrl);
     cabecerasCachePrecios(res);
     // Los product_id de Central One (datos.productos) nunca van al navegador
-    return res.status(200).json({ status: 'success', precios: datos.precios, stock: await estadoStock(datos) });
+    const stock = await estadoStock(datos);
+    // "⭐ Más vendido" / "💰 Mejor precio" por producto (_lib/fidelidad.js)
+    const destacados = Object.fromEntries((await conDestacados('roblox', Object.entries(datos.precios)
+      .map(([producto, precio]) => ({ producto, precio, ...(stock[producto] && { stock: stock[producto] }) }))))
+      .filter((p) => p.etiqueta).map((p) => [p.producto, p.etiqueta]));
+    return res.status(200).json({ status: 'success', precios: datos.precios, stock, destacados });
   } catch (error) {
     console.error('Error al obtener precios de Roblox:', error.message);
     return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
   }
 }
 
-export const acciones = { precios, descuento: crearAccionDescuento('Roblox', catalogoRoblox) };
+// Usuario de Roblox: sin distinguir mayúsculas (es la misma cuenta)
+const cuentaRoblox = (b) => (/^[A-Za-z0-9_]{2,30}$/.test(String(b.id ?? '')) ? String(b.id).toLowerCase() : null);
+export const acciones = {
+  precios, descuento: crearAccionDescuento('Roblox', catalogoRoblox),
+  fidelidad: crearAccionFidelidad('roblox', async () => conDestacados('roblox', await catalogoRoblox()), cuentaRoblox),
+};
 
 // Solo los campos que usa la página, nunca la respuesta cruda de Apps Script.
 // clave: la del pago por completar; solo se devuelve si roblox.gs guardó el pedido en "por_completar".
@@ -178,8 +189,23 @@ export async function recargar(req, res) {
     // sobre el precio de la hoja. El Apps Script solo acepta un monto menor que su precio.
     let desc = null;
     let montoACobrar;
+    let precioLista = 0;
+    // Premio de cliente fiel (_lib/fidelidad.js): solo sin código. roblox.gs acepta montoACobrar sin código.
+    let premio = 0;
+    if (!req.body?.codigoDescuento) {
+      premio = await porcentajePremio({ juego: 'roblox', cuenta: usuario.toLowerCase(), firma: req.body?.premioFidelidad });
+      if (premio) {
+        try {
+          const { precios } = await obtenerPreciosRoblox(scriptUrl);
+          if (Object.hasOwn(precios, String(producto))) precioLista = limpiarMontoVES(precios[String(producto)]);
+        } catch (error) {
+          console.error('Roblox: no se pudieron leer los precios para el premio de cliente fiel:', error.message);
+        }
+        const conPremio = precioLista > 0 ? precioConDescuento(precioLista, { tipo: 'porcentaje', valor: premio }) : 0;
+        if (conPremio > 0 && conPremio < precioLista) montoACobrar = conPremio; else premio = 0;
+      }
+    }
     if (req.body?.codigoDescuento) {
-      let precioLista = 0;
       try {
         const { precios } = await obtenerPreciosRoblox(scriptUrl);
         if (Object.hasOwn(precios, String(producto))) precioLista = limpiarMontoVES(precios[String(producto)]);
@@ -203,7 +229,8 @@ export async function recargar(req, res) {
     const payload = {
       tipo: 'compra', referencia: String(referencia), user: usuario, producto: String(producto),
       url_capture: textoParaHoja(url_capture || 'Sin comprobante'), idPedido, claveHash: huella(clave),
-      ...(desc && { montoACobrar, codigoDescuento: desc.codigo }),
+      ...(montoACobrar !== undefined && { montoACobrar }),
+      ...(desc && { codigoDescuento: desc.codigo }),
       // WhatsApp opcional ("+58…" o vacío): roblox.gs lo anota en "Exitosas", "por_completar" y "pedidos_api"
       telefono: telefonoCliente(req.body?.telefono),
       // Sin códigos guardados, roblox.gs reserva el pago y responde "comprar" (solo si hay llave)
@@ -222,6 +249,11 @@ export async function recargar(req, res) {
       return res.status(202).json({ status: 'error', message: 'Fallo técnico momentáneo: tu compra quedó en proceso. Si en 5 minutos no la recibes, escríbenos por WhatsApp.' });
     }
     if (data?.status === 'comprar') data = await comprarEnCentralOne({ scriptUrl, idPedido, productId: data.productId, usuario, inicio });
+
+    // Pago encontrado (entregado o insuficiente): +1 compra de la cuenta, el premio se gasta y +1 venta del producto
+    if (data?.status === 'success' || data?.insuficiente) {
+      anotarRecarga({ juego: 'roblox', cuenta: usuario.toLowerCase(), paquete: String(producto), idPedido, premio, precioLista, precio: montoACobrar ?? precioLista });
+    }
 
     // Una compra rechazada (pago no encontrado, ya usado, insuficiente...) cuenta como intento fallido.
     // "Fallo técnico" no cuenta: el pago sí existía y quedó en proceso. Tampoco lo que falló en Central One.

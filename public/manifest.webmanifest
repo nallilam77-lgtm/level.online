@@ -1,0 +1,24 @@
+{
+  "name": "Level Up - Recargas",
+  "short_name": "Level Up",
+  "description": "Recargas de Free Fire, Roblox, Blood Strike, Mobile Legends y más con Pago Móvil.",
+  "lang": "es-VE",
+  "id": "/",
+  "start_url": "/?app=1",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/img/app/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/img/app/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/img/app/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Free Fire", "url": "/freefire.html", "icons": [{ "src": "/img/app/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Roblox", "url": "/roblox.html", "icons": [{ "src": "/img/app/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Mobile Legends", "url": "/mobilelegends.html", "icons": [{ "src": "/img/app/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Blood Strike", "url": "/bloodstrike.html", "icons": [{ "src": "/img/app/icono-192.png", "sizes": "192x192" }] }
+  ]
+}

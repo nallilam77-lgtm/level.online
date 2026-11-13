@@ -27,7 +27,10 @@
   <meta name="twitter:card" content="summary_large_image">
   
   <link rel="icon" type="image/png" href="logo.png">
-  <link rel="apple-touch-icon" href="logo.png">
+  <link rel="apple-touch-icon" href="img/app/apple-touch-icon.png">
+  <!-- Instalable como app (manifest + sw.js, registrado por js/instalar-app.js) -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="css/instalar-app.css?v=1">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -551,6 +554,7 @@
   <link rel="stylesheet" href="css/pie-legal.css">
   <!-- Pestaña abierta hace días: se actualiza sola al volver (js/version-nueva.js) -->
   <script src="/js/version-nueva.js?v=1" defer></script>
+  <script src="/js/instalar-app.js?v=1" defer></script>
 </head>
 <body>
 
@@ -657,6 +661,9 @@
         <button type="button" class="btn-tutorial" onclick="abrirTutorial()"><span aria-hidden="true">▶</span> ¿Cómo recargar?</button>
       </div>
     </header>
+
+    <!-- "Instala Level Up en tu teléfono": solo aparece si el teléfono lo permite (js/instalar-app.js) -->
+    <div data-instalar-app hidden></div>
 
     <!-- SECCIÓN: CONSULTAR ESTADO DE ÓRDENES -->
     <section class="consulta-section animate-up delay-1">

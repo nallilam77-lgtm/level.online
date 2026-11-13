@@ -10,6 +10,7 @@ import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } fr
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
+import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con respuesta incierta:
@@ -93,7 +94,7 @@ async function precios(req, res) {
     // Lectura sin efectos secundarios (20 s con 1 reintento). Con copia en caché el cliente no espera.
     const { datos } = await conCache(CLAVE_CACHE_PRECIOS, () => leerPrecios(URL_GOOGLE_SCRIPT), { esValido: catalogoValido });
     cabecerasCachePrecios(res);
-    return res.status(200).json({ ...datos, catalogo: datos.catalogo.map(sinProducto) });
+    return res.status(200).json({ ...datos, catalogo: await conDestacados('mobilelegends', datos.catalogo.map(sinProducto)) });
   } catch (error) {
     console.error("Error al obtener precios de Mobile Legends:", error.message);
     return res.status(503).json({ status: "error", message: "Error interno al conectar con Google Sheets" });
@@ -156,7 +157,13 @@ async function catalogoMobileLegends() {
   return datos.catalogo.map(sinProducto);
 }
 
-export const acciones = { precios, verificar, descuento: crearAccionDescuento(NOMBRE_JUEGO, catalogoMobileLegends) };
+const catalogoDestacado = async () => conDestacados('mobilelegends', await catalogoMobileLegends());
+// La cuenta de Mobile Legends es ID + Zona ID
+const cuentaML = (b) => (ID_VALIDO.test(String(b.id ?? '')) && ZONA_VALIDA.test(String(b.zona ?? '')) ? `${b.id}:${b.zona}` : null);
+export const acciones = {
+  precios, verificar, descuento: crearAccionDescuento(NOMBRE_JUEGO, catalogoDestacado),
+  fidelidad: crearAccionFidelidad('mobilelegends', catalogoDestacado, cuentaML),
+};
 
 // =========================================================================
 // RECARGA (api/recargar.js)
@@ -373,7 +380,10 @@ export async function recargar(req, res) {
     // (pudo desactivarse) antes de tocar el pago
     const descuento = await aplicarDescuentoARecarga(req.body?.codigoDescuento, precioLista);
     if (descuento.error) return res.status(descuento.error.codigo).json(descuento.error.cuerpo);
-    const { desc, precio: precioReal } = descuento;
+    const { desc } = descuento;
+    // Premio de cliente fiel (_lib/fidelidad.js): solo sin código; la página manda la firma del que mostró
+    const fiel = await premioParaRecarga({ juego: 'mobilelegends', cuenta: `${id}:${zona}`, firma: req.body?.premioFidelidad, desc, precio: descuento.precio });
+    const precioReal = fiel.precio;
 
     // ==========================================
     // FASE 2: BUSCAR PAGO Y VERIFICAR
@@ -409,6 +419,8 @@ export async function recargar(req, res) {
     }
     const referenciaCompleta = dataVerificacion.referencia;
     pedido.referencias = [referenciaCompleta];
+    // Pago encontrado (alcance o no): +1 recarga de la cuenta, el premio se gasta y +1 venta del paquete
+    anotarRecarga({ juego: 'mobilelegends', cuenta: `${id}:${zona}`, paquete: paqueteGsheet.diamantes, idPedido, premio: fiel.porcentaje, precioLista, precio: precioReal });
 
     if (dataVerificacion.insuficiente) {
       await registrarFallo(clavesLimite);

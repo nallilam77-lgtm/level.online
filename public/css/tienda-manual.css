@@ -120,6 +120,12 @@ body.modal-abierto { overflow: hidden; }
 .product-card:hover, .product-card:focus-visible { border-color: var(--game-accent); transform: translateY(-3px); box-shadow: var(--shadow-lg), var(--shadow-glow-hover); outline: none; }
 .product-card.selected { border-color: var(--game-accent); background: linear-gradient(160deg, rgba(var(--game-accent-rgb), 0.18), rgba(var(--game-accent-rgb), 0.04)); box-shadow: var(--shadow-lg), 0 0 20px rgba(var(--game-accent-rgb), 0.4); }
 .product-card.full-width { grid-column: span 2; }
+/* "⭐ Más vendido" / "💰 Mejor precio" */
+.product-card.has-badge { position: relative; padding-top: 32px; }
+.product-badge { position: absolute; top: 0; left: 0; padding: 4px 9px; border-radius: var(--radius-card) 0 10px 0; background: var(--game-gradient); color: var(--on-game-cta); font-family: 'Montserrat', sans-serif; font-size: 10px; font-weight: 800; letter-spacing: 0.3px; text-transform: uppercase; }
+/* Aviso de seguimiento en la ventana de pedido recibido */
+.nota-seguimiento { margin-bottom: 12px; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+.nota-seguimiento strong { color: var(--text-main); }
 .product-card.skeleton { cursor: default; min-height: 120px; background: linear-gradient(90deg, rgba(30, 41, 59, 0.5), rgba(51, 65, 85, 0.5), rgba(30, 41, 59, 0.5)); }
 .paquete-icono { width: 30px; height: 30px; }
 .paquete-cantidad { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 22px; line-height: 1.1; color: var(--text-main); }
