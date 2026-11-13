@@ -30,7 +30,6 @@ let avisoSinFirestore = false;
 
 // firebase-admin pesa: se importa solo si hay credenciales y solo la primera vez que se usa,
 // para no alargar el arranque en frío de las funciones.
-// También la usa _lib/fidelidad.js (premio de cliente fiel y paquetes más vendidos)
 export function obtenerDb() {
   const cuenta = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!cuenta) {

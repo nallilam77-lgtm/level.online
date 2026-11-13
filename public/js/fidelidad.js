@@ -53,7 +53,7 @@
     const hechas = Math.max(0, cada - 1 - (Number(estado.faltan) || 0));
     const puntos = Array.from({ length: cada }, (_, i) => `<span class="fidelidad__punto${i < hechas ? ' fidelidad__punto--lleno' : ''}${i === cada - 1 ? ' fidelidad__punto--premio' : ''}"></span>`).join('');
     el.className = 'fidelidad';
-    el.innerHTML = `<span class="fidelidad__puntos" aria-hidden="true">${puntos}</span><span>Cliente fiel: llevas <strong>${hechas} de ${cada - 1}</strong> recargas. La n.º ${cada} lleva <strong>1,5 % de descuento</strong>.</span>`;
+    el.innerHTML = `<span class="fidelidad__puntos" aria-hidden="true">${puntos}</span><span>Cliente fiel: llevas <strong>${hechas} de ${cada - 1}</strong> recargas. La n.º&nbsp;${cada} lleva <strong>1,5&nbsp;% de descuento</strong>.</span>`;
   }
 
   async function consultar(cuenta) {

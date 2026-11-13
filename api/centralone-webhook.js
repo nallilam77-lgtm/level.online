@@ -3,6 +3,7 @@ import { llamarScript, leerCuerpoCrudo } from './_lib/externo.js';
 import { firmaCentralOneValida, primerCodigo, leerCodigos } from './_lib/centralone.js';
 import { registrarUsoDescuento } from './_lib/descuentos.js';
 import { limpiarMontoVES } from './_lib/recarga-comun.js';
+import { actualizarEstado } from './_lib/historial.js';
 
 // Webhook de Central One: POST https://levelupstore.online/api/centralone-webhook
 // (registrar en el portal de Central One: Integración → Webhooks, con los eventos de cierre de pedido;
@@ -48,6 +49,12 @@ const PEDIDO_BLOOD = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 // Estados con los que un pedido ya terminó (para eventos de pedido con otro nombre, p. ej. order.completed)
 const ESTADOS_FINALES = new Set(['completed', 'delivered', 'failed', 'cancelled', 'partially_completed', 'partially_delivered', 'refunded']);
 const AL_SCRIPT = { tiempoMs: 8500, intentoMs: 8500 };
+// Estado de Central One -> estado del perfil del cliente (_lib/historial.js)
+const ESTADO_EN_PERFIL = {
+  completed: 'completado', delivered: 'completado',
+  failed: 'en_revision', cancelled: 'en_revision', partially_completed: 'en_revision', partially_delivered: 'en_revision',
+  refunded: 'reembolsado',
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false });
@@ -93,6 +100,11 @@ export default async function handler(req, res) {
   if (!eventoDeCierre || !ORDEN_VALIDA.test(ordenCentralOne) || !ESTADO_VALIDO.test(estado)) {
     return res.status(200).json({ ok: true, ignorado: true });
   }
+
+  // Perfil del cliente con sesión (Supabase): el estado le llega en vivo. La fila usa el idPedido sin el
+  // prefijo de la Idempotency-Key (ff-/ml-, y sin el -1/-2 de un paquete partido en dos pedidos)
+  const idDelPerfil = PEDIDO_ROBLOX.test(idPedido) ? idPedido : idPedido.replace(/^(ff|ml)-/, '').replace(/-[1-9]$/, '');
+  actualizarEstado(idDelPerfil, ESTADO_EN_PERFIL[estado] || '');
 
   if (PEDIDO_ROBLOX.test(idPedido)) return avisoRoblox(res, { aviso, evento, ordenCentralOne, idPedido });
 

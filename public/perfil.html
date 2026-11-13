@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque, animaciones ni transiciones (css/ligero.css)
+    (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css?v=3'; document.head.appendChild(l); } })();
+  </script>
+  <meta name="description" content="Tu perfil de Level Up: tus recargas con fecha, hora y estado en vivo, y tu avance de cliente fiel.">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0f172a">
+  <title>Mi perfil - Level Up</title>
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="apple-touch-icon" href="logo.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/paginas-legales.css">
+  <link rel="stylesheet" href="css/pie-legal.css">
+  <link rel="stylesheet" href="css/sesion.css?v=1">
+  <link rel="stylesheet" href="css/perfil.css?v=1">
+  <script src="/js/sesion.js?v=1" defer></script>
+  <script src="/js/perfil.js?v=1" defer></script>
+</head>
+<body>
+
+  <div class="barra-superior">
+    <a href="index.html" class="nav-logo">
+      <img src="logo-chico.png" alt="Logo Level Up" width="36" height="35"> LEVEL<span>UP</span>
+    </a>
+    <a href="index.html" class="perfil-volver" id="enlaceVolver">◄ Volver</a>
+  </div>
+
+  <main>
+    <header class="animate-up">
+      <h1 class="titulo-principal">Mi perfil</h1>
+      <p class="subtitulo">Tus recargas con fecha, hora y estado en vivo.</p>
+    </header>
+
+    <div class="perfil-contenedor">
+
+      <!-- Cargando -->
+      <section class="panel-perfil perfil-cargando" id="panelCargando" aria-live="polite">
+        <span class="perfil-giro" aria-hidden="true"></span> Cargando tu perfil...
+      </section>
+
+      <!-- Sin sesión -->
+      <section class="panel-perfil" id="panelEntrar" hidden aria-labelledby="tituloEntrar">
+        <h2 id="tituloEntrar">Inicia sesión</h2>
+        <p>Con tu cuenta de Google, cada recarga que hagas queda guardada aquí con su <strong>ID, fecha, hora y estado en vivo</strong>, y ves cuánto te falta para tu premio de cliente fiel.</p>
+        <ul class="perfil-beneficios">
+          <li>Sin contraseñas nuevas: un toque con Google.</li>
+          <li>Iniciar sesión es opcional: puedes seguir comprando sin cuenta.</li>
+          <li>Solo guardamos tu nombre, tu correo y tus recargas. Nunca datos de tu banco ni contraseñas de tus juegos.</li>
+        </ul>
+        <button type="button" class="btn-google" id="btnGoogle">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="g-azul" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.7z"/><path class="g-verde" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24z"/><path class="g-amarillo" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6H1.3a12 12 0 0 0 0 10.8l4-3.1z"/><path class="g-rojo" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9z"/></svg>
+          Continuar con Google
+        </button>
+        <p class="perfil-mensaje" id="mensajeEntrar" role="alert"></p>
+      </section>
+
+      <!-- Con sesión -->
+      <section class="panel-perfil" id="panelPerfil" hidden aria-label="Tu cuenta">
+        <div class="perfil-cabecera">
+          <img id="fotoPerfil" class="perfil-foto" src="logo-chico.png" alt="" width="64" height="64" referrerpolicy="no-referrer">
+          <div class="perfil-datos">
+            <strong id="nombrePerfil">Cliente Level Up</strong>
+            <span id="correoPerfil"></span>
+          </div>
+        </div>
+        <div class="perfil-resumen">
+          <div><strong id="totalRecargas">0</strong><span>recargas</span></div>
+          <div><strong id="totalEntregadas">0</strong><span>entregadas</span></div>
+        </div>
+        <button type="button" class="btn-salir" id="btnSalir">Cerrar sesión</button>
+      </section>
+
+      <section class="panel-perfil" id="panelFiel" hidden aria-labelledby="tituloFiel">
+        <h2 id="tituloFiel">Cliente fiel</h2>
+        <p>Cada ID tiene su conteo: la recarga n.º&nbsp;6 lleva <strong>1,5&nbsp;% de descuento</strong> y el conteo vuelve a empezar.</p>
+        <ul class="lista-fiel" id="listaFiel"></ul>
+      </section>
+
+      <section class="panel-perfil" id="panelRecargas" hidden aria-labelledby="tituloRecargas">
+        <h2 id="tituloRecargas">Mis recargas <span class="punto-vivo" aria-hidden="true"></span><span class="texto-vivo">en vivo</span></h2>
+        <p class="perfil-nota">Aparecen las recargas que hagas con la sesión iniciada. El estado cambia solo, sin recargar la página.</p>
+        <ul class="lista-recargas" id="listaRecargas" aria-live="polite"></ul>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="pie-legal">
+    <div class="pie-legal-enlaces" role="navigation" aria-label="Información legal">
+      <a href="terminos.html">Términos y Condiciones</a>
+      <a href="privacidad.html">Política de Privacidad</a>
+      <a href="reembolsos.html">Política de Reembolsos</a>
+    </div>
+    <p class="pie-legal-aviso">Level Up es un servicio de recarga independiente. No está afiliado, patrocinado ni respaldado por Garena (Free Fire), Roblox Corporation ni NetEase Games (Blood Strike). Todas las marcas y logotipos pertenecen a sus respectivos dueños.</p>
+    <p class="pie-legal-copy">&copy; 2026 <strong>Level Up</strong>. Todos los derechos reservados.</p>
+  </footer>
+</body>
+</html>

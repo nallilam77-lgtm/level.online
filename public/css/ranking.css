@@ -1,0 +1,59 @@
+/* Mejores clientes del día y de la semana (js/ranking.js) en inicio.
+   Usa las variables del :root de index.html (paleta Level Up, .claude/UI_RULES.md).
+   Oro, plata y bronce solo para el podio: van como variables aquí. */
+
+.ranking {
+  --oro: #facc15;
+  --plata: #cbd5e1;
+  --bronce: #f59e0b;
+  max-width: 550px; margin: 0 auto 48px; padding: 0 16px;
+}
+.ranking-caja {
+  padding: 24px; display: grid; gap: 20px;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.08), rgba(57, 255, 20, 0.04)), var(--surface);
+  backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-glass); border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+.ranking .categoria-titulo { margin: 0; }
+.ranking-sub { margin: -8px 0 0; text-align: center; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+
+/* Pestañas Hoy / Esta semana */
+.ranking-pestanas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px; border-radius: 999px; background: var(--bg-deep); }
+.ranking-pestanas button {
+  min-height: 44px; border: 0; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--text-muted);
+  font-family: 'Montserrat', sans-serif; font-size: 12px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+.ranking-pestanas button[aria-selected="true"] { background: var(--cta-gradient); color: var(--on-cta); }
+.ranking-pestanas button:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+
+/* Lista */
+.ranking-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ranking-fila {
+  display: grid; grid-template-columns: 32px 40px 1fr auto; align-items: center; gap: 12px;
+  min-height: 56px; padding: 8px 12px; border-radius: 12px;
+  background: var(--bg-deep); border: 1px solid var(--border-glass);
+}
+.ranking-puesto { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 16px; text-align: center; color: var(--text-muted); }
+.ranking-fila--1 { border-color: var(--oro); }
+.ranking-fila--1 .ranking-puesto { color: var(--oro); }
+.ranking-fila--2 .ranking-puesto { color: var(--plata); }
+.ranking-fila--3 .ranking-puesto { color: var(--bronce); }
+.ranking-foto {
+  width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--surface);
+  display: grid; place-items: center; color: var(--accent-cyan); font-family: 'Montserrat', sans-serif; font-weight: 900;
+}
+.ranking-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-main); font-weight: 600; font-size: 14px; }
+.ranking-cuenta { text-align: right; white-space: nowrap; }
+.ranking-cuenta strong { display: block; color: var(--accent-neon); font-family: 'Montserrat', sans-serif; font-size: 15px; font-weight: 900; }
+.ranking-cuenta small { color: var(--text-muted); font-size: 11px; }
+
+.ranking-vacio { margin: 0; padding: 24px 12px; text-align: center; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+.ranking-vacio a { color: var(--accent-cyan); font-weight: 600; }
+
+@media (min-width: 768px) {
+  .ranking { max-width: 750px; margin-bottom: 64px; }
+}
+.ligero .ranking-caja { box-shadow: none !important; }

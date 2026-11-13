@@ -1,0 +1,24 @@
+/* Botón "Entrar" / "Mi perfil" (js/sesion.js) en la barra de inicio y en cada tienda.
+   Toma el acento de la página: --game-accent en las tiendas, --primary en inicio y perfil. */
+
+.sesion-boton {
+  --sesion-acento: var(--game-accent, var(--primary));
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 14px 0 6px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border-glass);
+  color: var(--text-main); text-decoration: none;
+  font-family: 'Montserrat', sans-serif; font-size: 12px; font-weight: 800; letter-spacing: 0.3px;
+  white-space: nowrap; max-width: 160px;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.sesion-boton:hover, .sesion-boton:focus-visible { border-color: var(--sesion-acento); box-shadow: var(--shadow-glow); }
+.sesion-boton span { overflow: hidden; text-overflow: ellipsis; }
+.sesion-boton svg {
+  flex-shrink: 0; width: 30px; height: 30px; padding: 6px; border-radius: 50%;
+  color: var(--sesion-acento); background: var(--bg-deep);
+}
+.sesion-boton img { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
+.sesion-boton--activa { border-color: var(--sesion-acento); }
+
+/* Fila de arriba de las tiendas: "Volver al inicio" a la izquierda y la sesión a la derecha */
+.barra-sesion { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

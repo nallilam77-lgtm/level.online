@@ -3,6 +3,7 @@ User-agent: *
 Allow: /
 Disallow: /admin.html
 Disallow: /mantenimiento.html
+Disallow: /perfil.html
 Disallow: /api/
 
 Sitemap: https://www.levelupstore.online/sitemap.xml

@@ -35,8 +35,10 @@
   <!-- Pago por completar: lo recuerda en este equipo, lee la captura y arma el WhatsApp -->
   <script src="/js/pago-pendiente.js?v=1" defer></script>
   <!-- Historial del equipo (repetir y comprobante) y premio de cliente fiel -->
+  <!-- Inicio de sesión opcional con Google (perfil con historial en vivo) -->
+  <script src="/js/sesion.js?v=1" defer></script>
   <script src="/js/mis-recargas.js?v=1" defer></script>
-  <script src="/js/fidelidad.js?v=2" defer></script>
+  <script src="/js/fidelidad.js?v=3" defer></script>
   <script src="/js/descuento.js" defer></script>
   <script src="/js/ultimo-id.js" defer></script>
   <script src="/js/datos-pago.js" defer></script>
@@ -638,6 +640,7 @@
   <link rel="stylesheet" href="css/whatsapp-cliente.css?v=1">
   <link rel="stylesheet" href="css/pago-pendiente.css?v=1">
   <link rel="stylesheet" href="css/mis-recargas.css?v=1">
+  <link rel="stylesheet" href="css/sesion.css?v=1">
   <link rel="stylesheet" href="css/fidelidad.css?v=1">
   <link rel="stylesheet" href="css/canal.css?v=1">
 </head>
@@ -769,7 +772,7 @@
 
   <!-- Contenido Principal -->
   <div class="main-card anim-slide-up">
-    <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a></div>
+    <div class="top-nav barra-sesion anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a><a href="/perfil.html" data-sesion class="sesion-boton">Entrar</a></div>
     <header class="juego-hero anim-slide-up delay-1">
       <!-- Degradados de los íconos de paquetes y grupos (url(#…)) -->
       <svg class="degradados-svg" width="0" height="0" aria-hidden="true" focusable="false"><defs><linearGradient id="ffFuego" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--ff-fuego-claro)"/><stop offset=".45" style="stop-color: var(--game-accent-2)"/><stop offset="1" style="stop-color: var(--ff-fuego-oscuro)"/></linearGradient><linearGradient id="ffNoche" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: var(--ff-fuego-oscuro)"/><stop offset="1" style="stop-color: var(--ff-noche)"/></linearGradient></defs></svg>

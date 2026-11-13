@@ -1,8 +1,11 @@
 import { cargarJuego } from './_lib/juegos/index.js';
+import { conHistorial } from './_lib/historial.js';
 
 // Recargas: POST /api/recargar?juego=<freefire|bloodstrike|roblox> (maxDuration 180 en vercel.json).
 // Cada módulo de api/_lib/juegos/ valida sus datos y mantiene sus propios tiempos y reglas de
 // reintento (Roblox nunca reintenta la compra), así que el enrutador solo decide a quién llamar.
+// Con sesión iniciada (cabecera Authorization), conHistorial guarda la recarga en el perfil del cliente
+// después de responder (_lib/historial.js); sin sesión no hace nada.
 export default async function handler(req, res) {
   try {
     // COMPATIBILIDAD TEMPORAL: la página anterior de Free Fire llamaba a /api/recargar sin ?juego.
@@ -12,7 +15,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ status: "error", message: "Juego no válido." });
     }
 
-    return await juego.recargar(req, res);
+    const clave = String(req.query.juego ?? 'freefire');
+    return await conHistorial(req, res, clave, () => juego.recargar(req, res));
   } catch (error) {
     // Fallo al cargar el módulo del juego (cada recarga maneja sus propios errores)
     console.error(`Error en api/recargar (${req.query.juego}):`, error.message);

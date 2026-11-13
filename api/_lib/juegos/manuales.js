@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo, permitirUso } from '../limitador.js';
 import { anotarRecarga, conDestacados } from '../fidelidad.js';
+import { actualizarEstado } from '../historial.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
@@ -150,6 +151,8 @@ async function estado(req, res) {
       () => llamarScript(scriptUrl, { accion: 'estado_pedido', juego, idPedido }, LECTURA_APPS_SCRIPT),
       { frescoMs: 20000, respaldoMs: 0, esValido: (d) => d?.status === 'success' });
     const valor = String(datos.estado || '');
+    // Perfil del cliente con sesión (Supabase): el estado nuevo le llega en vivo
+    if (datos.encontrado && ESTADOS_PEDIDO.includes(valor)) actualizarEstado(idPedido, valor);
     return res.status(200).json({ status: 'success', estado: datos.encontrado && ESTADOS_PEDIDO.includes(valor) ? valor : 'desconocido' });
   } catch (error) {
     console.error(`Manuales: no se pudo leer el estado del pedido (${juego}):`, error.message);

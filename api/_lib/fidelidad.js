@@ -1,24 +1,29 @@
 // PREMIO DE CLIENTE FIEL y PAQUETES DESTACADOS (tiendas automáticas: Free Fire, Blood Strike,
-// Mobile Legends y Roblox). Todo vive en Firestore (la misma cuenta que el limitador,
-// FIREBASE_SERVICE_ACCOUNT): sin esa variable no hay premio ni "Más vendido" y todo sigue como antes.
+// Mobile Legends y Roblox). Todo vive en Supabase (desde 2026-11-13; antes Firestore): tablas y funciones
+// en supabase/levelup.sql, acceso en _lib/supabase.js. Sin SUPABASE_URL y SUPABASE_SECRET_KEY no hay
+// premio ni "Más vendido" y todo sigue como antes.
 //
 // Premio: la recarga número RECARGAS_POR_PREMIO (6.ª, 12.ª, 18.ª...) de la misma cuenta (ID) en el mismo
-// juego lleva PREMIO % de descuento (fijo). Colección "fidelidad", un documento por juego + cuenta
-// (la cuenta no se guarda en claro): { juego, recargas, premio, actualizado }.
+// juego lleva PREMIO % de descuento (fijo). Tabla "fidelidad", una fila por juego + cuenta (la cuenta
+// no se guarda en claro: huella SHA-256): { juego, cuenta, recargas, premio, actualizado }. El +1 lo hace
+// la función SQL fidelidad_anotar en un solo paso (dos compras a la vez no se pisan).
 //   - El premio se gana al pagar la recarga anterior (5.ª, 11.ª...) y queda guardado hasta usarlo.
 //   - No se suma a un código de descuento: con código, el premio se guarda para la próxima recarga.
 //   - Cuenta como recarga cada pago ENCONTRADO (aunque no alcance: el pedido queda guardado con su precio).
-//   - La página recibe el premio firmado (HMAC con SCRIPT_RECARGAS_TOKEN). Si al recargar Firestore no
+//   - La página recibe el premio firmado (HMAC con SCRIPT_RECARGAS_TOKEN). Si al recargar Supabase no
 //     responde, se respeta el premio firmado que la página mostró (así el cliente nunca paga "de menos").
-//   - Cada venta con premio queda en la colección "fidelidad_usos" (juego, cuenta, pedido, %, precios).
+//   - Cada venta con premio queda en la tabla "fidelidad_usos" (juego, cuenta, pedido, %, precios).
+//   - anotarRecarga también deja los datos del pedido para el perfil del cliente (_lib/historial.js).
 //
-// Destacados: colección "ventas_paquetes", un documento por juego con las ventas de cada paquete. El
+// Destacados: tabla "ventas_paquetes", una fila por juego + paquete con sus ventas (ventas_sumar). El
 // paquete con más ventas lleva "⭐ Más vendido" (desde VENTAS_MINIMAS ventas) y el de menor precio por
 // unidad "💰 Mejor precio" (campo "etiqueta" del catálogo, que las páginas ya dibujan).
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
-import { obtenerDb, conTiempoLimite, obtenerIp, permitirUso } from './limitador.js';
+import { obtenerIp, permitirUso } from './limitador.js';
+import { supabaseActivo, rpc, leer, guardar } from './supabase.js';
+import { anotarEnHistorial } from './historial.js';
 import { precioConDescuento } from './descuentos.js';
 import { formatearVES, limpiarMontoVES } from './recarga-comun.js';
 
@@ -28,9 +33,6 @@ const PREMIO = 1.5;
 const PREMIO_MAX = PREMIO;
 // La firma que recibe la página vale este tiempo (lo que tarda un cliente en pagar)
 const VIGENCIA_FIRMA_MS = 3 * 60 * 60 * 1000;
-const COLECCION = 'fidelidad';
-const COLECCION_USOS = 'fidelidad_usos';
-const COLECCION_VENTAS = 'ventas_paquetes';
 const VENTAS_MINIMAS = 10;
 const DESTACADOS_MS = 10 * 60 * 1000;
 
@@ -66,16 +68,14 @@ function leerFirma(juego, cuenta, firma) {
 }
 
 async function leerCuenta(juego, cuenta) {
-  const db = await obtenerDb();
-  if (!db) return null;
-  const snap = await conTiempoLimite(db.collection(COLECCION).doc(idDocumento(juego, cuenta)).get());
-  const datos = snap.exists ? snap.data() : {};
-  // Un premio guardado con la regla anterior (0,1-1,5 % al azar) vale ahora el premio fijo
+  if (!supabaseActivo()) return null;
+  const filas = await leer('fidelidad', { juego, cuenta: idDocumento(juego, cuenta) }, 'recargas,premio');
+  const datos = (Array.isArray(filas) && filas[0]) || {};
   return { recargas: Number(datos.recargas) || 0, premio: Number(datos.premio) > 0 ? PREMIO : 0 };
 }
 
 /**
- * Premio (en %) que tiene la cuenta, o 0. Firestore manda; si no responde, vale el premio firmado que
+ * Premio (en %) que tiene la cuenta, o 0. Supabase manda; si no responde, vale el premio firmado que
  * mostró la página. Nunca lanza.
  */
 export async function porcentajePremio({ juego, cuenta, firma }) {
@@ -113,35 +113,26 @@ export async function premioParaRecarga({ juego, cuenta, firma, desc, precio }) 
  * paquete = nombre del paquete tal como sale en el catálogo.
  */
 export function anotarRecarga({ juego, cuenta, paquete, idPedido, premio = 0, precioLista, precio }) {
+  // Perfil del cliente (solo con sesión): se guarda al terminar la recarga, con su estado
+  anotarEnHistorial({ cuenta, paquete, idPedido, precio });
+  if (!supabaseActivo()) return;
   waitUntil((async () => {
-    const db = await obtenerDb();
-    if (!db) return;
-    const ahora = new Date();
     try {
+      // La próxima es la del premio: fidelidad_anotar lo deja guardado (la página lo muestra en la próxima visita)
       if (cuenta) {
-        const ref = db.collection(COLECCION).doc(idDocumento(juego, cuenta));
-        await conTiempoLimite(db.runTransaction(async (tx) => {
-          const snap = await tx.get(ref);
-          const datos = snap.exists ? snap.data() : {};
-          const recargas = (Number(datos.recargas) || 0) + 1;
-          let premioNuevo = premio > 0 ? 0 : Number(datos.premio) || 0;
-          // La próxima es la del premio: queda guardado (la página lo muestra en la próxima visita)
-          if (!premioNuevo && recargas % RECARGAS_POR_PREMIO === RECARGAS_POR_PREMIO - 1) premioNuevo = PREMIO;
-          tx.set(ref, { juego, recargas, premio: premioNuevo, actualizado: ahora });
-        }));
+        await rpc('fidelidad_anotar', {
+          p_juego: juego, p_cuenta: idDocumento(juego, cuenta), p_premio_usado: premio > 0,
+          p_cada: RECARGAS_POR_PREMIO, p_premio: PREMIO,
+        });
       }
       if (premio > 0) {
-        await conTiempoLimite(db.collection(COLECCION_USOS).add({
-          juego, cuenta: String(cuenta), idPedido: String(idPedido || ''), porcentaje: premio,
-          precioLista: Number(precioLista) || 0, precioCobrado: Number(precio) || 0, fecha: ahora,
-        }));
+        await guardar('fidelidad_usos', {
+          juego, cuenta: String(cuenta).slice(0, 60), id_pedido: String(idPedido || '').slice(0, 80), porcentaje: premio,
+          precio_lista: Number(precioLista) || 0, precio_cobrado: Number(precio) || 0,
+        });
       }
       const clave = claveVenta(paquete);
-      if (clave) {
-        const { FieldValue } = await import('firebase-admin/firestore');
-        await conTiempoLimite(db.collection(COLECCION_VENTAS).doc(juego)
-          .set({ conteo: { [clave]: FieldValue.increment(1) }, actualizado: ahora }, { merge: true }));
-      }
+      if (clave) await rpc('ventas_sumar', { p_juego: juego, p_clave: clave });
     } catch (error) {
       console.error(`⚠️ fidelidad: no se pudo anotar la recarga (${juego}, pedido ${idPedido}):`, error.message);
     }
@@ -158,7 +149,7 @@ export function crearAccionFidelidad(juego, obtenerCatalogo, leerCuentaDe) {
     if (req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
     const cuenta = leerCuentaDe(req.body || {});
     if (!cuenta) return res.status(400).json({ status: 'error', message: 'Cuenta con formato inválido.' });
-    if (!process.env.FIREBASE_SERVICE_ACCOUNT) return res.status(200).json({ status: 'success', activo: false });
+    if (!supabaseActivo()) return res.status(200).json({ status: 'success', activo: false });
 
     const minutos = await permitirUso(`fidelidad:${obtenerIp(req)}`);
     if (minutos > 0) return res.status(429).json({ status: 'error', message: `Espera ${minutos} minutos.` });
@@ -205,10 +196,9 @@ async function ventasDe(juego) {
   if (guardado && Date.now() - guardado.fecha < DESTACADOS_MS) return guardado.conteo;
   let conteo = guardado?.conteo || {};
   try {
-    const db = await obtenerDb();
-    if (db) {
-      const snap = await conTiempoLimite(db.collection(COLECCION_VENTAS).doc(juego).get());
-      conteo = (snap.exists && snap.data().conteo) || {};
+    if (supabaseActivo()) {
+      const filas = await leer('ventas_paquetes', { juego }, 'clave,ventas');
+      conteo = Object.fromEntries((Array.isArray(filas) ? filas : []).map((f) => [f.clave, Number(f.ventas) || 0]));
     }
   } catch (error) {
     console.error(`⚠️ destacados: no se pudieron leer las ventas (${juego}):`, error.message);

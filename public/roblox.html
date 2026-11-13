@@ -35,8 +35,10 @@
   <!-- Pago por completar: lo recuerda en este equipo, lee la captura y arma el WhatsApp -->
   <script src="/js/pago-pendiente.js?v=1" defer></script>
   <!-- Historial del equipo (repetir y comprobante) y premio de cliente fiel -->
+  <!-- Inicio de sesión opcional con Google (perfil con historial en vivo) -->
+  <script src="/js/sesion.js?v=1" defer></script>
   <script src="/js/mis-recargas.js?v=1" defer></script>
-  <script src="/js/fidelidad.js?v=2" defer></script>
+  <script src="/js/fidelidad.js?v=3" defer></script>
   <!-- Código de descuento (compartido con Free Fire y Blood Strike) -->
   <script src="/js/descuento.js" defer></script>
   <script src="/js/ultimo-id.js" defer></script>
@@ -633,6 +635,7 @@
   <link rel="stylesheet" href="css/whatsapp-cliente.css?v=1">
   <link rel="stylesheet" href="css/pago-pendiente.css?v=1">
   <link rel="stylesheet" href="css/mis-recargas.css?v=1">
+  <link rel="stylesheet" href="css/sesion.css?v=1">
   <link rel="stylesheet" href="css/fidelidad.css?v=1">
   <link rel="stylesheet" href="css/canal.css?v=1">
 </head>
@@ -787,7 +790,7 @@
   </div>
 
   <div class="main-card anim-slide-up">
-    <div class="top-nav anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a></div>
+    <div class="top-nav barra-sesion anim-slide-up delay-1"><a href="index.html" class="btn-back">◄ Volver al Inicio</a><a href="/perfil.html" data-sesion class="sesion-boton">Entrar</a></div>
     <header class="juego-hero anim-slide-up delay-1">
       <p class="juego-kicker">Robux para tu avatar</p>
       <h1 class="title-banner title-banner--logo"><img src="img/juegos/emblema-roblox.webp?v=1" alt="Roblox" width="520" height="97" decoding="async"></h1>
