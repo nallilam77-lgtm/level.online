@@ -1,6 +1,6 @@
 // =========================================================================
 // PREMIO DE CLIENTE FIEL (Free Fire, Blood Strike, Mobile Legends y Roblox)
-// Cada 5 recargas de la misma cuenta, la siguiente lleva un descuento sorpresa de 0,1 % a 1,5 %.
+// La 6.ª recarga de la misma cuenta (ID) lleva 1,5 % de descuento, y así cada 6 (12.ª, 18.ª...).
 // El servidor decide todo (api/_lib/fidelidad.js): aquí solo se pregunta al confirmar la cuenta, se
 // muestra el avance o el premio y, con premio, se dibuja el catálogo con los precios que devolvió.
 // No se suma a un código de descuento: con código aplicado, el premio queda para la próxima recarga.
@@ -49,11 +49,11 @@
         : `${ICONO_REGALO}<span><strong>¡Premio de cliente fiel!</strong> Esta recarga tiene <strong>${porcentajeTexto(estado.premio)} de descuento</strong>. Los precios de abajo ya lo incluyen.</span>`;
       return;
     }
-    const cada = Number(estado.cada) || 5;
+    const cada = Number(estado.cada) || 6;
     const hechas = Math.max(0, cada - 1 - (Number(estado.faltan) || 0));
     const puntos = Array.from({ length: cada }, (_, i) => `<span class="fidelidad__punto${i < hechas ? ' fidelidad__punto--lleno' : ''}${i === cada - 1 ? ' fidelidad__punto--premio' : ''}"></span>`).join('');
     el.className = 'fidelidad';
-    el.innerHTML = `<span class="fidelidad__puntos" aria-hidden="true">${puntos}</span><span>Cliente fiel: ${estado.faltan === 1 ? '<strong>te falta 1 recarga</strong>' : `te faltan <strong>${estado.faltan} recargas</strong>`} para un descuento sorpresa (hasta 1,5 %).</span>`;
+    el.innerHTML = `<span class="fidelidad__puntos" aria-hidden="true">${puntos}</span><span>Cliente fiel: llevas <strong>${hechas} de ${cada - 1}</strong> recargas. La n.º ${cada} lleva <strong>1,5 % de descuento</strong>.</span>`;
   }
 
   async function consultar(cuenta) {

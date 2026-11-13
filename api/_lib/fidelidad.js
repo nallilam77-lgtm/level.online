@@ -2,10 +2,10 @@
 // Mobile Legends y Roblox). Todo vive en Firestore (la misma cuenta que el limitador,
 // FIREBASE_SERVICE_ACCOUNT): sin esa variable no hay premio ni "Más vendido" y todo sigue como antes.
 //
-// Premio: cada RECARGAS_POR_PREMIO recargas de la misma cuenta en el mismo juego, la siguiente lleva un
-// descuento al azar entre PREMIO_MIN y PREMIO_MAX %. Colección "fidelidad", un documento por juego + cuenta
+// Premio: la recarga número RECARGAS_POR_PREMIO (6.ª, 12.ª, 18.ª...) de la misma cuenta (ID) en el mismo
+// juego lleva PREMIO % de descuento (fijo). Colección "fidelidad", un documento por juego + cuenta
 // (la cuenta no se guarda en claro): { juego, recargas, premio, actualizado }.
-//   - El porcentaje se sortea al ganarlo y queda fijo hasta usarlo: la página y la recarga ven el mismo.
+//   - El premio se gana al pagar la recarga anterior (5.ª, 11.ª...) y queda guardado hasta usarlo.
 //   - No se suma a un código de descuento: con código, el premio se guarda para la próxima recarga.
 //   - Cuenta como recarga cada pago ENCONTRADO (aunque no alcance: el pedido queda guardado con su precio).
 //   - La página recibe el premio firmado (HMAC con SCRIPT_RECARGAS_TOKEN). Si al recargar Firestore no
@@ -16,17 +16,16 @@
 // paquete con más ventas lleva "⭐ Más vendido" (desde VENTAS_MINIMAS ventas) y el de menor precio por
 // unidad "💰 Mejor precio" (campo "etiqueta" del catálogo, que las páginas ya dibujan).
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
-import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { obtenerDb, conTiempoLimite, obtenerIp, permitirUso } from './limitador.js';
 import { precioConDescuento } from './descuentos.js';
 import { formatearVES, limpiarMontoVES } from './recarga-comun.js';
 
-export const RECARGAS_POR_PREMIO = 5;
-// En décimas de punto: 0,1 % a 1,5 %
-const PREMIO_MIN_DECIMAS = 1;
-const PREMIO_MAX_DECIMAS = 15;
-const PREMIO_MAX = PREMIO_MAX_DECIMAS / 10;
+export const RECARGAS_POR_PREMIO = 6;
+// Descuento del premio, en %
+const PREMIO = 1.5;
+const PREMIO_MAX = PREMIO;
 // La firma que recibe la página vale este tiempo (lo que tarda un cliente en pagar)
 const VIGENCIA_FIRMA_MS = 3 * 60 * 60 * 1000;
 const COLECCION = 'fidelidad';
@@ -66,14 +65,13 @@ function leerFirma(juego, cuenta, firma) {
   return timingSafeEqual(Buffer.from(esperada), Buffer.from(recibida)) ? porcentaje : 0;
 }
 
-const sortearPremio = () => randomInt(PREMIO_MIN_DECIMAS, PREMIO_MAX_DECIMAS + 1) / 10;
-
 async function leerCuenta(juego, cuenta) {
   const db = await obtenerDb();
   if (!db) return null;
   const snap = await conTiempoLimite(db.collection(COLECCION).doc(idDocumento(juego, cuenta)).get());
   const datos = snap.exists ? snap.data() : {};
-  return { recargas: Number(datos.recargas) || 0, premio: Number(datos.premio) || 0 };
+  // Un premio guardado con la regla anterior (0,1-1,5 % al azar) vale ahora el premio fijo
+  return { recargas: Number(datos.recargas) || 0, premio: Number(datos.premio) > 0 ? PREMIO : 0 };
 }
 
 /**
@@ -127,8 +125,8 @@ export function anotarRecarga({ juego, cuenta, paquete, idPedido, premio = 0, pr
           const datos = snap.exists ? snap.data() : {};
           const recargas = (Number(datos.recargas) || 0) + 1;
           let premioNuevo = premio > 0 ? 0 : Number(datos.premio) || 0;
-          // Queda una para el premio: se sortea ya (la página lo muestra en la próxima visita)
-          if (!premioNuevo && recargas % RECARGAS_POR_PREMIO === RECARGAS_POR_PREMIO - 1) premioNuevo = sortearPremio();
+          // La próxima es la del premio: queda guardado (la página lo muestra en la próxima visita)
+          if (!premioNuevo && recargas % RECARGAS_POR_PREMIO === RECARGAS_POR_PREMIO - 1) premioNuevo = PREMIO;
           tx.set(ref, { juego, recargas, premio: premioNuevo, actualizado: ahora });
         }));
       }
