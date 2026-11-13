@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
+    // El juego exige sesión: sin sesión guardada se va directo a iniciarla (y vuelve aquí solo)
+    (function () { try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i))) return; } } catch (e) { return; } location.replace('/perfil.html?volver=%2Fminijuego.html&entrar=1'); })();
     // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque, animaciones ni transiciones (css/ligero.css)
     (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css?v=3'; document.head.appendChild(l); } })();
   </script>
@@ -21,7 +23,7 @@
   <link rel="stylesheet" href="css/minijuego.css?v=2">
   <!-- Sesión (agrega el token a /api/minijuego) y después el juego (módulo: usa el motor compartido con el servidor) -->
   <script src="/js/sesion.js?v=4" defer></script>
-  <script type="module" src="/js/minijuego.js?v=2"></script>
+  <script type="module" src="/js/minijuego.js?v=3"></script>
 </head>
 <body>
   <div class="barra">
@@ -55,7 +57,7 @@
           <div class="capa" id="capaEntrar" hidden>
             <h3>Inicia sesión</h3>
             <p>Tus fichas y puntos se guardan en tu cuenta.</p>
-            <a class="btn" href="/perfil.html?volver=%2Fminijuego.html">Entrar con Google</a>
+            <a class="btn" href="/perfil.html?volver=%2Fminijuego.html&amp;entrar=1">Entrar con Google</a>
           </div>
 
           <div class="capa" id="capaInicio" hidden>

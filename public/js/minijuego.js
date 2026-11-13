@@ -11,6 +11,9 @@ import {
 } from './lluvia-motor.js?v=1';
 
 const $ = (id) => document.getElementById(id);
+// El juego exige sesión: sin ella se va a iniciar sesión y vuelve aquí solo (perfil.js, "entrar=1")
+const LOGIN = '/perfil.html?volver=%2Fminijuego.html&entrar=1';
+const irALogin = () => location.replace(LOGIN);
 const API = '/api/minijuego';
 const CAPAS = ['capaCargando', 'capaEntrar', 'capaInicio', 'capaSinFichas', 'capaFin', 'capaError'];
 
@@ -100,14 +103,15 @@ async function tablaEjemplos() {
 }
 
 async function cargar() {
+  if (!window.Sesion || !Sesion.hay()) return irALogin();
   mostrarCapa('capaCargando');
   try {
     const r = await api(API);
     if (!r.activo) return error('El juego no está disponible por ahora.');
     info = { fichas: r.fichas, costo: r.costo, bsPorFicha: r.bsPorFicha, sesion: r.sesion, cierre: r.cierre };
     pintarFichas(); pintarRanking(r.ranking); cuentaAtras();
-    if (!r.sesion) mostrarCapa('capaEntrar');
-    else mostrarCapa(info.fichas >= info.costo ? 'capaInicio' : 'capaSinFichas');
+    if (!r.sesion) return irALogin();   // sesión vencida o no válida
+    mostrarCapa(info.fichas >= info.costo ? 'capaInicio' : 'capaSinFichas');
   } catch (e) {
     error('No pudimos conectar con el juego. Revisa tu conexión.');
   }
@@ -259,7 +263,7 @@ async function jugar() {
   $('btnJugar').disabled = true; $('btnOtra').disabled = true;
   try {
     const r = await api(`${API}?accion=empezar`, {});
-    if (r.http === 401) { info.sesion = false; return mostrarCapa('capaEntrar'); }
+    if (r.http === 401) return irALogin();
     if (r.sinFichas) { info.fichas = r.fichas; info.costo = r.costo; pintarFichas(); return mostrarCapa('capaSinFichas'); }
     if (r.status !== 'success') return error(r.message || 'No se pudo empezar la partida.');
     info.fichas = r.fichas; pintarFichas();

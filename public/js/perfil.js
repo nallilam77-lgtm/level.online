@@ -45,8 +45,12 @@
     ['panelCargando', 'panelEntrar', 'panelPerfil', 'panelFiel', 'panelRecargas'].forEach((id) => { $(id).hidden = !panel.includes(id); });
   }
   // "Volver" a la tienda de donde vino (solo páginas propias)
-  const volver = new URLSearchParams(location.search).get('volver') || '';
-  if (/^\/[a-z]+\.html$/.test(volver.split('?')[0])) $('enlaceVolver').href = volver;
+  const parametros = new URLSearchParams(location.search);
+  const volver = parametros.get('volver') || '';
+  const volverValido = /^\/[a-z]+\.html$/.test(volver.split('?')[0]);
+  if (volverValido) $('enlaceVolver').href = volver;
+  // "&entrar=1" (lo manda minijuego.html, que exige sesión): con la sesión lista, regresa solo a esa página
+  const regresarSolo = volverValido && parametros.get('entrar') === '1';
 
   // ---------------------------------------------------------------- recargas
   function tarjeta(r) {
@@ -203,6 +207,7 @@
 
   // ---------------------------------------------------------------- sesión
   async function conSesion(sesion) {
+    if (regresarSolo) { location.replace(volver); return; }
     usuario = sesion.user;
     const m = usuario.user_metadata || {};
     $('nombrePerfil').textContent = m.full_name || m.name || 'Cliente Level Up';

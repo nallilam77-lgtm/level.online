@@ -368,26 +368,8 @@
     .jugar-mini-flecha { font-size: 22px; color: var(--primary); }
     .jugar-mini:hover, .jugar-mini:focus-visible { transform: translateY(-3px); box-shadow: var(--shadow-lg), var(--shadow-glow-hover); }
 
-    /* --- ANUNCIO DEL MINIJUEGO: lo primero que se ve (1.ª visita del día; las demás, "Únete al canal") --- */
-    .anuncio-imagen { display: block; width: min(64%, 220px); }
-    .anuncio-imagen img { display: block; width: 100%; height: auto; max-height: calc(100vh - 360px); max-height: calc(100dvh - 360px); object-fit: contain;
-      filter: drop-shadow(0 12px 24px rgba(var(--accent-cyan-rgb), 0.4)); }
-    .anuncio-titulo {
-      font-family: 'Montserrat', sans-serif; font-size: 22px; font-weight: 900; text-transform: uppercase; text-align: center; line-height: 1.1;
-      background: var(--cta-gradient); -webkit-background-clip: text; background-clip: text; color: transparent;
-    }
-    .anuncio-texto { text-align: center; font-size: 13px; line-height: 1.5; color: var(--text-muted); max-width: 280px; }
-    .anuncio-texto strong { color: var(--accent-neon); }
-    .anuncio-boton {
-      width: 100%; min-height: 52px; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-      border-radius: 14px; background: var(--cta-gradient); color: var(--on-cta); text-decoration: none;
-      font-family: 'Montserrat', sans-serif; font-size: 15px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase;
-      box-shadow: 0 8px 22px -6px rgba(var(--accent-neon-rgb), 0.55);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    .anuncio-boton:hover, .anuncio-boton:focus-visible { transform: translateY(-2px); box-shadow: 0 12px 28px -6px rgba(var(--accent-cyan-rgb), 0.7); outline: none; }
     .ligero .jugar-mini, .ligero .jugar-mini:hover { transform: none; box-shadow: none; }
-    .ligero .jugar-mini img, .ligero .anuncio-imagen img { filter: none; }
+    .ligero .jugar-mini img { filter: none; }
 
     /* --- Títulos de Categorías --- */
     .categoria-titulo {
@@ -601,21 +583,6 @@
 <body>
 
   <!-- VENTANA "ÚNETE AL CANAL DE WHATSAPP": se abre en cada visita al inicio -->
-  <!-- ANUNCIO DEL MINIJUEGO: se abre primero (1.ª visita del día); usa el estilo de "Únete al canal" -->
-  <div class="unete-overlay" id="anuncioModal" role="dialog" aria-modal="true" aria-labelledby="anuncioTitulo" onclick="cerrarAnuncioAfuera(event)">
-    <div class="unete-modal" id="anuncioCaja">
-      <span class="unete-etiqueta">¡Nuevo!</span>
-      <button type="button" class="unete-cerrar" onclick="cerrarAnuncio()" aria-label="Cerrar">✕</button>
-      <a class="anuncio-imagen" href="minijuego.html" tabindex="-1" aria-hidden="true">
-        <img src="img/lluvia-diamantes.webp?v=1" width="440" height="476" alt="" decoding="async">
-      </a>
-      <h2 class="anuncio-titulo" id="anuncioTitulo">Lluvia de Diamantes</h2>
-      <p class="anuncio-texto">Cada recarga te da fichas para jugar. El mejor de la semana gana <strong>341 💎</strong>.</p>
-      <a class="anuncio-boton" href="minijuego.html">Jugar ahora</a>
-      <button type="button" class="unete-ahora-no" onclick="cerrarAnuncio()">Ahora no</button>
-    </div>
-  </div>
-
   <div class="unete-overlay" id="uneteModal" role="dialog" aria-modal="true" aria-label="Únete al canal de WhatsApp de Level Up" onclick="cerrarUneteAfuera(event)">
     <div class="unete-modal" id="uneteCaja">
       <span class="unete-etiqueta">
@@ -912,37 +879,8 @@
       if (!document.getElementById('uneteCaja').contains(event.target)) cerrarUnete();
     }
 
-    // --- ANUNCIO DEL MINIJUEGO ---
-    // Lo primero que se ve: en la 1.ª visita del día sale el anuncio; en las demás, "Únete al canal".
-    // Nunca las dos seguidas.
-    const CLAVE_ANUNCIO = 'levelup_anuncio_lluvia';
-    function abrirAnuncio() {
-      document.getElementById('anuncioModal').classList.add('abierto');
-      body.classList.add('no-scroll');
-      document.querySelector('#anuncioModal .anuncio-boton').focus({ preventScroll: true });
-    }
-    function cerrarAnuncio() {
-      const modal = document.getElementById('anuncioModal');
-      if (!modal.classList.contains('abierto')) return;
-      modal.classList.remove('abierto');
-      body.classList.remove('no-scroll');
-    }
-    function cerrarAnuncioAfuera(event) {
-      if (!document.getElementById('anuncioCaja').contains(event.target)) cerrarAnuncio();
-    }
-
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { cerrarAnuncio(); cerrarUnete(); } });
-    (function primeraVentana() {
-      const hoy = new Date().toLocaleDateString('es-VE');
-      let visto = '';
-      try { visto = localStorage.getItem(CLAVE_ANUNCIO) || ''; } catch (e) { /* sin almacenamiento */ }
-      if (visto !== hoy) {
-        try { localStorage.setItem(CLAVE_ANUNCIO, hoy); } catch (e) { /* sin almacenamiento */ }
-        abrirAnuncio();
-      } else {
-        abrirUnete();
-      }
-    })();
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarUnete(); });
+    abrirUnete();
 
     function cerrarTutorial() {
       const modal = document.getElementById('tutorialModal');
