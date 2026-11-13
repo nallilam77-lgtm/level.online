@@ -1,5 +1,5 @@
 // =========================================================================
-// MI PERFIL (perfil.html): inicio de sesión con Google, datos del cliente, cliente fiel por ID y
+// MI PERFIL (perfil.html): inicio de sesión con Google, datos del cliente, cliente fiel de la cuenta y
 // "Mis recargas" con el estado EN VIVO (Supabase Realtime sobre la tabla "recargas", que el cliente solo
 // puede leer: la escribe el servidor, api/_lib/historial.js).
 // Tiendas manuales: el estado vive en la hoja; mientras el perfil está abierto se pregunta cada 60 s
@@ -11,7 +11,6 @@
     freefire: 'Free Fire', bloodstrike: 'Blood Strike', mobilelegends: 'Mobile Legends', roblox: 'Roblox',
     fcmobile: 'FC Mobile', codmobile: 'COD Mobile', clashroyale: 'Clash Royale',
   };
-  const AUTOMATICAS = ['freefire', 'bloodstrike', 'mobilelegends', 'roblox'];
   const MANUALES = ['fcmobile', 'codmobile', 'clashroyale'];
   const ESTADOS = {
     pendiente: 'Recibido', en_proceso: 'En proceso', completado: 'Entregada', incompleto: 'Pago incompleto',
@@ -164,57 +163,42 @@
   }
 
   // ---------------------------------------------------------------- cliente fiel
+  // Una sola tarjeta: el premio es de la cuenta (suman todas las tiendas automáticas, con cualquier ID).
+  // La consulta lleva el token (sesion.js); se pregunta a Free Fire, pero el conteo es el mismo en todas.
+  let consultandoFiel = false;
   async function pintarFiel() {
-    const vistas = new Set();
-    const cuentas = [];
-    recargas.forEach((r) => {
-      if (!AUTOMATICAS.includes(r.juego) || !r.id_jugador) return;
-      const clave = `${r.juego}:${r.id_jugador}:${r.zona || ''}`;
-      if (vistas.has(clave) || cuentas.length >= 6) return;
-      vistas.add(clave);
-      cuentas.push(r);
-    });
-    $('panelFiel').hidden = !cuentas.length;
-    if (!cuentas.length) return;
-    const resultados = await Promise.all(cuentas.map(async (r) => {
-      try {
-        const res = await fetch(`/api/juego?juego=${r.juego}&accion=fidelidad`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(r.zona ? { id: r.id_jugador, zona: r.zona } : { id: r.id_jugador }),
-        });
-        const d = await res.json();
-        return d && d.status === 'success' && d.activo ? { r, d } : null;
-      } catch (e) { return null; }
-    }));
+    if (consultandoFiel) return;
+    consultandoFiel = true;
+    let d = null;
+    try {
+      const res = await fetch('/api/juego?juego=freefire&accion=fidelidad', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      });
+      const r = await res.json();
+      d = r && r.status === 'success' && r.activo && r.sesion ? r : null;
+    } catch (e) { d = null; }
+    consultandoFiel = false;
     const lista = $('listaFiel');
     lista.replaceChildren();
-    resultados.filter(Boolean).forEach(({ r, d }) => {
-      const li = el('li', 'fiel-item' + (d.premio > 0 ? ' fiel-item--premio' : ''));
-      li.dataset.juego = r.juego;
-      const cabeza = el('div', 'fiel-cabeza');
-      const titulo = el('strong');
-      titulo.append(el('em', '', JUEGOS[r.juego]), document.createTextNode(` · ${r.cuenta}`));
-      const cada = Number(d.cada) || 6;
-      const hechas = d.premio > 0 ? cada - 1 : Math.max(0, cada - 1 - (Number(d.faltan) || 0));
-      const puntos = el('span', 'fiel-puntos');
-      puntos.setAttribute('aria-hidden', 'true');
-      for (let i = 0; i < cada; i++) {
-        puntos.append(el('span', `fiel-punto${i < hechas ? ' fiel-punto--lleno' : ''}${i === cada - 1 ? ' fiel-punto--premio' : ''}`));
-      }
-      cabeza.append(titulo, puntos);
-      const texto = el('p', 'fiel-texto');
-      if (d.premio > 0) {
-        texto.innerHTML = '<strong>¡Tu próxima recarga tiene 1,5&nbsp;% de descuento!</strong> Se aplica solo al poner este ID. ';
-        const ir = el('a', '', `Recargar ${JUEGOS[r.juego]}`);
-        ir.href = `/${r.juego}.html`;
-        texto.append(ir);
-      } else {
-        texto.innerHTML = `Llevas <strong>${hechas} de ${cada - 1}</strong> recargas. La n.º&nbsp;${cada} lleva 1,5&nbsp;% de descuento.`;
-      }
-      li.append(cabeza, texto);
-      lista.append(li);
-    });
-    $('panelFiel').hidden = !lista.children.length;
+    $('panelFiel').hidden = !d;
+    if (!d) return;
+    const cada = Number(d.cada) || 6;
+    const hechas = d.premio > 0 ? cada - 1 : Math.max(0, cada - 1 - (Number(d.faltan) || 0));
+    const li = el('li', 'fiel-item' + (d.premio > 0 ? ' fiel-item--premio' : ''));
+    const cabeza = el('div', 'fiel-cabeza');
+    const titulo = el('strong', '', 'Tu cuenta Level Up');
+    const puntos = el('span', 'fiel-puntos');
+    puntos.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < cada; i++) {
+      puntos.append(el('span', `fiel-punto${i < hechas ? ' fiel-punto--lleno' : ''}${i === cada - 1 ? ' fiel-punto--premio' : ''}`));
+    }
+    cabeza.append(titulo, puntos);
+    const texto = el('p', 'fiel-texto');
+    texto.innerHTML = d.premio > 0
+      ? '<strong>¡Tu próxima recarga tiene 1,5&nbsp;% de descuento!</strong> Se aplica sola en Free Fire, Blood Strike, Mobile Legends o Roblox con la sesión iniciada, para cualquier ID.'
+      : `Llevas <strong>${hechas} de ${cada - 1}</strong> recargas. La n.º&nbsp;${cada} lleva 1,5&nbsp;% de descuento.`;
+    li.append(cabeza, texto);
+    lista.append(li);
   }
 
   // ---------------------------------------------------------------- sesión

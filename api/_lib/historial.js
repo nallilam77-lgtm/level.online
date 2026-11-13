@@ -23,9 +23,17 @@ const contexto = new AsyncLocalStorage();
 const huella = (texto) => createHash('sha256').update(String(texto)).digest('hex');
 const corto = (texto, max = 120) => String(texto ?? '').slice(0, max);
 
-function tokenDe(req) {
+export function tokenDe(req) {
   const m = String(req.headers?.authorization || '').match(/^Bearer\s+(\S+)$/i);
   return m ? m[1] : '';
+}
+
+/**
+ * Promesa con el UUID del cliente con sesión de ESTA recarga (o null sin sesión). La usa el premio de
+ * cliente fiel (_lib/fidelidad.js), que se cuenta por cuenta de Level Up, no por ID del juego.
+ */
+export function usuarioActual() {
+  return contexto.getStore()?.usuario || Promise.resolve(null);
 }
 
 /** La tienda encontró el pago: datos del pedido para el historial (lo llama anotarRecarga). */
@@ -54,8 +62,8 @@ function cuentaVisible(juego, cuenta, body) {
   return { cuenta: `ID ${corto(cuenta, 30)}`, id_jugador: corto(cuenta, 30) };
 }
 
-async function guardarFila({ token, juego, body, pedido, respuesta }) {
-  const usuario = await usuarioDelToken(token);
+async function guardarFila({ usuario: promesaUsuario, juego, body, pedido, respuesta }) {
+  const usuario = await promesaUsuario;
   if (!usuario) return;
   const cuerpo = respuesta.cuerpo || {};
   const referencia = String(body?.referencia ?? '').replace(/\D/g, '');
@@ -74,8 +82,8 @@ async function guardarFila({ token, juego, body, pedido, respuesta }) {
 }
 
 // Pago completado con la clave del pago insuficiente: misma fila, estado nuevo
-async function completarFila({ token, clave, respuesta }) {
-  if (!(await usuarioDelToken(token))) return;
+async function completarFila({ usuario, clave, respuesta }) {
+  if (!(await usuario)) return;
   const cuerpo = respuesta.cuerpo || {};
   const estado = cuerpo.status === 'success' ? 'completado' : respuesta.codigo === 202 ? 'en_revision' : null;
   if (!estado) return; // clave o referencia rechazada: el pedido sigue "incompleto"
@@ -91,7 +99,8 @@ async function completarFila({ token, clave, respuesta }) {
 export async function conHistorial(req, res, juego, fn) {
   const token = tokenDe(req);
   if (!token || !supabaseActivo()) return fn();
-  const ctx = { pedido: null };
+  // El usuario se averigua en paralelo con la recarga (no la frena); fidelidad.js lo espera solo si hace falta
+  const ctx = { pedido: null, usuario: usuarioDelToken(token) };
   const respuesta = { codigo: 0, cuerpo: null };
   const jsonOriginal = res.json.bind(res);
   res.json = (cuerpo) => { respuesta.codigo = res.statusCode; respuesta.cuerpo = cuerpo; return jsonOriginal(cuerpo); };
@@ -100,8 +109,8 @@ export async function conHistorial(req, res, juego, fn) {
   } finally {
     const body = req.body || {};
     const clave = typeof body.tokenComplemento === 'string' ? body.tokenComplemento : '';
-    const tarea = ctx.pedido ? guardarFila({ token, juego, body, pedido: ctx.pedido, respuesta })
-      : clave && respuesta.cuerpo ? completarFila({ token, clave, respuesta }) : null;
+    const tarea = ctx.pedido ? guardarFila({ usuario: ctx.usuario, juego, body, pedido: ctx.pedido, respuesta })
+      : clave && respuesta.cuerpo ? completarFila({ usuario: ctx.usuario, clave, respuesta }) : null;
     if (tarea) waitUntil(tarea.catch((error) => console.error(`⚠️ historial: no se pudo guardar la recarga (${juego}):`, error.message)));
   }
 }

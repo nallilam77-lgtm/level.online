@@ -1,6 +1,8 @@
 // =========================================================================
 // PREMIO DE CLIENTE FIEL (Free Fire, Blood Strike, Mobile Legends y Roblox)
-// La 6.ª recarga de la misma cuenta (ID) lleva 1,5 % de descuento, y así cada 6 (12.ª, 18.ª...).
+// La 6.ª recarga de la misma CUENTA DE LEVEL UP (sesión con Google) lleva 1,5 % de descuento, y así
+// cada 6 (12.ª, 18.ª...). Suman todas las tiendas automáticas, con cualquier ID. Sin sesión no hay premio:
+// el aviso invita a iniciar sesión. La consulta lleva el token (public/js/sesion.js envuelve fetch).
 // El servidor decide todo (api/_lib/fidelidad.js): aquí solo se pregunta al confirmar la cuenta, se
 // muestra el avance o el premio y, con premio, se dibuja el catálogo con los precios que devolvió.
 // No se suma a un código de descuento: con código aplicado, el premio queda para la próxima recarga.
@@ -41,6 +43,12 @@
     if (!el) return;
     if (!estado || !estado.activo) { el.hidden = true; el.innerHTML = ''; return; }
     el.hidden = false;
+    if (!estado.sesion) {
+      const volver = encodeURIComponent(location.pathname + location.search);
+      el.className = 'fidelidad';
+      el.innerHTML = `${ICONO_REGALO}<span><a href="/perfil.html?volver=${volver}">Inicia sesión</a> y suma tus recargas: la n.º&nbsp;${Number(estado.cada) || 6} de tu cuenta lleva <strong>1,5&nbsp;% de descuento</strong>.</span>`;
+      return;
+    }
     const conCodigo = config.codigoActivo && config.codigoActivo();
     if (estado.premio > 0) {
       el.className = 'fidelidad fidelidad--premio';
@@ -53,7 +61,7 @@
     const hechas = Math.max(0, cada - 1 - (Number(estado.faltan) || 0));
     const puntos = Array.from({ length: cada }, (_, i) => `<span class="fidelidad__punto${i < hechas ? ' fidelidad__punto--lleno' : ''}${i === cada - 1 ? ' fidelidad__punto--premio' : ''}"></span>`).join('');
     el.className = 'fidelidad';
-    el.innerHTML = `<span class="fidelidad__puntos" aria-hidden="true">${puntos}</span><span>Cliente fiel: llevas <strong>${hechas} de ${cada - 1}</strong> recargas. La n.º&nbsp;${cada} lleva <strong>1,5&nbsp;% de descuento</strong>.</span>`;
+    el.innerHTML = `<span class="fidelidad__puntos" aria-hidden="true">${puntos}</span><span>Cliente fiel: tu cuenta lleva <strong>${hechas} de ${cada - 1}</strong> recargas. La n.º&nbsp;${cada} lleva <strong>1,5&nbsp;% de descuento</strong>.</span>`;
   }
 
   async function consultar(cuenta) {

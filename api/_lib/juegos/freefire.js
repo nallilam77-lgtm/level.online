@@ -183,7 +183,7 @@ async function estadisticas(req, res) {
 const catalogoDestacado = async () => conDestacados('freefire', await catalogoFreeFire());
 export const acciones = {
   precios, verificar, estadisticas, descuento: crearAccionDescuento('Free Fire', catalogoDestacado),
-  fidelidad: crearAccionFidelidad('freefire', catalogoDestacado, (b) => (/^\d{5,15}$/.test(String(b.id ?? '')) ? String(b.id) : null)),
+  fidelidad: crearAccionFidelidad('freefire', catalogoDestacado),
 };
 
 // =========================================================================
@@ -617,7 +617,7 @@ export async function recargar(req, res) {
     if (descuento.error) return res.status(descuento.error.codigo).json(descuento.error.cuerpo);
     const { desc } = descuento;
     // Premio de cliente fiel (_lib/fidelidad.js): solo sin código; la página manda la firma del que mostró
-    const fiel = await premioParaRecarga({ juego: 'freefire', cuenta: String(id), firma: req.body?.premioFidelidad, desc, precio: descuento.precio });
+    const fiel = await premioParaRecarga({ juego: 'freefire', firma: req.body?.premioFidelidad, desc, precio: descuento.precio });
     const precioReal = fiel.precio;
 
     // ==========================================

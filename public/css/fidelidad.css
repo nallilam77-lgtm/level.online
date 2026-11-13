@@ -15,6 +15,7 @@
 }
 .fidelidad[hidden] { display: none; }
 .fidelidad strong { color: var(--text-main); }
+.fidelidad a { color: var(--game-text, var(--game-accent)); font-weight: 700; }
 
 .fidelidad--premio {
   border-style: solid;

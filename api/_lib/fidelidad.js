@@ -3,10 +3,13 @@
 // en supabase/levelup.sql, acceso en _lib/supabase.js. Sin SUPABASE_URL y SUPABASE_SECRET_KEY no hay
 // premio ni "Más vendido" y todo sigue como antes.
 //
-// Premio: la recarga número RECARGAS_POR_PREMIO (6.ª, 12.ª, 18.ª...) de la misma cuenta (ID) en el mismo
-// juego lleva PREMIO % de descuento (fijo). Tabla "fidelidad", una fila por juego + cuenta (la cuenta
-// no se guarda en claro: huella SHA-256): { juego, cuenta, recargas, premio, actualizado }. El +1 lo hace
-// la función SQL fidelidad_anotar en un solo paso (dos compras a la vez no se pisan).
+// Premio: la recarga número RECARGAS_POR_PREMIO (6.ª, 12.ª, 18.ª...) de la misma CUENTA DE LEVEL UP
+// (cliente con sesión de Google, desde 2026-11-13; antes era por ID del juego) lleva PREMIO % de
+// descuento (fijo). Suman las recargas de las 4 tiendas automáticas, con cualquier ID. Sin sesión no se
+// cuenta ni hay premio. El usuario sale del token de la recarga (usuarioActual de _lib/historial.js).
+// Tabla "fidelidad", una fila por cuenta: juego = ALCANCE ('cuenta') y cuenta = SHA-256 del UUID:
+// { juego, cuenta, recargas, premio, actualizado } (las filas viejas por juego + ID quedan sin uso).
+// El +1 lo hace la función SQL fidelidad_anotar en un solo paso (dos compras a la vez no se pisan).
 //   - El premio se gana al pagar la recarga anterior (5.ª, 11.ª...) y queda guardado hasta usarlo.
 //   - No se suma a un código de descuento: con código, el premio se guarda para la próxima recarga.
 //   - Cuenta como recarga cada pago ENCONTRADO (aunque no alcance: el pedido queda guardado con su precio).
@@ -22,8 +25,8 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { obtenerIp, permitirUso } from './limitador.js';
-import { supabaseActivo, rpc, leer, guardar } from './supabase.js';
-import { anotarEnHistorial } from './historial.js';
+import { supabaseActivo, rpc, leer, guardar, usuarioDelToken } from './supabase.js';
+import { anotarEnHistorial, usuarioActual, tokenDe } from './historial.js';
 import { precioConDescuento } from './descuentos.js';
 import { formatearVES, limpiarMontoVES } from './recarga-comun.js';
 
@@ -39,54 +42,58 @@ const DESTACADOS_MS = 10 * 60 * 1000;
 export const ETIQUETA_MAS_VENDIDO = '⭐ Más vendido';
 export const ETIQUETA_MEJOR_PRECIO = '💰 Mejor precio';
 
+// El premio es de la cuenta de Level Up: una sola fila por usuario en la tabla "fidelidad"
+const ALCANCE = 'cuenta';
 const huella = (texto) => createHash('sha256').update(texto).digest('hex');
-const idDocumento = (juego, cuenta) => huella(`${juego}:${String(cuenta).toLowerCase()}`);
+const idDocumento = (usuario) => huella(`${ALCANCE}:${String(usuario).toLowerCase()}`);
 
-// Firma del premio para la página: "<décimas>.<vence>.<hmac>" (1,2 % -> 12). Sin SCRIPT_RECARGAS_TOKEN no se firma.
+// Firma del premio para la página: "<décimas>.<vence>.<hmac>" (1,2 % -> 12), atada al usuario.
+// Sin SCRIPT_RECARGAS_TOKEN no se firma.
 function llaveFirma() {
   const token = (process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
   return token ? createHash('sha256').update(`levelup-fidelidad:${token}`).digest() : null;
 }
-function firmar(juego, cuenta, porcentaje, vence) {
+function firmar(usuario, porcentaje, vence) {
   const llave = llaveFirma();
   if (!llave) return '';
   const decimas = Math.round(porcentaje * 10);
-  const mac = createHmac('sha256', llave).update(`${idDocumento(juego, cuenta)}|${decimas}|${vence}`).digest('base64url');
+  const mac = createHmac('sha256', llave).update(`${idDocumento(usuario)}|${decimas}|${vence}`).digest('base64url');
   return `${decimas}.${vence}.${mac}`;
 }
-// Devuelve el porcentaje firmado para ESA cuenta y juego, o 0 si la firma no es válida o venció
-function leerFirma(juego, cuenta, firma) {
+// Devuelve el porcentaje firmado para ESE usuario, o 0 si la firma no es válida o venció
+function leerFirma(usuario, firma) {
   const partes = String(firma || '').split('.');
   if (partes.length !== 3 || !/^\d{1,2}$/.test(partes[0]) || !/^\d{13}$/.test(partes[1])) return 0;
   const porcentaje = Number(partes[0]) / 10;
   const vence = Number(partes[1]);
   if (!(porcentaje > 0 && porcentaje <= PREMIO_MAX) || !(vence > Date.now())) return 0;
-  const esperada = firmar(juego, cuenta, porcentaje, vence).split('.').pop();
+  const esperada = firmar(usuario, porcentaje, vence).split('.').pop();
   const recibida = partes[2];
   if (!esperada || esperada.length !== recibida.length) return 0;
   return timingSafeEqual(Buffer.from(esperada), Buffer.from(recibida)) ? porcentaje : 0;
 }
 
-async function leerCuenta(juego, cuenta) {
+async function leerCuenta(usuario) {
   if (!supabaseActivo()) return null;
-  const filas = await leer('fidelidad', { juego, cuenta: idDocumento(juego, cuenta) }, 'recargas,premio');
+  const filas = await leer('fidelidad', { juego: ALCANCE, cuenta: idDocumento(usuario) }, 'recargas,premio');
   const datos = (Array.isArray(filas) && filas[0]) || {};
   return { recargas: Number(datos.recargas) || 0, premio: Number(datos.premio) > 0 ? PREMIO : 0 };
 }
 
 /**
- * Premio (en %) que tiene la cuenta, o 0. Supabase manda; si no responde, vale el premio firmado que
- * mostró la página. Nunca lanza.
+ * Premio (en %) del cliente con sesión de ESTA recarga, o 0 (sin sesión, 0). Supabase manda; si no
+ * responde, vale el premio firmado que mostró la página. Nunca lanza.
  */
-export async function porcentajePremio({ juego, cuenta, firma }) {
-  if (!cuenta) return 0;
+export async function porcentajePremio({ juego, firma }) {
+  const usuario = await usuarioActual();
+  if (!usuario) return 0;
   let porcentaje = 0;
   try {
-    const datos = await leerCuenta(juego, cuenta);
-    porcentaje = datos ? datos.premio : leerFirma(juego, cuenta, firma);
+    const datos = await leerCuenta(usuario);
+    porcentaje = datos ? datos.premio : leerFirma(usuario, firma);
   } catch (error) {
     console.error(`⚠️ fidelidad: no se pudo leer el premio (${juego}):`, error.message);
-    porcentaje = leerFirma(juego, cuenta, firma);
+    porcentaje = leerFirma(usuario, firma);
   }
   return porcentaje > 0 && porcentaje <= PREMIO_MAX ? porcentaje : 0;
 }
@@ -99,16 +106,16 @@ const faltanPara = ({ recargas, premio }) => (premio > 0 ? 0 : Math.max(1, (RECA
  * precio = el que ya salió de aplicarDescuentoARecarga. firma = la que la página recibió (respaldo).
  * Devuelve { porcentaje, precio }. Nunca lanza: si algo falla, sin premio (o el firmado).
  */
-export async function premioParaRecarga({ juego, cuenta, firma, desc, precio }) {
-  if (desc || !cuenta) return { porcentaje: 0, precio };
-  const porcentaje = await porcentajePremio({ juego, cuenta, firma });
+export async function premioParaRecarga({ juego, firma, desc, precio }) {
+  if (desc) return { porcentaje: 0, precio };
+  const porcentaje = await porcentajePremio({ juego, firma });
   if (!porcentaje) return { porcentaje: 0, precio };
   const conPremio = precioConDescuento(precio, { tipo: 'porcentaje', valor: porcentaje });
   return conPremio < precio ? { porcentaje, precio: conPremio } : { porcentaje: 0, precio };
 }
 
 /**
- * Pago encontrado: +1 recarga de la cuenta (y gasta el premio si se usó), +1 venta del paquete y, con
+ * Pago encontrado: +1 recarga de la cuenta de Level Up, solo con sesión (y gasta el premio si se usó), +1 venta del paquete y, con
  * premio, una fila en "fidelidad_usos". Corre después de responder (waitUntil): nunca frena la recarga.
  * paquete = nombre del paquete tal como sale en el catálogo.
  */
@@ -116,12 +123,15 @@ export function anotarRecarga({ juego, cuenta, paquete, idPedido, premio = 0, pr
   // Perfil del cliente (solo con sesión): se guarda al terminar la recarga, con su estado
   anotarEnHistorial({ cuenta, paquete, idPedido, precio });
   if (!supabaseActivo()) return;
+  // Se toma aquí, dentro de la recarga (contexto de la sesión). Las manuales (cuenta null) no suman.
+  const promesaUsuario = cuenta ? usuarioActual() : Promise.resolve(null);
   waitUntil((async () => {
     try {
       // La próxima es la del premio: fidelidad_anotar lo deja guardado (la página lo muestra en la próxima visita)
-      if (cuenta) {
+      const usuario = await promesaUsuario;
+      if (usuario) {
         await rpc('fidelidad_anotar', {
-          p_juego: juego, p_cuenta: idDocumento(juego, cuenta), p_premio_usado: premio > 0,
+          p_juego: ALCANCE, p_cuenta: idDocumento(usuario), p_premio_usado: premio > 0,
           p_cada: RECARGAS_POR_PREMIO, p_premio: PREMIO,
         });
       }
@@ -140,26 +150,28 @@ export function anotarRecarga({ juego, cuenta, paquete, idPedido, premio = 0, pr
 }
 
 /**
- * Acción "fidelidad" de api/juego.js: POST { id, zona? } -> { activo, recargas, cada, faltan, premio, firma,
- * catalogo? } (con premio, el catálogo ya trae los precios con el premio, igual que un código).
- * leerCuentaDe(body) devuelve la cuenta normalizada o null si el formato no vale.
+ * Acción "fidelidad" de api/juego.js: POST con la cabecera Authorization del cliente (public/js/sesion.js)
+ * -> { activo, sesion, recargas, cada, faltan, premio, firma, catalogo? } (con premio, el catálogo ya trae
+ * los precios con el premio, igual que un código). Sin sesión: { activo: true, sesion: false } (la página
+ * invita a iniciar sesión). El ID del juego ya no importa: el premio es de la cuenta.
  */
-export function crearAccionFidelidad(juego, obtenerCatalogo, leerCuentaDe) {
+export function crearAccionFidelidad(juego, obtenerCatalogo) {
   return async function fidelidad(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
-    const cuenta = leerCuentaDe(req.body || {});
-    if (!cuenta) return res.status(400).json({ status: 'error', message: 'Cuenta con formato inválido.' });
     if (!supabaseActivo()) return res.status(200).json({ status: 'success', activo: false });
 
     const minutos = await permitirUso(`fidelidad:${obtenerIp(req)}`);
     if (minutos > 0) return res.status(429).json({ status: 'error', message: `Espera ${minutos} minutos.` });
 
+    const usuario = await usuarioDelToken(tokenDe(req));
+    if (!usuario) return res.status(200).json({ status: 'success', activo: true, sesion: false, cada: RECARGAS_POR_PREMIO });
+
     try {
-      const datos = await leerCuenta(juego, cuenta);
+      const datos = await leerCuenta(usuario);
       if (!datos) return res.status(200).json({ status: 'success', activo: false });
-      const respuesta = { status: 'success', activo: true, recargas: datos.recargas, cada: RECARGAS_POR_PREMIO, faltan: faltanPara(datos), premio: datos.premio };
+      const respuesta = { status: 'success', activo: true, sesion: true, recargas: datos.recargas, cada: RECARGAS_POR_PREMIO, faltan: faltanPara(datos), premio: datos.premio };
       if (datos.premio > 0) {
-        respuesta.firma = firmar(juego, cuenta, datos.premio, Date.now() + VIGENCIA_FIRMA_MS);
+        respuesta.firma = firmar(usuario, datos.premio, Date.now() + VIGENCIA_FIRMA_MS);
         const desc = { tipo: 'porcentaje', valor: datos.premio };
         respuesta.catalogo = (await obtenerCatalogo()).map((p) => {
           const original = limpiarMontoVES(p.precio);

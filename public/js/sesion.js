@@ -2,7 +2,8 @@
 // SESIÓN DEL CLIENTE (opcional, con Google, en Supabase)
 // - Pinta el botón "Entrar" / "Mi perfil" en cada [data-sesion] (lleva a perfil.html).
 // - Con sesión, agrega el token a las compras (POST /api/recargar) para que la recarga quede en el
-//   perfil (api/_lib/historial.js). Sin sesión, la compra va igual que siempre.
+//   perfil (api/_lib/historial.js) y sume al premio de cliente fiel, y a la consulta de ese premio
+//   (/api/juego?accion=fidelidad). Sin sesión, la compra va igual que siempre.
 // - La librería de Supabase (~60 KB) solo se descarga en perfil.html o cuando hay que renovar el token:
 //   quien no inició sesión no la descarga nunca.
 // Uso: <script src="/js/sesion.js?v=1" defer></script> + <link rel="stylesheet" href="css/sesion.css?v=1">
@@ -82,7 +83,8 @@
     try {
       const url = typeof recurso === 'string' ? recurso : (recurso && recurso.url) || '';
       const ruta = url.replace(location.origin, '');
-      if (/^\/api\/recargar(\?|$)/.test(ruta) && guardada()) {
+      // Compras y consulta del premio de cliente fiel (es de la cuenta: el servidor necesita saber quién es)
+      if ((/^\/api\/recargar(\?|$)/.test(ruta) || /^\/api\/juego\?.*accion=fidelidad/.test(ruta)) && guardada()) {
         const t = await token();
         if (t) {
           opciones = Object.assign({}, opciones);

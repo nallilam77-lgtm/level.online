@@ -158,11 +158,9 @@ async function catalogoMobileLegends() {
 }
 
 const catalogoDestacado = async () => conDestacados('mobilelegends', await catalogoMobileLegends());
-// La cuenta de Mobile Legends es ID + Zona ID
-const cuentaML = (b) => (ID_VALIDO.test(String(b.id ?? '')) && ZONA_VALIDA.test(String(b.zona ?? '')) ? `${b.id}:${b.zona}` : null);
 export const acciones = {
   precios, verificar, descuento: crearAccionDescuento(NOMBRE_JUEGO, catalogoDestacado),
-  fidelidad: crearAccionFidelidad('mobilelegends', catalogoDestacado, cuentaML),
+  fidelidad: crearAccionFidelidad('mobilelegends', catalogoDestacado),
 };
 
 // =========================================================================
@@ -382,7 +380,7 @@ export async function recargar(req, res) {
     if (descuento.error) return res.status(descuento.error.codigo).json(descuento.error.cuerpo);
     const { desc } = descuento;
     // Premio de cliente fiel (_lib/fidelidad.js): solo sin código; la página manda la firma del que mostró
-    const fiel = await premioParaRecarga({ juego: 'mobilelegends', cuenta: `${id}:${zona}`, firma: req.body?.premioFidelidad, desc, precio: descuento.precio });
+    const fiel = await premioParaRecarga({ juego: 'mobilelegends', firma: req.body?.premioFidelidad, desc, precio: descuento.precio });
     const precioReal = fiel.precio;
 
     // ==========================================

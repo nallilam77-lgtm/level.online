@@ -118,11 +118,9 @@ async function precios(req, res) {
   }
 }
 
-// Usuario de Roblox: sin distinguir mayúsculas (es la misma cuenta)
-const cuentaRoblox = (b) => (/^[A-Za-z0-9_]{2,30}$/.test(String(b.id ?? '')) ? String(b.id).toLowerCase() : null);
 export const acciones = {
   precios, descuento: crearAccionDescuento('Roblox', catalogoRoblox),
-  fidelidad: crearAccionFidelidad('roblox', async () => conDestacados('roblox', await catalogoRoblox()), cuentaRoblox),
+  fidelidad: crearAccionFidelidad('roblox', async () => conDestacados('roblox', await catalogoRoblox())),
 };
 
 // Solo los campos que usa la página, nunca la respuesta cruda de Apps Script.
@@ -193,7 +191,7 @@ export async function recargar(req, res) {
     // Premio de cliente fiel (_lib/fidelidad.js): solo sin código. roblox.gs acepta montoACobrar sin código.
     let premio = 0;
     if (!req.body?.codigoDescuento) {
-      premio = await porcentajePremio({ juego: 'roblox', cuenta: usuario.toLowerCase(), firma: req.body?.premioFidelidad });
+      premio = await porcentajePremio({ juego: 'roblox', firma: req.body?.premioFidelidad });
       if (premio) {
         try {
           const { precios } = await obtenerPreciosRoblox(scriptUrl);
