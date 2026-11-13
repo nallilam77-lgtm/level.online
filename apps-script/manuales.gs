@@ -382,7 +382,7 @@ function tomarPago(ultimos5, idPedido) {
   var hojaPagos = hojaCentralPagos();
   var rows = hojaPagos.getDataRange().getValues();
   var props = PropertiesService.getScriptProperties();
-  var hayUsado = false, hayEnProceso = false, hayPorCompletar = false;
+  var hayUsado = false, hayEnProceso = false, hayPorCompletar = false, hayVencido = false;
 
   for (var i = rows.length - 1; i >= 1; i--) {
     var referencia = String(rows[i][2]).replace(/\s+/g, "");
@@ -397,9 +397,15 @@ function tomarPago(ultimos5, idPedido) {
     if (estado === "en proceso") { hayEnProceso = true; continue; }
     if (estado === "por completar") { hayPorCompletar = true; continue; }
     if (estado !== "verificado" && estado !== "") continue;
+    // Pago olvidado de hace días: no se toma solo (ver pagoVencido al final)
+    if (pagoVencido(rows[i][0])) { hayVencido = true; continue; }
 
     props.setProperty("man_" + referencia, idPedido);
-    hojaPagos.getRange(i + 1, 5).setValue("Usado");
+    // Otro juego pudo tomarlo en este mismo instante (cada script tiene su candado): uno solo se lo lleva
+    if (!reclamarPago(hojaPagos, i + 1, idPedido, "Usado")) {
+      if (props.getProperty("man_" + referencia) === idPedido) props.deleteProperty("man_" + referencia);
+      hayEnProceso = true; continue;
+    }
     anotarHoraUsado(hojaPagos, i + 1);
     SpreadsheetApp.flush();
     actualizarEstadoFirebase(referencia, "Usado");
@@ -407,6 +413,7 @@ function tomarPago(ultimos5, idPedido) {
   }
 
   if (hayEnProceso) return { encontrado: false, message: "⚠️ Otro cliente está procesando esta referencia en este momento." };
+  if (hayVencido) return { encontrado: false, message: MENSAJE_PAGO_VENCIDO };
   if (hayPorCompletar) return { encontrado: false, message: "⏳ Este pago está esperando que completes la diferencia en otro pedido: escríbenos por WhatsApp." };
   if (hayUsado) return { encontrado: false, message: "❌ Este pago ya fue validado y gastado." };
   return { encontrado: false, message: "🔍 Referencia no encontrada en el sistema. Si acabas de pagar, espera un minuto e intenta de nuevo." };
@@ -680,4 +687,52 @@ function borrarClavesCompletados() {
     lock.releaseLock();
   }
   ui.alert("✅ Contraseñas borradas: " + borradas + ".");
+}
+
+// =========================================================================
+// PAGO PARA UN SOLO PEDIDO (desde 2026-11-13; MISMO bloque en recargas.gs, bloodstrike.gs,
+// mobilelegends.gs, manuales.gs y roblox.gs: si cambias uno, cambia los cinco)
+// La pestaña "pagos" de la hoja central la usan cinco scripts y cada uno tiene SU candado (LockService
+// no se comparte entre proyectos): dos juegos podían tomar el mismo pago en el mismo instante y entregar
+// dos recargas por un solo pago. reclamarPago anota el pedido en la columna H, espera y vuelve a leer:
+// sigue solo si la H todavía tiene SU pedido y el pago sigue libre. Gana uno solo; el otro sigue buscando.
+// Además, un pago de hace más de DIAS_PAGO_VALIDO días no se toma solo (un pago olvidado podía usarlo
+// cualquiera que acertara sus 5 dígitos): se resuelve por WhatsApp.
+// =========================================================================
+const COLUMNA_PEDIDO_PAGO = 8;     // H de "pagos": pedido que tomó el pago (A-G ya tienen dueño)
+const ESPERA_RECLAMO_MS = 1500;    // más que lo que tarda otro script entre leer el pago y escribirlo
+const DIAS_PAGO_VALIDO = 3;
+const MENSAJE_PAGO_VENCIDO = "⌛ Este pago tiene más de " + DIAS_PAGO_VALIDO + " días: escríbenos por WhatsApp con tu referencia y lo revisamos.";
+
+/**
+ * Deja el pago de la fila con estadoNuevo SOLO si este pedido (marca) es el único que lo toma.
+ * true = es de este pedido y ya tiene estadoNuevo · false = otro pedido lo tomó (no se toca nada más).
+ */
+function reclamarPago(hoja, fila, marca, estadoNuevo) {
+  marca = String(marca || ("sin-pedido-" + Utilities.getUuid()));
+  var celdaPedido = hoja.getRange(fila, COLUMNA_PEDIDO_PAGO);
+  celdaPedido.setNumberFormat("@").setValue(marca);
+  SpreadsheetApp.flush();
+  Utilities.sleep(ESPERA_RECLAMO_MS);
+  var ahoraFila = hoja.getRange(fila, 5, 1, COLUMNA_PEDIDO_PAGO - 4).getValues()[0]; // E..H
+  var estado = String(ahoraFila[0]).trim().toLowerCase();
+  if (String(ahoraFila[COLUMNA_PEDIDO_PAGO - 5]) !== marca || (estado !== "verificado" && estado !== "")) return false;
+  hoja.getRange(fila, 5).setValue(estadoNuevo);
+  celdaPedido.setValue(marca); // otro pudo escribir la H después de que este ganó: queda la del dueño
+  SpreadsheetApp.flush();
+  return true;
+}
+
+// Fecha de la columna A de "pagos": Date o "dd/MM/yyyy HH:mm:ss" (hora de Venezuela). null si no se entiende.
+function fechaDePago(valor) {
+  if (valor instanceof Date) return valor;
+  var m = String(valor || "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]), (Number(m[4]) || 0) + 4, Number(m[5]) || 0, Number(m[6]) || 0));
+}
+
+// ¿Pago de hace más de DIAS_PAGO_VALIDO días? Una fecha que no se entiende NO lo vence (como antes).
+function pagoVencido(valor) {
+  var fecha = fechaDePago(valor);
+  return !!fecha && !isNaN(fecha.getTime()) && Date.now() - fecha.getTime() > DIAS_PAGO_VALIDO * 24 * 60 * 60 * 1000;
 }

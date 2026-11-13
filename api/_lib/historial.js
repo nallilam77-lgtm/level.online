@@ -1,6 +1,8 @@
-// HISTORIAL DEL PERFIL (Supabase, tabla "recargas" de supabase/levelup.sql).
-// Solo para clientes con sesión iniciada (Google): la página manda su token en la cabecera
-// Authorization de /api/recargar (public/js/sesion.js). Sin token no se guarda nada.
+// PEDIDOS EN SUPABASE (tabla "recargas" de supabase/levelup.sql; supabase/tienda.sql la abre a todos).
+// Desde 2026-11-13 se guardan TODOS los pedidos: con sesión iniciada (Google) la fila lleva el usuario y
+// sale en su perfil; sin sesión, usuario vacío (sirve para "Consulta tus últimas recargas", el contador
+// del inicio y el panel admin). La página manda el token en la cabecera Authorization de /api/recargar
+// (public/js/sesion.js).
 //
 // Cómo se arma la fila sin tocar cada tienda:
 //   1. api/recargar.js corre la recarga dentro de conHistorial() y mira la respuesta (res.json).
@@ -45,6 +47,9 @@ export function anotarEnHistorial(datos) {
 // Estado según lo que se le respondió al cliente
 function estadoDeRespuesta(juego, cuerpo) {
   if (cuerpo?.insuficiente) return 'incompleto';
+  // Central One aceptó el pedido pero no confirmó la entrega: "en proceso" hasta el webhook (que lo pasa a
+  // "completado"; recién ahí el disparador de Supabase da las fichas del minijuego)
+  if (cuerpo?.status === 'success' && cuerpo.entrega === 'en_camino') return 'en_proceso';
   if (cuerpo?.status === 'success') return MANUALES.has(juego) ? 'pendiente' : 'completado';
   return 'en_revision';
 }
@@ -63,8 +68,7 @@ function cuentaVisible(juego, cuenta, body) {
 }
 
 async function guardarFila({ usuario: promesaUsuario, juego, body, pedido, respuesta }) {
-  const usuario = await promesaUsuario;
-  if (!usuario) return;
+  const usuario = await promesaUsuario;   // null sin sesión: el pedido se guarda igual, sin dueño
   const cuerpo = respuesta.cuerpo || {};
   const referencia = String(body?.referencia ?? '').replace(/\D/g, '');
   const precio = typeof pedido.precio === 'number' ? pedido.precio : limpiarMontoVES(cuerpo.precio || pedido.precio || '');
@@ -82,8 +86,7 @@ async function guardarFila({ usuario: promesaUsuario, juego, body, pedido, respu
 }
 
 // Pago completado con la clave del pago insuficiente: misma fila, estado nuevo
-async function completarFila({ usuario, clave, respuesta }) {
-  if (!(await usuario)) return;
+async function completarFila({ clave, respuesta }) {
   const cuerpo = respuesta.cuerpo || {};
   const estado = cuerpo.status === 'success' ? 'completado' : respuesta.codigo === 202 ? 'en_revision' : null;
   if (!estado) return; // clave o referencia rechazada: el pedido sigue "incompleto"
@@ -93,14 +96,14 @@ async function completarFila({ usuario, clave, respuesta }) {
 }
 
 /**
- * api/recargar.js: corre la recarga (fn) mirando qué se le responde al cliente y, con sesión, guarda la
- * fila del perfil después de responder.
+ * api/recargar.js: corre la recarga (fn) mirando qué se le responde al cliente y guarda el pedido después
+ * de responder (con su usuario si hay sesión).
  */
 export async function conHistorial(req, res, juego, fn) {
+  if (!supabaseActivo()) return fn();
   const token = tokenDe(req);
-  if (!token || !supabaseActivo()) return fn();
   // El usuario se averigua en paralelo con la recarga (no la frena); fidelidad.js lo espera solo si hace falta
-  const ctx = { pedido: null, usuario: usuarioDelToken(token) };
+  const ctx = { pedido: null, usuario: token ? usuarioDelToken(token) : Promise.resolve(null) };
   const respuesta = { codigo: 0, cuerpo: null };
   const jsonOriginal = res.json.bind(res);
   res.json = (cuerpo) => { respuesta.codigo = res.statusCode; respuesta.cuerpo = cuerpo; return jsonOriginal(cuerpo); };
@@ -110,7 +113,7 @@ export async function conHistorial(req, res, juego, fn) {
     const body = req.body || {};
     const clave = typeof body.tokenComplemento === 'string' ? body.tokenComplemento : '';
     const tarea = ctx.pedido ? guardarFila({ usuario: ctx.usuario, juego, body, pedido: ctx.pedido, respuesta })
-      : clave && respuesta.cuerpo ? completarFila({ usuario: ctx.usuario, clave, respuesta }) : null;
+      : clave && respuesta.cuerpo ? completarFila({ clave, respuesta }) : null;
     if (tarea) waitUntil(tarea.catch((error) => console.error(`⚠️ historial: no se pudo guardar la recarga (${juego}):`, error.message)));
   }
 }

@@ -1,18 +1,18 @@
 // Límite de intentos FALLIDOS de recarga, compartido entre todas las instancias de Vercel.
 // Frena que alguien adivine referencias de pago ajenas probando combinaciones de 5 dígitos.
 //
-// Usa Firestore (firebase-admin) si existe la variable FIREBASE_SERVICE_ACCOUNT.
-// Sin ella cae a memoria local: protección débil, porque cada instancia cuenta por separado.
+// Usa Supabase (tabla "limites" y funciones limite_minutos / limite_fallo de supabase/tienda.sql; antes
+// Firestore, hasta 2026-11-13: así Vercel ya no carga firebase-admin, que alargaba el arranque en frío).
+// Sin Supabase, o si no responde, cae a memoria local: protección débil, porque cada instancia cuenta
+// por separado. Nunca frena una recarga: cada llamada tiene tiempo límite (_lib/supabase.js).
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 import { createHash } from 'node:crypto';
 import { BlockList, isIP } from 'node:net';
 import { waitUntil } from '@vercel/functions';
+import { supabaseActivo, rpc } from './supabase.js';
 
-const COLECCION = 'limites_recarga';
 const VENTANA_MS = 30 * 60 * 1000;  // los fallos se cuentan dentro de 30 minutos
 const BLOQUEO_MS = 60 * 60 * 1000;  // al llegar al máximo se bloquea 1 hora
-// Firestore nunca debe frenar una recarga: si tarda más que esto se usa la memoria local
-const TIEMPO_FIRESTORE_MS = 2500;
 const MAX_CLAVES_EN_MEMORIA = 10000;
 
 // Fallos permitidos por tipo de clave. La IP tiene más margen porque en Venezuela
@@ -25,44 +25,14 @@ const MAX_CLAVES_EN_MEMORIA = 10000;
 // "fidelidad": consultas del premio de cliente fiel · "estado": seguimiento de pedidos manuales (cada 30 s).
 const MAX_FALLOS = { ip: 15, jugador: 5, descuento: 10, panel: 8, panelcodigo: 20, subida: 30, chat: 60, consulta: 30, fidelidad: 60, estado: 150 };
 
-let promesaDb = null;
-let avisoSinFirestore = false;
-
-// firebase-admin pesa: se importa solo si hay credenciales y solo la primera vez que se usa,
-// para no alargar el arranque en frío de las funciones.
-export function obtenerDb() {
-  const cuenta = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!cuenta) {
-    if (!avisoSinFirestore) {
-      console.error("⚠️ limitador: falta FIREBASE_SERVICE_ACCOUNT. Usando memoria local (protección débil).");
-      avisoSinFirestore = true;
-    }
-    return Promise.resolve(null);
+let avisoSinSupabase = false;
+function usarSupabase() {
+  if (supabaseActivo()) return true;
+  if (!avisoSinSupabase) {
+    console.error("⚠️ limitador: Supabase no está configurado. Usando memoria local (protección débil).");
+    avisoSinSupabase = true;
   }
-  if (!promesaDb) {
-    promesaDb = (async () => {
-      try {
-        const [{ initializeApp, cert, getApps }, { getFirestore }] = await Promise.all([
-          import('firebase-admin/app'),
-          import('firebase-admin/firestore'),
-        ]);
-        const app = getApps().length ? getApps()[0] : initializeApp({ credential: cert(JSON.parse(cuenta)) });
-        return getFirestore(app);
-      } catch (error) {
-        console.error("❌ limitador: FIREBASE_SERVICE_ACCOUNT inválida o firebase-admin no disponible:", error.message);
-        return null;
-      }
-    })();
-  }
-  return promesaDb;
-}
-
-export function conTiempoLimite(promesa) {
-  let temporizador;
-  const limite = new Promise((_, rechazar) => {
-    temporizador = setTimeout(() => rechazar(new Error(`Firestore tardó más de ${TIEMPO_FIRESTORE_MS} ms`)), TIEMPO_FIRESTORE_MS);
-  });
-  return Promise.race([promesa, limite]).finally(() => clearTimeout(temporizador));
+  return false;
 }
 
 const memoria = new Map();
@@ -109,19 +79,6 @@ export function obtenerIp(req) {
   return ipConexion || 'desconocida';
 }
 
-async function leerRegistro(clave) {
-  const firestore = await obtenerDb();
-  if (firestore) {
-    try {
-      const snap = await conTiempoLimite(firestore.collection(COLECCION).doc(idDocumento(clave)).get());
-      return snap.exists ? snap.data() : null;
-    } catch (error) {
-      console.error("❌ limitador: no se pudo leer Firestore:", error.message);
-    }
-  }
-  return memoria.get(clave) || null;
-}
-
 function siguienteEstado(registro, clave, ahora) {
   const enVentana = registro && ahora - registro.inicioVentana < VENTANA_MS;
   const fallos = enVentana ? registro.fallos + 1 : 1;
@@ -133,42 +90,45 @@ function siguienteEstado(registro, clave, ahora) {
   };
 }
 
-// Devuelve los minutos que faltan del bloqueo más largo entre las claves, o 0 si no hay bloqueo
-export async function minutosBloqueado(claves) {
-  const ahora = Date.now();
-  const registros = await Promise.all(claves.map(leerRegistro));
-  const hasta = Math.max(0, ...registros.map(r => r?.bloqueadoHasta || 0));
+function minutosEnMemoria(claves, ahora) {
+  const hasta = Math.max(0, ...claves.map((c) => memoria.get(c)?.bloqueadoHasta || 0));
   return hasta > ahora ? Math.ceil((hasta - ahora) / 60000) : 0;
 }
 
-export async function registrarFallo(claves) {
+// Devuelve los minutos que faltan del bloqueo más largo entre las claves, o 0 si no hay bloqueo
+export async function minutosBloqueado(claves) {
   const ahora = Date.now();
-  const firestore = await obtenerDb();
+  // La memoria cuenta también: si Supabase falló al anotar, el bloqueo quedó aquí
+  const enMemoria = minutosEnMemoria(claves, ahora);
+  if (!usarSupabase()) return enMemoria;
+  try {
+    const minutos = Number(await rpc('limite_minutos', { p_claves: claves.map(idDocumento) })) || 0;
+    return Math.max(minutos, enMemoria);
+  } catch (error) {
+    console.error("❌ limitador: no se pudo leer Supabase:", error.message);
+    return enMemoria;
+  }
+}
 
-  await Promise.all(claves.map(async (clave) => {
-    if (firestore) {
-      try {
-        const ref = firestore.collection(COLECCION).doc(idDocumento(clave));
-        await conTiempoLimite(firestore.runTransaction(async (tx) => {
-          const snap = await tx.get(ref);
-          tx.set(ref, {
-            ...siguienteEstado(snap.exists ? snap.data() : null, clave, ahora),
-            // Campo para una política TTL de Firestore que borre registros viejos
-            expira: new Date(ahora + VENTANA_MS + BLOQUEO_MS),
-          });
-        }));
-        return;
-      } catch (error) {
-        console.error("❌ limitador: no se pudo escribir en Firestore:", error.message);
-      }
+export async function registrarFallo(claves) {
+  if (usarSupabase()) {
+    try {
+      await rpc('limite_fallo', {
+        p_claves: claves.map(idDocumento), p_maximos: claves.map(maximoPara),
+        p_ventana_s: VENTANA_MS / 1000, p_bloqueo_s: BLOQUEO_MS / 1000,
+      });
+      return;
+    } catch (error) {
+      console.error("❌ limitador: no se pudo escribir en Supabase:", error.message);
     }
-    guardarEnMemoria(clave, siguienteEstado(memoria.get(clave), clave, ahora));
-  }));
+  }
+  const ahora = Date.now();
+  for (const clave of claves) guardarEnMemoria(clave, siguienteEstado(memoria.get(clave), clave, ahora));
 }
 
 // Límite de USO para lo que gasta recursos (Drive, cuota de Gemini) o deja consultar datos: cada llamada
 // cuenta. Devuelve los minutos de bloqueo (0 = adelante). El conteo se anota después de responder
-// (waitUntil) para no sumar la escritura de Firestore a la espera del cliente.
+// (waitUntil) para no sumar la escritura a la espera del cliente.
 export async function permitirUso(clave) {
   const minutos = await minutosBloqueado([clave]);
   if (minutos > 0) return minutos;

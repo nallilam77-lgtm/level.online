@@ -289,7 +289,9 @@ async function entregarRecarga(res, {
       ? `SIN CONFIRMAR: marcar a mano como "Usado" la referencia ${referenciaCompleta}` : 'USADO (correcto)',
   })));
 
-  return res.status(200).json({ status: "success", message: "Recarga de Mobile Legends procesada exitosamente." });
+  // entrega "en_camino": Central One aceptó el pedido pero todavía no confirma que llegó (el webhook avisa)
+  const enCamino = !/^(completed|delivered)$/i.test(String(orden.orden.status || ''));
+  return res.status(200).json({ status: "success", message: "Recarga de Mobile Legends procesada exitosamente.", ...(enCamino && { entrega: 'en_camino' }) });
 }
 
 export async function recargar(req, res) {

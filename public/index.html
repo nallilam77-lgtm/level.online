@@ -1025,6 +1025,9 @@
 
           if (estadoTexto === "completed") estadoClase = "estado-completed";
           if (estadoTexto === "refunded") estadoClase = "estado-pending";
+          // Pedidos de Supabase: el servidor manda la etiqueta en español y su color en "clase"
+          if (recarga.clase === "completed") estadoClase = "estado-completed";
+          if (recarga.clase === "pending") estadoClase = "estado-pending";
 
           let fechaFormateada = recarga.fecha;
           try {

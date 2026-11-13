@@ -197,3 +197,10 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 **Regla 4 — límite de funciones**: con api/minijuego.js hay 12 archivos en api/ (el máximo del plan Hobby de Vercel). Un endpoint nuevo debe ir como acción de uno existente.
 **Regla 5 — orden al cambiar la base del minijuego**: si api/minijuego.js llama una función de Supabase con parámetros nuevos (p. ej. `juego_empezar(p_usuario, p_semilla, p_clave)` de la v2), correr PRIMERO el SQL y DESPUÉS desplegar: con la función vieja, PostgREST no encuentra la firma y "Jugar" falla para todos.
 **Regla 6 — partidas pendientes en el teléfono**: js/minijuego.js guarda la partida terminada en localStorage (`lluvia_envio_pendiente`) hasta que el servidor la acepta (o responde 400/404/409). Al cargar la página la envía primero. No borrar esa clave en otro lado.
+
+## Pestaña "pagos" compartida por 5 Apps Script: doble gasto (corregido 2026-11-13)
+
+**Causa**: recargas.gs, bloodstrike.gs, mobilelegends.gs, manuales.gs y roblox.gs toman pagos de la MISMA pestaña "pagos" (hoja central) y cada uno tiene SU LockService: los candados no se excluyen entre proyectos. Dos juegos podían leer el mismo pago "Verificado" a la vez y entregar dos recargas.
+**Regla**: todo cambio de estado de un pago (Verificado → En proceso / Usado / Por completar) pasa por `reclamarPago(hoja, fila, pedido, estado)` (bloque igual al final de los 5 scripts): anota el pedido en la columna H, espera ESPERA_RECLAMO_MS y solo sigue si la H tiene su pedido y el pago sigue libre. Un script nuevo que tome pagos de esa pestaña DEBE usarlo. No usar la columna H de "pagos" para otra cosa.
+**Pagos vencidos**: `pagoVencido(fecha de la columna A)`: más de DIAS_PAGO_VALIDO (3) días no se toman solos (MENSAJE_PAGO_VENCIDO → WhatsApp).
+

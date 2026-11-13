@@ -228,10 +228,8 @@ function procesarPagoYExtraerCodigo(datos) {
     // "por_completar" para que pague la diferencia (sin huella, como antes: el pago no se toca)
     var claveHash = String(datos.claveHash || "");
     if (/^[a-f0-9]{64}$/.test(claveHash) && idPedido && !buscarFilaPorCompletar(14, claveHash)) {
-      var celdaPago = hojaPagos.getRange(filaPago, 5);
-      var estadoPago = String(celdaPago.getValue()).trim().toLowerCase();
-      if (estadoPago === "verificado" || estadoPago === "") {
-        celdaPago.setValue(ESTADO_PAGO_POR_COMPLETAR);
+      // Uno solo se lleva el pago aunque otro juego lo tome en el mismo instante (reclamarPago)
+      if (reclamarPago(hojaPagos, filaPago, idPedido, ESTADO_PAGO_POR_COMPLETAR)) {
         var falta = redondear2(precioACobrar - montoPagado);
         var fechaHora = ahora();
         hojaPorCompletar().appendRow([
@@ -277,7 +275,10 @@ function procesarPagoYExtraerCodigo(datos) {
   if (estadoAhora !== "verificado" && estadoAhora !== "") {
     return { status: "error", message: "⚠️ Ese pago se acaba de usar en otra recarga." };
   }
-  celdaEstado.setValue("Usado");
+  // Uno solo se lleva el pago aunque otro juego lo tome en el mismo instante
+  if (!reclamarPago(hojaPagos, filaPago, idPedido, "Usado")) {
+    return { status: "error", message: "⚠️ Ese pago se acaba de usar en otra recarga." };
+  }
   anotarHoraUsado(hojaPagos, filaPago);
   SpreadsheetApp.flush();
 
@@ -398,7 +399,9 @@ function completarCompra(datos) {
 
   if (pagado < precio - TOLERANCIA_BS) {
     // Tampoco alcanza: este pago también queda "Por completar" y la compra sigue pendiente
-    celdaPago.setValue(ESTADO_PAGO_POR_COMPLETAR);
+    if (!reclamarPago(hojaPagos, pago.filaPago, idPedido, ESTADO_PAGO_POR_COMPLETAR)) {
+      return { status: "error", message: "⚠️ Ese pago se acaba de usar en otra recarga." };
+    }
     referencias.push(pago.referencia);
     hojaPc.getRange(fila, 6, 1, 3).setValues([[pagado, falta, referencias.join(" + ")]]);
     hojaPc.getRange(fila, 11).setValue("PENDIENTE: faltan " + formatoBs(falta));
@@ -438,8 +441,10 @@ function completarCompra(datos) {
     return { status: "error", agotado: true, message: "⚠️ Este paquete se agotó justo ahora. Tu pago anterior sigue guardado: escríbenos por WhatsApp y te lo entregamos." };
   }
 
-  // Gastar TODOS los pagos de esta compra
-  celdaPago.setValue("Usado");
+  // Gastar TODOS los pagos de esta compra (el nuevo, solo si ningún otro juego lo tomó en este instante)
+  if (!reclamarPago(hojaPagos, pago.filaPago, idPedido, "Usado")) {
+    return { status: "error", message: "⚠️ Ese pago se acaba de usar en otra recarga." };
+  }
   anotarHoraUsado(hojaPagos, pago.filaPago);
   referencias.forEach(function (ref) { marcarPagoUsado(hojaPagos, ref); });
   referencias.push(pago.referencia);
@@ -477,8 +482,10 @@ function reservarParaCentralOne(c) {
     return { status: "error", message: "⚠️ Ese pago se acaba de usar en otra recarga." };
   }
   var enProceso = c.pagos[c.pagos.length - 1];
-  celda.setValue("En proceso");
-  SpreadsheetApp.flush();
+  // Uno solo se lleva el pago aunque otro juego lo tome en el mismo instante
+  if (!reclamarPago(c.hojaPagos, c.filaPago, c.idPedido, "En proceso")) {
+    return { status: "error", message: "⚠️ Ese pago se acaba de usar en otra recarga." };
+  }
   hojaPedidosApi().appendRow([
     ahora(), textoSeguro(c.idPedido), textoSeguro(c.usuario), textoSeguro(c.paquete), c.precio, c.pagos.join(" + "),
     textoSeguro(c.codigoDescuento), textoSeguro(c.urlCapture), textoSeguro(c.productId), ESTADO_COMPRANDO, "", "", ahora(),
@@ -688,7 +695,7 @@ function abrirHojaPagos() {
 function buscarPagoLibre(hojaPagos, referencia) {
   var ultimaPago = hojaPagos.getLastRow();
   var filas = ultimaPago > 1 ? hojaPagos.getRange(2, 1, ultimaPago - 1, 5).getValues() : [];
-  var r = { filaPago: -1, montoPagado: 0, referencia: "", hayUsado: false, hayEnProceso: false, hayPorCompletar: false };
+  var r = { filaPago: -1, montoPagado: 0, referencia: "", hayUsado: false, hayEnProceso: false, hayPorCompletar: false, hayVencido: false };
   for (var i = filas.length - 1; i >= 0; i--) {
     var refCompleta = String(filas[i][2]).replace(/\s+/g, "");
     if (!refCompleta || refCompleta.slice(-5) !== referencia) continue;
@@ -697,6 +704,8 @@ function buscarPagoLibre(hojaPagos, referencia) {
     if (estado === "en proceso") { r.hayEnProceso = true; continue; }
     if (estado === ESTADO_PAGO_POR_COMPLETAR.toLowerCase()) { r.hayPorCompletar = true; continue; }
     if (estado !== "verificado" && estado !== "") continue;
+    // Pago olvidado de hace días: no se toma solo (ver pagoVencido al final)
+    if (pagoVencido(filas[i][0])) { r.hayVencido = true; continue; }
     r.filaPago = i + 2;
     r.montoPagado = limpiarMontoVES(filas[i][3]);
     r.referencia = refCompleta;
@@ -707,6 +716,7 @@ function buscarPagoLibre(hojaPagos, referencia) {
 
 function mensajePagoNoDisponible(pago) {
   if (pago.hayEnProceso) return "⚠️ Ese pago se está procesando en otra recarga en este momento.";
+  if (pago.hayVencido) return MENSAJE_PAGO_VENCIDO;
   if (pago.hayPorCompletar) return "⏳ Este pago no alcanzó y está esperando que completes la diferencia: usa el botón \"Completar pago\" de la tienda o escríbenos por WhatsApp.";
   if (pago.hayUsado) return "❌ Esta referencia ya fue utilizada anteriormente.";
   return "⚠️ Referencia no encontrada en el sistema de pagos.";
@@ -1200,4 +1210,52 @@ function tokenVercelValido(datos) {
     return false;
   }
   return mismoTexto(String((datos && datos.token) || ""), esperado);
+}
+
+// =========================================================================
+// PAGO PARA UN SOLO PEDIDO (desde 2026-11-13; MISMO bloque en recargas.gs, bloodstrike.gs,
+// mobilelegends.gs, manuales.gs y roblox.gs: si cambias uno, cambia los cinco)
+// La pestaña "pagos" de la hoja central la usan cinco scripts y cada uno tiene SU candado (LockService
+// no se comparte entre proyectos): dos juegos podían tomar el mismo pago en el mismo instante y entregar
+// dos recargas por un solo pago. reclamarPago anota el pedido en la columna H, espera y vuelve a leer:
+// sigue solo si la H todavía tiene SU pedido y el pago sigue libre. Gana uno solo; el otro sigue buscando.
+// Además, un pago de hace más de DIAS_PAGO_VALIDO días no se toma solo (un pago olvidado podía usarlo
+// cualquiera que acertara sus 5 dígitos): se resuelve por WhatsApp.
+// =========================================================================
+const COLUMNA_PEDIDO_PAGO = 8;     // H de "pagos": pedido que tomó el pago (A-G ya tienen dueño)
+const ESPERA_RECLAMO_MS = 1500;    // más que lo que tarda otro script entre leer el pago y escribirlo
+const DIAS_PAGO_VALIDO = 3;
+const MENSAJE_PAGO_VENCIDO = "⌛ Este pago tiene más de " + DIAS_PAGO_VALIDO + " días: escríbenos por WhatsApp con tu referencia y lo revisamos.";
+
+/**
+ * Deja el pago de la fila con estadoNuevo SOLO si este pedido (marca) es el único que lo toma.
+ * true = es de este pedido y ya tiene estadoNuevo · false = otro pedido lo tomó (no se toca nada más).
+ */
+function reclamarPago(hoja, fila, marca, estadoNuevo) {
+  marca = String(marca || ("sin-pedido-" + Utilities.getUuid()));
+  var celdaPedido = hoja.getRange(fila, COLUMNA_PEDIDO_PAGO);
+  celdaPedido.setNumberFormat("@").setValue(marca);
+  SpreadsheetApp.flush();
+  Utilities.sleep(ESPERA_RECLAMO_MS);
+  var ahoraFila = hoja.getRange(fila, 5, 1, COLUMNA_PEDIDO_PAGO - 4).getValues()[0]; // E..H
+  var estado = String(ahoraFila[0]).trim().toLowerCase();
+  if (String(ahoraFila[COLUMNA_PEDIDO_PAGO - 5]) !== marca || (estado !== "verificado" && estado !== "")) return false;
+  hoja.getRange(fila, 5).setValue(estadoNuevo);
+  celdaPedido.setValue(marca); // otro pudo escribir la H después de que este ganó: queda la del dueño
+  SpreadsheetApp.flush();
+  return true;
+}
+
+// Fecha de la columna A de "pagos": Date o "dd/MM/yyyy HH:mm:ss" (hora de Venezuela). null si no se entiende.
+function fechaDePago(valor) {
+  if (valor instanceof Date) return valor;
+  var m = String(valor || "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]), (Number(m[4]) || 0) + 4, Number(m[5]) || 0, Number(m[6]) || 0));
+}
+
+// ¿Pago de hace más de DIAS_PAGO_VALIDO días? Una fecha que no se entiende NO lo vence (como antes).
+function pagoVencido(valor) {
+  var fecha = fechaDePago(valor);
+  return !!fecha && !isNaN(fecha.getTime()) && Date.now() - fecha.getTime() > DIAS_PAGO_VALIDO * 24 * 60 * 60 * 1000;
 }

@@ -1,0 +1,259 @@
+-- =====================================================================
+-- LEVEL UP · TIENDA EN SUPABASE (fases 1 y 2, desde 2026-11-13)
+--
+-- Cómo instalarlo: Supabase → SQL Editor → New query → pega TODO este archivo → Run (después de
+-- supabase/levelup.sql y supabase/minijuego.sql). Se puede volver a correr.
+--
+--   Fase 1 (sin Firebase en Vercel ni en las tiendas):
+--     limites          límite de intentos fallidos y de uso (antes Firestore "limites_recarga").
+--                      Solo el servidor (api/_lib/limitador.js).
+--     configuracion    datos de Pago Móvil (y otros ajustes). Lo marcado "publico" lo lee cualquiera
+--                      (las tiendas: public/js/datos-pago.js); solo los administradores lo cambian.
+--     administradores  quién entra a public/admin.html (con su cuenta de Google).
+--   Fase 2 (todos los pedidos):
+--     recargas         ahora guarda TODOS los pedidos (usuario vacío si el cliente no inició sesión).
+--                      Cada cliente sigue viendo solo los suyos; los administradores, todos.
+--
+-- Para dar acceso a admin.html a alguien (tiene que haber iniciado sesión en la tienda una vez):
+--   insert into public.administradores (usuario)
+--   select id from auth.users where email = 'CORREO@gmail.com' on conflict do nothing;
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Administradores
+-- ---------------------------------------------------------------------
+create table if not exists public.administradores (
+  usuario uuid primary key references auth.users (id) on delete cascade,
+  creado  timestamptz not null default now()
+);
+alter table public.administradores enable row level security;
+revoke all on public.administradores from anon, authenticated;
+
+-- ¿El que llama es administrador? (security definer: puede mirar la tabla aunque el cliente no)
+create or replace function public.es_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from administradores where usuario = (select auth.uid()));
+$$;
+revoke execute on function public.es_admin() from public, anon;
+grant execute on function public.es_admin() to authenticated, service_role;
+
+-- ---------------------------------------------------------------------
+-- Fase 1 · Límite de intentos (api/_lib/limitador.js)
+-- ---------------------------------------------------------------------
+create table if not exists public.limites (
+  clave           text primary key,                -- SHA-256 de "tipo:valor" (IP, ID...): nunca en claro
+  fallos          integer not null default 0,
+  inicio_ventana  timestamptz not null default now(),
+  bloqueado_hasta timestamptz,
+  expira          timestamptz not null default now()
+);
+create index if not exists limites_expira on public.limites (expira);
+alter table public.limites enable row level security;
+revoke all on public.limites from anon, authenticated;
+
+-- Minutos que faltan del bloqueo más largo entre las claves (0 = sin bloqueo)
+create or replace function public.limite_minutos(p_claves text[])
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(ceil(extract(epoch from (max(bloqueado_hasta) - now())) / 60)::integer, 0)
+    from limites where clave = any (p_claves) and bloqueado_hasta > now();
+$$;
+
+-- +1 fallo en cada clave, en un solo paso (dos peticiones a la vez no se pisan). p_maximos[i] es el
+-- máximo de p_claves[i]: al llegar, la clave queda bloqueada p_bloqueo_s segundos y el conteo vuelve a 0.
+create or replace function public.limite_fallo(p_claves text[], p_maximos integer[], p_ventana_s integer, p_bloqueo_s integer)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  i        integer;
+  r        limites%rowtype;
+  v_fallos integer;
+  v_inicio timestamptz;
+  v_hasta  timestamptz;
+begin
+  for i in 1 .. coalesce(array_length(p_claves, 1), 0) loop
+    insert into limites (clave) values (p_claves[i]) on conflict (clave) do nothing;
+    select * into r from limites where clave = p_claves[i] for update;
+    if r.fallos > 0 and r.inicio_ventana > now() - make_interval(secs => p_ventana_s) then
+      v_fallos := r.fallos + 1; v_inicio := r.inicio_ventana;
+    else
+      v_fallos := 1; v_inicio := now();
+    end if;
+    v_hasta := r.bloqueado_hasta;
+    if v_fallos >= coalesce(p_maximos[i], 5) then
+      v_hasta := now() + make_interval(secs => p_bloqueo_s); v_fallos := 0; v_inicio := now();
+    end if;
+    update limites set fallos = v_fallos, inicio_ventana = v_inicio, bloqueado_hasta = v_hasta,
+           expira = now() + make_interval(secs => p_ventana_s + p_bloqueo_s)
+     where clave = p_claves[i];
+  end loop;
+  -- Limpieza de vez en cuando (sin tareas programadas)
+  if random() < 0.02 then delete from limites where expira < now(); end if;
+end $$;
+
+revoke execute on function public.limite_minutos(text[]) from public, anon, authenticated;
+revoke execute on function public.limite_fallo(text[], integer[], integer, integer) from public, anon, authenticated;
+grant execute on function public.limite_minutos(text[]) to service_role;
+grant execute on function public.limite_fallo(text[], integer[], integer, integer) to service_role;
+
+-- ---------------------------------------------------------------------
+-- Fase 1 · Configuración (Pago Móvil)
+-- ---------------------------------------------------------------------
+create table if not exists public.configuracion (
+  clave       text primary key,
+  valor       jsonb not null,
+  publico     boolean not null default false,       -- true: la tienda lo lee sin sesión
+  actualizado timestamptz not null default now()
+);
+alter table public.configuracion enable row level security;
+revoke all on public.configuracion from anon, authenticated;
+grant select on public.configuracion to anon, authenticated;
+grant insert, update on public.configuracion to authenticated;
+
+-- Datos de Pago Móvil que tenía Firestore (configuracion/pago_movil) al mudarse. Solo si todavía no
+-- existen: si ya los cambiaste en admin.html, volver a correr este archivo no los pisa.
+insert into public.configuracion (clave, valor, publico)
+values ('pago_movil', '{"banco": "Venezuela 0102", "telefono": "04148653510", "cedula": "13476015"}'::jsonb, true)
+on conflict (clave) do nothing;
+
+drop policy if exists "lo publico lo lee cualquiera" on public.configuracion;
+create policy "lo publico lo lee cualquiera" on public.configuracion
+  for select to anon, authenticated using (publico);
+drop policy if exists "los administradores leen todo" on public.configuracion;
+create policy "los administradores leen todo" on public.configuracion
+  for select to authenticated using ((select public.es_admin()));
+-- Si alguien pudiera escribir aquí, cambiaría el número al que pagan los clientes: solo administradores
+drop policy if exists "los administradores editan" on public.configuracion;
+create policy "los administradores editan" on public.configuracion
+  for update to authenticated using ((select public.es_admin())) with check ((select public.es_admin()));
+drop policy if exists "los administradores crean" on public.configuracion;
+create policy "los administradores crean" on public.configuracion
+  for insert to authenticated with check ((select public.es_admin()));
+
+-- ---------------------------------------------------------------------
+-- Fase 2 · Todos los pedidos en "recargas"
+-- ---------------------------------------------------------------------
+alter table public.recargas alter column usuario drop not null;
+-- "Consulta tus últimas recargas" busca por ID (Roblox: el usuario ya se guarda en minúsculas)
+create index if not exists recargas_id_jugador on public.recargas (id_jugador, creado desc) where id_jugador is not null;
+
+drop policy if exists "los administradores leen todas" on public.recargas;
+create policy "los administradores leen todas" on public.recargas
+  for select to authenticated using ((select public.es_admin()));
+
+-- Las fichas del minijuego siguen siendo solo para clientes con sesión: un pedido sin usuario no da fichas
+create or replace function public.juego_fichas_por_recarga()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_fichas integer;
+  v_filas  integer;
+begin
+  if new.usuario is null or new.juego not in ('freefire', 'bloodstrike', 'mobilelegends', 'roblox') then
+    return new;
+  end if;
+  if new.estado = 'completado' and (tg_op = 'INSERT' or old.estado is distinct from 'completado') then
+    select greatest(1, floor(coalesce(new.precio, 0) / a.bs_por_ficha))::integer into v_fichas
+      from juego_ajustes a where a.id = 1;
+    insert into juego_movimientos (usuario, cambio, motivo, id_pedido)
+      values (new.usuario, v_fichas, 'recarga', new.id_pedido)
+      on conflict (id_pedido, motivo) do nothing;
+    get diagnostics v_filas = row_count;
+    if v_filas > 0 then
+      insert into juego_fichas (usuario, fichas) values (new.usuario, v_fichas)
+        on conflict (usuario) do update set fichas = juego_fichas.fichas + v_fichas, actualizado = now();
+    end if;
+  end if;
+  if new.estado = 'reembolsado' and tg_op = 'UPDATE' and old.estado is distinct from 'reembolsado' then
+    select m.cambio into v_fichas from juego_movimientos m where m.id_pedido = new.id_pedido and m.motivo = 'recarga';
+    if v_fichas is not null then
+      insert into juego_movimientos (usuario, cambio, motivo, id_pedido)
+        values (new.usuario, -v_fichas, 'reembolso', new.id_pedido)
+        on conflict (id_pedido, motivo) do nothing;
+      get diagnostics v_filas = row_count;
+      if v_filas > 0 then
+        update juego_fichas set fichas = fichas - v_fichas, actualizado = now() where usuario = new.usuario;
+      end if;
+    end if;
+  end if;
+  return new;
+end $$;
+revoke execute on function public.juego_fichas_por_recarga() from public, anon, authenticated;
+
+-- Contador del inicio: recargas completadas desde p_desde (00:00 de hoy, hora de Venezuela)
+create or replace function public.recargas_completadas_desde(p_desde timestamptz)
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select count(*)::integer from recargas where estado = 'completado' and creado >= p_desde;
+$$;
+revoke execute on function public.recargas_completadas_desde(timestamptz) from public, anon, authenticated;
+grant execute on function public.recargas_completadas_desde(timestamptz) to service_role;
+
+-- ---------------------------------------------------------------------
+-- Panel admin.html: resumen de ventas y revisión del minijuego
+-- (solo administradores; desde el SQL Editor también funcionan)
+-- ---------------------------------------------------------------------
+create or replace function public.admin_resumen(p_desde timestamptz)
+returns table (juego text, estado text, pedidos integer, total numeric)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select r.juego, r.estado, count(*)::integer, coalesce(sum(r.precio), 0)
+    from recargas r
+   where r.creado >= p_desde
+     and ((select auth.role()) is null or (select auth.role()) = 'service_role' or (select public.es_admin()))
+   group by r.juego, r.estado;
+$$;
+revoke execute on function public.admin_resumen(timestamptz) from public, anon;
+grant execute on function public.admin_resumen(timestamptz) to authenticated, service_role;
+
+-- juego_revision (supabase/minijuego.sql) ahora también la puede usar un administrador desde admin.html
+create or replace function public.juego_revision(p_desde timestamptz, p_hasta timestamptz default null, p_limite integer default 10)
+returns table (puesto integer, correo text, puntos integer, revisar boolean, stats jsonb, segundos numeric,
+               partidas_validas integer, partidas_invalidas integer, terminada timestamptz, id_partida uuid)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with semana as (
+    select * from juego_partidas p
+     where p.terminada >= p_desde and (p_hasta is null or p.terminada < p_hasta)
+       and ((select auth.role()) is null or (select auth.role()) = 'service_role' or (select public.es_admin()))
+  ), mejores as (
+    select distinct on (s.usuario) s.* from semana s where s.estado = 'valida'
+     order by s.usuario, s.puntos desc, s.terminada asc
+  ), ordenados as (
+    select m.*, (row_number() over (order by m.puntos desc, m.terminada asc))::integer as puesto from mejores m
+  )
+  select o.puesto, u.email::text, o.puntos, o.revisar, o.stats, round(o.ticks / 60.0, 1),
+         (select count(*) from semana x where x.usuario = o.usuario and x.estado = 'valida')::integer,
+         (select count(*) from semana x where x.usuario = o.usuario and x.estado = 'invalida')::integer,
+         o.terminada, o.id
+    from ordenados o join auth.users u on u.id = o.usuario
+   where o.puesto <= least(greatest(coalesce(p_limite, 10), 1), 50)
+   order by o.puesto;
+$$;
+revoke execute on function public.juego_revision(timestamptz, timestamptz, integer) from public, anon;
+grant execute on function public.juego_revision(timestamptz, timestamptz, integer) to authenticated, service_role;

@@ -11,6 +11,8 @@ import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorIne
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
+import { supabaseActivo, rpc } from '../supabase.js';
+import { iniciosVE } from '../semana.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con fallo del bot:
 // precios 8 + verificar 32 + códigos 32 + bot 45 + devolver pines 15 + registrar 12 + marcar 12 = 156 s
@@ -157,8 +159,24 @@ async function catalogoFreeFire() {
 // Contador del inicio: recargas entregadas (pestaña "finalizados", Free Fire y Mobile Legends).
 // Copia de 1 h en esta instancia y 1 h en la CDN: la hoja casi nunca se despierta por esto.
 // Sin dato (Apps Script anterior o caído) responde total 0 y la página no muestra nada.
+// Desde este día (hora de Venezuela) el contador sale de Supabase, que desde 2026-11-13 tiene TODOS los
+// pedidos de todas las tiendas (_lib/historial.js). Antes de esa fecha Supabase no tenía el día completo.
+const CONTADOR_SUPABASE_DESDE = '2026-11-14';
+
 async function estadisticas(req, res) {
   const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
+  const hoyVE = new Date(Date.now() - 4 * 60 * 60_000).toISOString().slice(0, 10);
+  if (supabaseActivo() && hoyVE >= CONTADOR_SUPABASE_DESDE) {
+    try {
+      const { datos } = await conCache(`estadisticas:supabase:${hoyVE}`,
+        async () => ({ hoy: Number(await rpc('recargas_completadas_desde', { p_desde: iniciosVE().dia })) }),
+        { frescoMs: 2 * 60_000, respaldoMs: 30 * 60_000, esValido: (d) => Number.isFinite(d?.hoy) });
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=120');
+      return res.status(200).json({ total: Math.max(0, Math.floor(datos.hoy)) });
+    } catch (error) {
+      console.error("⚠️ estadisticas: Supabase no respondió, se cuenta en la hoja:", error.message);
+    }
+  }
   // Solo un dato real se guarda en la CDN: un 0 por fallo se volvería a pedir enseguida
   res.setHeader('Cache-Control', 'no-store');
   // Sin dato: total null (un 0 se mostraría como "0 recargas hoy")
@@ -524,7 +542,10 @@ async function entregarRecarga(res, {
     }));
   });
 
-  return res.status(200).json({ status: "success", message: "Recarga procesada exitosamente con Level Up Bot." });
+  // entrega "en_camino": Central One aceptó el pedido pero todavía no confirma que llegó (el webhook avisa).
+  // El perfil lo muestra "En proceso" y las fichas del minijuego llegan al confirmarse (_lib/historial.js)
+  const enCamino = porApi && !/^(completed|delivered)$/i.test(String(ordenFazer?.status || ''));
+  return res.status(200).json({ status: "success", message: "Recarga procesada exitosamente con Level Up Bot.", ...(enCamino && { entrega: 'en_camino' }) });
 
 }
 

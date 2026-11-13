@@ -1,22 +1,41 @@
-// Datos de Pago Móvil (Firestore: configuracion/pago_movil) leídos por la API REST de Firestore.
-// Reemplaza al SDK de Firebase en las tiendas: ~300 KB menos de JavaScript y la página no espera
-// esa descarga para mostrar el catálogo. Mismas reglas de seguridad que el SDK (lectura sin sesión).
+// Datos de Pago Móvil (Supabase: tabla "configuracion", clave "pago_movil"; antes Firestore, hasta
+// 2026-11-13). Se leen con la llave PÚBLICA de Supabase por su API REST (sin librería): la tabla deja leer a
+// cualquiera solo las filas marcadas "publico" y solo los administradores (admin.html) las cambian.
+// La dirección y la llave públicas salen de /api/version?config=1 (la misma configuración que js/sesion.js,
+// guardada en sessionStorage). Uso: const datos = await DatosPago.leer();  -> { banco, telefono, cedula } o null
 (function () {
-  const PROYECTO = 'levelupstore-87d4d';
-  const CLAVE_WEB = 'AIzaSyBIdEh_HzzB8dnzG8qkPQYOIo2kSb_F6xQ'; // clave pública de la app web (la misma que usaba el SDK)
-  const URL = `https://firestore.googleapis.com/v1/projects/${PROYECTO}/databases/(default)/documents/configuracion/pago_movil?key=${CLAVE_WEB}`;
+  const CLAVE_CONFIG = 'levelup_sesion_config';
 
-  // Devuelve { banco, telefono, cedula } o null si no existe o falla
-  async function leer() {
+  async function configuracion() {
     try {
-      const res = await fetch(URL);
-      if (!res.ok) return null;
-      const campos = (await res.json()).fields || {};
-      const texto = (nombre) => (campos[nombre] ? String(campos[nombre].stringValue ?? campos[nombre].integerValue ?? '') : '');
-      return { banco: texto('banco'), telefono: texto('telefono'), cedula: texto('cedula') };
-    } catch (e) {
-      return null;
-    }
+      const c = JSON.parse(sessionStorage.getItem(CLAVE_CONFIG) || 'null');
+      if (c && c.supabaseUrl) return c;
+    } catch (e) { /* sigue */ }
+    const res = await fetch('/api/version?config=1');
+    const c = await res.json();
+    try { if (c && c.supabaseUrl) sessionStorage.setItem(CLAVE_CONFIG, JSON.stringify(c)); } catch (e) { /* sin almacenamiento */ }
+    return c;
+  }
+
+  async function intento() {
+    const c = await configuracion();
+    if (!c || !c.supabaseUrl || !c.supabaseKey) return null;
+    const res = await fetch(`${c.supabaseUrl}/rest/v1/configuracion?clave=eq.pago_movil&select=valor`, {
+      headers: { apikey: c.supabaseKey, Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const fila = (await res.json())[0];
+    const v = (fila && fila.valor) || null;
+    if (!v) return null;
+    const texto = (x) => String(x == null ? '' : x).slice(0, 60);
+    return { banco: texto(v.banco), telefono: texto(v.telefono), cedula: texto(v.cedula) };
+  }
+
+  // Devuelve { banco, telefono, cedula } o null si no existe o falla (un reintento: el cliente necesita
+  // estos datos para pagar)
+  async function leer() {
+    try { return await intento(); } catch (e) { /* un reintento */ }
+    try { await new Promise((ok) => setTimeout(ok, 800)); return await intento(); } catch (e) { return null; }
   }
 
   window.DatosPago = { leer };

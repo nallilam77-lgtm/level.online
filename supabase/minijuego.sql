@@ -82,7 +82,8 @@ declare
   v_fichas integer;
   v_filas  integer;
 begin
-  if new.juego not in ('freefire', 'bloodstrike', 'mobilelegends', 'roblox') then
+  -- Sin usuario (pedido sin sesión, supabase/tienda.sql) no hay fichas
+  if new.usuario is null or new.juego not in ('freefire', 'bloodstrike', 'mobilelegends', 'roblox') then
     return new;
   end if;
 

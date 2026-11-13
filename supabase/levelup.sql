@@ -5,10 +5,10 @@
 -- Se puede volver a correr: crea lo que falta y reemplaza las funciones.
 --
 -- Qué guarda (solo lo necesario):
---   recargas        las recargas de los clientes CON SESIÓN (inicio con Google): juego, cuenta (ID o
---                   WhatsApp, nunca correo ni contraseña del juego), paquete, precio, últimos dígitos
---                   de la referencia, fecha y hora y estado (se actualiza en vivo). Sin sesión no se
---                   guarda nada aquí. Al borrar el usuario se borran sus recargas.
+--   recargas        los pedidos: juego, cuenta (ID o WhatsApp, nunca correo ni contraseña del juego),
+--                   paquete, precio, últimos dígitos de la referencia, fecha y hora y estado (se
+--                   actualiza en vivo). Desde supabase/tienda.sql guarda TODOS los pedidos (usuario
+--                   vacío si no hay sesión). Al borrar el usuario se borran sus recargas.
 --   fidelidad       conteo del premio de cliente fiel por juego + cuenta (la cuenta va como huella
 --                   SHA-256, nunca en claro). Cuenta para todos, tengan sesión o no.
 --   fidelidad_usos  cada venta con el premio (juego, cuenta, pedido, %, precio normal y cobrado).
