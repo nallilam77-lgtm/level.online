@@ -4,21 +4,9 @@
 // Hora de Venezuela (UTC-4 todo el año): el día empieza a las 00:00 y la semana el lunes a las 00:00.
 // 5 min en la CDN de Vercel: muchas visitas al inicio = una sola llamada a Supabase cada 5 min.
 import { supabaseActivo, rpc } from './_lib/supabase.js';
+import { iniciosVE } from './_lib/semana.js';
 
-const DESFASE_VE_MS = 4 * 60 * 60 * 1000; // America/Caracas = UTC-4, sin horario de verano
-const DIA_MS = 24 * 60 * 60 * 1000;
 const PUESTOS = 10;
-
-// Inicio del día y de la semana (lunes) en Venezuela, en ISO (UTC)
-function inicios(ahora = Date.now()) {
-  const local = ahora - DESFASE_VE_MS;
-  const dia = Math.floor(local / DIA_MS) * DIA_MS;
-  const diaSemana = (new Date(dia).getUTCDay() + 6) % 7; // lunes = 0
-  return {
-    dia: new Date(dia + DESFASE_VE_MS).toISOString(),
-    semana: new Date(dia - diaSemana * DIA_MS + DESFASE_VE_MS).toISOString(),
-  };
-}
 
 const limpiar = (filas) => (Array.isArray(filas) ? filas : []).map((f) => ({
   puesto: Number(f.puesto) || 0,
@@ -36,7 +24,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ status: 'success', activo: false, dia: [], semana: [] });
   }
   try {
-    const desde = inicios();
+    const desde = iniciosVE();
     const [dia, semana] = await Promise.all([
       rpc('ranking_clientes', { p_desde: desde.dia, p_limite: PUESTOS }),
       rpc('ranking_clientes', { p_desde: desde.semana, p_limite: PUESTOS }),
