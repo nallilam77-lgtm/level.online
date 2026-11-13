@@ -207,3 +207,92 @@ on conflict (usuario) do update set fichas = juego_fichas.fichas + excluded.fich
 --   select * from public.juego_ranking(
 --     date_trunc('week', (now() at time zone 'America/Caracas') - interval '7 days') at time zone 'America/Caracas',
 --     date_trunc('week', now() at time zone 'America/Caracas') at time zone 'America/Caracas', 3);
+
+-- =====================================================================
+-- v2 (2026-11-13): contra errores y trampas. Se puede correr sobre lo anterior.
+--   - clave: el teléfono manda una clave por cada "Jugar". Si se corta la conexión y reintenta con la
+--     misma clave, recibe la MISMA partida (no se cobran fichas dos veces).
+--   - stats: lo que pasó en la partida según el servidor (diamantes atrapados/escapados, golpes...).
+--   - revisar: partida demasiado perfecta (posible programa que juega solo). Cuenta para el ranking,
+--     pero revísala antes de pagar el premio con juego_revision (abajo).
+-- =====================================================================
+alter table public.juego_partidas add column if not exists clave uuid;
+alter table public.juego_partidas add column if not exists stats jsonb;
+alter table public.juego_partidas add column if not exists revisar boolean not null default false;
+create unique index if not exists juego_partidas_clave on public.juego_partidas (usuario, clave) where clave is not null;
+
+drop function if exists public.juego_empezar(uuid, bigint);
+create or replace function public.juego_empezar(p_usuario uuid, p_semilla bigint, p_clave uuid default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_costo   integer;
+  v_fichas  integer;
+  v_id      uuid;
+  v_semilla bigint;
+begin
+  select costo_partida into v_costo from juego_ajustes where id = 1;
+  insert into juego_fichas (usuario) values (p_usuario) on conflict (usuario) do nothing;
+  select fichas into v_fichas from juego_fichas where usuario = p_usuario for update;
+
+  -- Reintento del mismo "Jugar": la misma partida, sin cobrar otra vez
+  if p_clave is not null then
+    select p.id, p.semilla into v_id, v_semilla from juego_partidas p
+     where p.usuario = p_usuario and p.clave = p_clave and p.estado = 'abierta';
+    if v_id is not null then
+      return jsonb_build_object('ok', true, 'id', v_id, 'semilla', v_semilla, 'fichas', v_fichas, 'costo', v_costo, 'repetida', true);
+    end if;
+  end if;
+
+  if v_fichas < v_costo then
+    return jsonb_build_object('ok', false, 'fichas', v_fichas, 'costo', v_costo);
+  end if;
+  update juego_partidas set estado = 'vencida', motivo = 'se empezó otra', terminada = now()
+    where usuario = p_usuario and estado = 'abierta';
+  insert into juego_partidas (usuario, semilla, clave) values (p_usuario, p_semilla, p_clave) returning id into v_id;
+  update juego_fichas set fichas = fichas - v_costo, actualizado = now() where usuario = p_usuario;
+  insert into juego_movimientos (usuario, cambio, motivo, id_partida) values (p_usuario, -v_costo, 'partida', v_id);
+  return jsonb_build_object('ok', true, 'id', v_id, 'semilla', p_semilla, 'fichas', v_fichas - v_costo, 'costo', v_costo);
+end $$;
+
+-- Revisión antes de pagar: los mejores de la semana con correo, su mejor partida, estadísticas y si
+-- quedó marcada para revisar. Solo desde el SQL Editor (o el servidor), nunca desde el navegador.
+--   Semana actual:
+--     select * from public.juego_revision(date_trunc('week', now() at time zone 'America/Caracas') at time zone 'America/Caracas', null, 10);
+--   Semana pasada (para pagar el lunes):
+--     select * from public.juego_revision(
+--       date_trunc('week', (now() at time zone 'America/Caracas') - interval '7 days') at time zone 'America/Caracas',
+--       date_trunc('week', now() at time zone 'America/Caracas') at time zone 'America/Caracas', 10);
+create or replace function public.juego_revision(p_desde timestamptz, p_hasta timestamptz default null, p_limite integer default 10)
+returns table (puesto integer, correo text, puntos integer, revisar boolean, stats jsonb, segundos numeric,
+               partidas_validas integer, partidas_invalidas integer, terminada timestamptz, id_partida uuid)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with semana as (
+    select * from juego_partidas p
+     where p.terminada >= p_desde and (p_hasta is null or p.terminada < p_hasta)
+  ), mejores as (
+    select distinct on (s.usuario) s.* from semana s where s.estado = 'valida'
+     order by s.usuario, s.puntos desc, s.terminada asc
+  ), ordenados as (
+    select m.*, (row_number() over (order by m.puntos desc, m.terminada asc))::integer as puesto from mejores m
+  )
+  select o.puesto, u.email::text, o.puntos, o.revisar, o.stats, round(o.ticks / 60.0, 1),
+         (select count(*) from semana x where x.usuario = o.usuario and x.estado = 'valida')::integer,
+         (select count(*) from semana x where x.usuario = o.usuario and x.estado = 'invalida')::integer,
+         o.terminada, o.id
+    from ordenados o join auth.users u on u.id = o.usuario
+   where o.puesto <= least(greatest(coalesce(p_limite, 10), 1), 50)
+   order by o.puesto;
+$$;
+
+revoke execute on function public.juego_empezar(uuid, bigint, uuid) from public, anon, authenticated;
+revoke execute on function public.juego_revision(timestamptz, timestamptz, integer) from public, anon, authenticated;
+grant execute on function public.juego_empezar(uuid, bigint, uuid) to service_role;
+grant execute on function public.juego_revision(timestamptz, timestamptz, integer) to service_role;

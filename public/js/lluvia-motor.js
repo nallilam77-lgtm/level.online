@@ -54,6 +54,9 @@ export function partidaNueva(semilla) {
     objetos: [], textos: [], explosiones: [], proximo: 0.3, sacudida: 0,
     escudo: 0, lento: 0, rapido: 0, ciego: 0,
     registro: [],                     // [tick, x] cada vez que el cofre cambia de destino
+    // Para revisar partidas (no cambian el juego): diamantes atrapados y escapados, golpes recibidos,
+    // golpes que paró el escudo y especiales (escudo, lento, rápido) atrapados
+    stats: { atrapados: 0, escapados: 0, golpes: 0, bloqueados: 0, especiales: 0 },
   };
 }
 
@@ -78,7 +81,8 @@ function crearObjeto(e) {
 function texto(e, x, t, k) { e.textos.push({ x, y: COFRE_Y - 14, t, k, vida: 0.8 }); }
 
 function golpe(e, x, motivo) {
-  if (e.escudo > 0) { e.escudo = 0; texto(e, x, '¡Escudo!', 'escudo'); return; }
+  if (e.escudo > 0) { e.escudo = 0; e.stats.bloqueados++; texto(e, x, '¡Escudo!', 'escudo'); return; }
+  e.stats.golpes++;
   e.vidas--; e.racha = 0; e.sacudida = 0.35; texto(e, x, motivo, 'bomba');
 }
 
@@ -116,10 +120,11 @@ export function paso(e, destino) {
       switch (o.tipo) {
         case 'bomba': golpe(e, o.x, '−1 vida'); break;
         case 'granada': case 'cegadora': explotar(e, o, true); break;
-        case 'escudo': e.escudo = DUR.escudo; texto(e, o.x, 'Escudo', 'escudo'); break;
-        case 'lento': e.lento = DUR.lento; e.rapido = 0; texto(e, o.x, 'Lento', 'lento'); break;
-        case 'rapido': e.rapido = DUR.rapido; e.lento = 0; texto(e, o.x, 'Rápido ×2', 'rapido'); break;
+        case 'escudo': e.stats.especiales++; e.escudo = DUR.escudo; texto(e, o.x, 'Escudo', 'escudo'); break;
+        case 'lento': e.stats.especiales++; e.lento = DUR.lento; e.rapido = 0; texto(e, o.x, 'Lento', 'lento'); break;
+        case 'rapido': e.stats.especiales++; e.rapido = DUR.rapido; e.lento = 0; texto(e, o.x, 'Rápido ×2', 'rapido'); break;
         default: {
+          e.stats.atrapados++;
           e.racha++;
           const pts = (o.tipo === 'oro' ? 50 : 10) * multiplicador(e);
           e.puntos += pts; texto(e, o.x, '+' + pts, o.tipo);
@@ -129,7 +134,7 @@ export function paso(e, destino) {
       e.objetos.splice(i, 1); explotar(e, o, false);
     } else if (o.y - o.r > H) {
       e.objetos.splice(i, 1);
-      if (o.tipo === 'gema' || o.tipo === 'oro') e.racha = 0; // se te escapó: el combo vuelve a x1
+      if (o.tipo === 'gema' || o.tipo === 'oro') { e.racha = 0; e.stats.escapados++; } // se te escapó: el combo vuelve a x1
     }
   }
   for (const x of e.explosiones) x.t += dt;
@@ -153,7 +158,7 @@ export function registroValido(registro) {
   return true;
 }
 
-/** Repite una partida con su semilla y su registro: { puntos, ticks, fin, usados } (usados = movimientos aplicados). */
+/** Repite una partida con su semilla y su registro: { puntos, ticks, fin, usados, stats } (usados = movimientos aplicados). */
 export function repetirPartida(semilla, registro) {
   const e = partidaNueva(semilla);
   let i = 0, destino = W / 2;
@@ -161,5 +166,5 @@ export function repetirPartida(semilla, registro) {
     while (i < registro.length && registro[i][0] === e.tick) destino = registro[i++][1];
     paso(e, destino);
   }
-  return { puntos: e.puntos, ticks: e.tick, fin: e.fin, usados: i };
+  return { puntos: e.puntos, ticks: e.tick, fin: e.fin, usados: i, stats: e.stats };
 }

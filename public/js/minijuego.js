@@ -8,7 +8,7 @@
 import {
   W, H, SUELO, COFRE_Y, COFRE_MEDIO, DURACION_S, PASO, OBJETOS, X_MIN, X_MAX,
   partidaNueva, paso, segundos, multiplicador,
-} from './lluvia-motor.js?v=1';
+} from './lluvia-motor.js?v=2';
 
 const $ = (id) => document.getElementById(id);
 // El juego exige sesión: sin ella se va a iniciar sesión y vuelve aquí solo (perfil.js, "entrar=1")
@@ -20,8 +20,14 @@ const CAPAS = ['capaCargando', 'capaEntrar', 'capaInicio', 'capaSinFichas', 'cap
 let info = { fichas: 0, costo: 5, bsPorFicha: 780, sesion: false, cierre: null };
 let estado = null;          // partida en pantalla (del motor)
 let idPartida = '';
-let envioPendiente = null;  // { id, registro } si falló el envío al terminar
+let avisoPausaHasta = 0;    // aviso "no salgas del juego" (visibilitychange)
+let envioPendiente = null;  // { id, registro, puntos, fin } si falló el envío al terminar (también en el teléfono)
+let claveJugar = '';        // una por cada "Jugar": si se corta y se reintenta, el servidor da la MISMA partida
 let ocupado = false;
+const CLAVE_ENVIO = 'lluvia_envio_pendiente';
+const espera = (ms) => new Promise((ok) => setTimeout(ok, ms));
+const nuevaClave = () => (crypto.randomUUID ? crypto.randomUUID()
+  : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
 
 const leer = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } };
 const guardar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sin almacenamiento */ } };
@@ -111,6 +117,8 @@ async function cargar() {
     info = { fichas: r.fichas, costo: r.costo, bsPorFicha: r.bsPorFicha, sesion: r.sesion, cierre: r.cierre };
     pintarFichas(); pintarRanking(r.ranking); cuentaAtras();
     if (!r.sesion) return irALogin();   // sesión vencida o no válida
+    const guardado = leer(CLAVE_ENVIO, null);
+    if (guardado && guardado.id && Array.isArray(guardado.registro)) return enviarResultado(guardado);
     mostrarCapa(info.fichas >= info.costo ? 'capaInicio' : 'capaSinFichas');
   } catch (e) {
     error('No pudimos conectar con el juego. Revisa tu conexión.');
@@ -227,6 +235,7 @@ function pintarHud() {
   $('hudVidas').textContent = '♥'.repeat(Math.max(0, e.vidas)) || '0';
   $('hudCombo').textContent = 'x' + multiplicador(e);
   const activos = [
+    Date.now() < avisoPausaHasta && ['aviso', 'No salgas del juego: una pausa larga anula la partida'],
     e.escudo > 0 && ['escudo', `Escudo ${Math.ceil(e.escudo)} s`],
     e.lento > 0 && ['lento', `Lento ${Math.ceil(e.lento)} s`],
     e.rapido > 0 && ['rapido', `Rápido ×2 ${Math.ceil(e.rapido)} s`],
@@ -253,7 +262,7 @@ function bucle(t) {
   pintarHud();
   dibujar();
   if (estado.jugando) animacion = requestAnimationFrame(bucle);
-  else enviarResultado({ id: idPartida, registro: estado.registro });
+  else enviarResultado({ id: idPartida, registro: estado.registro, puntos: estado.puntos, fin: estado.fin });
 }
 
 async function jugar() {
@@ -261,9 +270,14 @@ async function jugar() {
   if (envioPendiente) return enviarResultado(envioPendiente);
   ocupado = true;
   $('btnJugar').disabled = true; $('btnOtra').disabled = true;
+  if (!claveJugar) claveJugar = nuevaClave();
   try {
-    const r = await api(`${API}?accion=empezar`, {});
+    // Si se corta la conexión, un reintento con la misma clave: el servidor no cobra dos veces
+    let r;
+    try { r = await api(`${API}?accion=empezar`, { clave: claveJugar }); }
+    catch (e) { await espera(1500); r = await api(`${API}?accion=empezar`, { clave: claveJugar }); }
     if (r.http === 401) return irALogin();
+    if (r.status === 'success' || r.sinFichas) claveJugar = '';
     if (r.sinFichas) { info.fichas = r.fichas; info.costo = r.costo; pintarFichas(); return mostrarCapa('capaSinFichas'); }
     if (r.status !== 'success') return error(r.message || 'No se pudo empezar la partida.');
     info.fichas = r.fichas; pintarFichas();
@@ -278,7 +292,8 @@ async function jugar() {
     ultimo = performance.now();
     animacion = requestAnimationFrame(bucle);
   } catch (e) {
-    error('No pudimos empezar la partida (tus fichas no se cobraron si no llegó a empezar). Intenta otra vez.');
+    // claveJugar se conserva: "Reintentar" recupera la misma partida si ya se había cobrado
+    error('Sin conexión. Toca Reintentar: si la partida ya se cobró, no se cobra otra vez.');
   } finally {
     ocupado = false;
     $('btnJugar').disabled = false; $('btnOtra').disabled = false;
@@ -287,19 +302,35 @@ async function jugar() {
 
 async function enviarResultado(envio) {
   envioPendiente = envio;
-  const fin = estado && estado.fin === 'tiempo' ? '¡Tiempo!' : '¡Sin vidas!';
-  $('finTitulo').textContent = fin;
-  $('finPuntos').textContent = numero(estado ? estado.puntos : 0);
+  guardar(CLAVE_ENVIO, envio);   // si se cierra la página o vence la sesión, se envía al volver
+  $('finTitulo').textContent = envio.fin === 'tiempo' ? '¡Tiempo!' : '¡Sin vidas!';
+  $('finPuntos').textContent = numero(envio.puntos);
   $('finTexto').textContent = 'Comprobando…';
   $('btnOtra').hidden = true;
   mostrarCapa('capaFin');
   try {
-    const r = await api(`${API}?accion=terminar`, envio);
+    // Hasta 3 intentos (la conexión móvil a veces se corta un momento)
+    let r = null;
+    for (let intento = 0; intento < 3 && !r; intento++) {
+      if (intento) await espera(intento * 2000);
+      try { r = await api(`${API}?accion=terminar`, envio); } catch (e) { r = null; }
+    }
+    if (!r) throw new Error('sin conexión');
+    if (r.http === 401) return irALogin();   // la partida queda guardada y se envía al volver
+    // Ya terminada (se envió antes) o no existe: no hay nada más que hacer con ella
+    if (r.http === 409 || r.http === 404 || r.http === 400) {
+      envioPendiente = null; try { localStorage.removeItem(CLAVE_ENVIO); } catch (e) { /* sin almacenamiento */ }
+      $('finTexto').textContent = r.http === 409 ? 'Esta partida ya estaba registrada.' : 'No pudimos registrar esta partida.';
+      $('btnOtra').textContent = info.fichas >= info.costo ? `Jugar · ${info.costo} fichas` : 'Recargar';
+      $('btnOtra').hidden = false;
+      return;
+    }
     if (r.status !== 'success') throw new Error(r.message || 'falló');
     envioPendiente = null;
+    try { localStorage.removeItem(CLAVE_ENVIO); } catch (e) { /* sin almacenamiento */ }
     $('finPuntos').textContent = numero(r.puntos);
     $('finTexto').textContent = !r.valida
-      ? 'Partida no válida: no cuenta.'
+      ? (r.motivo || 'Partida no válida: no cuenta.')
       : (r.puntos >= r.mejor && r.puntos > 0
         ? `¡Nuevo récord! Puesto ${r.puesto}.`
         : `Tu récord: ${numero(r.mejor)}${r.puesto ? ` · puesto ${r.puesto}` : ''}.`);
@@ -335,6 +366,15 @@ window.addEventListener('keydown', (ev) => {
 window.addEventListener('keyup', (ev) => {
   if (ev.key === 'ArrowLeft' || ev.key === 'a') teclas.izq = false;
   if (ev.key === 'ArrowRight' || ev.key === 'd') teclas.der = false;
+});
+// Salir del juego a mitad de partida (cambiar de app): el juego se detiene, pero si la pausa es larga la
+// partida no cuenta (el servidor compara el tiempo real con el del juego). Al volver se avisa.
+let salioA = 0;
+document.addEventListener('visibilitychange', () => {
+  if (!estado || !estado.jugando) return;
+  if (document.hidden) { salioA = Date.now(); return; }
+  if (salioA && Date.now() - salioA > 1500) avisoPausaHasta = Date.now() + 4000;   // pintarHud lo muestra
+  salioA = 0;
 });
 // Salir a mitad de partida la pierde: se avisa
 window.addEventListener('beforeunload', (ev) => { if ((estado && estado.jugando) || envioPendiente) { ev.preventDefault(); ev.returnValue = ''; } });

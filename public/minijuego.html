@@ -20,10 +20,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/minijuego.css?v=2">
+  <link rel="stylesheet" href="css/minijuego.css?v=3">
   <!-- Sesión (agrega el token a /api/minijuego) y después el juego (módulo: usa el motor compartido con el servidor) -->
   <script src="/js/sesion.js?v=4" defer></script>
-  <script type="module" src="/js/minijuego.js?v=3"></script>
+  <script type="module" src="/js/minijuego.js?v=4"></script>
 </head>
 <body>
   <div class="barra">
@@ -120,6 +120,7 @@
       <ul class="reglas">
         <li><strong>5 fichas</strong> por partida. Ganas fichas recargando con tu sesión.</li>
         <li>La <strong>mejor partida de la semana</strong> gana <strong>341 💎</strong>.</li>
+        <li>No salgas del juego mientras juegas: una pausa larga anula la partida.</li>
         <li>Hacer trampa = fuera del torneo.</li>
       </ul>
       <button type="button" class="btn" id="btnTutorialOk">¡A jugar!</button>
