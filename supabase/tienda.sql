@@ -297,6 +297,9 @@ begin
   return jsonb_build_object(
     'total', pg_database_size(current_database()),
     'limite', admin_limite_borrado(),
+    'conexiones', (select count(*) from pg_stat_activity where datname = current_database()),
+    'conexiones_max', current_setting('max_connections')::integer,
+    'version', current_setting('server_version'),
     'tablas', (
       select coalesce(jsonb_agg(jsonb_build_object(
                'tabla', c.relname,
@@ -347,3 +350,47 @@ end;
 $$;
 revoke execute on function public.admin_borrar_viejo(text, timestamptz) from public, anon;
 grant execute on function public.admin_borrar_viejo(text, timestamptz) to authenticated, service_role;
+
+-- ---------------------------------------------------------------------
+-- Panel admin.html · Cuentas: cuentas creadas, sus recargas y fichas del minijuego
+-- (solo administradores). Las recargas cuentan solo las ENTREGADAS.
+-- ---------------------------------------------------------------------
+create or replace function public.admin_cuentas(p_limite integer default 50)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_hoy timestamptz := date_trunc('day', now() at time zone 'America/Caracas') at time zone 'America/Caracas';
+begin
+  if not ((select auth.role()) is null or (select auth.role()) = 'service_role' or (select es_admin())) then
+    raise exception 'solo administradores' using errcode = '42501';
+  end if;
+  return jsonb_build_object(
+    'total', (select count(*) from auth.users),
+    'hoy', (select count(*) from auth.users where created_at >= v_hoy),
+    'semana', (select count(*) from auth.users where created_at >= now() - interval '7 days'),
+    'recargas', (select count(*) from recargas where estado = 'completado'),
+    'recargas_con_cuenta', (select count(*) from recargas where estado = 'completado' and usuario is not null),
+    'fichas', (select coalesce(sum(fichas), 0) from juego_fichas),
+    'cuentas', (
+      select coalesce(jsonb_agg(c order by c.creado desc), '[]'::jsonb) from (
+        select u.email::text as correo,
+               coalesce(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name') as nombre,
+               u.created_at as creado,
+               u.last_sign_in_at as ultimo,
+               (select count(*) from recargas r where r.usuario = u.id and r.estado = 'completado') as recargas,
+               (select coalesce(sum(r.precio), 0) from recargas r where r.usuario = u.id and r.estado = 'completado') as gastado,
+               coalesce((select f.fichas from juego_fichas f where f.usuario = u.id), 0) as fichas
+          from auth.users u
+         order by u.created_at desc
+         limit least(greatest(coalesce(p_limite, 50), 1), 500)
+      ) c
+    )
+  );
+end;
+$$;
+revoke execute on function public.admin_cuentas(integer) from public, anon;
+grant execute on function public.admin_cuentas(integer) to authenticated, service_role;

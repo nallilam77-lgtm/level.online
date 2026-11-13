@@ -1,9 +1,10 @@
 // =========================================================================
-// PANEL (panel.html) sobre Supabase (desde 2026-11-13). Pago Móvil sigue en Firebase: se cambia en admin.html.
+// PANEL ADMIN (admin.html) sobre Supabase (desde 2026-11-13; el panel de Firebase se quitó). Pago Móvil sigue en
+// Firebase y se cambia en la consola de Firebase.
 // Entra con la sesión de Google de la tienda (js/sesion.js) y solo funciona si la cuenta está en la tabla
 // "administradores": la base lo comprueba en cada consulta (RLS y es_admin(), supabase/tienda.sql), así
 // que esta página no protege nada por sí sola. Secciones: resumen de ventas (admin_resumen), pedidos en
-// vivo (tabla "recargas"), ranking del minijuego
+// vivo (tabla "recargas"), cuentas con sus recargas y fichas (admin_cuentas), ranking del minijuego
 // (juego_revision) y espacio de la base con limpieza de semanas viejas (admin_espacio / admin_borrar_viejo). Todo lo que viene de la base se pinta con textContent.
 // =========================================================================
 (function () {
@@ -52,6 +53,7 @@
     document.querySelectorAll('.seccion').forEach((s) => { s.hidden = s.id !== 'seccion-' + b.dataset.seccion; });
     if (b.dataset.seccion === 'juego') cargarJuego();
     if (b.dataset.seccion === 'espacio') cargarEspacio();
+    if (b.dataset.seccion === 'cuentas') cargarCuentas();
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -203,6 +205,9 @@
     $('medidorEspacio').setAttribute('aria-valuenow', pct.toFixed(1));
     $('medidorEspacio').classList.toggle('medidor--alto', pct >= 80);
     $('textoEspacio').textContent = `${tamano(Number(data.total))} usados (${pct.toFixed(1)} %)`;
+    $('kpiBase').textContent = tamano(Number(data.total));
+    $('kpiConexiones').textContent = `${Number(data.conexiones) || 0} / ${Number(data.conexiones_max) || '?'}`;
+    $('kpiVersion').textContent = String(data.version || '–');
 
     const cuerpo = $('tablaEspacio');
     cuerpo.replaceChildren();
@@ -240,6 +245,49 @@
     cargarEspacio();
   }
   $('antesDe').addEventListener('change', cargarEspacio);
+  $('actualizarEspacio').addEventListener('click', () => { cargarEspacio(); cargarCuentas(); });
+
+  // ---------------------------------------------------------------- cuentas
+  let cuentas = [];
+  const corta = (iso) => (iso ? new Date(iso).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: '2-digit' }) : 'nunca');
+
+  function pintarCuentas() {
+    const texto = $('buscarCuenta').value.trim().toLowerCase();
+    const lista = $('listaCuentas');
+    lista.replaceChildren();
+    const visibles = cuentas.filter((c) => !texto || `${c.correo} ${c.nombre || ''}`.toLowerCase().includes(texto));
+    if (!visibles.length) { lista.append(el('li', 'vacio', 'No hay cuentas con esa búsqueda.')); return; }
+    visibles.forEach((c) => {
+      const li = el('li', 'pedido');
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', c.nombre || c.correo || 'Sin correo'));
+      if (Number(c.recargas) > 0) cabeza.append(el('span', 'etiqueta etiqueta--completado', `${c.recargas} recarga${Number(c.recargas) === 1 ? '' : 's'}`));
+      li.append(cabeza,
+        el('span', '', `${c.correo || ''}${Number(c.gastado) > 0 ? ` · ${bs(c.gastado)} Bs` : ''} · ${Number(c.fichas) || 0} fichas`),
+        el('span', '', `Creada ${corta(c.creado)} · última entrada ${corta(c.ultimo)}`));
+      lista.append(li);
+    });
+  }
+
+  async function cargarCuentas() {
+    const { data, error } = await cliente.rpc('admin_cuentas', { p_limite: Number($('limiteCuentas').value) });
+    if (error || !data) {
+      console.error(error);
+      $('listaCuentas').replaceChildren(el('li', 'vacio', 'No se pudieron cargar las cuentas.'));
+      return;
+    }
+    const n = (x) => Number(x || 0).toLocaleString('es-VE');
+    $('kpiCuentas').textContent = n(data.total);
+    $('kpiCuentasSb').textContent = n(data.total);
+    $('kpiNuevas').textContent = `${n(data.hoy)} · ${n(data.semana)}`;
+    $('kpiRecargas').textContent = n(data.recargas);
+    $('kpiFichas').textContent = n(data.fichas);
+    $('notaRecargas').textContent = `Recargas entregadas desde que se guardan en Supabase; ${n(data.recargas_con_cuenta)} fueron con la sesión iniciada.`;
+    cuentas = Array.isArray(data.cuentas) ? data.cuentas : [];
+    pintarCuentas();
+  }
+  $('limiteCuentas').addEventListener('change', cargarCuentas);
+  $('buscarCuenta').addEventListener('input', pintarCuentas);
 
   // "Entrar con Google": si había otra cuenta (no administradora), primero se cierra
   $('btnEntrarAdmin').addEventListener('click', async (ev) => {

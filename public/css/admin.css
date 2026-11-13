@@ -103,6 +103,7 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .medidor span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--cta-gradient); }
 .medidor--alto span { background: var(--aviso); }
 .borrar-fila { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.btn--chico { min-height: 40px; padding: 0 16px; font-size: 11px; }
 .btn--peligro { min-height: 44px; padding: 0 16px; font-size: 12px; background: transparent; color: var(--peligro); border: 1px solid var(--peligro); }
 
 .punto-vivo { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-neon); vertical-align: middle; }
