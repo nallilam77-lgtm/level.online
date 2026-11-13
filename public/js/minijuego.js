@@ -40,13 +40,13 @@ async function api(ruta, cuerpo) {
 
 // ------------------------------------------------------------------ fichas y ranking
 function pintarFichas() {
-  $('saldoFichas').textContent = info.sesion ? numero(info.fichas) : '–';
+  const saldo = info.sesion ? numero(info.fichas) : '–';
+  $('saldoFichas').textContent = saldo;
+  $('chipFichas').textContent = saldo;
   $('saldoCosto').textContent = `${info.costo} fichas = 1 partida`;
-  const regla = `1 ficha por cada ${numero(info.bsPorFicha)} Bs`;
-  $('reglaFichas').textContent = regla;
-  $('tutRegla').textContent = regla;
+  $('reglaFichas').textContent = `1 ficha por cada ${numero(info.bsPorFicha)} Bs`;
   $('btnJugar').textContent = `Jugar · ${info.costo} fichas`;
-  $('sinFichasTexto').textContent = `Necesitas ${info.costo} fichas para jugar y tienes ${numero(info.fichas)}. Las ganas con cada recarga completada con tu sesión iniciada.`;
+  $('sinFichasTexto').textContent = `Tienes ${numero(info.fichas)} de ${info.costo}. Recarga con tu sesión para ganar más.`;
 }
 
 function pintarRanking(filas) {
@@ -84,13 +84,13 @@ async function tablaEjemplos() {
     const res = await fetch('/api/precios');
     const data = await res.json();
     const precio = (p) => Number(String(p.precio || '').replace(/\./g, '').replace(',', '.'));
-    const filas = (data.catalogo || []).filter((p) => /^\d+\s+Diamantes$/i.test(String(p.diamantes || '').trim()) && precio(p) > 0).slice(0, 6);
+    const filas = (data.catalogo || []).filter((p) => /^\d+\s+Diamantes$/i.test(String(p.diamantes || '').trim()) && precio(p) > 0).slice(0, 5);
     if (!filas.length) throw new Error('sin paquetes');
     $('tablaFichas').replaceChildren(...filas.map((p) => {
       const tr = document.createElement('tr');
       const fichas = Math.max(1, Math.floor(precio(p) / info.bsPorFicha));
       tr.innerHTML = '<td></td><td></td>';
-      tr.children[0].textContent = `${p.diamantes.replace(/Diamantes/i, '💎')} (${numero(precio(p))} Bs)`;
+      tr.children[0].textContent = `${p.diamantes.replace(/\s*Diamantes/i, ' 💎')} · ${numero(precio(p))} Bs`;
       tr.children[1].textContent = `${fichas} ficha${fichas === 1 ? '' : 's'}`;
       return tr;
     }));
@@ -268,6 +268,8 @@ async function jugar() {
     destinoX = W / 2; acumulado = 0;
     mostrarCapa(null);
     pintarHud();
+    // En el teléfono, que el juego quede entero a la vista
+    $('canvas').closest('.juego').scrollIntoView({ block: 'end', behavior: 'auto' });
     cancelAnimationFrame(animacion);
     ultimo = performance.now();
     animacion = requestAnimationFrame(bucle);
@@ -281,10 +283,10 @@ async function jugar() {
 
 async function enviarResultado(envio) {
   envioPendiente = envio;
-  const fin = estado && estado.fin === 'tiempo' ? '¡Tiempo! Partida finalizada' : '¡Sin vidas! Partida finalizada';
+  const fin = estado && estado.fin === 'tiempo' ? '¡Tiempo!' : '¡Sin vidas!';
   $('finTitulo').textContent = fin;
   $('finPuntos').textContent = numero(estado ? estado.puntos : 0);
-  $('finTexto').textContent = 'Comprobando tu partida…';
+  $('finTexto').textContent = 'Comprobando…';
   $('btnOtra').hidden = true;
   mostrarCapa('capaFin');
   try {
@@ -293,15 +295,15 @@ async function enviarResultado(envio) {
     envioPendiente = null;
     $('finPuntos').textContent = numero(r.puntos);
     $('finTexto').textContent = !r.valida
-      ? 'No pudimos comprobar esta partida: no cuenta para el ranking.'
+      ? 'Partida no válida: no cuenta.'
       : (r.puntos >= r.mejor && r.puntos > 0
-        ? `¡Tu mejor partida de la semana! Vas en el puesto ${r.puesto}.`
-        : `Tu récord de la semana es ${numero(r.mejor)}${r.puesto ? ` (puesto ${r.puesto})` : ''}.`);
+        ? `¡Nuevo récord! Puesto ${r.puesto}.`
+        : `Tu récord: ${numero(r.mejor)}${r.puesto ? ` · puesto ${r.puesto}` : ''}.`);
     pintarRanking(r.ranking);
-    $('btnOtra').textContent = info.fichas >= info.costo ? `Otra partida · ${info.costo} fichas` : 'Sin fichas: recarga para seguir';
+    $('btnOtra').textContent = info.fichas >= info.costo ? `Otra · ${info.costo} fichas` : 'Recargar';
   } catch (e) {
     // La partida queda guardada en el teléfono: el botón vuelve a intentar el envío
-    $('finTexto').textContent = 'No pudimos enviar tu partida. Revisa tu conexión y toca "Enviar otra vez".';
+    $('finTexto').textContent = 'No se pudo enviar. Revisa tu conexión.';
     $('btnOtra').textContent = 'Enviar otra vez';
   }
   $('btnOtra').hidden = false;
@@ -338,14 +340,14 @@ $('btnReintentar').addEventListener('click', cargar);
 
 // ------------------------------------------------------------------ tutorial
 const GUIA = [
-  ['gema', 'Diamante', '+10 puntos (× combo).'],
-  ['oro', 'Diamante dorado', '+50 puntos (× combo). Sale poco.'],
-  ['bomba', 'Bomba', 'Si toca el cofre: −1 vida.'],
-  ['granada', 'Granada', 'Cae en zigzag. Si toca el cofre: −1 vida.'],
-  ['cegadora', 'Granada cegadora', 'Cae en zigzag. Si toca el cofre, un destello te deja sin ver un instante.'],
-  ['escudo', 'Escudo', 'Aguanta 1 golpe durante 8 s.', true],
-  ['lento', 'Lento', 'Todo cae a la mitad de velocidad por 5 s.', true],
-  ['rapido', 'Rápido', 'Todo cae más rápido por 5 s, pero los puntos valen ×2.', true],
+  ['gema', 'Diamante', '+10'],
+  ['oro', 'Dorado', '+50'],
+  ['bomba', 'Bomba', '−1 vida'],
+  ['granada', 'Granada', '−1 vida, zigzag'],
+  ['cegadora', 'Cegadora', 'Te ciega un instante'],
+  ['escudo', 'Escudo', 'Aguanta 1 golpe.', true],
+  ['lento', 'Lento', 'Todo más lento.', true],
+  ['rapido', 'Rápido', 'Puntos ×2.', true],
 ];
 GUIA.forEach(([tipo, nombre, efecto, raro]) => {
   const li = document.createElement('li');
@@ -370,7 +372,7 @@ function cerrarTutorial() {
   guardar('lluvia_tutorial_visto', true);
   if (focoPrevio && focoPrevio.focus) focoPrevio.focus();
 }
-$('btnAyuda').addEventListener('click', abrirTutorial);
+document.querySelectorAll('[data-ayuda]').forEach((b) => b.addEventListener('click', abrirTutorial));
 $('btnTutorialOk').addEventListener('click', cerrarTutorial);
 $('tutorial').addEventListener('click', (ev) => { if (ev.target === $('tutorial')) cerrarTutorial(); });
 window.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !$('tutorial').hidden) cerrarTutorial(); });

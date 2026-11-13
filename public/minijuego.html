@@ -18,10 +18,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/minijuego.css?v=1">
+  <link rel="stylesheet" href="css/minijuego.css?v=2">
   <!-- Sesión (agrega el token a /api/minijuego) y después el juego (módulo: usa el motor compartido con el servidor) -->
-  <script src="/js/sesion.js?v=3" defer></script>
-  <script type="module" src="/js/minijuego.js?v=1"></script>
+  <script src="/js/sesion.js?v=4" defer></script>
+  <script type="module" src="/js/minijuego.js?v=2"></script>
 </head>
 <body>
   <div class="barra">
@@ -32,39 +32,42 @@
   <main>
     <header class="encabezado">
       <h1>Lluvia de Diamantes</h1>
-      <p>Atrapa diamantes, esquiva las bombas y sube en el ranking semanal.</p>
-      <span class="premio">🏆 Premio de la semana: <strong>341 diamantes</strong></span>
+      <div class="chips">
+        <span class="chip chip--premio" title="Premio de la semana">🏆 <strong>341 💎</strong></span>
+        <span class="chip" title="Tus fichas">🎟️ <strong id="chipFichas">–</strong></span>
+      </div>
     </header>
 
     <div class="rejilla">
-      <section class="tarjeta juego" aria-label="Juego">
+      <section class="juego" aria-label="Juego">
         <div class="hud">
           <div><small>Puntos</small><strong class="hud-puntos" id="hudPuntos">0</strong></div>
           <div><small>Tiempo</small><strong id="hudTiempo">60</strong></div>
           <div><small>Vidas</small><strong id="hudVidas">♥♥♥</strong></div>
           <div><small>Combo</small><strong id="hudCombo">x1</strong></div>
         </div>
-        <div class="efectos" id="efectos" aria-live="polite"></div>
         <div class="lienzo">
           <canvas id="canvas" aria-label="Área de juego: mueve el cofre con el dedo, el ratón o las flechas"></canvas>
+          <div class="efectos" id="efectos" aria-live="polite"></div>
 
           <div class="capa" id="capaCargando"><p>Cargando…</p></div>
 
           <div class="capa" id="capaEntrar" hidden>
             <h3>Inicia sesión</h3>
-            <p>Para jugar necesitas tu cuenta de Level Up: ahí se guardan tus fichas y tus puntos.</p>
+            <p>Tus fichas y puntos se guardan en tu cuenta.</p>
             <a class="btn" href="/perfil.html?volver=%2Fminijuego.html">Entrar con Google</a>
           </div>
 
           <div class="capa" id="capaInicio" hidden>
             <h3>¿Listo?</h3>
-            <p>Mueve el cofre con el dedo (o las flechas). Bombas y granadas solo hacen daño si tocan el cofre. 3 golpes y se acaba.</p>
+            <p>Desliza el dedo para mover el cofre.</p>
             <button type="button" class="btn" id="btnJugar">Jugar · 5 fichas</button>
+            <button type="button" class="btn-sec" data-ayuda>¿Cómo se juega?</button>
           </div>
 
           <div class="capa" id="capaSinFichas" hidden>
             <h3>Sin fichas</h3>
-            <p id="sinFichasTexto">Necesitas 5 fichas para jugar. Las ganas con cada recarga hecha con tu sesión iniciada.</p>
+            <p id="sinFichasTexto">Recarga para ganar fichas.</p>
             <a class="btn" href="index.html">Recargar</a>
           </div>
 
@@ -72,7 +75,7 @@
             <h3 id="finTitulo">¡Se acabó!</h3>
             <div class="resultado" id="finPuntos">0</div>
             <p id="finTexto"></p>
-            <button type="button" class="btn" id="btnOtra">Otra partida · 5 fichas</button>
+            <button type="button" class="btn" id="btnOtra">Otra partida</button>
           </div>
 
           <div class="capa" id="capaError" hidden>
@@ -81,35 +84,22 @@
             <button type="button" class="btn" id="btnReintentar">Reintentar</button>
           </div>
         </div>
-        <div class="leyenda">
-          <span><i class="punto" style="background: var(--gema)"></i>Diamante +10</span>
-          <span><i class="punto" style="background: var(--gema-oro)"></i>Dorado +50</span>
-          <span><i class="punto" style="background: var(--escudo)"></i>Escudo</span>
-          <span><i class="punto" style="background: var(--lento)"></i>Lento</span>
-          <span><i class="punto" style="background: var(--rapido)"></i>Rápido ×2</span>
-          <span><i class="punto" style="background: var(--bomba)"></i>Bomba</span>
-          <span><i class="punto" style="background: var(--granada)"></i>Granada</span>
-          <span><i class="punto" style="background: var(--cegadora)"></i>Cegadora</span>
-        </div>
-        <button type="button" class="btn-sec ayuda" id="btnAyuda">¿Cómo se juega? Objetos y reglas</button>
       </section>
 
-      <div style="display: grid; gap: 24px;">
+      <div class="columna">
+        <section class="tarjeta" aria-labelledby="tituloRanking">
+          <h2 id="tituloRanking">Ranking semanal</h2>
+          <div class="cuenta-atras"><span>Cierra en</span><strong id="cuentaAtras">—</strong></div>
+          <ol class="ranking" id="ranking"><li class="ranking-vacio">Cargando…</li></ol>
+          <p class="nota">Gana la <strong>mejor partida</strong> de la semana: <strong>341 💎</strong>.</p>
+        </section>
+
         <section class="tarjeta" aria-labelledby="tituloFichas">
           <h2 id="tituloFichas">Tus fichas</h2>
           <div class="saldo"><strong id="saldoFichas">–</strong><span id="saldoCosto">5 fichas = 1 partida</span></div>
-          <p class="nota">Ganas fichas con cada recarga <strong>completada</strong> en Free Fire, Blood Strike, Mobile Legends o Roblox con tu sesión iniciada: <strong id="reglaFichas">1 ficha por cada 780 Bs</strong> (mínimo 1).</p>
-          <table class="tabla-fichas" aria-label="Ejemplos de fichas por recarga">
-            <thead><tr><th>Si recargas</th><th>Ganas</th></tr></thead>
-            <tbody id="tablaFichas"></tbody>
-          </table>
-        </section>
-
-        <section class="tarjeta" aria-labelledby="tituloRanking">
-          <h2 id="tituloRanking">Ranking semanal</h2>
-          <div class="cuenta-atras"><span>Cierra el domingo 11:59 p. m.</span><strong id="cuentaAtras">—</strong></div>
-          <ol class="ranking" id="ranking"><li class="ranking-vacio">Cargando…</li></ol>
-          <p class="nota">Cuenta tu <strong>mejor partida</strong> de la semana. El 1.º gana <strong>341 diamantes</strong>.</p>
+          <p class="nota">Ganas <strong id="reglaFichas">1 ficha por cada 780 Bs</strong> que recargas con tu sesión iniciada.</p>
+          <table class="tabla-fichas" aria-label="Ejemplos de fichas por recarga"><tbody id="tablaFichas"></tbody></table>
+          <button type="button" class="btn-sec" data-ayuda>¿Cómo se juega?</button>
         </section>
       </div>
     </div>
@@ -120,25 +110,17 @@
     <div class="tarjeta tutorial-caja">
       <h2 id="tutTitulo">Cómo se juega</h2>
       <ol class="pasos">
-        <li><span><strong>Mueve el cofre</strong> deslizando el dedo sobre el juego (en computadora: ratón o flechas ← →).</span></li>
-        <li><span><strong>Atrapa los diamantes</strong> para sumar puntos. Cada 8 seguidos sube el combo (hasta ×5).</span></li>
-        <li><span><strong>Esquiva lo peligroso</strong>: tienes 3 vidas. Todo cae cada vez más rápido.</span></li>
-        <li><span>La partida dura <strong>1 minuto como máximo</strong>. Al terminar, tu mejor puntaje de la semana entra al ranking.</span></li>
+        <li><span><strong>Desliza el dedo</strong> para mover el cofre.</span></li>
+        <li><span><strong>Atrapa diamantes.</strong> 8 seguidos suben el combo.</span></li>
+        <li><span><strong>Esquiva</strong> bombas y granadas: 3 vidas, 1 minuto.</span></li>
       </ol>
-
-      <h3>Objetos</h3>
       <ul class="objetos" id="tutObjetos"></ul>
-
-      <h3>Reglas</h3>
       <ul class="reglas">
-        <li>Cada partida cuesta <strong>5 fichas</strong>. Ganas fichas con cada recarga <strong>completada</strong> en Free Fire, Blood Strike, Mobile Legends o Roblox con tu sesión iniciada: <strong id="tutRegla">1 ficha por cada 780 Bs</strong> (mínimo 1). Si una recarga se reembolsa, se descuentan sus fichas.</li>
-        <li>La partida termina al <strong>minuto</strong> o cuando pierdes las <strong>3 vidas</strong>. Si sales a la mitad, la partida se pierde.</li>
-        <li><strong>Combo</strong>: si se te escapa un diamante o recibes un golpe, vuelve a ×1.</li>
-        <li><strong>Ranking semanal</strong>: cuenta tu mejor partida de lunes 12:00 a. m. a domingo 11:59 p. m. (hora de Venezuela). El 1.º gana <strong>341 diamantes</strong>. Si hay empate, gana quien llegó primero a ese puntaje.</li>
-        <li><strong>Juego limpio</strong>: el servidor repite cada partida para calcular los puntos. Una partida que no cuadre no cuenta, y quien haga trampa queda fuera del torneo sin premio.</li>
+        <li><strong>5 fichas</strong> por partida. Ganas fichas recargando con tu sesión.</li>
+        <li>La <strong>mejor partida de la semana</strong> gana <strong>341 💎</strong>.</li>
+        <li>Hacer trampa = fuera del torneo.</li>
       </ul>
-
-      <button type="button" class="btn" id="btnTutorialOk">¡Entendido, a jugar!</button>
+      <button type="button" class="btn" id="btnTutorialOk">¡A jugar!</button>
     </div>
   </div>
 </body>

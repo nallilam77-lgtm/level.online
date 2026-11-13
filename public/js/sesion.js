@@ -84,7 +84,7 @@
       const url = typeof recurso === 'string' ? recurso : (recurso && recurso.url) || '';
       const ruta = url.replace(location.origin, '');
       // Compras, consulta del premio de cliente fiel y minijuego (el servidor necesita saber quién es)
-      if ((/^\/api\/recargar(\?|$)/.test(ruta) || /^\/api\/juego\?.*accion=fidelidad/.test(ruta) || /^\/api\/minijuego(\?|$)/.test(ruta)) && guardada()) {
+      if ((/^\/api\/recargar(\?|$)/.test(ruta) || /^\/api\/juego\?.*accion=fidelidad/.test(ruta) || /^\/api\/minijuego(\?(?!accion=ajustes)|$)/.test(ruta)) && guardada()) {
         const t = await token();
         if (t) {
           opciones = Object.assign({}, opciones);

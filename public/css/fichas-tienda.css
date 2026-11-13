@@ -1,0 +1,32 @@
+/* Fichas del minijuego en las tiendas automáticas (js/fichas-tienda.js).
+   Usa las variables de cada tienda (--game-text, --game-accent-rgb, --text-muted): toma el acento del juego. */
+
+.fichas-tag {
+  margin-top: 6px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.fichas-aviso {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--game-accent-rgb), 0.3);
+  background: rgba(var(--game-accent-rgb), 0.08);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: border-color 0.25s ease;
+}
+.fichas-aviso strong { color: var(--game-text); }
+.fichas-aviso span:nth-child(2) { flex: 1; }
+.fichas-aviso span:last-child { color: var(--game-text); font-size: 16px; }
+.fichas-aviso:hover, .fichas-aviso:focus-visible { border-color: rgba(var(--game-accent-rgb), 0.6); }

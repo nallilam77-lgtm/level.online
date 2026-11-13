@@ -1,5 +1,7 @@
 // MINIJUEGO "LLUVIA DE DIAMANTES" (public/minijuego.html). Tablas y funciones: supabase/minijuego.sql.
 //   GET  /api/minijuego                      → { activo, sesion, fichas, costo, bsPorFicha, ranking, cierre }
+//   GET  /api/minijuego?accion=ajustes       → { bsPorFicha, costo } (público, 5 min en la CDN: las tiendas
+//                                              muestran "+N fichas" en cada paquete, js/fichas-tienda.js)
 //   POST /api/minijuego?accion=empezar       → cobra las fichas y da { id, semilla, fichas }
 //   POST /api/minijuego?accion=terminar      { id, registro } → { valida, puntos, fin, mejor, puesto }
 // Todo con la sesión del cliente (cabecera Authorization, la agrega public/js/sesion.js); sin sesión solo
@@ -101,6 +103,16 @@ async function terminar(req, res, usuario) {
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (!supabaseActivo()) return res.status(200).json({ status: 'success', activo: false });
+  if (req.method === 'GET' && req.query?.accion === 'ajustes') {
+    try {
+      const aj = await leerAjustes();
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=3600');
+      return res.status(200).json({ status: 'success', activo: true, bsPorFicha: aj.bsPorFicha, costo: aj.costo });
+    } catch (error) {
+      console.error('⚠️ minijuego (ajustes):', error.message);
+      return res.status(503).json({ status: 'error', message: 'No disponible.' });
+    }
+  }
   const accion = req.method === 'GET' ? 'estado' : String(req.query?.accion || '');
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
   try {

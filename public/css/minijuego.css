@@ -1,4 +1,5 @@
 /* Minijuego "Lluvia de Diamantes" (minijuego.html + js/minijuego.js). Paleta Level Up: .claude/UI_RULES.md.
+   Pensado primero para teléfono: el juego cabe entero en la pantalla (sin desplazarse) y los textos son cortos.
    Los colores de los objetos del juego van como variables aquí (el lienzo los lee con getComputedStyle). */
 :root {
   /* Paleta Level Up: ver .claude/UI_RULES.md */
@@ -18,6 +19,7 @@
   --shadow-glow-hover: 0 12px 30px -5px rgba(6, 182, 212, 0.35);
   --glass-blur: 12px;
   --radius-card: 16px;
+  --capa: rgba(11, 17, 32, 0.88);
   /* Objetos del juego */
   --gema: #22d3ee;
   --gema-oro: #facc15;
@@ -30,6 +32,8 @@
   --oro: #facc15;
   --plata: #cbd5e1;
   --bronce: #f59e0b;
+  /* Alto que ocupan barra + encabezado + marcador: el juego usa el resto de la pantalla */
+  --alto-fijo: 196px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -42,56 +46,67 @@ body {
 }
 h1, h2, h3, button { font-family: 'Montserrat', sans-serif; }
 
+/* Barra */
 .barra {
   position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--border-glass);
+  padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border-glass);
   backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 .barra .volver { color: var(--accent-cyan); text-decoration: none; font-weight: 600; font-size: 13px; min-height: 44px; display: inline-flex; align-items: center; }
+.barra .sesion-boton { min-height: 44px; }
 
-main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 24px; }
-.encabezado { text-align: center; display: grid; gap: 8px; }
-.encabezado h1 { font-size: clamp(26px, 7vw, 40px); font-weight: 900; letter-spacing: 1px; text-transform: uppercase;
+main { max-width: 1040px; margin: 0 auto; padding: 12px 16px 48px; display: grid; gap: 24px; }
+
+/* Encabezado compacto: título, premio y fichas en una franja */
+.encabezado { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.encabezado h1 { font-size: 20px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; line-height: 1.1;
   background: var(--cta-gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.encabezado p { color: var(--text-muted); font-size: 14px; }
-.premio { display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin: 4px auto 0; padding: 8px 16px; border-radius: 999px;
-  border: 1px solid var(--accent-cyan); color: var(--text-main); font-weight: 600; font-size: 13px; }
-.premio strong { color: var(--accent-neon); font-family: 'Montserrat', sans-serif; font-weight: 900; }
+.chips { display: flex; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border-glass); background: var(--bg-deep); white-space: nowrap; }
+.chip strong { font-family: 'Montserrat', sans-serif; font-weight: 900; color: var(--accent-neon); }
+.chip--premio { border-color: var(--accent-cyan); }
 
-.rejilla { display: grid; gap: 24px; }
-@media (min-width: 900px) { .rejilla { grid-template-columns: minmax(0, 1fr) 340px; gap: 32px; align-items: start; } }
+.rejilla { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.columna { display: grid; gap: 24px; align-content: start; }
 
 .tarjeta {
   padding: 24px; background: var(--surface); border: 1px solid var(--border-glass); border-radius: var(--radius-card);
   backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   box-shadow: var(--shadow-lg), var(--shadow-glow); display: grid; gap: 16px;
 }
-.tarjeta h2 { font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-cyan); }
-.nota { color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.tarjeta h2 { font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-cyan); }
+.nota { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.nota strong { color: var(--text-main); }
 
-/* Juego */
-.juego { padding: 16px; }
-.hud { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.hud div { background: var(--bg-deep); border: 1px solid var(--border-glass); border-radius: 12px; padding: 8px; text-align: center; }
-.hud small { display: block; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-.hud strong { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 18px; color: var(--text-main); }
+/* Juego: en teléfono no es tarjeta (todo el ancho para jugar) */
+.juego { display: grid; gap: 8px; justify-items: center; }
+.hud { width: 100%; max-width: var(--ancho-juego); display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.hud div { background: var(--bg-deep); border: 1px solid var(--border-glass); border-radius: 10px; padding: 4px 6px; text-align: center; }
+.hud small { display: block; color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
+.hud strong { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 16px; color: var(--text-main); }
 .hud .hud-puntos { color: var(--accent-neon); }
-.efectos { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; min-height: 26px; }
-.efecto { padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; font-family: 'Montserrat', sans-serif; border: 1px solid currentColor; }
+
+/* El juego cabe en la pantalla: ancho = el menor entre la página y lo que permite el alto */
+.juego { --ancho-juego: min(100%, 480px, calc((100vh - var(--alto-fijo)) * 0.75)); }
+@supports (height: 100svh) { .juego { --ancho-juego: min(100%, 480px, calc((100svh - var(--alto-fijo)) * 0.75)); } }
+.lienzo { position: relative; width: var(--ancho-juego); aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden;
+  background: linear-gradient(180deg, var(--bg-deep), var(--bg-base)); border: 1px solid var(--border-glass); touch-action: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+canvas { display: block; width: 100%; height: 100%; }
+
+/* Efectos activos: sobre el juego, arriba */
+.efectos { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; pointer-events: none; }
+.efecto { padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; font-family: 'Montserrat', sans-serif; border: 1px solid currentColor; background: var(--capa); }
 .efecto--escudo { color: var(--escudo); }
 .efecto--lento { color: var(--lento); }
 .efecto--rapido { color: var(--rapido); }
-.lienzo { position: relative; width: 100%; max-width: 480px; margin: 0 auto; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden;
-  background: linear-gradient(180deg, var(--bg-deep), var(--bg-base)); border: 1px solid var(--border-glass); touch-action: none; }
-canvas { display: block; width: 100%; height: 100%; }
-.capa { position: absolute; inset: 0; display: grid; place-content: center; gap: 16px; padding: 24px; text-align: center; background: rgba(11, 17, 32, 0.85); }
+
+.capa { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 20px; text-align: center; background: var(--capa); }
 .capa[hidden] { display: none; }
-.capa h3 { font-size: 22px; font-weight: 900; text-transform: uppercase; }
-.capa p { color: var(--text-muted); font-size: 13px; line-height: 1.6; max-width: 300px; margin: 0 auto; }
-.capa .resultado { font-family: 'Montserrat', sans-serif; font-size: 44px; font-weight: 900; color: var(--accent-neon); }
-.leyenda { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; font-size: 12px; color: var(--text-muted); }
-.leyenda span { display: inline-flex; align-items: center; gap: 6px; }
-.punto { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.capa h3 { font-size: 20px; font-weight: 900; text-transform: uppercase; }
+.capa p { color: var(--text-muted); font-size: 13px; line-height: 1.5; max-width: 260px; }
+.capa .resultado { font-family: 'Montserrat', sans-serif; font-size: 40px; font-weight: 900; color: var(--accent-neon); line-height: 1; }
 
 .btn {
   min-height: 48px; padding: 0 24px; border: 0; border-radius: 999px; cursor: pointer;
@@ -101,19 +116,24 @@ canvas { display: block; width: 100%; height: 100%; }
 .btn:hover, .btn:focus-visible { box-shadow: var(--shadow-glow-hover); transform: translateY(-2px); }
 .btn:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 3px; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
-.btn-sec { background: var(--bg-deep); color: var(--text-main); border: 1px solid var(--border-glass); box-shadow: none; text-transform: none; font-weight: 800; font-size: 13px; min-height: 44px; padding: 0 12px; }
+.capa a.btn { display: inline-grid; place-items: center; text-decoration: none; }
+.btn-sec { background: var(--bg-deep); color: var(--text-main); border: 1px solid var(--border-glass); border-radius: 999px; cursor: pointer;
+  font-weight: 800; font-size: 13px; min-height: 44px; padding: 0 16px; transition: border-color 0.25s ease, box-shadow 0.25s ease; }
 .btn-sec:hover, .btn-sec:focus-visible { border-color: var(--accent-cyan); box-shadow: var(--shadow-glow); }
 
 /* Fichas */
 .saldo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.saldo strong { font-family: 'Montserrat', sans-serif; font-size: 36px; font-weight: 900; color: var(--accent-neon); }
-.saldo span { color: var(--text-muted); font-size: 13px; }
+.saldo strong { font-family: 'Montserrat', sans-serif; font-size: 32px; font-weight: 900; color: var(--accent-neon); }
+.saldo span { color: var(--text-muted); font-size: 12px; }
+.tabla-fichas { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tabla-fichas td { padding: 6px 4px; border-bottom: 1px solid var(--border-glass); color: var(--text-muted); }
+.tabla-fichas td:last-child { text-align: right; color: var(--accent-neon); font-family: 'Montserrat', sans-serif; font-weight: 900; white-space: nowrap; }
 
 /* Ranking */
-.cuenta-atras { display: flex; justify-content: space-between; gap: 8px; background: var(--bg-deep); border-radius: 12px; padding: 12px; font-size: 12px; color: var(--text-muted); }
+.cuenta-atras { display: flex; justify-content: space-between; gap: 8px; background: var(--bg-deep); border-radius: 12px; padding: 10px 12px; font-size: 12px; color: var(--text-muted); }
 .cuenta-atras strong { color: var(--text-main); font-family: 'Montserrat', sans-serif; }
 .ranking { list-style: none; display: grid; gap: 8px; }
-.ranking li { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 12px; min-height: 44px; padding: 8px 12px;
+.ranking li { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px;
   background: var(--bg-deep); border: 1px solid var(--border-glass); border-radius: 12px; font-size: 13px; }
 .ranking .pos { font-family: 'Montserrat', sans-serif; font-weight: 900; text-align: center; color: var(--text-muted); }
 .ranking li:nth-child(1) { border-color: var(--oro); }
@@ -124,42 +144,44 @@ canvas { display: block; width: 100%; height: 100%; }
 .ranking .pts { font-family: 'Montserrat', sans-serif; font-weight: 900; color: var(--accent-neon); }
 .ranking .tu { border-color: var(--accent-cyan); box-shadow: var(--shadow-glow); }
 .ranking .tu .nom { color: var(--accent-cyan); font-weight: 700; }
+.ranking-vacio { padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
-/* Tutorial */
-.tutorial { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: rgba(11, 17, 32, 0.8);
+/* Tutorial: en teléfono ocupa la pantalla; corto para leerlo de un vistazo */
+.tutorial { position: fixed; inset: 0; z-index: 20; display: grid; grid-template-columns: minmax(0, 480px); justify-content: center; align-items: center; padding: 16px; background: rgba(11, 17, 32, 0.85);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .tutorial[hidden] { display: none; }
-.tutorial-caja { width: 100%; max-width: 560px; max-height: calc(100vh - 32px); overflow-y: auto; overscroll-behavior: contain; }
-.tutorial-caja h2 { font-size: 20px; color: var(--text-main); }
-.tutorial-caja h3 { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-cyan); }
+.tutorial-caja { width: 100%; min-width: 0; padding: 20px; max-height: calc(100vh - 32px); overflow-y: auto; overscroll-behavior: contain; gap: 16px; }
+@supports (height: 100svh) { .tutorial-caja { max-height: calc(100svh - 32px); } }
+.tutorial-caja h2 { font-size: 18px; color: var(--text-main); }
+.tutorial-caja h3 { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-cyan); }
 .pasos { list-style: none; display: grid; gap: 8px; counter-reset: paso; }
-.pasos li { counter-increment: paso; display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; font-size: 13px; line-height: 1.5; }
-.pasos li::before { content: counter(paso); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
-  background: var(--cta-gradient); color: var(--on-cta); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; }
-.objetos { list-style: none; display: grid; grid-template-columns: 1fr; gap: 8px; }
-@media (min-width: 520px) { .objetos { grid-template-columns: 1fr 1fr; } }
-.objetos li { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: center; padding: 8px 12px; border-radius: 12px;
-  background: var(--bg-deep); border: 1px solid var(--border-glass); font-size: 12px; line-height: 1.4; color: var(--text-muted); }
-.objetos strong { display: block; color: var(--text-main); font-size: 13px; }
-.objetos canvas { width: 40px; height: 40px; }
+.pasos li { counter-increment: paso; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 13px; line-height: 1.4; }
+.pasos li::before { content: counter(paso); display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--cta-gradient); color: var(--on-cta); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 12px; }
+.objetos { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.objetos li { min-width: 0; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 8px; border-radius: 10px;
+  background: var(--bg-deep); border: 1px solid var(--border-glass); font-size: 11px; line-height: 1.3; color: var(--text-muted); }
+.objetos strong { display: block; color: var(--text-main); font-size: 12px; }
+.objetos canvas { width: 30px; height: 30px; }
 .objetos .raro { color: var(--accent-neon); font-weight: 700; }
-.reglas { display: grid; gap: 8px; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
+.reglas { display: grid; gap: 6px; padding-left: 18px; font-size: 12px; line-height: 1.4; color: var(--text-muted); }
 .reglas strong { color: var(--text-main); }
-.ayuda { justify-self: center; }
 
-.ligero .tarjeta, .ligero .btn { box-shadow: none !important; }
+@media (max-width: 360px) {
+  .encabezado h1 { font-size: 17px; }
+  .chip { padding: 5px 10px; font-size: 11px; }
+}
 
-/* Barra: sesión a la derecha */
-.barra .sesion-boton { min-height: 44px; }
+/* Computadora: juego a la izquierda dentro de una tarjeta, ranking y fichas a la derecha */
+@media (min-width: 900px) {
+  :root { --alto-fijo: 260px; }
+  main { padding-top: 24px; gap: 32px; }
+  .encabezado h1 { font-size: 30px; }
+  .rejilla { grid-template-columns: minmax(0, 1fr) 340px; gap: 32px; align-items: start; }
+  .juego { padding: 24px; background: var(--surface); border: 1px solid var(--border-glass); border-radius: var(--radius-card);
+    backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--shadow-lg), var(--shadow-glow); gap: 12px; }
+  .hud strong { font-size: 18px; }
+  .hud small { font-size: 10px; }
+}
 
-/* Avisos dentro de las tarjetas */
-.aviso { padding: 12px; border-radius: 12px; background: var(--bg-deep); border: 1px dashed var(--border-glass); font-size: 12px; line-height: 1.6; color: var(--text-muted); }
-.aviso strong { color: var(--text-main); }
-.aviso a, .capa a.btn-sec { color: var(--accent-cyan); font-weight: 700; }
-.capa a.btn { display: inline-grid; place-items: center; text-decoration: none; }
-.tabla-fichas { width: 100%; border-collapse: collapse; font-size: 12px; }
-.tabla-fichas th, .tabla-fichas td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border-glass); }
-.tabla-fichas th { color: var(--text-muted); font-weight: 600; }
-.tabla-fichas td:last-child, .tabla-fichas th:last-child { text-align: right; }
-.tabla-fichas td:last-child { color: var(--accent-neon); font-family: 'Montserrat', sans-serif; font-weight: 900; }
-.ranking-vacio { padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.ligero .tarjeta, .ligero .btn, .ligero .juego { box-shadow: none !important; }
