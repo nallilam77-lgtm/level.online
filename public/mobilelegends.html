@@ -31,6 +31,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
   <!-- Lector de referencias con Tesseract (compartido entre juegos; Tesseract se descarga bajo demanda) -->
   <script src="/js/lector-referencia.js" defer></script>
+  <!-- Pago por completar: lo recuerda en este equipo, lee la captura y arma el WhatsApp -->
+  <script src="/js/pago-pendiente.js?v=1" defer></script>
   <script src="/js/descuento.js" defer></script>
   <script src="/js/ultimo-id.js" defer></script>
   <script src="/js/datos-pago.js" defer></script>
@@ -658,6 +660,7 @@
   <link rel="stylesheet" href="css/descuento.css">
   <link rel="stylesheet" href="css/aviso-codigo.css?v=3">
   <link rel="stylesheet" href="css/whatsapp-cliente.css?v=1">
+  <link rel="stylesheet" href="css/pago-pendiente.css?v=1">
   <link rel="stylesheet" href="css/canal.css?v=1">
 </head>
 <body class="pagina-juego">
@@ -679,6 +682,8 @@
       <div id="bloqueCompletar" class="completar-pago">
         <p class="modal-texto">Paga <strong id="completarFaltante"></strong> a estos mismos datos y escribe la referencia del nuevo pago. La recarga irá al mismo ID y paquete.</p>
         <div class="monto-detalle" id="completarDatosBanco"></div>
+        <label class="completar-captura" for="inputCapturaCompletar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span>Sube la captura del nuevo pago</span><input type="file" accept="image/*" id="inputCapturaCompletar"></label>
+        <div class="completar-captura__estado" id="estadoCapturaCompletar" role="status" aria-live="polite"></div>
         <input type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" id="inputRefCompletar" class="input-field" placeholder="Últimos 5 dígitos del nuevo pago" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
         <button type="button" class="btn-confirmar" id="btnCompletarPago" onclick="completarPagoInsuficiente()">COMPLETAR PAGO</button>
         <div class="modal-nota" id="completarNota"></div>
@@ -976,6 +981,9 @@
     let datosBancoGlobal = { banco: "", telefono: "", cedula: "" }; let isProcessing = false;
     // Pago insuficiente que se puede completar: { token, faltante } (la clave solo vive en esta pestaña)
     let complementoPendiente = null;
+    // Si el cliente se fue a pagar la diferencia y volvió, el aviso de arriba reabre esta ventana
+    PagoPendiente.iniciar({ juego: 'mobilelegends', nombreJuego: 'Mobile Legends', excluir: () => [datosBancoGlobal.telefono, datosBancoGlobal.cedula],
+      abrir: async (pendiente) => { if (!datosBancoGlobal.banco) await cargarDatosBancarios(); mostrarCompletarPago(pendiente); } });
     let globalTxnCode = "";
     
     // RUTAS DE MOBILE LEGENDS
@@ -1480,6 +1488,7 @@
       document.getElementById('completarNota').textContent =
         `Tienes ${complemento.horas || 48} horas. Si el nuevo pago tampoco alcanza, podrás completar otra vez (hasta 4 pagos en total).`;
       document.getElementById('inputRefCompletar').value = '';
+      PagoPendiente.limpiarCaptura();
       notaWhatsApp.innerHTML = '¿Necesitas ayuda? Escríbenos a nuestro WhatsApp oficial <strong>0414-1916377</strong>.';
       bloque.style.display = 'block';
     }
@@ -1492,7 +1501,7 @@
         return;
       }
       cerrarModalWhatsApp();
-      iniciarCargaConTiemposAleatorios({ token: complementoPendiente.token, referencia });
+      iniciarCargaConTiemposAleatorios({ token: complementoPendiente.token, referencia, paquete: complementoPendiente.paquete, cuenta: complementoPendiente.cuenta });
     };
 
     async function subirComprobanteDrive(file) {
@@ -1577,7 +1586,9 @@
           textoElem.innerHTML = "🔍 Verificando pago y bloqueando referencia...";
           barraFill.style.width = '45%';
            
-          const nombreDelPaquete = nombrePaquete(paqueteSeleccionado);
+          // Al completar desde el aviso de arriba puede no haber paquete elegido: va el guardado
+          const nombreDelPaquete = (datosComplemento && datosComplemento.paquete) || nombrePaquete(paqueteSeleccionado);
+          const cuentaCliente = (datosComplemento && datosComplemento.cuenta) || `ID ${playerId} (zona ${zonaJugador})`;
 
           const respuestaServidor = await fetch(SCRIPT_RECARGAS_URL, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1627,7 +1638,8 @@
                  isProcessing = false; btnConfirmar.disabled = false;
                  return;
              }
-             if (resultado.complementoInvalido) complementoPendiente = null;
+             // Vencido o ya usado: se olvida en este equipo
+             if (resultado.complementoInvalido) { complementoPendiente = null; PagoPendiente.borrar(); }
 
              if (msgLower.includes("insuficiente") || resultado.insuficiente) {
                  document.getElementById('pantallaProcesando').style.display = 'none';
@@ -1635,13 +1647,14 @@
                  let precioReal = parseFloat(resultado.precioRequerido || 0);
                  let faltante = parseFloat(resultado.faltante || 0);
                  
-                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (<strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${nombreDelPaquete}</strong>.`;
+                 document.getElementById('textoMotivoWhatsApp').innerHTML = `El pago registrado (<strong>${referenciaUsuario}</strong>) no cubre el total del paquete de <strong>${escaparHtml(nombreDelPaquete)}</strong>.`;
                  document.getElementById('waMontoEncontrado').innerText = pagado > 0 ? pagado.toFixed(2) + " Bs" : "Monto no detectado";
                  document.getElementById('waMontoFaltante').innerText = pagado > 0 ? faltante.toFixed(2) + " Bs" : "Diferencia desconocida";
 
-                 let msgWa = `Hola Level Up, el sistema me marcó *Pago Insuficiente* ⚠️%0A%0A*Mi Referencia:* ${referenciaUsuario}%0A*Monto que pagué:* ${pagado.toFixed(2)} Bs%0A*Paquete deseado:* ${nombreDelPaquete} (${precioReal.toFixed(2)} Bs)%0A*Me faltan:* ${faltante.toFixed(2)} Bs%0A%0A¿Cómo hago para completarlo?`;
-                 document.getElementById('btnWhatsAppLink').href = `https://wa.me/584141916377?text=${msgWa}`;
-                 mostrarCompletarPago(resultado.tokenComplemento ? { token: resultado.tokenComplemento, faltante, horas: resultado.horasParaCompletar } : null);
+                 const pedidoInsuficiente = { paquete: nombreDelPaquete, cuenta: cuentaCliente, referencia: referenciaUsuario, pagado, precio: precioReal, faltante };
+                 if (resultado.tokenComplemento) PagoPendiente.guardar({ ...pedidoInsuficiente, token: resultado.tokenComplemento, horas: resultado.horasParaCompletar });
+                 document.getElementById('btnWhatsAppLink').href = PagoPendiente.enlaceWhatsApp({ ...(resultado.tokenComplemento ? PagoPendiente.leer() : null), ...pedidoInsuficiente });
+                 mostrarCompletarPago(resultado.tokenComplemento ? { token: resultado.tokenComplemento, faltante, horas: resultado.horasParaCompletar, paquete: nombreDelPaquete, cuenta: cuentaCliente } : null);
                  document.getElementById('modalWhatsApp').style.display = 'flex';
              } 
              else if(msgLower.includes("gastado") || msgLower.includes("usado")) {
@@ -1661,6 +1674,8 @@
 
           localStorage.setItem('intentos_recarga', '0');
           localStorage.setItem('tiempo_bloqueo', '0');
+          // Pago completado: ya no hay nada pendiente en este equipo
+          if (datosComplemento) PagoPendiente.borrar();
 
           textoElem.innerHTML = "🛡️ Pago confirmado: abriendo portal a la Tierra del Amanecer...";
           barraFill.style.width = '75%';

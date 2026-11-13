@@ -149,6 +149,15 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 
 ---
 
+## Apps Script sin TOKEN_VERCEL: validador y Mobile Legends (2026-11-12)
+
+**Síntoma**: Free Fire siempre decía "⚠️ No pudimos verificar tu ID" (con cualquier ID, real o no); Blood Strike y Mobile Legends dejaban seguir sin comprobar nada.
+**Causa**: desde 2026-11-08 validador.gs exige la propiedad del script `TOKEN_VERCEL`, y en ese proyecto no estaba: respondía `{ valid: false, message: "No autorizado" }` a todo. freefire.js lo pasa como "no válido" (la página avisa y deja seguir); bloodstrike.js y mobilelegends.js lo toman como "no se pudo comprobar".
+**Mismo día, Mobile Legends**: la página mostraba los precios (GET `obtener_precios`, público), pero al comprar decía "Error al leer la base de datos de precios": la recarga lee los precios por POST, que exige el token, y mobilelegends.gs no tenía `TOKEN_VERCEL`.
+**Regla**: todos los Apps Script (recargas, bloodstrike, mobilelegends, roblox, ruleta, validador y manuales) necesitan `TOKEN_VERCEL` = `SCRIPT_RECARGAS_TOKEN` de Vercel. Comprobar con un ID cualquiera: `POST /api/juego?juego=bloodstrike&accion=verificar` debe dar `verificado: true` (existe o no existe), nunca `verificado: false` siempre.
+
+---
+
 ## Códigos de descuento en las tiendas manuales (desde 2026-11-12)
 
 **Reglas**: el precio con descuento lo calcula `api/_lib/juegos/manuales.js` sobre el precio de la caché de precios y lo manda como `montoACobrar`; `manuales.gs` (v2) lo acepta solo si es menor que su precio y no menor que la mitad. El uso (+1 y la comisión del creador) se anota en la hoja de Free Fire SOLO si el pago alcanzó: con pago incompleto la nota del pedido dice "El uso del código NO se anotó…" y hay que anotarlo a mano al completar (o no, si se devuelve el dinero). En "movimientos_descuentos" el jugador va como `WhatsApp +58…`: nunca mandar el correo de la cuenta (va junto a la contraseña).
