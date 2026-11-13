@@ -16,6 +16,7 @@
 // demasiado perfectas quedan marcadas "revisar" (posible programa que juega solo): cuentan, pero hay que
 // revisarlas antes de pagar el premio (función juego_revision de supabase/minijuego.sql).
 import { randomInt } from 'node:crypto';
+import { waitUntil } from '@vercel/functions';
 import { supabaseActivo, rpc, leer, actualizar, usuarioDelToken } from './_lib/supabase.js';
 import { tokenDe } from './_lib/historial.js';
 import { iniciosVE } from './_lib/semana.js';
@@ -28,6 +29,9 @@ const PUESTOS = 10;
 const REAL_MIN = (s) => s * 980 - 1000;
 const REAL_MAX = (s) => s * 1050 + 8000;
 const MAX_ABIERTA_MS = 5 * 60 * 1000;
+// Los movimientos de cada partida (~25 KB) solo hacen falta para revisar al ganador: pasadas 3 semanas se
+// borran (quedan puntos y estadísticas). Así la base gratis (500 MB) no se llena con los meses.
+const GUARDAR_REGISTRO_MS = 21 * 24 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Ajustes (Bs por ficha y costo): cambian poco, 5 min en memoria
@@ -118,6 +122,12 @@ async function terminar(req, res, usuario) {
   });
   if (!valida) console.warn(`⚠️ minijuego: partida ${id} inválida (${motivo}).`);
   if (revisar) console.warn(`⚠️ minijuego: partida ${id} marcada para revisar (${JSON.stringify(r.stats)}).`);
+  // Limpieza de vez en cuando (1 de cada 50 partidas), después de responder
+  if (Math.random() < 0.02) {
+    const antes = encodeURIComponent(new Date(Date.now() - GUARDAR_REGISTRO_MS).toISOString());
+    waitUntil(actualizar('juego_partidas', `terminada=lt.${antes}&registro=not.is.null`, { registro: null })
+      .catch((error) => console.error('⚠️ minijuego: no se pudieron borrar registros viejos:', error.message)));
+  }
 
   const filas = await ranking(usuario);
   const yo = filas.find((f) => f.soyYo);

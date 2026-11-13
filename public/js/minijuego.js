@@ -13,7 +13,16 @@ import {
 const $ = (id) => document.getElementById(id);
 // El juego exige sesión: sin ella se va a iniciar sesión y vuelve aquí solo (perfil.js, "entrar=1")
 const LOGIN = '/perfil.html?volver=%2Fminijuego.html&entrar=1';
-const irALogin = () => location.replace(LOGIN);
+// Sin bucles: si ya se fue a iniciar sesión hace menos de 30 s y el servidor sigue sin aceptar la sesión
+// (p. ej. se cerró en otro equipo pero el teléfono la guarda), no se vuelve a redirigir: se muestra
+// "Inicia sesión" y ese botón cierra la sesión vieja antes de ir a entrar de nuevo.
+function irALogin() {
+  let ultimo = 0;
+  try { ultimo = Number(sessionStorage.getItem('lluvia_ir_login')) || 0; } catch (e) { /* sin almacenamiento */ }
+  if (Date.now() - ultimo < 30000) return mostrarCapa('capaEntrar');
+  try { sessionStorage.setItem('lluvia_ir_login', String(Date.now())); } catch (e) { /* sin almacenamiento */ }
+  location.replace(LOGIN);
+}
 const API = '/api/minijuego';
 const CAPAS = ['capaCargando', 'capaEntrar', 'capaInicio', 'capaSinFichas', 'capaFin', 'capaError'];
 
@@ -381,6 +390,11 @@ window.addEventListener('beforeunload', (ev) => { if ((estado && estado.jugando)
 $('btnJugar').addEventListener('click', jugar);
 $('btnOtra').addEventListener('click', otra);
 $('btnReintentar').addEventListener('click', cargar);
+$('btnEntrar').addEventListener('click', async (ev) => {
+  ev.preventDefault();
+  try { if (window.Sesion) await Sesion.salir(); } catch (e) { /* igual se va a entrar */ }
+  location.href = LOGIN;
+});
 
 // ------------------------------------------------------------------ tutorial
 const GUIA = [

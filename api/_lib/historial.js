@@ -115,9 +115,14 @@ export async function conHistorial(req, res, juego, fn) {
   }
 }
 
-/** Estado nuevo de un pedido (webhook de Central One, hoja de las manuales). Sin fila, no hace nada. */
-export function actualizarEstado(idPedido, estado) {
+/**
+ * Estado nuevo de un pedido (webhook de Central One, hoja de las manuales). Sin fila, no hace nada.
+ * noPisar: estados que este aviso NO puede cambiar (un paquete partido en dos pedidos: que una mitad se
+ * entregue no tapa que la otra falló).
+ */
+export function actualizarEstado(idPedido, estado, { noPisar = [] } = {}) {
   if (!supabaseActivo() || !ESTADOS.includes(estado) || !/^[A-Za-z0-9-]{8,80}$/.test(String(idPedido || ''))) return;
-  waitUntil(actualizar('recargas', `id_pedido=eq.${encodeURIComponent(idPedido)}&estado=neq.${estado}`, { estado, actualizado: new Date().toISOString() })
+  const intactos = [estado, ...noPisar.filter((e) => ESTADOS.includes(e))];
+  waitUntil(actualizar('recargas', `id_pedido=eq.${encodeURIComponent(idPedido)}&estado=not.in.(${intactos.join(',')})`, { estado, actualizado: new Date().toISOString() })
     .catch((error) => console.error('⚠️ historial: no se pudo actualizar el estado:', error.message)));
 }

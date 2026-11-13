@@ -104,7 +104,14 @@ export default async function handler(req, res) {
   // Perfil del cliente con sesión (Supabase): el estado le llega en vivo. La fila usa el idPedido sin el
   // prefijo de la Idempotency-Key (ff-/ml-, y sin el -1/-2 de un paquete partido en dos pedidos)
   const idDelPerfil = PEDIDO_ROBLOX.test(idPedido) ? idPedido : idPedido.replace(/^(ff|ml)-/, '').replace(/-[1-9]$/, '');
-  actualizarEstado(idDelPerfil, ESTADO_EN_PERFIL[estado] || '');
+  // Paquete partido en dos pedidos (Free Fire "ff-<id>-1" / "-2"): cada aviso es de UNA mitad. "Entregado"
+  // no pisa una falla de la otra mitad, y el reembolso de una sola mitad queda "en revisión" (no
+  // "reembolsado": la otra mitad sí llegó y el pedido entero no se devolvió).
+  const partido = /^ff-.+-[1-9]$/.test(idPedido);
+  const estadoPerfil = ESTADO_EN_PERFIL[estado] || '';
+  if (!partido) actualizarEstado(idDelPerfil, estadoPerfil);
+  else if (estadoPerfil === 'completado') actualizarEstado(idDelPerfil, 'completado', { noPisar: ['en_revision', 'problema', 'reembolsado'] });
+  else if (estadoPerfil) actualizarEstado(idDelPerfil, 'en_revision', { noPisar: ['problema', 'reembolsado'] });
 
   if (PEDIDO_ROBLOX.test(idPedido)) return avisoRoblox(res, { aviso, evento, ordenCentralOne, idPedido });
 
