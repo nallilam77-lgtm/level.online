@@ -10,7 +10,8 @@
 --     configuracion    datos de Pago Móvil (y otros ajustes). Lo marcado "publico" lo lee cualquiera
 --                      (las tiendas: public/js/datos-pago.js); solo los administradores lo cambian.
 --     administradores  quién entra a public/admin.html (con su cuenta de Google).
---                      Panel: pestaña Espacio (admin_espacio / admin_borrar_viejo, al final del archivo).
+--                      Panel: pestañas Cuentas y Supabase (admin_cuentas, admin_espacio, admin_borrar_viejo).
+--     perfiles         WhatsApp de cada cuenta (se pide al iniciar sesión: public/js/telefono-cuenta.js).
 --   Fase 2 (todos los pedidos):
 --     recargas         ahora guarda TODOS los pedidos (usuario vacío si el cliente no inició sesión).
 --                      Cada cliente sigue viendo solo los suyos; los administradores, todos.
@@ -42,6 +43,30 @@ as $$
 $$;
 revoke execute on function public.es_admin() from public, anon;
 grant execute on function public.es_admin() to authenticated, service_role;
+
+-- ---------------------------------------------------------------------
+-- Perfiles: WhatsApp de cada cuenta (desde 2026-11-13). Se pide al iniciar sesión
+-- (public/js/telefono-cuenta.js) para avisar al cliente si gana algo. Cada cliente lee y cambia
+-- solo el suyo; los administradores leen todos (admin.html).
+-- ---------------------------------------------------------------------
+create table if not exists public.perfiles (
+  usuario     uuid primary key references auth.users (id) on delete cascade,
+  telefono    text not null check (telefono ~ '^\+584(12|14|16|22|24|26)[0-9]{7}$'),
+  actualizado timestamptz not null default now()
+);
+alter table public.perfiles enable row level security;
+revoke all on public.perfiles from anon;
+grant select, insert, update on public.perfiles to authenticated;
+
+drop policy if exists "cada cliente lee su perfil" on public.perfiles;
+create policy "cada cliente lee su perfil" on public.perfiles
+  for select to authenticated using (usuario = (select auth.uid()) or (select public.es_admin()));
+drop policy if exists "cada cliente crea su perfil" on public.perfiles;
+create policy "cada cliente crea su perfil" on public.perfiles
+  for insert to authenticated with check (usuario = (select auth.uid()));
+drop policy if exists "cada cliente cambia su perfil" on public.perfiles;
+create policy "cada cliente cambia su perfil" on public.perfiles
+  for update to authenticated using (usuario = (select auth.uid())) with check (usuario = (select auth.uid()));
 
 -- ---------------------------------------------------------------------
 -- Fase 1 · Límite de intentos (api/_lib/limitador.js)
@@ -229,10 +254,13 @@ $$;
 revoke execute on function public.admin_resumen(timestamptz) from public, anon;
 grant execute on function public.admin_resumen(timestamptz) to authenticated, service_role;
 
--- juego_revision (supabase/minijuego.sql) ahora también la puede usar un administrador desde admin.html
+-- juego_revision (supabase/minijuego.sql) ahora también la puede usar un administrador desde admin.html,
+-- con el WhatsApp del jugador (tabla perfiles) para avisarle si gana. Cambian las columnas: se borra antes.
+drop function if exists public.juego_revision(timestamptz, timestamptz, integer);
 create or replace function public.juego_revision(p_desde timestamptz, p_hasta timestamptz default null, p_limite integer default 10)
 returns table (puesto integer, correo text, puntos integer, revisar boolean, stats jsonb, segundos numeric,
-               partidas_validas integer, partidas_invalidas integer, terminada timestamptz, id_partida uuid)
+               partidas_validas integer, partidas_invalidas integer, terminada timestamptz, id_partida uuid,
+               telefono text, nombre text)
 language sql
 stable
 security definer
@@ -251,7 +279,9 @@ as $$
   select o.puesto, u.email::text, o.puntos, o.revisar, o.stats, round(o.ticks / 60.0, 1),
          (select count(*) from semana x where x.usuario = o.usuario and x.estado = 'valida')::integer,
          (select count(*) from semana x where x.usuario = o.usuario and x.estado = 'invalida')::integer,
-         o.terminada, o.id
+         o.terminada, o.id,
+         (select p.telefono from perfiles p where p.usuario = o.usuario),
+         coalesce(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name')
     from ordenados o join auth.users u on u.id = o.usuario
    where o.puesto <= least(greatest(coalesce(p_limite, 10), 1), 50)
    order by o.puesto;
@@ -375,9 +405,12 @@ begin
     'recargas', (select count(*) from recargas where estado = 'completado'),
     'recargas_con_cuenta', (select count(*) from recargas where estado = 'completado' and usuario is not null),
     'fichas', (select coalesce(sum(fichas), 0) from juego_fichas),
+    'con_telefono', (select count(*) from perfiles),
     'cuentas', (
       select coalesce(jsonb_agg(c order by c.creado desc), '[]'::jsonb) from (
-        select u.email::text as correo,
+        select u.id,
+               u.email::text as correo,
+               (select p.telefono from perfiles p where p.usuario = u.id) as telefono,
                coalesce(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name') as nombre,
                u.created_at as creado,
                u.last_sign_in_at as ultimo,

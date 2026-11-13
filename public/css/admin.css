@@ -106,6 +106,20 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .btn--chico { min-height: 40px; padding: 0 16px; font-size: 11px; }
 .btn--peligro { min-height: 44px; padding: 0 16px; font-size: 12px; background: transparent; color: var(--peligro); border: 1px solid var(--peligro); }
 
+.acciones-cuenta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.enlace-wa {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 999px; text-decoration: none;
+  color: var(--accent-neon); border: 1px solid var(--accent-neon); font-family: 'Montserrat', sans-serif; font-size: 12px; font-weight: 800;
+}
+.btn-ver {
+  min-height: 40px; padding: 0 14px; border-radius: 999px; cursor: pointer; background: transparent;
+  color: var(--accent-cyan); border: 1px solid var(--border-glass); font-family: 'Montserrat', sans-serif; font-size: 12px; font-weight: 800;
+}
+.btn-ver:disabled { opacity: 0.5; cursor: wait; }
+.enlace-wa:focus-visible, .btn-ver:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+.sin-telefono { font-size: 12px; color: var(--text-muted); }
+.recargas-cuenta { margin-top: 8px; }
+
 .punto-vivo { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-neon); vertical-align: middle; }
 
 .ligero .tarjeta { box-shadow: none !important; }

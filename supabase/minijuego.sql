@@ -267,6 +267,8 @@ end $$;
 --     select * from public.juego_revision(
 --       date_trunc('week', (now() at time zone 'America/Caracas') - interval '7 days') at time zone 'America/Caracas',
 --       date_trunc('week', now() at time zone 'America/Caracas') at time zone 'America/Caracas', 10);
+-- OJO: supabase/tienda.sql la reemplaza con más columnas (telefono, nombre). Si corres este archivo de nuevo,
+-- corre después tienda.sql (o antes: drop function public.juego_revision(timestamptz, timestamptz, integer)).
 create or replace function public.juego_revision(p_desde timestamptz, p_hasta timestamptz default null, p_limite integer default 10)
 returns table (puesto integer, correo text, puntos integer, revisar boolean, stats jsonb, segundos numeric,
                partidas_validas integer, partidas_invalidas integer, terminada timestamptz, id_partida uuid)

@@ -6,6 +6,8 @@
 //   (/api/juego?accion=fidelidad) y al minijuego (/api/minijuego). Sin sesión, la compra va igual que siempre.
 // - La librería de Supabase (~60 KB) solo se descarga en perfil.html o cuando hay que renovar el token:
 //   quien no inició sesión no la descarga nunca.
+// - Con sesión y sin WhatsApp guardado en la cuenta (tabla "perfiles"), abre js/telefono-cuenta.js para
+//   pedirlo (una consulta por visita; nunca en admin.html).
 // Uso: <script src="/js/sesion.js?v=1" defer></script> + <link rel="stylesheet" href="css/sesion.css?v=1">
 // API: Sesion.cliente() (Supabase o null), Sesion.entrar(), Sesion.salir(), Sesion.datos() (usuario guardado)
 // =========================================================================
@@ -101,7 +103,7 @@
     const s = guardada();
     if (!s || !s.user) return null;
     const m = s.user.user_metadata || {};
-    return { nombre: m.full_name || m.name || '', correo: s.user.email || '', foto: m.avatar_url || m.picture || '' };
+    return { id: s.user.id || '', nombre: m.full_name || m.name || '', correo: s.user.email || '', foto: m.avatar_url || m.picture || '' };
   }
 
   const ICONO_USUARIO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -146,10 +148,48 @@
     pintarBotones();
   }
 
-  window.Sesion = { cliente, entrar, salir, datos, token, hay: () => !!guardada(), pintar: pintarBotones };
+  // ¿La cuenta ya tiene WhatsApp? Si no, se lo pide (js/telefono-cuenta.js). Nunca frena la página.
+  const CLAVE_TELEFONO_LISTO = 'levelup_telefono_cuenta';
+  const CLAVE_TELEFONO_DESPUES = 'levelup_telefono_despues';
+  const CLAVE_TELEFONO_REVISADO = 'levelup_telefono_revisado';
+  function cargarTelefono() {
+    return window.TelefonoCuenta ? Promise.resolve() : cargarScript('/js/telefono-cuenta.js?v=1');
+  }
+  async function revisarTelefono() {
+    try {
+      const d = datos();
+      if (!d || !d.id || /^\/admin(\.html)?$/.test(location.pathname)) return;
+      if (localStorage.getItem(CLAVE_TELEFONO_LISTO) === d.id) return;
+      if (sessionStorage.getItem(CLAVE_TELEFONO_DESPUES) || sessionStorage.getItem(CLAVE_TELEFONO_REVISADO) === d.id) return;
+      const c = await configuracion();
+      const t = await token();
+      if (!c || !c.supabaseUrl || !t) return;
+      const res = await fetchOriginal(`${c.supabaseUrl}/rest/v1/perfiles?select=telefono&usuario=eq.${encodeURIComponent(d.id)}`, {
+        headers: { apikey: c.supabaseKey, Authorization: 'Bearer ' + t, Accept: 'application/json' },
+      });
+      if (!res.ok) return; // tabla aún no creada o sin conexión: se intenta en la próxima visita
+      sessionStorage.setItem(CLAVE_TELEFONO_REVISADO, d.id);
+      const filas = await res.json();
+      if (Array.isArray(filas) && filas[0] && filas[0].telefono) { localStorage.setItem(CLAVE_TELEFONO_LISTO, d.id); return; }
+      await cargarTelefono();
+      window.TelefonoCuenta.abrir();
+    } catch (e) { /* sin almacenamiento o sin conexión: no se pide */ }
+  }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pintarBotones);
-  else pintarBotones();
+  // Para perfil.html: abre la ventana con el número actual (para cambiarlo)
+  async function cambiarTelefono(actual) {
+    await cargarTelefono();
+    return window.TelefonoCuenta.abrir({ actual });
+  }
+
+  window.Sesion = {
+    cliente, entrar, salir, datos, token, hay: () => !!guardada(), pintar: pintarBotones,
+    config: configuracion, cambiarTelefono, revisarTelefono,
+  };
+
+  function alCargar() { pintarBotones(); setTimeout(revisarTelefono, 1200); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', alCargar);
+  else alCargar();
   // Otra pestaña inició o cerró sesión
   window.addEventListener('storage', (e) => { if (e.key && /^sb-.+-auth-token$/.test(e.key)) pintarBotones(); });
 })();

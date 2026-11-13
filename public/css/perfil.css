@@ -74,6 +74,21 @@
 .perfil-datos { display: grid; gap: 2px; min-width: 0; }
 .perfil-datos strong { font-family: 'Montserrat', sans-serif; font-size: 18px; font-weight: 900; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .perfil-datos span { font-size: 13px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.perfil-whatsapp {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px;
+  padding: 14px 16px; border-radius: 14px; background: var(--bg-deep); border: 1px solid var(--border-glass);
+}
+.perfil-whatsapp div { display: grid; gap: 2px; min-width: 0; }
+.perfil-whatsapp span { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.perfil-whatsapp strong { font-family: 'Montserrat', sans-serif; font-size: 16px; font-weight: 900; color: var(--text-main); }
+.perfil-whatsapp--falta { border-color: var(--estado-espera); }
+.perfil-whatsapp--falta strong { color: var(--estado-espera); }
+.btn-telefono {
+  flex-shrink: 0; min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--cta-gradient); color: var(--on-cta);
+  font-family: 'Montserrat', sans-serif; font-size: 12px; font-weight: 900; text-transform: uppercase;
+}
+.btn-telefono:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .perfil-resumen { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 24px 0 16px; }
 .perfil-resumen div { padding: 16px; border-radius: 14px; text-align: center; background: var(--bg-deep); border: 1px solid var(--border-glass); }
 .perfil-resumen strong { display: block; font-family: 'Montserrat', sans-serif; font-size: 22px; font-weight: 900; color: var(--primary); }

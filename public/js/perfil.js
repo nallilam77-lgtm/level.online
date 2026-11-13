@@ -208,6 +208,26 @@
     lista.append(li);
   }
 
+  // ---------------------------------------------------------------- WhatsApp de la cuenta (tabla perfiles)
+  let telefono = '';
+  function pintarTelefono() {
+    $('telefonoPerfil').textContent = telefono ? telefono.replace(/^\+58(\d{3})(\d{7})$/, '0$1 $2') : 'Sin número';
+    $('btnTelefono').textContent = telefono ? 'Cambiar' : 'Agregar';
+    $('telefonoPerfil').parentElement.parentElement.classList.toggle('perfil-whatsapp--falta', !telefono);
+  }
+  async function cargarTelefono() {
+    try {
+      const { data } = await cliente.from('perfiles').select('telefono').eq('usuario', usuario.id).maybeSingle();
+      telefono = (data && data.telefono) || '';
+    } catch (e) { telefono = ''; }
+    pintarTelefono();
+  }
+  window.addEventListener('telefono-cuenta', (e) => { telefono = e.detail || telefono; pintarTelefono(); });
+  $('btnTelefono').addEventListener('click', async () => {
+    const nuevo = await Sesion.cambiarTelefono(telefono);
+    if (nuevo) { telefono = nuevo; pintarTelefono(); }
+  });
+
   // ---------------------------------------------------------------- sesión
   async function conSesion(sesion) {
     if (regresarSolo) { location.replace(volver); return; }
@@ -218,6 +238,7 @@
     if (/^https:\/\//.test(m.avatar_url || '')) $('fotoPerfil').src = m.avatar_url;
     mostrar(['panelPerfil', 'panelRecargas']);
     Sesion.pintar();
+    cargarTelefono();
     try {
       await cargarRecargas();
     } catch (e) {

@@ -1,0 +1,64 @@
+/* Ventana "Tu WhatsApp" (js/telefono-cuenta.js). Se carga en cualquier página: toma el acento de la
+   tienda (--game-accent / --game-gradient) o el de Level Up. Ver .claude/UI_RULES.md */
+
+:root {
+  --tel-fondo: #0f172a;
+  --tel-profundo: #0b1120;
+  --tel-velo: rgba(2, 6, 23, 0.78);
+  --tel-borde: rgba(148, 163, 184, 0.15);
+  --tel-texto: #f1f5f9;
+  --tel-suave: #94a3b8;
+  --tel-cian: #22d3ee;
+  --tel-neon: #39ff14;
+  --tel-alerta: #fb7185;
+  --tel-sombra: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4), 0 10px 25px -5px rgba(6, 182, 212, 0.2);
+}
+
+.tel-cuenta {
+  --tel-acento: var(--game-accent, var(--tel-cian));
+  position: fixed; inset: 0; z-index: 10000;
+  display: grid; place-items: center; padding: 16px;
+  background: var(--tel-velo);
+  font-family: 'Montserrat', 'Poppins', sans-serif;
+}
+.tel-cuenta__caja {
+  width: 100%; max-width: 380px; display: grid; gap: 14px; padding: 24px;
+  background: var(--tel-fondo); color: var(--tel-texto);
+  border: 1px solid var(--tel-acento); border-radius: 16px; box-shadow: var(--tel-sombra);
+}
+.tel-cuenta__caja h2 {
+  font-size: 18px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--tel-acento);
+}
+.tel-cuenta__caja p { font-size: 14px; line-height: 1.5; color: var(--tel-suave); }
+.tel-cuenta__caja p strong { color: var(--tel-texto); }
+.tel-cuenta__caja small { font-size: 11px; line-height: 1.5; color: var(--tel-suave); text-align: center; }
+
+.tel-cuenta__campo {
+  display: flex; align-items: stretch; min-height: 48px; overflow: hidden;
+  background: var(--tel-profundo); border: 2px solid var(--tel-borde); border-radius: 12px;
+  transition: border-color 0.25s ease;
+}
+.tel-cuenta__campo:focus-within { border-color: var(--tel-acento); }
+.tel-cuenta__campo--ok { border-color: var(--tel-neon); }
+.tel-cuenta__prefijo {
+  display: grid; place-items: center; padding: 0 12px;
+  font-weight: 800; color: var(--tel-suave); border-right: 1px solid var(--tel-borde);
+}
+.tel-cuenta__campo input {
+  flex: 1; min-width: 0; padding: 0 12px; border: 0; outline: none; background: transparent;
+  color: var(--tel-texto); font: inherit; font-size: 16px; font-weight: 800; letter-spacing: 0.5px;
+}
+.tel-cuenta__mensaje { min-height: 0; color: var(--tel-alerta) !important; font-size: 12px !important; }
+.tel-cuenta__mensaje:empty { display: none; }
+
+.tel-cuenta__guardar, .tel-cuenta__despues {
+  min-height: 48px; border-radius: 999px; cursor: pointer;
+  font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; text-transform: uppercase;
+}
+.tel-cuenta__guardar {
+  border: 0; color: var(--on-cta, var(--tel-fondo));
+  background: var(--cta-gradient, linear-gradient(135deg, var(--tel-cian), var(--tel-neon)));
+}
+.tel-cuenta__guardar:disabled { opacity: 0.6; cursor: wait; }
+.tel-cuenta__despues { min-height: 44px; border: 0; background: transparent; color: var(--tel-suave); font-size: 12px; }
+.tel-cuenta__guardar:focus-visible, .tel-cuenta__despues:focus-visible { outline: 2px solid var(--tel-acento); outline-offset: 2px; }

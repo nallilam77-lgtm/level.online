@@ -32,6 +32,15 @@
     return e;
   }
 
+  // Botón que abre WhatsApp con el cliente (teléfono "+58414…" de la tabla perfiles) y un mensaje listo
+  function enlaceWhatsapp(telefono, mensaje) {
+    const a = el('a', 'enlace-wa', 'WhatsApp ' + telefono.replace(/^\+58(\d{3})(\d{7})$/, '0$1 $2'));
+    a.href = `https://wa.me/${telefono.replace(/\D/g, '')}${mensaje ? '?text=' + encodeURIComponent(mensaje) : ''}`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    return a;
+  }
+
   // Inicio del día y de la semana (lunes) en Venezuela (UTC-4), como api/_lib/semana.js
   function iniciosVE(ahora = Date.now()) {
     const DIA = 864e5, DESFASE = 4 * 36e5;
@@ -160,12 +169,19 @@
     data.forEach((f) => {
       const li = el('li');
       const cabeza = el('div', 'pedido-cabeza');
-      cabeza.append(el('strong', '', `${f.puesto}. ${f.correo} · ${Number(f.puntos).toLocaleString('es-VE')} pts`));
+      cabeza.append(el('strong', '', `${f.puesto}. ${f.nombre || f.correo} · ${Number(f.puntos).toLocaleString('es-VE')} pts`));
       if (f.revisar) cabeza.append(el('span', 'etiqueta etiqueta--revisar', 'Revisar'));
       const st = f.stats || {};
       li.append(cabeza,
         el('span', '', `Mejor partida: ${f.segundos} s · atrapó ${st.atrapados ?? '?'} y se le escaparon ${st.escapados ?? '?'} · ${st.golpes ?? '?'} golpes`),
-        el('span', '', `${f.partidas_validas} partidas válidas, ${f.partidas_invalidas} inválidas · ${fecha(f.terminada)}`));
+        el('span', '', `${f.partidas_validas} partidas válidas, ${f.partidas_invalidas} inválidas · ${fecha(f.terminada)}`),
+        el('span', '', f.correo));
+      const acciones = el('div', 'acciones-cuenta');
+      if (f.telefono) {
+        const premio = f.puesto === 1 ? '¡Ganaste la Lluvia de Diamantes de la semana! ' : '';
+        acciones.append(enlaceWhatsapp(f.telefono, `Hola${f.nombre ? ' ' + f.nombre.split(' ')[0] : ''}, te escribimos de Level Up. ${premio}`.trim()));
+      } else acciones.append(el('span', 'sin-telefono', 'Sin WhatsApp'));
+      li.append(acciones);
       lista.append(li);
     });
   }
@@ -255,7 +271,7 @@
     const texto = $('buscarCuenta').value.trim().toLowerCase();
     const lista = $('listaCuentas');
     lista.replaceChildren();
-    const visibles = cuentas.filter((c) => !texto || `${c.correo} ${c.nombre || ''}`.toLowerCase().includes(texto));
+    const visibles = cuentas.filter((c) => !texto || `${c.correo} ${c.nombre || ''} ${c.telefono || ''}`.toLowerCase().includes(texto));
     if (!visibles.length) { lista.append(el('li', 'vacio', 'No hay cuentas con esa búsqueda.')); return; }
     visibles.forEach((c) => {
       const li = el('li', 'pedido');
@@ -265,8 +281,35 @@
       li.append(cabeza,
         el('span', '', `${c.correo || ''}${Number(c.gastado) > 0 ? ` · ${bs(c.gastado)} Bs` : ''} · ${Number(c.fichas) || 0} fichas`),
         el('span', '', `Creada ${corta(c.creado)} · última entrada ${corta(c.ultimo)}`));
+      const acciones = el('div', 'acciones-cuenta');
+      if (c.telefono) acciones.append(enlaceWhatsapp(c.telefono, `Hola${c.nombre ? ' ' + c.nombre.split(' ')[0] : ''}, te escribimos de Level Up.`));
+      else acciones.append(el('span', 'sin-telefono', 'Sin WhatsApp'));
+      if (Number(c.recargas) > 0 || Number(c.gastado) > 0) {
+        const ver = el('button', 'btn-ver', 'Ver recargas');
+        ver.type = 'button';
+        ver.addEventListener('click', () => verRecargasCuenta(c.id, li, ver));
+        acciones.append(ver);
+      }
+      li.append(acciones);
       lista.append(li);
     });
+  }
+
+  // Últimas 20 recargas de una cuenta (cualquier estado), debajo de su tarjeta
+  async function verRecargasCuenta(id, li, boton) {
+    const abierta = li.querySelector('.recargas-cuenta');
+    if (abierta) { abierta.remove(); boton.textContent = 'Ver recargas'; return; }
+    boton.disabled = true;
+    const { data, error } = await cliente.from('recargas')
+      .select('id_pedido,juego,cuenta,paquete,precio,referencia,estado,creado,usuario')
+      .eq('usuario', id).order('creado', { ascending: false }).limit(20);
+    boton.disabled = false;
+    const sub = el('ul', 'pedidos recargas-cuenta');
+    if (error) sub.append(el('li', 'vacio', 'No se pudieron cargar.'));
+    else if (!data || !data.length) sub.append(el('li', 'vacio', 'Sin recargas con esta cuenta.'));
+    else data.forEach((p) => sub.append(tarjetaPedido(p, false)));
+    li.append(sub);
+    boton.textContent = 'Ocultar recargas';
   }
 
   async function cargarCuentas() {
@@ -282,7 +325,7 @@
     $('kpiNuevas').textContent = `${n(data.hoy)} · ${n(data.semana)}`;
     $('kpiRecargas').textContent = n(data.recargas);
     $('kpiFichas').textContent = n(data.fichas);
-    $('notaRecargas').textContent = `Recargas entregadas desde que se guardan en Supabase; ${n(data.recargas_con_cuenta)} fueron con la sesión iniciada.`;
+    $('notaRecargas').textContent = `Recargas entregadas desde que se guardan en Supabase; ${n(data.recargas_con_cuenta)} fueron con la sesión iniciada. ${n(data.con_telefono)} de ${n(data.total)} cuentas dejaron su WhatsApp.`;
     cuentas = Array.isArray(data.cuentas) ? data.cuentas : [];
     pintarCuentas();
   }
