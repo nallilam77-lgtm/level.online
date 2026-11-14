@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=9">
+  <link rel="stylesheet" href="css/admin.css?v=10">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=10" defer></script>
+  <script src="/js/admin.js?v=11" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -194,18 +194,39 @@
           <h2>Códigos de Roblox</h2>
           <div class="kpis" id="kpisRoblox"></div>
           <p class="nota">Cada compra se lleva un código de aquí, uno solo y nunca repetido. Si un paquete llega a 0, la tienda lo muestra <strong>Agotado</strong> y no cobra.</p>
+          <label class="interruptor">
+            <input type="checkbox" id="robloxCentralOne">
+            <span><strong>Comprar en Central One cuando se acaben los códigos</strong><small>Solo en los paquetes unidos a un producto de Central One. Se paga con tu saldo de Central One.</small></span>
+          </label>
+          <p class="mensaje-form" id="mensajeCentralOne" role="status"></p>
+        </div>
+
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Paquetes de Roblox</h2>
+            <button type="button" class="btn-ver" id="btnTraerRoblox">🔄 Traer de Central One</button>
+          </div>
+          <p class="nota" id="estadoTraerRoblox" role="status"></p>
+          <ul class="pedidos" id="listaPaquetesRoblox"></ul>
+          <form class="formulario" id="formNuevoRoblox" novalidate>
+            <h3 class="subtitulo-form">Crear paquete</h3>
+            <div class="dos-campos">
+              <label class="campo">Nombre (con los Robux)<input type="text" id="nuevoRobloxNombre" maxlength="60" placeholder="Ej. 800 Robux" autocomplete="off"></label>
+              <label class="campo">Precio (Bs)<input type="number" id="nuevoRobloxPrecio" inputmode="decimal" min="0" step="0.01" placeholder="Ej. 8000"></label>
+            </div>
+            <label class="campo">Producto de Central One (opcional, para comprar ahí sin códigos)
+              <select id="nuevoRobloxProducto"><option value="">Ninguno: solo mis códigos</option></select>
+            </label>
+            <button type="submit" class="btn btn--chico">Crear paquete</button>
+            <p class="mensaje-form" id="mensajeNuevoRoblox" role="status"></p>
+          </form>
         </div>
 
         <div class="tarjeta">
           <h2>Cargar códigos</h2>
           <form class="formulario" id="formRoblox" novalidate>
             <label class="campo">Paquete
-              <select id="robloxPaquete">
-                <option value="50">50 Robux</option>
-                <option value="100">100 Robux</option>
-                <option value="270">270 Robux</option>
-                <option value="355">355 Robux</option>
-              </select>
+              <select id="robloxPaquete"></select>
             </label>
             <label class="campo">Códigos (uno por línea)
               <textarea id="robloxCodigos" rows="6" spellcheck="false" autocomplete="off" placeholder="Pega aquí los códigos, uno debajo del otro"></textarea>

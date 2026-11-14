@@ -824,22 +824,39 @@
   });
 
   // ---------------------------------------------------------------- roblox (supabase/roblox.sql)
-  // Los códigos son dinero: la base solo devuelve los últimos 4 caracteres (admin_roblox).
-  const PAQUETES_ROBLOX = ['50', '100', '270', '355'];
+  // Los códigos son dinero: la base solo devuelve los últimos 4 caracteres (admin_roblox). Los paquetes y
+  // sus precios son los de la tabla "precios" (juego "roblox"); los códigos se guardan por la clave del
+  // paquete (los números de su nombre: "800 Robux" → "800"), igual que roblox.gs y api/_lib/juegos/roblox.js.
+  const claveRoblox = (nombre) => {
+    const n = String(nombre || '').replace(/[^0-9]/g, '');
+    return n ? (/EE\.?\s*UU|ESTADOS\s+UNIDOS|UNITED\s+STATES|\bUSA?\b/i.test(String(nombre)) ? `${n}-EEUU` : n) : '';
+  };
+  let robloxPaquetes = [];
   async function cargarRoblox() {
-    const { data, error } = await cliente.rpc('admin_roblox');
+    const [{ data, error }, precios] = await Promise.all([cliente.rpc('admin_roblox'), cliente.rpc('admin_precios', { p_juego: 'roblox' })]);
     if (error || !data) {
       console.error(error);
       $('listaRobloxLibres').replaceChildren(el('li', 'vacio', 'No se pudieron cargar. ¿Ya corriste supabase/roblox.sql?'));
       return;
     }
+    $('robloxCentralOne').checked = data.central_one === true;
     const porPaquete = Object.fromEntries((data.paquetes || []).map((p) => [p.paquete, p]));
-    $('kpisRoblox').replaceChildren(...PAQUETES_ROBLOX.map((k) => {
-      const libres = Number((porPaquete[k] || {}).libres) || 0;
+    robloxPaquetes = (precios.data && precios.data.paquetes) || [];
+    preciosDatosRoblox = precios.data || {};
+    pintarPaquetesRoblox(porPaquete, (precios.data && precios.data.sin_usar) || []);
+    $('kpisRoblox').replaceChildren(...robloxPaquetes.map((p) => {
+      const libres = Number((porPaquete[claveRoblox(p.paquete)] || {}).libres) || 0;
       const kpi = el('div', 'kpi' + (libres <= 3 ? ' kpi--aviso' : ''));
-      kpi.append(el('small', '', `${k} Robux`), el('strong', '', libres === 0 ? 'Agotado' : `${libres} libres`));
+      kpi.append(el('small', '', p.paquete), el('strong', '', libres === 0 ? 'Agotado' : `${libres} libres`));
       return kpi;
     }));
+    const elegido = $('robloxPaquete').value;
+    $('robloxPaquete').replaceChildren(...robloxPaquetes.map((p) => {
+      const o = el('option', '', p.paquete);
+      o.value = claveRoblox(p.paquete);
+      return o;
+    }));
+    if (elegido) $('robloxPaquete').value = elegido;
 
     const entregados = $('listaRobloxEntregados');
     entregados.replaceChildren();
@@ -872,6 +889,138 @@
     });
   }
 
+  // Paquetes: precio, unión con Central One y crear nuevos (admin_precio_guardar de supabase/precios.sql)
+  function opcionesCentralOne(select, sinUsar, actual) {
+    const opciones = [el('option', '', 'Ninguno: solo mis códigos')];
+    opciones[0].value = '';
+    const lista = sinUsar.slice();
+    if (actual && !lista.some((c) => c.producto === actual)) lista.unshift({ producto: actual, nombre: 'Producto actual', costo_usd: null });
+    lista.forEach((c) => {
+      const o = el('option', '', `${c.nombre || c.producto}${c.costo_usd !== null ? ` · $${Number(c.costo_usd)}` : ''}${c.en_stock === false ? ' · sin stock' : ''}`);
+      o.value = c.producto;
+      opciones.push(o);
+    });
+    select.replaceChildren(...opciones);
+    select.value = actual || '';
+  }
+
+  function pintarPaquetesRoblox(porPaquete, sinUsar) {
+    const lista = $('listaPaquetesRoblox');
+    lista.replaceChildren();
+    if (!robloxPaquetes.length) lista.append(el('li', 'vacio', 'No hay paquetes. Crea uno abajo.'));
+    robloxPaquetes.forEach((p) => {
+      const libres = Number((porPaquete[claveRoblox(p.paquete)] || {}).libres) || 0;
+      const li = el('li', 'pedido' + (p.activo ? '' : ' codigo--inactivo'));
+      const cabeza = el('div', 'pedido-cabeza');
+      const etiquetas = el('span', 'etiquetas');
+      etiquetas.append(el('span', 'etiqueta ' + (libres > 0 ? 'etiqueta--completado' : 'etiqueta--problema'), libres > 0 ? `${libres} códigos` : 'Sin códigos'));
+      if (p.producto) etiquetas.append(el('span', 'etiqueta etiqueta--pendiente', 'Central One'));
+      if (!p.activo) etiquetas.append(el('span', 'etiqueta etiqueta--reembolsado', 'Oculto'));
+      cabeza.append(el('strong', '', p.paquete), etiquetas);
+      li.append(cabeza, el('span', 'precio-final', p.precio !== null ? `${bs(p.precio)} Bs` : 'Sin precio'));
+      if (p.producto && p.costo_usd !== null && preciosDatosRoblox.tasa) {
+        const costoBs = Number(p.costo_usd) * Number(preciosDatosRoblox.tasa);
+        li.append(el('span', 'precio-detalle', `En Central One te cuesta $${Number(p.costo_usd)} = ${bs(costoBs)} Bs${p.en_stock ? '' : ' · sin stock allí'}`));
+      }
+      const acciones = el('div', 'acciones-cuenta');
+      acciones.append(
+        boton('Editar', 'btn-ver', () => editarPaqueteRoblox(p, li, sinUsar)),
+        boton(p.activo ? 'Ocultar' : 'Mostrar', 'btn-ver', (b) => guardarPaqueteRoblox(p, { activo: !p.activo }, b)));
+      li.append(acciones);
+      lista.append(li);
+    });
+    opcionesCentralOne($('nuevoRobloxProducto'), sinUsar, '');
+  }
+  let preciosDatosRoblox = {};
+
+  async function guardarPaqueteRoblox(p, cambios, b) {
+    if (b) b.disabled = true;
+    const v = Object.assign({ paquete: p.paquete, precio_manual: p.precio_manual, producto: p.producto || '', activo: p.activo }, cambios);
+    const { error } = await cliente.rpc('admin_precio_guardar', {
+      p_id: p.id, p_juego: 'roblox', p_paquete: v.paquete, p_producto: v.producto, p_cantidad: 1,
+      p_precio_manual: v.precio_manual === null || v.precio_manual === '' ? null : Number(v.precio_manual), p_activo: v.activo, p_orden: null,
+    });
+    if (error) { if (b) b.disabled = false; return textoError(error, 'No se pudo guardar.'); }
+    cargarRoblox();
+    return '';
+  }
+
+  function editarPaqueteRoblox(p, li, sinUsar) {
+    const abierto = li.querySelector('.editar-codigo');
+    if (abierto) { abierto.remove(); return; }
+    const form = el('form', 'formulario editar-codigo');
+    form.noValidate = true;
+    const inPrecio = el('input'); inPrecio.type = 'number'; inPrecio.inputMode = 'decimal'; inPrecio.min = '0'; inPrecio.step = '0.01';
+    inPrecio.value = p.precio_manual !== null ? String(Number(p.precio_manual)) : '';
+    const selProducto = el('select');
+    opcionesCentralOne(selProducto, sinUsar, p.producto || '');
+    const campo = (texto, input) => { const l = el('label', 'campo', texto); l.append(input); return l; };
+    const mensaje = el('p', 'mensaje-form'); mensaje.setAttribute('role', 'status');
+    const guardar = el('button', 'btn btn--chico', 'Guardar'); guardar.type = 'submit';
+    form.append(campo('Precio (Bs)', inPrecio), campo('Producto de Central One', selProducto), guardar, mensaje);
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      if (!(Number(inPrecio.value) > 0)) { mensaje.textContent = 'Escribe el precio en Bs.'; return; }
+      guardar.disabled = true;
+      const fallo = await guardarPaqueteRoblox(p, { precio_manual: inPrecio.value, producto: selProducto.value });
+      guardar.disabled = false;
+      if (fallo) mensaje.textContent = fallo;
+    });
+    li.append(form);
+    inPrecio.focus();
+  }
+
+  $('formNuevoRoblox').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const msg = $('mensajeNuevoRoblox');
+    const nombre = $('nuevoRobloxNombre').value.trim();
+    const precio = Number($('nuevoRobloxPrecio').value);
+    if (!claveRoblox(nombre)) { msg.textContent = 'El nombre tiene que llevar los Robux, por ejemplo "800 Robux".'; return; }
+    if (robloxPaquetes.some((p) => claveRoblox(p.paquete) === claveRoblox(nombre))) { msg.textContent = 'Ya hay un paquete con esos Robux.'; return; }
+    if (!(precio > 0)) { msg.textContent = 'Escribe el precio en Bs.'; return; }
+    const { error } = await cliente.rpc('admin_precio_guardar', {
+      p_id: null, p_juego: 'roblox', p_paquete: nombre, p_producto: $('nuevoRobloxProducto').value, p_cantidad: 1,
+      p_precio_manual: precio, p_activo: true, p_orden: null,
+    });
+    if (error) { msg.textContent = textoError(error, 'No se pudo crear.'); return; }
+    msg.textContent = `✅ ${nombre} creado. Ahora cárgale códigos abajo (o activa Central One si lo uniste a un producto).`;
+    $('formNuevoRoblox').reset();
+    await cargarRoblox();
+    $('robloxPaquete').value = claveRoblox(nombre);
+  });
+
+  $('robloxCentralOne').addEventListener('change', async () => {
+    const activo = $('robloxCentralOne').checked;
+    if (activo && !confirm('¿Activar la compra en Central One?\n\nCuando un paquete unido a Central One se quede sin códigos, la tienda lo seguirá vendiendo y comprará el código con tu saldo de Central One.')) {
+      $('robloxCentralOne').checked = false;
+      return;
+    }
+    const { error } = await cliente.rpc('admin_roblox_central_one', { p_activo: activo });
+    if (error) { $('robloxCentralOne').checked = !activo; $('mensajeCentralOne').textContent = textoError(error, 'No se pudo cambiar.'); return; }
+    $('mensajeCentralOne').textContent = activo ? '✅ Activado: los paquetes unidos a Central One se venden aunque no tengan códigos.' : 'Desactivado: sin códigos, el paquete sale Agotado.';
+  });
+
+  $('btnTraerRoblox').addEventListener('click', async () => {
+    const b = $('btnTraerRoblox');
+    b.disabled = true;
+    $('estadoTraerRoblox').textContent = 'Preguntando a Central One…';
+    try {
+      const { data: s } = await cliente.auth.getSession();
+      const res = await fetch('/api/juego?juego=roblox&accion=traer_productos', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + ((s && s.session && s.session.access_token) || '') },
+      });
+      const r = await res.json();
+      $('estadoTraerRoblox').textContent = r.status === 'success'
+        ? `✅ Central One tiene ${r.total} productos de Roblox (${r.conStock} con stock). Ya puedes unirlos a tus paquetes.`
+        : (r.message || 'No se pudo traer el catálogo.');
+      if (r.status === 'success') await cargarRoblox();
+    } catch (e) {
+      $('estadoTraerRoblox').textContent = 'No se pudo conectar. Intenta de nuevo.';
+    } finally {
+      b.disabled = false;
+    }
+  });
+
   $('formRoblox').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const msg = $('mensajeRoblox');
@@ -879,12 +1028,13 @@
     if (!codigos.length) { msg.textContent = 'Pega al menos un código.'; return; }
     if (codigos.length > 500) { msg.textContent = 'Máximo 500 códigos por vez.'; return; }
     const paquete = $('robloxPaquete').value;
-    if (!confirm(`¿Guardar ${codigos.length} código${codigos.length === 1 ? '' : 's'} en ${paquete} Robux?\n\nRevisa que sea el paquete correcto: un código en el paquete equivocado le daría al cliente otra cantidad de Robux.`)) return;
+    if (!paquete) { msg.textContent = 'Primero crea el paquete.'; return; }
+    if (!confirm(`¿Guardar ${codigos.length} código${codigos.length === 1 ? '' : 's'} en ${$('robloxPaquete').selectedOptions[0].textContent}?\n\nRevisa que sea el paquete correcto: un código en el paquete equivocado le daría al cliente otra cantidad de Robux.`)) return;
     $('btnCargarRoblox').disabled = true;
     const { data, error } = await cliente.rpc('admin_roblox_cargar', { p_paquete: paquete, p_codigos: codigos });
     $('btnCargarRoblox').disabled = false;
     if (error || !data) { msg.textContent = textoError(error, 'No se pudieron guardar.'); return; }
-    msg.textContent = `✅ ${data.nuevos} nuevo${data.nuevos === 1 ? '' : 's'} en ${paquete} Robux`
+    msg.textContent = `✅ ${data.nuevos} nuevo${data.nuevos === 1 ? '' : 's'} en ${$('robloxPaquete').selectedOptions[0].textContent}`
       + (data.repetidos ? ` · ${data.repetidos} ya estaban (no se repiten)` : '')
       + (data.invalidos ? ` · ${data.invalidos} con caracteres raros (no se guardaron)` : '') + '.';
     $('robloxCodigos').value = '';

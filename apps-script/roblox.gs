@@ -26,7 +26,7 @@
 // Los pagos se leen de la hoja de pagos compartida (ID_HOJA_PAGOS: C referencia, D monto, E estado).
 //
 // CÓDIGOS EN SUPABASE (desde 2026-11-14): si Vercel manda codigosSupabase: true, la pestaña "Codigos" ya
-// NO se usa. Con el pago encontrado y suficiente, aquí solo se aparta el pago ("En proceso" + fila en
+// NO se usa, y con precioOficial tampoco "PreciosRoblox" (paquetes y precios se manejan en el panel). Con el pago encontrado y suficiente, aquí solo se aparta el pago ("En proceso" + fila en
 // "pedidos_api", productId "SUPABASE") y se responde status "comprar"; Vercel toma el código de Supabase
 // (supabase/roblox.sql) y llama a entregar_api (o a liberar_api si no quedan). Los códigos se cargan en
 // admin.html → pestaña "Roblox".
@@ -189,10 +189,13 @@ function procesarPagoYExtraerCodigo(datos) {
 
   var libro = SpreadsheetApp.getActiveSpreadsheet();
   var numeroPaquete = claveDePaquete(paquete);
-  if (!numeroPaquete || !esPaqueteDeLaTienda(numeroPaquete)) return { status: "error", message: "⚠️ Paquete no reconocido." };
+  // Con códigos en Supabase, los paquetes y sus precios también viven allí (los crea el panel admin):
+  // Vercel manda precioOficial y este script ya no mira "PreciosRoblox" ni la lista fija de paquetes
+  var enSupabase = datos.codigosSupabase === true && limpiarMontoVES(datos.precioOficial) > 0;
+  if (!numeroPaquete || (!enSupabase && !esPaqueteDeLaTienda(numeroPaquete))) return { status: "error", message: "⚠️ Paquete no reconocido." };
 
-  // ---- Precio del paquete (obligatorio: sin precio en la hoja no se vende) ----
-  var precioOficial = precioDePaquete(libro, numeroPaquete);
+  // ---- Precio del paquete (obligatorio: sin precio no se vende) ----
+  var precioOficial = enSupabase ? limpiarMontoVES(datos.precioOficial) : precioDePaquete(libro, numeroPaquete);
   if (!(precioOficial > 0)) {
     console.error("Roblox: el paquete '" + paquete + "' no tiene precio en " + sheetNamePreciosRoblox);
     return { status: "error", message: "⚠️ Este paquete no está disponible en este momento." };

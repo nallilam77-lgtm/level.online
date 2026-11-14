@@ -82,6 +82,7 @@ as $$
 begin
   perform admin_revisar();
   return jsonb_build_object(
+    'central_one', roblox_central_one(),
     'paquetes', (
       select coalesce(jsonb_agg(x order by (regexp_replace(x.paquete, '\D', '', 'g'))::int), '[]'::jsonb) from (
         select paquete, count(*) filter (where estado = 'libre') as libres,
@@ -158,3 +159,38 @@ end;
 $$;
 revoke execute on function public.admin_roblox_anular(bigint) from public, anon;
 grant execute on function public.admin_roblox_anular(bigint) to authenticated, service_role;
+
+-- ---------------------------------------------------------------------
+-- Desde 2026-11-14 (segunda parte): paquetes y precios de Roblox desde Supabase (tabla "precios" de
+-- supabase/precios.sql, juego "roblox") y compra en Central One cuando se acaban los códigos.
+--   configuracion "roblox_central_one" = true → si un paquete no tiene códigos y está unido a un producto
+--   de Central One (precios.producto), el código se compra ahí (llave roblox_nuevo de Vercel).
+-- ---------------------------------------------------------------------
+create or replace function public.admin_roblox_central_one(p_activo boolean)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform admin_revisar();
+  insert into configuracion (clave, valor, publico, actualizado) values ('roblox_central_one', to_jsonb(coalesce(p_activo, false)), false, now())
+  on conflict (clave) do update set valor = excluded.valor, actualizado = now();
+  return coalesce(p_activo, false);
+end;
+$$;
+revoke execute on function public.admin_roblox_central_one(boolean) from public, anon;
+grant execute on function public.admin_roblox_central_one(boolean) to authenticated, service_role;
+
+-- ¿Comprar en Central One cuando no hay códigos? (lo lee el servidor y el panel)
+create or replace function public.roblox_central_one()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select valor = 'true'::jsonb from configuracion where clave = 'roblox_central_one'), false);
+$$;
+revoke execute on function public.roblox_central_one() from public, anon, authenticated;
+grant execute on function public.roblox_central_one() to service_role;

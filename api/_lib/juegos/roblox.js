@@ -10,7 +10,7 @@ import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } fr
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento, precioConDescuento } from '../descuentos.js';
 import { porcentajePremio, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
-import { limpiarMontoVES } from '../recarga-comun.js';
+import { limpiarMontoVES, formatearVES } from '../recarga-comun.js';
 import { catalogo as catalogoCentralOne, datosParaPedido, crearPedidoCentralOne, esperarCodigo } from '../centralone.js';
 import { supabaseActivo, rpc } from '../supabase.js';
 
@@ -62,8 +62,36 @@ function cabecerasCors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-// Precios de la hoja { "50 Robux": 1100, ... }, con caché en memoria (instantánea y con respaldo)
+// Paquetes de Roblox en Supabase (tabla "precios", juego "roblox"; se crean en admin.html → Roblox).
+// { precios: { "355 Robux": "3.500,00" }, filas: { "355 Robux": { producto, enStock } }, centralOne, origen }
+// 30 s en memoria. null si Supabase no respondió (se usa la hoja).
+async function preciosSupabase() {
+  try {
+    const { datos } = await conCache('precios:roblox:supabase', async () => {
+      const [filas, centralOne] = await Promise.all([rpc('precios_de', { p_juego: 'roblox' }), rpc('roblox_central_one', {})]);
+      return { filas, centralOne: centralOne === true };
+    }, { frescoMs: 30_000, respaldoMs: 10 * 60_000, esValido: (d) => Array.isArray(d?.filas) });
+    const precios = {};
+    const filas = {};
+    for (const f of datos.filas) {
+      if (!f.activo || !(Number(f.precio) > 0) || !PAQUETE_VALIDO.test(String(f.paquete))) continue;
+      precios[f.paquete] = formatearVES(Number(f.precio));
+      filas[f.paquete] = { producto: PRODUCTO_VALIDO.test(String(f.producto || '')) ? f.producto : '', enStock: f.en_stock === true };
+    }
+    return { status: 'success', precios, filas, centralOne: datos.centralOne, origen: 'supabase' };
+  } catch (error) {
+    console.error('Roblox: no se pudieron leer los paquetes de Supabase (se usa la hoja):', error.message);
+    return null;
+  }
+}
+
+// Precios { "50 Robux": "1.000,00", ... }: de Supabase si está activo; si no (o falla), de la hoja, con
+// caché en memoria (instantánea y con respaldo)
 async function obtenerPreciosRoblox(scriptUrl) {
+  if (supabaseActivo()) {
+    const deSupabase = await preciosSupabase();
+    if (deSupabase) return deSupabase;
+  }
   const { datos } = await conCache('precios:roblox',
     () => llamarScript(scriptUrl, { tipo: 'obtener_precios' }, LECTURA_APPS_SCRIPT),
     { esValido: (d) => d?.status === 'success' && d.precios && typeof d.precios === 'object' });
@@ -73,14 +101,17 @@ async function obtenerPreciosRoblox(scriptUrl) {
 // Stock de cada paquete para el cliente: nunca la cantidad exacta de códigos del inventario,
 // solo 'disponible', 'pocos' o 'agotado'. Sin datos de stock (Apps Script anterior) → {}.
 // Sin códigos guardados, un paquete con product_id sigue a la venta si Central One tiene stock.
-async function estadoStock({ stock, productos, precios } = {}) {
+async function estadoStock({ stock, productos, precios, filas, centralOne } = {}) {
   if (supabaseActivo() && precios && typeof precios === 'object') {
     const libres = await stockSupabase();
     // Sin respuesta de Supabase no se sabe: se deja comprar (si no quedan, la compra libera el pago)
     return Object.fromEntries(Object.keys(precios).map((producto) => {
       if (!libres) return [producto, 'disponible'];
       const n = Number(libres[claveDePaquete(producto)]) || 0;
-      return [producto, n <= 0 ? 'agotado' : n <= POCOS_CODIGOS ? 'pocos' : 'disponible'];
+      if (n > 0) return [producto, n <= POCOS_CODIGOS ? 'pocos' : 'disponible'];
+      // Sin códigos: se vende si se compra en Central One (activado, unido a un producto y con stock allí)
+      const f = filas?.[producto];
+      return [producto, centralOne && llaveRoblox() && f?.producto && f.enStock ? 'disponible' : 'agotado'];
     }));
   }
   if (!stock || typeof stock !== 'object') return {};
@@ -221,6 +252,18 @@ export async function recargar(req, res) {
     let desc = null;
     let montoACobrar;
     let precioLista = 0;
+    // Con Supabase: el paquete tiene que existir y estar a la venta; su precio va a roblox.gs (precioOficial)
+    let paqueteSupabase = null;
+    if (supabaseActivo()) {
+      const datosPrecios = await obtenerPreciosRoblox(scriptUrl);
+      if (datosPrecios.origen === 'supabase') {
+        if (!Object.hasOwn(datosPrecios.precios, String(producto))) {
+          return res.status(400).json({ status: 'error', message: 'Ese paquete ya no está disponible. Recarga la página.' });
+        }
+        precioLista = limpiarMontoVES(datosPrecios.precios[String(producto)]);
+        paqueteSupabase = { ...datosPrecios.filas[String(producto)], centralOne: datosPrecios.centralOne };
+      }
+    }
     // Premio de cliente fiel (_lib/fidelidad.js): solo sin código. roblox.gs acepta montoACobrar sin código.
     let premio = 0;
     if (!req.body?.codigoDescuento) {
@@ -268,6 +311,7 @@ export async function recargar(req, res) {
       ...(llaveRoblox() && { api: true }),
       // Códigos en Supabase: roblox.gs aparta el pago y el código se toma aquí (entregarDeSupabase)
       ...(supabaseActivo() && { codigosSupabase: true }),
+      ...(paqueteSupabase && precioLista > 0 && { precioOficial: precioLista }),
     };
 
     // Apps Script verifica el pago y la entrega, puede tardar más. Sin reintento
@@ -283,7 +327,7 @@ export async function recargar(req, res) {
     }
     if (data?.status === 'comprar') {
       data = data.productId === PRODUCTO_SUPABASE
-        ? await entregarDeSupabase({ scriptUrl, idPedido, paquete: String(producto), usuario })
+        ? await entregarDeSupabase({ scriptUrl, idPedido, paquete: String(producto), usuario, inicio, respaldo: paqueteSupabase })
         : await comprarEnCentralOne({ scriptUrl, idPedido, productId: data.productId, usuario, inicio });
     }
 
@@ -354,8 +398,11 @@ async function completarCompra(req, res, inicio) {
     }
 
     if (data?.status === 'comprar') {
+      const datosPrecios = data.productId === PRODUCTO_SUPABASE ? await obtenerPreciosRoblox(scriptUrl).catch(() => null) : null;
+      const respaldo = datosPrecios?.origen === 'supabase' && datosPrecios.filas[String(data.paquete || '')]
+        ? { ...datosPrecios.filas[String(data.paquete || '')], centralOne: datosPrecios.centralOne } : null;
       data = data.productId === PRODUCTO_SUPABASE
-        ? await entregarDeSupabase({ scriptUrl, idPedido, paquete: String(data.paquete || ''), usuario: String(data.usuario || '') })
+        ? await entregarDeSupabase({ scriptUrl, idPedido, paquete: String(data.paquete || ''), usuario: String(data.usuario || ''), inicio, respaldo })
         : await comprarEnCentralOne({ scriptUrl, idPedido, productId: data.productId, usuario: String(data.usuario || ''), inicio });
     }
 
@@ -382,8 +429,10 @@ async function completarCompra(req, res, inicio) {
  *  - hay código   → entregar_api: pago(s) "Usado", venta en "Exitosas" y el código para el cliente.
  *  - no quedan    → liberar_api: el pago vuelve a "Verificado" y el cliente ve "Agotado".
  *  - no responde  → se reintenta una vez; si sigue sin responder, el pago se libera (sin código no hay venta).
+ *  - no quedan y está activado "comprar en Central One" (admin.html → Roblox) y el paquete está unido a un
+ *    producto → comprarEnCentralOne (mismo pedido en "pedidos_api": entregar_api / liberar_api igual).
  */
-async function entregarDeSupabase({ scriptUrl, idPedido, paquete, usuario }) {
+async function entregarDeSupabase({ scriptUrl, idPedido, paquete, usuario, inicio = Date.now(), respaldo = null }) {
   const avisar = (tipo, datos) => llamarScript(scriptUrl, { tipo, idPedido, ...datos }, ESCRITURA_IDEMPOTENTE)
     .catch((error) => ({ status: 'error', message: error.message }));
   const clave = claveDePaquete(paquete);
@@ -397,6 +446,11 @@ async function entregarDeSupabase({ scriptUrl, idPedido, paquete, usuario }) {
     } catch (error) {
       fallo = error.message;
     }
+  }
+  // Sin códigos en Supabase (y Supabase sí respondió): Central One, si está activado para este paquete
+  if ((typeof codigo !== 'string' || !codigo) && !fallo && respaldo?.centralOne && respaldo.producto && llaveRoblox()) {
+    console.info(`Roblox, pedido ${idPedido}: sin códigos de ${clave} Robux en Supabase → se compra en Central One`);
+    return comprarEnCentralOne({ scriptUrl, idPedido, productId: respaldo.producto, usuario, inicio });
   }
   if (typeof codigo !== 'string' || !codigo) {
     const motivo = fallo ? `Supabase no respondió (${fallo.slice(0, 120)})` : `sin códigos de ${clave} Robux en Supabase`;

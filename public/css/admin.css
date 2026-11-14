@@ -153,6 +153,12 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .precio-detalle { display: block; font-size: 12px; color: var(--text-muted); }
 .precio-detalle .ganas { color: var(--accent-neon); font-weight: 600; }
 .precio-detalle .pierdes { color: var(--peligro); font-weight: 800; }
+.interruptor { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 12px; cursor: pointer;
+  background: var(--bg-deep); border: 1px solid var(--border-glass); }
+.interruptor input { width: 22px; height: 22px; min-height: 0; margin-top: 2px; accent-color: var(--accent-neon); flex: none; }
+.interruptor span { display: grid; gap: 2px; font-size: 13px; }
+.interruptor small { color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+.subtitulo-form { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; text-transform: uppercase; color: var(--text-main); margin-top: 8px; }
 .btn-mini { min-width: 40px; padding: 0 10px; font-size: 14px; }
 .codigo-pago { display: grid; gap: 2px; padding: 8px 10px; margin-top: 2px; border-radius: 10px; border: 1px dashed var(--border-glass); }
 .codigo-pago strong { color: var(--accent-neon); font-size: 12px; font-weight: 600; }
