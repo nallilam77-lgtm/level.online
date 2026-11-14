@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=14">
+  <link rel="stylesheet" href="css/admin.css?v=15">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=19" defer></script>
+  <script src="/js/admin.js?v=20" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -130,6 +130,19 @@
 
       <!-- PAGOS (supabase/pagos.sql): lo que MacroDroid avisa. Etapa 1: en paralelo con la hoja "pagos". -->
       <section class="seccion" id="seccion-pagos" hidden>
+        <div class="tarjeta">
+          <h2>¿Con qué cobran las tiendas?</h2>
+          <div class="selector-motor" role="radiogroup" aria-label="Con qué cobran las tiendas">
+            <button type="button" role="radio" class="opcion-motor" data-motor="supabase" aria-checked="false">
+              <strong>⚡ Supabase</strong><small>Rápido. Un pago nunca se usa dos veces.</small>
+            </button>
+            <button type="button" role="radio" class="opcion-motor" data-motor="hoja" aria-checked="false">
+              <strong>📄 Hoja de cálculo</strong><small>Como antes (respaldo).</small>
+            </button>
+          </div>
+          <p class="nota" id="notaSelectorMotor">Cambia las 5 tiendas a la vez, en menos de 30 segundos. Con Supabase, cada pago usado también se marca "Usado" en la hoja: si vuelves a la hoja, nadie puede reusarlo.</p>
+        </div>
+
         <div class="tarjeta">
           <div class="fila-titulo">
             <h2>Pagos recibidos</h2>

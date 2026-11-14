@@ -195,3 +195,164 @@ end;
 $$;
 revoke execute on function public.pagos_limpiar() from public, anon, authenticated;
 grant execute on function public.pagos_limpiar() to service_role;
+
+-- =====================================================================
+-- PAGOS QUE NO ALCANZAN (por completar) EN SUPABASE (desde 2026-11-14). Las mismas reglas que la pestaña
+-- "por_completar" de las hojas: el pago queda "por_completar", el cliente recibe una clave (aquí solo su
+-- huella SHA-256), tiene 48 horas y hasta 4 pagos para completar la diferencia (con 0,50 Bs de margen).
+-- datos: lo que el pedido necesita para entregarse al completar (jugador, zona, paquete, código de descuento,
+-- comprobante, WhatsApp), tal cual lo mandó la tienda.
+-- =====================================================================
+create table if not exists public.pagos_por_completar (
+  id_pedido      text primary key,
+  juego          text,
+  clave_hash     text not null unique check (clave_hash ~ '^[a-f0-9]{64}$'),
+  precio         numeric(14, 2) not null,
+  pagado         numeric(14, 2) not null,
+  referencias    text[] not null,
+  datos          jsonb not null default '{}'::jsonb,
+  estado         text not null default 'pendiente' check (estado in ('pendiente', 'completo', 'vencido')),
+  id_pedido_completo text,
+  respuesta      jsonb,                     -- la respuesta de "completo" (un reintento recibe la misma)
+  vence          timestamptz not null default now() + interval '48 hours',
+  creado         timestamptz not null default now(),
+  actualizado    timestamptz not null default now()
+);
+alter table public.pagos_por_completar enable row level security;
+revoke all on public.pagos_por_completar from anon, authenticated;
+
+-- El pago que apartó este pedido no alcanzó: queda "por_completar" y se guarda el pedido.
+-- p: { idPedido, referencia, claveHash, precio, pagado, juego, datos: {...} }
+create or replace function public.pagos_guardar_por_completar(p jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ref text := regexp_replace(coalesce(p->>'referencia', ''), '\D', '', 'g');
+  v_id text := p->>'idPedido';
+begin
+  if v_id is null or coalesce(p->>'claveHash', '') !~ '^[a-f0-9]{64}$' or v_ref = '' then
+    return jsonb_build_object('status', 'error', 'message', 'Datos inválidos para guardar el pago por completar');
+  end if;
+  if exists (select 1 from pagos_por_completar where id_pedido = v_id) then
+    return jsonb_build_object('status', 'success', 'repetido', true, 'horas', 48);
+  end if;
+  update pagos set estado = 'por_completar' where referencia = v_ref and id_pedido = v_id and estado = 'en_proceso';
+  if not found then return jsonb_build_object('status', 'error', 'message', 'El pago ya no está en proceso'); end if;
+  insert into pagos_por_completar (id_pedido, juego, clave_hash, precio, pagado, referencias, datos)
+  values (v_id, p->>'juego', p->>'claveHash', round((p->>'precio')::numeric, 2), round((p->>'pagado')::numeric, 2),
+          array[v_ref], coalesce(p->'datos', '{}'::jsonb));
+  return jsonb_build_object('status', 'success', 'horas', 48);
+end;
+$$;
+revoke execute on function public.pagos_guardar_por_completar(jsonb) from public, anon, authenticated;
+grant execute on function public.pagos_guardar_por_completar(jsonb) to service_role;
+
+-- Completar con un pago nuevo (últimos 5 dígitos). Misma respuesta que usar_complemento de las hojas.
+create or replace function public.pagos_completar(p_clave_hash text, p_ultimos5 text, p_id_pedido text, p_juego text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  f pagos_por_completar%rowtype;
+  t jsonb;
+  v_pagado numeric;
+  v_falta numeric;
+  v_resp jsonb;
+begin
+  select * into f from pagos_por_completar where clave_hash = p_clave_hash for update;
+  if not found then
+    return jsonb_build_object('status', 'success', 'valido', false, 'message', 'No encontramos este pago por completar. Escríbenos por WhatsApp con tus referencias.');
+  end if;
+  -- Reintento del mismo pedido que lo completó: la misma respuesta
+  if f.estado = 'completo' and f.id_pedido_completo = p_id_pedido and f.respuesta is not null then return f.respuesta; end if;
+  if f.estado <> 'pendiente' then
+    return jsonb_build_object('status', 'success', 'valido', false, 'message', 'Este pago ya se completó o está en revisión. Si no recibiste tu recarga, escríbenos por WhatsApp.');
+  end if;
+  if f.vence < now() then
+    update pagos_por_completar set estado = 'vencido', actualizado = now() where id_pedido = f.id_pedido;
+    return jsonb_build_object('status', 'success', 'valido', false, 'message', 'Pasaron más de 48 horas: escríbenos por WhatsApp con tus referencias para completar tu recarga.');
+  end if;
+  if array_length(f.referencias, 1) >= 4 then
+    return jsonb_build_object('status', 'success', 'valido', false, 'message', 'Ya usaste el máximo de 4 pagos para este pedido: escríbenos por WhatsApp.');
+  end if;
+
+  t := pagos_tomar(p_ultimos5, p_id_pedido, p_juego);
+  if not (t->>'encontrado')::boolean then
+    return jsonb_build_object('status', 'success', 'valido', true, 'encontrado', false, 'motivo', t->>'motivo');
+  end if;
+  v_pagado := round(f.pagado + (t->>'monto')::numeric, 2);
+  v_falta := round(greatest(0, f.precio - v_pagado), 2);
+
+  if v_pagado < f.precio - 0.50 then
+    update pagos set estado = 'por_completar' where referencia = t->>'referencia' and estado = 'en_proceso';
+    update pagos_por_completar set pagado = v_pagado, referencias = referencias || (t->>'referencia'), actualizado = now()
+     where id_pedido = f.id_pedido;
+    return jsonb_build_object('status', 'success', 'valido', true, 'encontrado', true, 'completo', false,
+      'precio', f.precio, 'pagadoTotal', v_pagado, 'falta', v_falta);
+  end if;
+
+  -- Completo: el último pago queda "en_proceso" para este pedido; la tienda marca TODOS usados al cerrar
+  v_resp := (f.datos - 'precio') || jsonb_build_object('status', 'success', 'valido', true, 'encontrado', true, 'completo', true,
+    'idPedidoOriginal', f.id_pedido, 'precio', f.precio, 'pagadoTotal', v_pagado,
+    'referencias', to_jsonb(f.referencias || (t->>'referencia')), 'version', 3);
+  update pagos_por_completar set pagado = v_pagado, referencias = referencias || (t->>'referencia'), estado = 'completo',
+         id_pedido_completo = p_id_pedido, respuesta = v_resp, actualizado = now()
+   where id_pedido = f.id_pedido;
+  -- Los pagos anteriores (por_completar) pasan a este pedido para que bloquear_pedido / marcar usado los encuentren
+  update pagos set id_pedido = p_id_pedido where referencia = any(f.referencias);
+  return v_resp;
+end;
+$$;
+revoke execute on function public.pagos_completar(text, text, text, text) from public, anon, authenticated;
+grant execute on function public.pagos_completar(text, text, text, text) to service_role;
+
+-- pagos_usar_del_pedido: también los pagos "por_completar" de un pedido que se completó y falló al entregarse
+create or replace function public.pagos_usar_del_pedido(p_id_pedido text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_ref text;
+begin
+  update pagos set estado = 'usado', usado = coalesce(usado, now())
+   where id_pedido = p_id_pedido and estado in ('en_proceso', 'por_completar')
+  returning referencia into v_ref;
+  if v_ref is null then select referencia into v_ref from pagos where id_pedido = p_id_pedido limit 1; end if;
+  return coalesce(v_ref, '');
+end;
+$$;
+revoke execute on function public.pagos_usar_del_pedido(text) from public, anon, authenticated;
+grant execute on function public.pagos_usar_del_pedido(text) to service_role;
+
+-- Limpieza diaria: además, los pedidos por completar viejos (completos o vencidos de hace más de 7 días)
+create or replace function public.pagos_limpiar()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_hoy timestamptz := date_trunc('day', now() at time zone 'America/Caracas') at time zone 'America/Caracas';
+  v_borrados int;
+  v_vencidos int;
+  v_viejos int;
+begin
+  delete from pagos where estado = 'usado' and coalesce(usado, tomado, recibido) < v_hoy;
+  get diagnostics v_borrados = row_count;
+  update pagos set estado = 'vencido' where estado = 'verificado' and recibido < now() - interval '3 days';
+  get diagnostics v_vencidos = row_count;
+  delete from pagos where estado = 'vencido' and recibido < now() - interval '7 days';
+  get diagnostics v_viejos = row_count;
+  update pagos_por_completar set estado = 'vencido', actualizado = now() where estado = 'pendiente' and vence < now();
+  delete from pagos_por_completar where estado <> 'pendiente' and actualizado < now() - interval '7 days';
+  return jsonb_build_object('usados_borrados', v_borrados, 'vencidos', v_vencidos, 'vencidos_borrados', v_viejos);
+end;
+$$;
+revoke execute on function public.pagos_limpiar() from public, anon, authenticated;
+grant execute on function public.pagos_limpiar() to service_role;

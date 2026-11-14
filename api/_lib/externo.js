@@ -8,6 +8,7 @@
 // (compras, registros), porque un reintento tras un timeout podría duplicar la operación.
 // La ruleta sí se reintenta: apps-script/ruleta.gs devuelve el premio ya anotado si se repite el giro.
 
+import { pagoEnSupabase } from './motor-pagos.js';
 import { waitUntil } from '@vercel/functions';
 
 export const TIEMPO_LIMITE_MS = 8000;
@@ -101,7 +102,10 @@ export async function pedirJSON(url, { metodo = 'POST', cuerpo, reintentos = 0, 
 // script lo EXIGE: sin la propiedad TOKEN_VERCEL, o con un token distinto, responde "No autorizado".
 // Así solo Vercel puede pedir pines, comprar o cambiar pagos aunque la URL /exec se filtre.
 let avisoSinToken = false;
-export function llamarScript(url, cuerpo, opciones = {}) {
+export async function llamarScript(url, cuerpo, opciones = {}) {
+  // Pagos en Supabase (interruptor del panel): las operaciones de cobro no van a la hoja (_lib/motor-pagos.js)
+  const enSupabase = await pagoEnSupabase(url, cuerpo);
+  if (enSupabase) return enSupabase;
   const token = (process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
   if (!token && !avisoSinToken) {
     console.error('🚨 Falta SCRIPT_RECARGAS_TOKEN en Vercel: todos los Apps Script responderán "No autorizado".');

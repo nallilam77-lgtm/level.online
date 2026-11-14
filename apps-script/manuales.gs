@@ -290,7 +290,12 @@ function registrarPedido(datos) {
   var ultimos5 = String(datos.referencia || "").replace(/\s+/g, "");
   if (!/^\d{5}$/.test(ultimos5)) return rechazo("🔍 La referencia debe tener exactamente 5 dígitos.");
 
-  var pago = tomarPago(ultimos5, idPedido);
+  // Pagos en Supabase (desde 2026-11-14, interruptor del panel): Vercel ya apartó el pago y lo manda en
+  // pagoSupabase; aquí no se busca en la hoja. Sin él, como siempre.
+  var ps = datos.pagoSupabase;
+  var pago = ps && /^\d{4,30}$/.test(String(ps.referencia || "")) && limpiarMontoVES(ps.monto) > 0
+    ? { encontrado: true, referencia: String(ps.referencia), montoPagado: redondear2(limpiarMontoVES(ps.monto)) }
+    : tomarPago(ultimos5, idPedido);
   if (!pago.encontrado) return rechazo(pago.message);
 
   var insuficiente = pago.montoPagado < precioACobrar - MARGEN_PAGO_BS;
@@ -311,7 +316,7 @@ function registrarPedido(datos) {
   // Enlace para avisarle al cliente cuando la recarga esté hecha (un toque abre WhatsApp con el mensaje)
   hoja.getRange(hoja.getLastRow(), COL_AVISAR).setFormula(formulaAvisar(whatsapp, juego.nombre, paquete.paquete));
   SpreadsheetApp.flush();
-  PropertiesService.getScriptProperties().deleteProperty("man_" + pago.referencia);
+  if (!ps) PropertiesService.getScriptProperties().deleteProperty("man_" + pago.referencia);
   return { status: "success", registrado: true, repetido: false, insuficiente: insuficiente,
     precio: formatoBs(precioACobrar), pagado: formatoBs(pago.montoPagado), falta: formatoBs(falta), codigoDescuento: codigoDescuento };
 }

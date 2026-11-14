@@ -13,6 +13,7 @@
 //
 // SEGURIDAD: el cuerpo trae la CONTRASEÑA del cliente. Nunca se escribe en los logs (ni req.body ni el
 // payload) y solo viaja a manuales.gs.
+import { motorPagos, tomarPago, cambiarPago } from '../motor-pagos.js';
 import { randomUUID } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo, permitirUso } from '../limitador.js';
 import { anotarRecarga, conDestacados } from '../fidelidad.js';
@@ -227,14 +228,33 @@ export async function recargar(req, res) {
     }
 
     const idPedido = `man-${randomUUID()}`;
+    // Pagos en Supabase (interruptor del panel, _lib/motor-pagos.js): el pago se aparta aquí y manuales.gs
+    // solo anota el pedido (recibe pagoSupabase y no busca en la hoja)
+    let pagoSupabase = null;
+    if ((await motorPagos()) === 'supabase') {
+      const pago = await tomarPago(String(referencia), idPedido, juego);
+      if (!pago.encontrado) {
+        await registrarFallo(clavesLimite);
+        return res.status(200).json({ status: 'error', message: pago.message });
+      }
+      pagoSupabase = { referencia: pago.referencia, monto: pago.monto };
+    }
     let data;
     try {
       data = await llamarScript(scriptUrl, {
         accion: 'registrar_pedido', juego, idPedido, paquete: String(paquete), referencia: String(referencia),
         metodo: String(metodo), usuario, clave, telefono, comprobante: textoParaHoja(url_capture || 'Sin comprobante'),
         ...(desc && { montoACobrar, codigoDescuento: desc.codigo }),
+        ...(pagoSupabase && { pagoSupabase }),
       }, REGISTRO_PEDIDO);
+      // Con el pedido anotado el pago queda usado; si la hoja lo rechazó (datos de la cuenta, paquete…), se libera
+      if (pagoSupabase && data?.status === 'success') {
+        if (data.registrado) await cambiarPago(pagoSupabase.referencia, 'usado', { idPedido });
+        else await cambiarPago(pagoSupabase.referencia, 'verificado', { soloSi: 'en_proceso' });
+      }
     } catch (error) {
+      // Sin respuesta: no se sabe si se anotó, así que el pago no vuelve a estar libre (se revisa a mano)
+      if (pagoSupabase) await cambiarPago(pagoSupabase.referencia, 'usado', { idPedido }).catch(() => {});
       if (!error.tiempoAgotado) throw error;
       console.error(`⚠️ Pedido manual de ${juego} sin respuesta a tiempo | REF: ${referencia} | pedido ${idPedido}: revisar la pestaña del juego` +
         (desc ? ` | código ${desc.codigo} (${montoACobrar} Bs): si el pedido se anotó, anotar el uso a mano en "Descuentos"` : ''));

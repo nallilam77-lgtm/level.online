@@ -169,6 +169,14 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .alerta-saldo[hidden] { display: none; }
 .alerta-saldo--baja { color: var(--peligro); }
 .alerta-saldo--ok { color: var(--accent-neon); }
+.selector-motor { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.opcion-motor { display: grid; gap: 4px; padding: 14px 12px; min-height: 64px; border-radius: 14px; cursor: pointer; text-align: left;
+  background: var(--bg-deep); border: 1px solid var(--border-glass); color: var(--text-muted); font-family: 'Poppins', sans-serif; }
+.opcion-motor strong { font-family: 'Montserrat', sans-serif; font-size: 14px; color: var(--text-main); }
+.opcion-motor small { font-size: 11px; line-height: 1.4; }
+.opcion-motor[aria-checked="true"] { border-color: var(--accent-neon); box-shadow: 0 0 0 3px rgba(57, 255, 20, 0.15); }
+.opcion-motor[aria-checked="true"] strong { color: var(--accent-neon); }
+.opcion-motor:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
 .interruptor { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 12px; cursor: pointer;
   background: var(--bg-deep); border: 1px solid var(--border-glass); }
 .interruptor input { width: 22px; height: 22px; min-height: 0; margin-top: 2px; accent-color: var(--accent-neon); flex: none; }

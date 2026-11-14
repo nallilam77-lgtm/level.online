@@ -1292,9 +1292,11 @@
     pagos = data || [];
     await cargarPedidosDePagos(pagos);
     const { data: motor } = await cliente.from('configuracion').select('valor').eq('clave', 'pagos_motor').maybeSingle();
-    $('notaMotor').textContent = motor && motor.valor === 'supabase'
+    const conSupabase = !!(motor && motor.valor === 'supabase');
+    document.querySelectorAll('[data-motor]').forEach((b) => b.setAttribute('aria-checked', String((b.dataset.motor === 'supabase') === conSupabase)));
+    $('notaMotor').textContent = conSupabase
       ? '✅ Las tiendas cobran con estos pagos (Supabase).'
-      : 'La tienda todavía cobra con la hoja "pagos". Aquí ves lo que MacroDroid manda a Supabase.';
+      : 'Las tiendas cobran con la hoja "pagos". Aquí ves lo que MacroDroid manda a Supabase.';
     $('kpiPagos').textContent = pagos.length;
     $('kpiPagosBs').textContent = bs(pagos.reduce((s, p) => s + Number(p.monto || 0), 0));
     $('kpiPagosPm').textContent = pagos.filter((p) => p.origen === 'pago_movil').length;
@@ -1347,6 +1349,18 @@
     });
   }
   $('periodoPagos').addEventListener('change', cargarPagos);
+  document.querySelectorAll('[data-motor]').forEach((b) => b.addEventListener('click', async () => {
+    if (b.getAttribute('aria-checked') === 'true') return;
+    const aSupabase = b.dataset.motor === 'supabase';
+    const aviso = aSupabase
+      ? '¿Cobrar con SUPABASE en las 5 tiendas?\n\nLos clientes solo podrán usar pagos que estén en la pestaña Pagos (los que llegaron por MacroDroid desde que lo conectamos). Si alguien tiene un pago viejo que no está aquí, agrégalo con "Agregar pago a mano".'
+      : '¿Volver a cobrar con la HOJA DE CÁLCULO en las 5 tiendas?';
+    if (!confirm(aviso)) return;
+    const { error } = await cliente.rpc('admin_pagos_motor', { p_motor: b.dataset.motor });
+    if (error) { alert(textoError(error, 'No se pudo cambiar.')); return; }
+    alert(aSupabase ? '✅ Listo: en menos de 30 segundos las 5 tiendas cobran con Supabase.' : 'Listo: en menos de 30 segundos las tiendas vuelven a cobrar con la hoja.');
+    cargarPagos();
+  }));
   let esperaBusqueda = 0;
   $('buscarPago').addEventListener('input', () => {
     pintarPagos();

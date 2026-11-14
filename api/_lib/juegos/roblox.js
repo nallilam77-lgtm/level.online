@@ -13,6 +13,7 @@ import { porcentajePremio, anotarRecarga, crearAccionFidelidad, conDestacados } 
 import { limpiarMontoVES, formatearVES } from '../recarga-comun.js';
 import { catalogo as catalogoCentralOne, datosParaPedido, crearPedidoCentralOne, esperarCodigo } from '../centralone.js';
 import { supabaseActivo, rpc } from '../supabase.js';
+import { motorPagos, tomarPago, cambiarPago, guardarPorCompletar, completarPago } from '../motor-pagos.js';
 
 // Debe ser menor que maxDuration de api/recargar.js en vercel.json (180 s).
 // La compra no se reintenta: el Apps Script de Roblox no tiene idPedido y repetirla podría duplicarla.
@@ -314,10 +315,15 @@ export async function recargar(req, res) {
       ...(paqueteSupabase && precioLista > 0 && { precioOficial: precioLista }),
     };
 
-    // Apps Script verifica el pago y la entrega, puede tardar más. Sin reintento
-    // (podría duplicar la compra). Si se agota el tiempo, la compra sigue en Apps Script.
+    // Pagos en Supabase (interruptor del panel): todo aquí, sin Apps Script (compraConSupabase)
     let data;
-    try {
+    if (paqueteSupabase && (await motorPagos()) === 'supabase') {
+      data = await compraConSupabase({ idPedido, referencia: String(referencia), usuario, paquete: String(producto),
+        precio: montoACobrar ?? precioLista, claveHash: huella(clave), codigoDescuento: desc?.codigo || '',
+        telefono: telefonoCliente(req.body?.telefono) });
+    } else try {
+      // Apps Script verifica el pago y la entrega, puede tardar más. Sin reintento
+      // (podría duplicar la compra). Si se agota el tiempo, la compra sigue en Apps Script.
       data = await llamarScript(scriptUrl, payload, { tiempoMs: TIEMPO_COMPRA_MS });
     } catch (error) {
       if (!error.tiempoAgotado) throw error;
@@ -384,7 +390,9 @@ async function completarCompra(req, res, inicio) {
 
     const idPedido = `rbx-${randomUUID()}`;
     let data;
-    try {
+    if ((await motorPagos()) === 'supabase') {
+      data = await completarConSupabase({ idPedido, claveHash, referencia });
+    } else try {
       data = await llamarScript(scriptUrl, {
         tipo: 'completar', claveHash, referencia, idPedido, ...(llaveRoblox() && { api: true }),
         ...(supabaseActivo() && { codigosSupabase: true }),
@@ -423,8 +431,63 @@ async function completarCompra(req, res, inicio) {
   }
 }
 
+// =========================================================================
+// PAGOS EN SUPABASE (interruptor "pagos_motor" del panel; _lib/motor-pagos.js). La compra entera pasa aquí:
+// apartar el pago → si no alcanza, "por completar" → código de Supabase → pago usado. Sin Apps Script.
+// Devuelve lo mismo que roblox.gs para respuestaCompra.
+// =========================================================================
+async function compraConSupabase({ idPedido, referencia, usuario, paquete, precio, claveHash, codigoDescuento, telefono }) {
+  const pago = await tomarPago(referencia, idPedido, 'roblox');
+  if (!pago.encontrado) return { status: 'error', message: pago.message };
+  if (pago.monto < precio - 0.5) {
+    const g = await guardarPorCompletar({ idPedido, referencia: pago.referencia, claveHash, precio, pagado: pago.monto, juego: 'roblox',
+      datos: { usuario, paquete, codigoDescuento, telefono } });
+    const falta = Math.round((precio - pago.monto) * 100) / 100;
+    return {
+      status: 'error', insuficiente: true, montoPagado: pago.monto, precioOficial: precio,
+      ...(g?.status === 'success' && { porCompletar: true, falta, horas: 48 }),
+      message: `Pago insuficiente: encontramos ${formatearVES(pago.monto)} Bs, pero este paquete cuesta ${formatearVES(precio)} Bs.`
+        + (g?.status === 'success' ? ` Faltan ${formatearVES(falta)} Bs: paga la diferencia y escribe la nueva referencia para completar tu compra.` : ''),
+    };
+  }
+  return entregarCodigoSupabase({ idPedido, paquete, usuario, referencias: [pago.referencia], liberar: pago.referencia });
+}
+
+// Código de Supabase para un pago ya apartado. Sin códigos: el pago se libera (compra nueva) o queda guardado
+// para que el administrador lo entregue (pago completado: se avisa como en roblox.gs).
+async function entregarCodigoSupabase({ idPedido, paquete, usuario, referencias, liberar }) {
+  let codigo = null;
+  try {
+    codigo = await rpc('roblox_tomar_codigo', { p_paquete: claveDePaquete(paquete), p_id_pedido: idPedido, p_usuario: usuario });
+  } catch (error) {
+    console.error(`❌ Roblox (Supabase), pedido ${idPedido}: no se pudo tomar un código: ${error.message}`);
+  }
+  if (typeof codigo !== 'string' || !codigo) {
+    if (liberar) {
+      await cambiarPago(liberar, 'verificado', { soloSi: 'en_proceso' }).catch(() => {});
+      return { status: 'error', agotado: true, sinCulpa: true, message: '⚠️ Este paquete se acaba de agotar. Tu pago no se usó: elige otro paquete o escríbenos por WhatsApp.' };
+    }
+    return { status: 'error', agotado: true, sinCulpa: true, message: '⚠️ Este paquete se agotó justo ahora. Tu pago anterior sigue guardado: escríbenos por WhatsApp y te lo entregamos.' };
+  }
+  for (const ref of referencias) await cambiarPago(ref, 'usado', { idPedido }).catch((e) => console.error(`🚨 Roblox: código entregado pero el pago …${String(ref).slice(-5)} no se pudo marcar usado: ${e.message}`));
+  return { status: 'success', code: codigo, message: '¡Código canjeado con éxito!' };
+}
+
+async function completarConSupabase({ idPedido, claveHash, referencia }) {
+  const r = await completarPago(claveHash, referencia, idPedido, 'roblox');
+  if (!r?.valido) return { status: 'error', complementoInvalido: true, message: String(r?.message || 'No encontramos este pago por completar.') };
+  if (!r.encontrado) return { status: 'error', message: r.message };
+  if (!r.completo) {
+    const falta = Number(r.falta) || 0;
+    return { status: 'error', insuficiente: true, porCompletar: true, montoPagado: Number(r.pagadoTotal) || 0, precioOficial: Number(r.precio) || 0,
+      falta, horas: 48, message: `Pago insuficiente: con este pago llevas ${formatearVES(Number(r.pagadoTotal) || 0)} Bs y faltan ${formatearVES(falta)} Bs. Paga la diferencia y escribe la nueva referencia.` };
+  }
+  const datos = await entregarCodigoSupabase({ idPedido, paquete: String(r.paquete || ''), usuario: String(r.usuario || ''), referencias: r.referencias || [] });
+  return { ...datos, usuario: r.usuario, precio: r.precio, codigoDescuento: r.codigoDescuento };
+}
+
 /**
- * Códigos en Supabase: roblox.gs ya dejó el pago "En proceso" y el pedido en "pedidos_api" (productId
+ * Códigos en Supabase: roblox.gs ya dejó el pago "En proceso\" y el pedido en "pedidos_api" (productId
  * "SUPABASE"). Se toma un código (roblox_tomar_codigo: uno por pedido; repetirlo da el mismo) y:
  *  - hay código   → entregar_api: pago(s) "Usado", venta en "Exitosas" y el código para el cliente.
  *  - no quedan    → liberar_api: el pago vuelve a "Verificado" y el cliente ve "Agotado".
