@@ -5,8 +5,9 @@
 -- supabase/tienda.sql y supabase/codigos.sql). Se puede volver a correr. Después, una sola vez,
 -- privado/precios-datos.sql (los paquetes que había en las hojas).
 --
--- Mudanza por pasos (la tienda sigue con las hojas hasta el paso 6):
---   3. Estas tablas.  4. Pestaña "Precios" de admin.html.  5. Prueba en paralelo.  6. La tienda las usa.
+-- Mudanza por pasos: 3. Estas tablas.  4. Pestaña "Precios" de admin.html.  5. Prueba en paralelo.
+--   6. (2026-11-14) LA TIENDA COBRA CON ESTOS PRECIOS: Free Fire, Blood Strike y Mobile Legends (y Roblox).
+--      Las hojas solo verifican pagos; sus pestañas de precios ya no se usan (respaldo si Supabase falla).
 --
 -- Un solo dólar y un solo % de ganancia para TODOS los juegos (los pone el administrador en el panel):
 --   configuracion "tasa_usd"     Bs por dólar (la misma de los creadores)
@@ -234,12 +235,31 @@ revoke all on public.precios_diferencias from anon, authenticated;
 -- =====================================================================
 alter table public.precios add column if not exists fichas integer check (fichas is null or fichas between 0 and 1000);
 
+-- Precio garantizado (desde 2026-11-14, cuando la tienda pasa a cobrar con Supabase): si Central One cambia
+-- un costo, durante 30 minutos se cobra el MENOR de los dos precios. Así un cliente que vio el precio de antes
+-- y pagó nunca queda con "pago insuficiente" por un cambio que pasó mientras pagaba.
+alter table public.centralone_catalogo add column if not exists costo_anterior numeric(12, 4);
+alter table public.centralone_catalogo add column if not exists costo_cambio timestamptz;
+create or replace function public.centralone_costo_anterior()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.costo_usd is distinct from old.costo_usd and old.costo_usd is not null then
+    new.costo_anterior := old.costo_usd;
+    new.costo_cambio := now();
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists centralone_costo_anterior on public.centralone_catalogo;
+create trigger centralone_costo_anterior before update on public.centralone_catalogo
+  for each row execute function public.centralone_costo_anterior();
+
 -- precios_de con las fichas (cambia lo que devuelve: hay que borrarla y crearla de nuevo)
 drop function if exists public.precios_de(text);
 create or replace function public.precios_de(p_juego text)
 returns table (id bigint, paquete text, producto text, cantidad smallint, precio_manual numeric, costo_usd numeric,
                precio_calculado numeric, precio numeric, en_stock boolean, stock integer, visto timestamptz,
-               orden smallint, activo boolean, fichas_manual integer, fichas integer)
+               orden smallint, activo boolean, fichas_manual integer, fichas integer, precio_cobro numeric)
 language sql
 stable
 security definer
@@ -249,9 +269,13 @@ as $$
                        (select bs_por_ficha from juego_ajustes where id = 1) as bs_ficha),
   base as (
     select p.id, p.paquete, p.producto, p.cantidad, p.precio_manual, p.orden, p.activo, p.fichas,
-           c.costo_usd, c.en_stock as c_stock, c.stock as c_cantidad, c.visto as c_visto,
+           c.costo_usd, c.costo_anterior, c.costo_cambio, c.en_stock as c_stock, c.stock as c_cantidad, c.visto as c_visto,
            case when c.costo_usd is not null and conf.tasa is not null and conf.ganancia is not null
                 then round(c.costo_usd * p.cantidad * conf.tasa * (1 + conf.ganancia / 100), 2) end as calculado,
+           -- Lo que se cobra: el menor entre el costo de ahora y el de hace menos de 30 min (least ignora null)
+           case when c.costo_usd is not null and conf.tasa is not null and conf.ganancia is not null
+                then round(least(c.costo_usd, case when c.costo_cambio > now() - interval '30 minutes' then c.costo_anterior end)
+                           * p.cantidad * conf.tasa * (1 + conf.ganancia / 100), 2) end as calculado_cobro,
            conf.bs_ficha
       from precios p cross join conf left join centralone_catalogo c on c.producto = p.producto
      where p.juego = p_juego
@@ -261,7 +285,8 @@ as $$
          case when b.producto is null then true else coalesce(b.c_stock, false) end,
          b.c_cantidad, b.c_visto, b.orden, b.activo, b.fichas,
          coalesce(b.fichas, case when coalesce(b.precio_manual, b.calculado) > 0 and b.bs_ficha > 0
-                                 then greatest(1, floor(coalesce(b.precio_manual, b.calculado) / b.bs_ficha))::integer end)
+                                 then greatest(1, floor(coalesce(b.precio_manual, b.calculado) / b.bs_ficha))::integer end),
+         coalesce(b.precio_manual, b.calculado_cobro)
     from base b
    order by b.orden, b.id;
 $$;

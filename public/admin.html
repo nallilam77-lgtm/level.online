@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=12" defer></script>
+  <script src="/js/admin.js?v=13" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -148,7 +148,7 @@
             </form>
           </div>
           <p class="nota" id="notaPrecios">Valen para los 4 juegos: todo paquete <strong>sin precio a mano</strong> cuesta <strong>costo de Central One × dólar × (1 + ganancia)</strong>. El dólar es el mismo de Creadores.</p>
-          <p class="aviso-precios"><strong>La tienda todavía usa las hojas.</strong> Aquí preparas los precios; cuando estén listos los pasamos a la tienda.</p>
+          <p class="aviso-precios"><strong>La tienda cobra con estos precios</strong> (Free Fire, Blood Strike, Mobile Legends y Roblox). Lo oculto o sin stock en Central One no sale en la tienda.</p>
         </div>
 
         <div class="tarjeta">
@@ -170,12 +170,6 @@
             </form>
           </div>
           <p class="nota">A cada paquete le puedes poner sus fichas en <strong>Editar</strong>. Si lo dejas vacío, da 1 ficha por cada "Bs por ficha" de lo que pagó el cliente (mínimo 1). Con 0, ese paquete no da fichas.</p>
-        </div>
-
-        <div class="tarjeta">
-          <h2>Prueba en paralelo</h2>
-          <p class="nota">La tienda sigue cobrando con las hojas. Cada vez que un cliente abre una tienda, se compara el precio de la hoja con el de aquí. <strong>Si esta lista queda vacía, los precios coinciden</strong> y ya podemos pasar la tienda a Supabase.</p>
-          <ul class="pedidos" id="listaDiferencias"></ul>
         </div>
 
         <div class="tarjeta">

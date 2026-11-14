@@ -809,6 +809,7 @@
   // Prueba en paralelo: lo que la hoja cobra distinto de Supabase (precios_diferencias)
   function pintarDiferencias(lista) {
     const ul = $('listaDiferencias');
+    if (!ul) return;   // la prueba en paralelo terminó: la tienda ya cobra con Supabase
     ul.replaceChildren();
     if (!lista.length) { ul.append(el('li', 'vacio', '✅ Sin diferencias en este juego (o todavía nadie abrió la tienda desde el último cambio).')); return; }
     lista.forEach((d) => {

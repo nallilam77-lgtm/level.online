@@ -1,18 +1,25 @@
 // PRECIOS EN SUPABASE (supabase/precios.sql, desde 2026-11-14).
-// "🔄 Traer productos de Central One" del panel admin (pestaña Precios):
-//   POST /api/juego?juego=<freefire|bloodstrike|mobilelegends|roblox>&accion=traer_productos
-//   con el token de la sesión del administrador (Authorization: Bearer …).
-// Lee el catálogo de Central One con la llave de ese juego (solo vive en Vercel), se queda con los
-// productos del juego y guarda en centralone_catalogo su costo (4 decimales, como texto) y su stock.
-// Los que ya no aparecen quedan "sin stock". El panel después elige cuáles se venden (admin_precio_guardar).
+//
+// 1. LA TIENDA COBRA CON SUPABASE (Free Fire, Blood Strike y Mobile Legends; Roblox en juegos/roblox.js):
+//    conPreciosSupabase(juego, datosDeLaHoja) cambia el catálogo de la hoja por el de Supabase (precios_de):
+//    solo los paquetes activos, con precio y con stock en Central One. De la hoja solo queda lo demás
+//    (version del script, etc.). Si Supabase no responde, se usa el catálogo de la hoja tal cual.
+//    Cada paquete lleva precioCobro: lo que se cobra (precio_cobro: si Central One cambió el costo hace
+//    menos de 30 min, el menor de los dos precios). sinProducto de cada juego lo quita antes de ir al navegador.
+// 2. COPIA DEL CATÁLOGO DE CENTRAL ONE (centralone_catalogo): costo y stock de cada producto.
+//    - Botón "🔄 Traer productos de Central One" del panel (traerProductos, solo administrador):
+//      POST /api/juego?juego=<freefire|bloodstrike|mobilelegends|roblox>&accion=traer_productos
+//    - Sola: si al abrir una tienda la copia tiene más de 15 min, se renueva después de responder
+//      (Central One pide no leer el catálogo en cada visita: 15 min por juego y por instancia).
 import { waitUntil } from '@vercel/functions';
-import { pedirJSON } from './externo.js';
-import { supabaseActivo, guardar, actualizar, borrar, rpc, esAdminToken } from './supabase.js';
+import { pedirJSON, conCache } from './externo.js';
+import { supabaseActivo, guardar, actualizar, rpc, esAdminToken } from './supabase.js';
 import { tokenDe } from './historial.js';
-import { limpiarMontoVES } from './recarga-comun.js';
+import { formatearVES } from './recarga-comun.js';
 
 const URL_CATALOGO = 'https://portal.centraloneglobal.com/api/v1/catalog';
 const UUID = /^[0-9a-f-]{36}$/;
+const RENOVAR_CADA_MS = 15 * 60_000;
 
 // Llave de Central One de cada juego (las mismas variables que usa cada tienda)
 const LLAVES = {
@@ -34,28 +41,17 @@ const DEL_JUEGO = {
 
 const corto = (t, max) => String(t ?? '').slice(0, max);
 
-export async function traerProductos(req, res, juego) {
-  if (req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
-  if (!Object.hasOwn(LLAVES, juego)) return res.status(400).json({ status: 'error', message: 'Este juego no usa Central One.' });
-  if (!supabaseActivo()) return res.status(503).json({ status: 'error', message: 'Supabase no está configurado.' });
-  if (!(await esAdminToken(tokenDe(req)))) return res.status(403).json({ status: 'error', message: 'Solo el administrador.' });
-  const llave = String(LLAVES[juego]() || '').trim();
-  if (!llave) return res.status(503).json({ status: 'error', message: 'Falta la llave de Central One de este juego en Vercel.' });
-
-  let items;
-  try {
-    const datos = await pedirJSON(URL_CATALOGO, {
-      metodo: 'GET', cabeceras: { Authorization: `Bearer ${llave}` }, tiempoMs: 12000, reintentos: 1, reintentarTrasTimeout: true,
-    });
-    if (!Array.isArray(datos?.items)) throw new Error('catálogo sin items');
-    items = datos.items;
-  } catch (error) {
-    console.error(`⚠️ precios: Central One no respondió el catálogo (${juego}):`, error.message);
-    return res.status(503).json({ status: 'error', message: 'Central One no respondió. Intenta de nuevo en un minuto.' });
-  }
+/** Lee el catálogo de Central One del juego y lo guarda en centralone_catalogo. { total, conStock } */
+async function actualizarCatalogo(juego) {
+  const llave = String(LLAVES[juego]?.() || '').trim();
+  if (!llave) throw new Error('falta la llave de Central One de este juego en Vercel');
+  const datos = await pedirJSON(URL_CATALOGO, {
+    metodo: 'GET', cabeceras: { Authorization: `Bearer ${llave}` }, tiempoMs: 12000, reintentos: 1, reintentarTrasTimeout: true,
+  });
+  if (!Array.isArray(datos?.items)) throw new Error('catálogo sin items');
 
   const ahora = new Date().toISOString();
-  const filas = items.filter((p) => UUID.test(String(p?.product_id || '')) && DEL_JUEGO[juego](p)).map((p) => {
+  const filas = datos.items.filter((p) => UUID.test(String(p?.product_id || '')) && DEL_JUEGO[juego](p)).map((p) => {
     const costo = Number(p.reseller_price);
     return {
       producto: p.product_id, juego,
@@ -68,50 +64,80 @@ export async function traerProductos(req, res, juego) {
       visto: ahora,
     };
   });
-
-  try {
-    if (filas.length) await guardar('centralone_catalogo', filas, 'producto');
-    // Lo que antes era de este juego y ya no está en el catálogo: sin stock (no se borra: puede volver)
-    const ids = filas.map((f) => f.producto);
-    await actualizar('centralone_catalogo', `juego=eq.${juego}${ids.length ? `&producto=not.in.(${ids.join(',')})` : ''}`,
-      { en_stock: false, visto: ahora });
-  } catch (error) {
-    console.error(`⚠️ precios: no se pudo guardar el catálogo (${juego}):`, error.message);
-    return res.status(503).json({ status: 'error', message: 'No se pudo guardar el catálogo. Intenta de nuevo.' });
-  }
-
-  return res.status(200).json({ status: 'success', total: filas.length, conStock: filas.filter((f) => f.en_stock).length });
+  if (filas.length) await guardar('centralone_catalogo', filas, 'producto');
+  // Lo que antes era de este juego y ya no está en el catálogo: sin stock (no se borra: puede volver)
+  const ids = filas.map((f) => f.producto);
+  await actualizar('centralone_catalogo', `juego=eq.${juego}${ids.length ? `&producto=not.in.(${ids.join(',')})` : ''}`,
+    { en_stock: false, visto: ahora });
+  return { total: filas.length, conStock: filas.filter((f) => f.en_stock).length };
 }
 
-// =========================================================================
-// PRUEBA EN PARALELO (paso 5): la tienda sigue cobrando con la hoja. Cuando alguien abre una tienda, después
-// de responderle, se compara cada precio de la hoja con el de Supabase (precios_de) y se guarda en
-// precios_diferencias lo que no coincide (el panel lo muestra en Precios). Como mucho una vez cada 5 min
-// por juego en cada instancia: no frena a nadie ni gasta Supabase.
-// catalogo: la lista de la hoja [{ diamantes: "110 Diamantes", precio: "780,00" }, ...]
-// =========================================================================
-const ultimaComparacion = new Map();
-const CADA_MS = 5 * 60_000;
+export async function traerProductos(req, res, juego) {
+  if (req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
+  if (!Object.hasOwn(LLAVES, juego)) return res.status(400).json({ status: 'error', message: 'Este juego no usa Central One.' });
+  if (!supabaseActivo()) return res.status(503).json({ status: 'error', message: 'Supabase no está configurado.' });
+  if (!(await esAdminToken(tokenDe(req)))) return res.status(403).json({ status: 'error', message: 'Solo el administrador.' });
+  try {
+    const r = await actualizarCatalogo(juego);
+    ultimaRenovacion.set(juego, Date.now());
+    return res.status(200).json({ status: 'success', ...r });
+  } catch (error) {
+    console.error(`⚠️ precios: no se pudo traer el catálogo de Central One (${juego}):`, error.message);
+    return res.status(503).json({ status: 'error', message: 'Central One no respondió o no se pudo guardar. Intenta de nuevo en un minuto.' });
+  }
+}
 
-export function compararConHoja(juego, catalogo) {
-  if (!supabaseActivo() || !Array.isArray(catalogo)) return;
+// Renovación sola de la copia del catálogo (después de responder; nunca frena a nadie)
+const ultimaRenovacion = new Map();
+function renovarSiHaceFalta(juego, filas) {
   const ahora = Date.now();
-  if (ahora - (ultimaComparacion.get(juego) || 0) < CADA_MS) return;
-  ultimaComparacion.set(juego, ahora);
-  waitUntil((async () => {
-    const filas = await rpc('precios_de', { p_juego: juego });
-    const enSupabase = new Map((filas || []).filter((f) => f.activo).map((f) => [String(f.paquete).trim(), f.precio === null ? null : Number(f.precio)]));
-    const enHoja = new Map(catalogo.map((p) => [String(p.diamantes ?? p.paquete ?? p.producto ?? '').trim(), limpiarMontoVES(p.precio)]).filter(([n]) => n));
-    const visto = new Date().toISOString();
-    const diferencias = [];
-    for (const paquete of new Set([...enHoja.keys(), ...enSupabase.keys()])) {
-      const hoja = enHoja.has(paquete) ? enHoja.get(paquete) : null;
-      const supa = enSupabase.has(paquete) ? enSupabase.get(paquete) : null;
-      if (hoja !== null && supa !== null && Math.abs(hoja - supa) < 0.01) continue;
-      diferencias.push({ juego, paquete: paquete.slice(0, 80), precio_hoja: hoja, precio_supabase: supa, visto });
-    }
-    await borrar('precios_diferencias', `juego=eq.${juego}`);
-    if (diferencias.length) await guardar('precios_diferencias', diferencias, 'juego,paquete');
-    if (diferencias.length) console.info(`💲 prueba de precios (${juego}): ${diferencias.length} diferencia(s) entre la hoja y Supabase`);
-  })().catch((error) => console.error(`⚠️ prueba de precios (${juego}):`, error.message)));
+  if (ahora - (ultimaRenovacion.get(juego) || 0) < RENOVAR_CADA_MS) return;
+  const vistos = filas.filter((f) => f.producto && f.visto).map((f) => Date.parse(f.visto));
+  if (vistos.length && ahora - Math.max(...vistos) < RENOVAR_CADA_MS) return;
+  ultimaRenovacion.set(juego, ahora);
+  waitUntil(actualizarCatalogo(juego)
+    .then((r) => console.info(`🔄 catálogo de Central One (${juego}) renovado solo: ${r.total} productos, ${r.conStock} con stock`))
+    .catch((error) => console.error(`⚠️ catálogo de Central One (${juego}) no se pudo renovar:`, error.message)));
+}
+
+// Paquetes de un juego en Supabase (30 s en memoria)
+async function paquetesDe(juego) {
+  const { datos } = await conCache(`precios:supabase:${juego}`, () => rpc('precios_de', { p_juego: juego }),
+    { frescoMs: 30_000, respaldoMs: 10 * 60_000, esValido: Array.isArray });
+  return datos;
+}
+
+/**
+ * datos de la hoja ({ status, catalogo: [{ diamantes, precio, producto }], version, … }) con el catálogo
+ * de Supabase en vez del de la hoja. Sin Supabase (o si falla), los datos de la hoja tal cual.
+ */
+export async function conPreciosSupabase(juego, datos) {
+  if (!supabaseActivo() || !Object.hasOwn(LLAVES, juego)) return datos;
+  let filas;
+  try {
+    filas = await paquetesDe(juego);
+  } catch (error) {
+    console.error(`⚠️ precios: Supabase no respondió (${juego}), se usan los precios de la hoja:`, error.message);
+    return datos;
+  }
+  renovarSiHaceFalta(juego, filas);
+  // Lo que la hoja trae de cada paquete (otros campos que la tienda pueda usar), por nombre
+  const deLaHoja = new Map((Array.isArray(datos?.catalogo) ? datos.catalogo : []).map((p) => [String(p.diamantes ?? '').trim(), p]));
+  const catalogo = filas
+    .filter((f) => f.activo && Number(f.precio) > 0 && f.en_stock)
+    .map((f) => ({
+      ...(deLaHoja.get(String(f.paquete).trim()) || {}),
+      diamantes: f.paquete,
+      precio: formatearVES(Number(f.precio)),
+      // Lo que se cobra (nunca va al navegador: sinProducto lo quita)
+      precioCobro: Number(f.precio_cobro) > 0 ? Number(f.precio_cobro) : Number(f.precio),
+      // "2x<id>" = dos pedidos de ese producto (como la fila 3 de la hoja de Free Fire)
+      producto: f.producto ? (f.cantidad > 1 ? `${f.cantidad}x${f.producto}` : f.producto) : '',
+    }));
+  // Supabase sin paquetes de este juego: mejor la hoja que una tienda vacía
+  if (!catalogo.length) {
+    console.error(`⚠️ precios: Supabase no tiene paquetes a la venta de ${juego}; se usan los de la hoja`);
+    return datos;
+  }
+  return { ...datos, catalogo, origenPrecios: 'supabase' };
 }

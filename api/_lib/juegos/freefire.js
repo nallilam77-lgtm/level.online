@@ -8,7 +8,7 @@ import { llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasC
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { FASES, ESTADO_PINES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
-import { compararConHoja } from '../precios.js';
+import { conPreciosSupabase } from '../precios.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
@@ -42,7 +42,8 @@ const PINES_POR_REVISAR = { pinesNoUsados: ['los de la columna L ("pines asignad
 // "2x<product_id>" = dos pedidos de ese producto (Central One no vende 220: son dos de 110).
 const PRODUCTO_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRODUCTOS_DEL_PAQUETE = /^(?:([2-9])x)?([0-9a-f-]{36})$/i;
-const sinProducto = ({ producto, ...paquete }) => paquete;
+// Ni el product_id de Central One ni el precio de cobro interno van al navegador
+const sinProducto = ({ producto, precioCobro, ...paquete }) => paquete;
 // Lista de product_id a pedir para un paquete (vacía = no se puede pedir por la API)
 function productosDe(producto) {
   const partes = String(producto ?? '').trim().match(PRODUCTOS_DEL_PAQUETE);
@@ -95,10 +96,9 @@ async function precios(req, res) {
   try {
     // Lectura sin efectos secundarios (20 s con 1 reintento). Con copia en caché el cliente no espera.
     const { datos } = await conCache('precios:ff',
-      () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT),
+      async () => conPreciosSupabase('freefire', await llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT)),
       { esValido: catalogoValido });
     cabecerasCachePrecios(res);
-    compararConHoja('freefire', datos.catalogo);   // prueba en paralelo de precios (_lib/precios.js)
     return res.status(200).json({ ...datos, catalogo: await conDestacados('freefire', datos.catalogo.map(sinProducto)) });
   } catch (error) {
     console.error("Error al obtener precios de Free Fire:", error.message);
@@ -153,7 +153,7 @@ async function verificar(req, res) {
 // Catálogo de Free Fire para la acción "descuento" (misma caché que la acción precios)
 async function catalogoFreeFire() {
   const { datos } = await conCache('precios:ff',
-    () => llamarScript(process.env.SCRIPT_RECARGAS_URL, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT),
+    async () => conPreciosSupabase('freefire', await llamarScript(process.env.SCRIPT_RECARGAS_URL, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT)),
     { esValido: catalogoValido });
   return datos.catalogo.map(sinProducto);
 }
@@ -310,7 +310,7 @@ async function prepararCentralOne({ apiKey, producto, id, paquete }) {
 async function productoDelCatalogo(urlScript, clave) {
   try {
     const { datos } = await conCache('precios:ff',
-      () => llamarScript(urlScript, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true }),
+      async () => conPreciosSupabase('freefire', await llamarScript(urlScript, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
       { esValido: catalogoValido, respaldoMs: 0 });
     return datos.catalogo.find((p) => clavePaquete(p.diamantes) === clave)?.producto || '';
   } catch (error) {
@@ -614,7 +614,7 @@ export async function recargar(req, res) {
     let dataPrecios;
     try {
       ({ datos: dataPrecios } = await conCache('precios:ff',
-        () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true }),
+        async () => conPreciosSupabase('freefire', await llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
         { esValido: catalogoValido, respaldoMs: 0 }));
     } catch (error) {
       console.error(`❌ [${FASES.precios}] ${error.message}`);
@@ -634,7 +634,8 @@ export async function recargar(req, res) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado." });
     }
-    const precioLista = limpiarMontoVES(paqueteGsheet.precio);
+    // Precio de Supabase (_lib/precios.js): precioCobro = el garantizado si Central One cambió el costo hace poco
+    const precioLista = paqueteGsheet.precioCobro > 0 ? paqueteGsheet.precioCobro : limpiarMontoVES(paqueteGsheet.precio);
 
     // Descuento opcional: se vuelve a consultar el código (pudo desactivarse) antes de tocar el pago
     const descuento = await aplicarDescuentoARecarga(req.body?.codigoDescuento, precioLista);
