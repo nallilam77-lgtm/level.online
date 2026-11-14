@@ -11,6 +11,9 @@ export default async function handler(req, res) {
     // Panel admin → Resumen: saldo de Central One (solo administrador; _lib/precios.js). No es de un juego.
     // MacroDroid: cada pago que llega al teléfono (etapa 1 de los pagos en Supabase; _lib/pagos.js)
     if (req.query.accion === 'pago_recibido') return (await import('./_lib/pagos.js')).pagoRecibido(req, res);
+    // Panel admin → Pagos: agregar un pago a mano y limpiar (solo administrador)
+    if (req.query.accion === 'pago_manual') return (await import('./_lib/pagos.js')).pagoManual(req, res);
+    if (req.query.accion === 'pagos_limpiar') return (await import('./_lib/pagos.js')).limpiarPagos(req, res);
     if (req.query.accion === 'saldo_centralone') return (await import('./_lib/precios.js')).saldoCentralOne(req, res);
     const juego = await cargarJuego(req.query.juego);
     if (!juego) {

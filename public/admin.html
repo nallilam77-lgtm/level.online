@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=18" defer></script>
+  <script src="/js/admin.js?v=19" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -136,6 +136,7 @@
             <select id="periodoPagos" aria-label="Periodo">
               <option value="dia">Hoy</option>
               <option value="7">Últimos 7 días</option>
+              <option value="todos">Todos los guardados</option>
             </select>
           </div>
           <div class="kpis">
@@ -144,9 +145,27 @@
             <div class="kpi"><small>Pago móvil</small><strong id="kpiPagosPm">–</strong></div>
             <div class="kpi"><small>Transferencias</small><strong id="kpiPagosTr">–</strong></div>
           </div>
-          <p class="nota"><strong>Prueba en paralelo:</strong> la tienda todavía cobra con la hoja "pagos". Aquí ves lo que MacroDroid manda a Supabase; compara con la hoja que estén los mismos pagos.</p>
-          <input type="search" id="buscarPago" class="buscar" placeholder="Buscar referencia o monto…" aria-label="Buscar pagos" autocomplete="off">
+          <p class="nota" id="notaMotor">La tienda todavía cobra con la hoja "pagos". Aquí ves lo que MacroDroid manda a Supabase.</p>
+          <input type="search" id="buscarPago" class="buscar" placeholder="Buscar referencia (o sus últimos 5), monto o teléfono…" aria-label="Buscar pagos" autocomplete="off" inputmode="search">
           <ul class="pedidos" id="listaPagos"></ul>
+          <p class="nota">Cada día se borran solos los pagos <strong>usados</strong> de días anteriores. Los libres se guardan 3 días (después quedan "Vencido") y los vencidos se borran a los 7 días. <button type="button" class="btn-ver" id="btnLimpiarPagos">Limpiar ahora</button></p>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Agregar pago a mano</h2>
+          <p class="nota">Para un pago que MacroDroid no anotó. Se guarda aquí <strong>y en la hoja "pagos"</strong>, así el cliente lo puede usar.</p>
+          <form class="formulario" id="formPagoManual" novalidate>
+            <div class="dos-campos">
+              <label class="campo">Referencia completa<input type="text" id="manualReferencia" inputmode="numeric" maxlength="30" placeholder="Ej. 030227531521" autocomplete="off"></label>
+              <label class="campo">Monto (Bs)<input type="text" id="manualMonto" inputmode="decimal" maxlength="20" placeholder="Ej. 1.560,00" autocomplete="off"></label>
+            </div>
+            <div class="dos-campos">
+              <label class="campo">Quién pagó (opcional)<input type="text" id="manualRemitente" maxlength="80" placeholder="Teléfono o nombre" autocomplete="off"></label>
+              <label class="campo">Nota (opcional)<input type="text" id="manualNota" maxlength="200" placeholder="Ej. no llegó la notificación" autocomplete="off"></label>
+            </div>
+            <button type="submit" class="btn btn--chico" id="btnPagoManual">Agregar pago</button>
+            <p class="mensaje-form" id="mensajePagoManual" role="status"></p>
+          </form>
         </div>
       </section>
 

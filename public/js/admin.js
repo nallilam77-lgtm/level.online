@@ -1277,22 +1277,51 @@
   $('actualizarRevision').addEventListener('click', cargarRevision);
 
   // ---------------------------------------------------------------- pagos (supabase/pagos.sql)
-  const ORIGEN_PAGO = { pago_movil: 'Pago móvil', bdv: 'BDV a BDV', transferencia: 'Transferencia', otro: 'Otro' };
+  const ORIGEN_PAGO = { pago_movil: 'Pago móvil', bdv: 'BDV a BDV', transferencia: 'Transferencia', manual: 'Agregado a mano', otro: 'Otro' };
   const ESTADO_PAGO = { verificado: ['Libre', 'etiqueta--completado'], en_proceso: ['En proceso', 'etiqueta--en_proceso'],
     usado: ['Usado', 'etiqueta--reembolsado'], por_completar: ['Por completar', 'etiqueta--incompleto'], vencido: ['Vencido', 'etiqueta--problema'] };
   let pagos = [];
+  let pedidosDePagos = {};   // id_pedido -> { juego, paquete, cuenta, estado }
+  const COLUMNAS_PAGO = 'referencia,monto,monto_texto,remitente,origen,recibido,estado,id_pedido,juego,tomado,usado,nota';
   async function cargarPagos() {
-    const desde = $('periodoPagos').value === 'dia' ? iniciosVE().dia : new Date(Date.now() - 7 * 864e5);
-    const { data, error } = await cliente.from('pagos').select('referencia,monto,monto_texto,remitente,origen,recibido,estado,id_pedido')
-      .gte('recibido', desde.toISOString()).order('recibido', { ascending: false }).limit(500);
+    const periodo = $('periodoPagos').value;
+    let q = cliente.from('pagos').select(COLUMNAS_PAGO).order('recibido', { ascending: false }).limit(500);
+    if (periodo !== 'todos') q = q.gte('recibido', (periodo === 'dia' ? iniciosVE().dia : new Date(Date.now() - 7 * 864e5)).toISOString());
+    const { data, error } = await q;
     if (error) { console.error(error); $('listaPagos').replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/pagos.sql?')); return; }
     pagos = data || [];
+    await cargarPedidosDePagos(pagos);
+    const { data: motor } = await cliente.from('configuracion').select('valor').eq('clave', 'pagos_motor').maybeSingle();
+    $('notaMotor').textContent = motor && motor.valor === 'supabase'
+      ? '✅ Las tiendas cobran con estos pagos (Supabase).'
+      : 'La tienda todavía cobra con la hoja "pagos". Aquí ves lo que MacroDroid manda a Supabase.';
     $('kpiPagos').textContent = pagos.length;
     $('kpiPagosBs').textContent = bs(pagos.reduce((s, p) => s + Number(p.monto || 0), 0));
     $('kpiPagosPm').textContent = pagos.filter((p) => p.origen === 'pago_movil').length;
     $('kpiPagosTr').textContent = pagos.filter((p) => p.origen !== 'pago_movil').length;
     pintarPagos();
   }
+  // Juego, paquete y cuenta del pedido que usó cada pago
+  async function cargarPedidosDePagos(lista) {
+    const ids = [...new Set(lista.map((p) => p.id_pedido).filter((id) => id && !pedidosDePagos[id]))].slice(0, 200);
+    if (!ids.length) return;
+    const { data } = await cliente.from('recargas').select('id_pedido,juego,paquete,cuenta,estado').in('id_pedido', ids);
+    (data || []).forEach((r) => { pedidosDePagos[r.id_pedido] = r; });
+  }
+  // Buscar en TODOS los pagos guardados (no solo el periodo): por referencia o sus últimos 5
+  let buscando = 0;
+  async function buscarPagosServidor(texto) {
+    const digitos = texto.replace(/\D/g, '');
+    if (digitos.length < 4) return;
+    const turno = ++buscando;
+    const { data } = await cliente.from('pagos').select(COLUMNAS_PAGO).like('referencia', `%${digitos}%`).order('recibido', { ascending: false }).limit(50);
+    if (turno !== buscando || !data) return;
+    const vistos = new Set(pagos.map((p) => p.referencia));
+    data.forEach((p) => { if (!vistos.has(p.referencia)) pagos.push(p); });
+    await cargarPedidosDePagos(data);
+    pintarPagos();
+  }
+
   function pintarPagos() {
     const texto = $('buscarPago').value.replace(/\s/g, '').toLowerCase();
     const lista = $('listaPagos');
@@ -1304,13 +1333,65 @@
       const li = el('li', 'pedido');
       const cabeza = el('div', 'pedido-cabeza');
       cabeza.append(el('strong', '', `${bs(p.monto)} Bs · ref. ${p.referencia}`), el('span', 'etiqueta ' + clase, estado));
-      li.append(cabeza, el('span', '', `${ORIGEN_PAGO[p.origen] || p.origen}${p.remitente ? ` · ${p.remitente}` : ''} · ${fecha(p.recibido)}`));
-      if (p.id_pedido) li.append(el('span', 'precio-detalle', `Pedido ${p.id_pedido}`));
+      li.append(cabeza, el('span', '', `Llegó ${fecha(p.recibido)} · ${ORIGEN_PAGO[p.origen] || p.origen}${p.remitente ? ` · ${p.remitente}` : ''}`));
+      if (p.tomado) li.append(el('span', '', `Apartado ${fecha(p.tomado)}${p.usado ? ` · usado ${fecha(p.usado)}` : ''}${p.juego ? ` · ${JUEGOS[p.juego] || p.juego}` : ''}`));
+      else if (p.usado) li.append(el('span', '', `Usado ${fecha(p.usado)}`));
+      if (p.id_pedido) {
+        const ped = pedidosDePagos[p.id_pedido];
+        li.append(el('span', 'precio-detalle', ped
+          ? `Pedido: ${JUEGOS[ped.juego] || ped.juego} · ${ped.paquete} · ${ped.cuenta} · ${ESTADOS[ped.estado] || ped.estado}`
+          : `Pedido ${p.id_pedido}`));
+      }
+      if (p.nota) li.append(el('span', 'precio-detalle', `📝 ${p.nota}`));
       lista.append(li);
     });
   }
   $('periodoPagos').addEventListener('change', cargarPagos);
-  $('buscarPago').addEventListener('input', pintarPagos);
+  let esperaBusqueda = 0;
+  $('buscarPago').addEventListener('input', () => {
+    pintarPagos();
+    clearTimeout(esperaBusqueda);
+    esperaBusqueda = setTimeout(() => buscarPagosServidor($('buscarPago').value), 400);
+  });
+
+  async function llamarAdmin(accion, cuerpo) {
+    const { data: s } = await cliente.auth.getSession();
+    const res = await fetch(`/api/juego?accion=${accion}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ((s && s.session && s.session.access_token) || '') },
+      body: JSON.stringify(cuerpo || {}),
+    });
+    return res.json();
+  }
+
+  $('formPagoManual').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const msg = $('mensajePagoManual');
+    const referencia = $('manualReferencia').value.replace(/\D/g, '');
+    const monto = $('manualMonto').value.trim();
+    if (referencia.length < 6) { msg.textContent = 'Escribe la referencia completa (solo números).'; return; }
+    if (!monto) { msg.textContent = 'Escribe el monto en Bs.'; return; }
+    if (!confirm(`¿Agregar el pago ${referencia} por ${monto} Bs?\n\nQuedará libre para que el cliente lo use con sus últimos 5 dígitos (${referencia.slice(-5)}).`)) return;
+    $('btnPagoManual').disabled = true;
+    try {
+      const r = await llamarAdmin('pago_manual', { referencia, monto, remitente: $('manualRemitente').value, nota: $('manualNota').value });
+      msg.textContent = r.status === 'success'
+        ? (r.enHoja ? `✅ Pago agregado (aquí y en la hoja). El cliente ya puede usar …${referencia.slice(-5)}.` : '✅ Agregado aquí, pero NO se pudo anotar en la hoja: agrégalo también en la hoja mientras la tienda cobre con ella.')
+        : (r.message || 'No se pudo agregar.');
+      if (r.status === 'success') { $('formPagoManual').reset(); cargarPagos(); }
+    } catch (e) {
+      msg.textContent = 'No se pudo conectar. Intenta de nuevo.';
+    } finally {
+      $('btnPagoManual').disabled = false;
+    }
+  });
+
+  $('btnLimpiarPagos').addEventListener('click', async () => {
+    if (!confirm('¿Limpiar ahora?\n\nSe borran los pagos USADOS de días anteriores y los vencidos de más de 7 días. Los libres no se tocan.')) return;
+    const r = await llamarAdmin('pagos_limpiar');
+    alert(r.status === 'success' ? `Listo: ${r.usados_borrados} usados borrados, ${r.vencidos} pasaron a vencido, ${r.vencidos_borrados} vencidos borrados.` : (r.message || 'No se pudo limpiar.'));
+    cargarPagos();
+  });
 
   // "Entrar con Google": si había otra cuenta (no administradora), primero se cierra
   $('btnEntrarAdmin').addEventListener('click', async (ev) => {
