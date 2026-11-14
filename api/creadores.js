@@ -1,21 +1,12 @@
-import { obtenerIp, minutosBloqueado, registrarFallo } from './_lib/limitador.js';
-import { llamarScript, LECTURA_APPS_SCRIPT } from './_lib/externo.js';
-import { faltaConfiguracion } from './_lib/validacion.js';
-import { CODIGO_DESCUENTO_VALIDO, normalizarCodigoDescuento } from './_lib/descuentos.js';
 import { supabaseActivo, rpc, usuarioDelToken } from './_lib/supabase.js';
 import { tokenDe } from './_lib/historial.js';
 
-// Panel de creadores: POST { codigo, pin } -> ventas, comisión y últimos movimientos.
-// Con "Entrar con Google": POST { cuenta: true } + Authorization: Bearer <token de la sesión> -> los
-// códigos cuyo correo puso el administrador en admin.html (función creador_por_usuario). El creador no
-// puede darse acceso solo: sin su correo en un código, no ve nada.
-// Desde 2026-11-13 los datos viven en Supabase (función creador_panel de supabase/codigos.sql: compara
-// el PIN cifrado). Si Supabase no responde, se usa la hoja de Free Fire (acción consultar_creador de
-// recargas.gs, datos viejos de respaldo). El PIN protege las ganancias de cada creador:
-// los intentos fallidos se limitan por IP y por código (frena que se adivine el PIN).
+// Panel de creadores (creadores.html), SOLO con "Entrar con Google" desde 2026-11-13:
+// POST { cuenta: true } + Authorization: Bearer <token de la sesión> -> los códigos cuyo correo puso el
+// administrador en admin.html (función creador_por_usuario de supabase/codigos.sql). El usuario sale del
+// token (Supabase lo comprueba), nunca de lo que mande la página. El creador no puede darse acceso solo.
+// El código + PIN ya no abre el panel (el PIN queda guardado en "codigos" solo como dato del creador).
 const RETIRO_MINIMO_USD = 3;
-const PIN_VALIDO = /^\d{4,8}$/;
-const NO_ENCONTRADO = "Código o PIN incorrecto. Si eres creador y no tienes tu PIN, pídelo por WhatsApp.";
 
 const numero = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 // Sin tasa del dólar en la hoja, los montos en USD llegan como null (no se inventan)
@@ -23,69 +14,16 @@ const numeroONulo = (v) => (v === null || v === undefined || v === '' ? null : n
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
-  if (req.body?.cuenta === true) return panelPorCuenta(req, res);
-
-  const codigo = normalizarCodigoDescuento(req.body?.codigo);
-  const pin = String(req.body?.pin ?? '').trim();
-  if (!CODIGO_DESCUENTO_VALIDO.test(codigo) || !PIN_VALIDO.test(pin)) {
-    return res.status(400).json({ status: "error", message: "Escribe tu código y tu PIN (de 4 a 8 números)." });
+  // Desde 2026-11-13 el panel es SOLO con Google: el código + PIN ya no abre nada
+  if (req.body?.cuenta !== true) {
+    return res.status(410).json({ status: "error", encontrado: false, message: "Ahora entras a tu panel con tu cuenta de Google. Pídenos tu acceso por WhatsApp." });
   }
-
-  const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
-  if (!URL_GOOGLE_SCRIPT) {
-    return faltaConfiguracion(res, ["SCRIPT_RECARGAS_URL"], { status: "error", message: "El panel de creadores no está disponible en este momento." });
-  }
-
-  const clavesLimite = [`panel:${obtenerIp(req)}`, `panelcodigo:${codigo}`];
-  const minutosEspera = await minutosBloqueado(clavesLimite);
-  if (minutosEspera > 0) {
-    return res.status(429).json({ status: "error", message: `Demasiados intentos incorrectos. Espera ${minutosEspera} minutos para volver a intentar.` });
-  }
-
-  if (supabaseActivo()) {
-    try {
-      const d = await rpc('creador_panel', { p_codigo: codigo, p_pin: pin });
-      if (!d?.encontrado) {
-        if (d?.sinPin) return res.status(200).json({ status: "success", encontrado: false, message: "Tu código todavía no tiene PIN de acceso. Pídelo por WhatsApp para ver tu panel." });
-        await registrarFallo(clavesLimite);
-        return res.status(200).json({ status: "success", encontrado: false, message: NO_ENCONTRADO });
-      }
-      const pendienteUsd = numeroONulo(d.pendienteUsd);
-      return res.status(200).json(respuestaPanel({
-        ...d,
-        descuentoSeguidores: d.porcentaje, comisionPorcentaje: d.porcentaje, retiroMinimoUsd: RETIRO_MINIMO_USD,
-        // Sin tasa en el panel admin, las ventas nuevas esperan en Bs y se suman al guardar la tasa
-        faltaParaRetiroUsd: pendienteUsd !== null ? Math.max(0, Math.round((RETIRO_MINIMO_USD - pendienteUsd) * 100) / 100) : null,
-      }));
-    } catch (error) {
-      console.error("⚠️ panel de creadores: Supabase no respondió, se usa la hoja:", error.message);
-    }
-  }
-
-  try {
-    // Solo lectura: se puede reintentar sin riesgo
-    const datos = await llamarScript(URL_GOOGLE_SCRIPT, { accion: "consultar_creador", codigo, pin }, LECTURA_APPS_SCRIPT);
-    if (datos?.status !== 'success') throw new Error(datos?.message || 'respuesta inválida de Apps Script');
-
-    if (!datos.encontrado) {
-      if (datos.sinPin) {
-        return res.status(200).json({ status: "success", encontrado: false, message: "Tu código todavía no tiene PIN de acceso. Pídelo por WhatsApp para ver tu panel." });
-      }
-      await registrarFallo(clavesLimite);
-      return res.status(200).json({ status: "success", encontrado: false, message: NO_ENCONTRADO });
-    }
-
-    return res.status(200).json(respuestaPanel(datos));
-  } catch (error) {
-    console.error("Error en el panel de creadores:", error.message);
-    return res.status(503).json({ status: "error", message: "No pudimos consultar tu panel ahora. Intenta de nuevo en unos segundos." });
-  }
+  return panelPorCuenta(req, res);
 }
 
-// Solo los campos que muestra la página, nunca la respuesta cruda de Supabase o de Apps Script
 // "Entrar con Google": el usuario sale del token (Supabase lo comprueba), nunca de lo que mande la página
 async function panelPorCuenta(req, res) {
-  if (!supabaseActivo()) return res.status(503).json({ status: "error", message: "El panel con Google no está disponible ahora. Usa tu código y tu PIN." });
+  if (!supabaseActivo()) return res.status(503).json({ status: "error", message: "El panel no está disponible ahora. Intenta de nuevo en unos minutos." });
   const usuario = await usuarioDelToken(tokenDe(req));
   if (!usuario) return res.status(401).json({ status: "error", sesion: false, message: "Tu sesión venció. Vuelve a entrar con Google." });
   try {

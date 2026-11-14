@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=5" defer></script>
-  <script src="/js/admin.js?v=6" defer></script>
+  <script src="/js/admin.js?v=7" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -160,11 +160,11 @@
             <label class="campo" id="campoCreador">Creador (nombre o WhatsApp)
               <input type="text" id="nuevoCreador" maxlength="60" autocomplete="off" placeholder="Ej. Carlos o 0414-1234567">
             </label>
-            <label class="campo" id="campoCorreo">Correo de Google del creador (entra a su panel con él, sin PIN)
+            <label class="campo" id="campoCorreo">Correo de Google del creador (es la única forma de entrar a su panel)
               <input type="email" id="nuevoCorreo" maxlength="120" autocomplete="off" placeholder="Ej. carlos@gmail.com">
             </label>
             <div class="campo" id="campoPin">
-              <label for="nuevoPin">PIN (opcional si pusiste el correo): 4 a 8 números</label>
+              <label for="nuevoPin">PIN, solo para identificarlo (opcional): 4 a 8 números</label>
               <div class="fila-campos">
                 <input type="text" id="nuevoPin" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="Ej. 4821">
                 <button type="button" class="btn-ver" id="generarPin">Inventar uno</button>

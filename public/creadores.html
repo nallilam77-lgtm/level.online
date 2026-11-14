@@ -75,10 +75,10 @@
 
     <div class="creadores-container">
 
-      <!-- CONSULTA: código + PIN -> ventas, comisión y últimos movimientos -->
+      <!-- CONSULTA: solo con Google (desde 2026-11-13 ya no se entra con código + PIN) -> ventas, comisión y movimientos -->
       <section class="panel-caja animate-up" aria-labelledby="tituloConsulta">
         <h2 id="tituloConsulta">📊 Consulta tu panel</h2>
-        <p>Entra con el correo de Google que nos diste. Si todavía no nos lo has dado, usa tu código y tu PIN.</p>
+        <p>Entra con el correo de Google que nos diste. ¿Todavía no nos lo has dado? Pídenos tu acceso por WhatsApp.</p>
 
         <div class="acceso-google">
           <a class="btn-google" id="btnGoogle" href="/perfil.html?volver=%2Fcreadores.html&amp;entrar=1">Entrar con Google</a>
@@ -88,21 +88,6 @@
           </div>
           <div class="mis-codigos" id="misCodigos" role="group" aria-label="Tus códigos" hidden></div>
         </div>
-        <p class="separador" id="separadorPin"><span>o con tu código y PIN</span></p>
-
-        <form id="formPanel" novalidate>
-          <div class="consulta-campos">
-            <div class="campo">
-              <label for="inputCodigoCreador">Tu código</label>
-              <input type="text" id="inputCodigoCreador" placeholder="Ej: JUANGAMER" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
-            </div>
-            <div class="campo">
-              <label for="inputPinCreador">PIN</label>
-              <input type="password" id="inputPinCreador" placeholder="••••" inputmode="numeric" maxlength="8" autocomplete="off" required>
-            </div>
-          </div>
-          <button type="submit" class="btn-consultar-panel" id="btnConsultarPanel">Consultar</button>
-        </form>
         <div class="panel-mensaje" id="panelMensaje" role="status" aria-live="polite"></div>
 
         <div class="panel-resultado" id="panelResultado">
@@ -199,15 +184,15 @@
           </details>
           <details>
             <summary>¿Cada cuánto se actualiza mi panel?</summary>
-            <p>Al instante: cada recarga con tu código suma a tu panel en cuanto se completa. Consulta cuando quieras con tu código y tu PIN.</p>
+            <p>Al instante: cada recarga con tu código suma a tu panel en cuanto se completa. Entra cuando quieras con tu cuenta de Google.</p>
           </details>
           <details>
             <summary>¿Puedo usar mi propio código?</summary>
             <p>No. Las autocompras, recargas falsas o cualquier abuso anulan la comisión y pueden costarte el código.</p>
           </details>
           <details>
-            <summary>Olvidé mi PIN, ¿qué hago?</summary>
-            <p>Escríbenos por WhatsApp desde el número con el que te registramos y te lo enviamos de nuevo.</p>
+            <summary>¿Cómo entro a mi panel?</summary>
+            <p>Con tu cuenta de Google. Mándanos por WhatsApp tu código y tu correo de Gmail y nosotros creamos tu acceso: las cuentas de creador solo las hace Level Up. Si cambias de correo, avísanos.</p>
           </details>
         </div>
       </section>
@@ -252,11 +237,11 @@
   <div class="aviso-cambio" id="avisoCambio" hidden>
     <div class="aviso-cambio__caja" role="dialog" aria-modal="true" aria-labelledby="avisoCambioTitulo">
       <h2 id="avisoCambioTitulo">📢 Cambio en el panel de creadores</h2>
-      <p>Ahora entras a tu panel con tu <strong>cuenta de Google</strong>, sin PIN.</p>
+      <p>Ahora entras a tu panel <strong>solo con tu cuenta de Google</strong>. El código y PIN ya no sirven para entrar.</p>
       <ul>
         <li><span aria-hidden="true">✅</span><p><strong>¿Ya tenías código?</strong> Escríbenos por WhatsApp con tu código y tu correo de Gmail. Nosotros creamos tu acceso: las cuentas de creador solo las hace Level Up.</p></li>
         <li><span aria-hidden="true">💰</span><p><strong>No pierdes nada.</strong> Tus ventas, tu ganancia y lo que te debemos siguen igual.</p></li>
-        <li><span aria-hidden="true">🔑</span><p><strong>Mientras tanto</strong> puedes seguir entrando con tu código y tu PIN.</p></li>
+        <li><span aria-hidden="true">🎟️</span><p><strong>Tu código sigue igual.</strong> Tus seguidores lo siguen usando para su descuento, como siempre.</p></li>
       </ul>
       <a class="aviso-cambio__whatsapp" id="avisoCambioWhatsapp" target="_blank" rel="noopener noreferrer">💬 Pedir mi acceso por WhatsApp</a>
       <button type="button" class="aviso-cambio__ok" id="avisoCambioOk">Entendido</button>
@@ -282,7 +267,7 @@
     }
 
     // =========================================================================
-    // PANEL DE CREADORES: POST /api/creadores { codigo, pin } (o con Google, más abajo)
+    // PANEL DE CREADORES: solo con Google (más abajo, POST /api/creadores { cuenta: true })
     // Todo lo que llega del servidor se pinta con textContent (nunca como HTML).
     // =========================================================================
     const WHATSAPP = '584141916377';
@@ -412,9 +397,6 @@
           return;
         }
         cerrarAviso(true);
-        // Con sesión de creador, el código + PIN ya no hace falta
-        $('formPanel').hidden = true;
-        $('separadorPin').hidden = true;
         const caja = $('misCodigos');
         caja.replaceChildren();
         if (lista.length > 1) {
@@ -439,7 +421,7 @@
       location.reload();
     });
     // Aviso del cambio: hasta que lo cierren o ya vean su panel con Google
-    const CLAVE_AVISO = 'levelup_aviso_creadores_google';
+    const CLAVE_AVISO = 'levelup_aviso_creadores_solo_google';
     function cerrarAviso(recordar) {
       $('avisoCambio').hidden = true;
       body.classList.remove('no-scroll');
@@ -465,37 +447,6 @@
     // sesion.js carga con defer: ya está listo al llegar DOMContentLoaded
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', panelConGoogle);
     else panelConGoogle();
-
-    $('formPanel').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const codigo = $('inputCodigoCreador').value.replace(/\s+/g, '').toUpperCase();
-      const pin = $('inputPinCreador').value.trim();
-      $('inputCodigoCreador').value = codigo;
-      $('panelResultado').classList.remove('visible');
-      $('panelMensaje').textContent = '';
-
-      if (!/^[A-Z0-9_-]{2,30}$/.test(codigo) || !/^\d{4,8}$/.test(pin)) {
-        mostrarMensaje('Escribe tu código y tu PIN (de 4 a 8 números).');
-        return;
-      }
-
-      const boton = $('btnConsultarPanel');
-      boton.disabled = true;
-      boton.textContent = 'Consultando...';
-      try {
-        const res = await fetch('/api/creadores', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo, pin })
-        });
-        const datos = await res.json();
-        if (datos.encontrado) pintarPanel(datos);
-        else mostrarMensaje(datos.message || 'Código o PIN incorrecto.');
-      } catch (error) {
-        mostrarMensaje('No pudimos consultar tu panel. Revisa tu conexión e intenta de nuevo.');
-      } finally {
-        boton.disabled = false;
-        boton.textContent = 'Consultar';
-      }
-    });
   </script>
 
 </body>
