@@ -46,9 +46,12 @@ export const guardar = (tabla, fila, conflicto) => pedir(`/rest/v1/${tabla}${con
   headers: { Prefer: `${conflicto ? 'resolution=merge-duplicates,' : ''}return=minimal` },
 });
 
-/** Cambia las filas que cumplan `donde` (texto de filtro de PostgREST, p. ej. "id_pedido=eq.X&estado=neq.Y"). */
-export const actualizar = (tabla, donde, datos) => pedir(`/rest/v1/${tabla}?${donde}`, {
-  method: 'PATCH', body: datos, headers: { Prefer: 'return=minimal' },
+/**
+ * Cambia las filas que cumplan `donde` (texto de filtro de PostgREST, p. ej. "id_pedido=eq.X&estado=neq.Y").
+ * Con `columnas` devuelve las filas cambiadas (solo esas columnas): sirve para saber si cambió alguna.
+ */
+export const actualizar = (tabla, donde, datos, columnas) => pedir(`/rest/v1/${tabla}?${donde}${columnas ? `&select=${columnas}` : ''}`, {
+  method: 'PATCH', body: datos, headers: { Prefer: columnas ? 'return=representation' : 'return=minimal' },
 });
 
 /** UUID del cliente dueño de este token de sesión (el que manda la página), o null si no vale. */

@@ -239,6 +239,8 @@
     mostrar(['panelPerfil', 'panelRecargas']);
     Sesion.pintar();
     cargarTelefono();
+    // Recién iniciada la sesión aquí: sesion.js ya revisó al cargar la página (sin sesión todavía)
+    if (Sesion.revisarTelefono) Sesion.revisarTelefono();
     try {
       await cargarRecargas();
     } catch (e) {

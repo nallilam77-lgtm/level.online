@@ -15,7 +15,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
-import { supabaseActivo, guardar, actualizar, usuarioDelToken } from './supabase.js';
+import { supabaseActivo, guardar, actualizar, leer, usuarioDelToken } from './supabase.js';
 import { limpiarMontoVES } from './recarga-comun.js';
 
 const MANUALES = new Set(['fcmobile', 'codmobile', 'clashroyale']);
@@ -123,9 +123,28 @@ export async function conHistorial(req, res, juego, fn) {
  * noPisar: estados que este aviso NO puede cambiar (un paquete partido en dos pedidos: que una mitad se
  * entregue no tapa que la otra falló).
  */
+// Esperas antes de volver a buscar la fila de un aviso que llegó antes que el pedido (ver actualizarEstado).
+// Suman 18 s: caben en los 30 s de maxDuration del webhook.
+const ESPERAS_FILA_MS = [3000, 6000, 9000];
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export function actualizarEstado(idPedido, estado, { noPisar = [] } = {}) {
   if (!supabaseActivo() || !ESTADOS.includes(estado) || !/^[A-Za-z0-9-]{8,80}$/.test(String(idPedido || ''))) return;
   const intactos = [estado, ...noPisar.filter((e) => ESTADOS.includes(e))];
-  waitUntil(actualizar('recargas', `id_pedido=eq.${encodeURIComponent(idPedido)}&estado=not.in.(${intactos.join(',')})`, { estado, actualizado: new Date().toISOString() })
-    .catch((error) => console.error('⚠️ historial: no se pudo actualizar el estado:', error.message)));
+  const id = encodeURIComponent(idPedido);
+  // Central One puede confirmar la entrega ANTES de que se guarde la fila del pedido (se guarda después de
+  // responder al cliente). Si no cambió ninguna fila y el pedido todavía no existe, se espera y se repite:
+  // si no, la fila nacía "en_proceso" y se quedaba así para siempre (y sin fichas del minijuego).
+  waitUntil((async () => {
+    for (let intento = 0; intento <= ESPERAS_FILA_MS.length; intento++) {
+      if (intento) await esperar(ESPERAS_FILA_MS[intento - 1]);
+      const cambiadas = await actualizar('recargas', `id_pedido=eq.${id}&estado=not.in.(${intactos.join(',')})`,
+        { estado, actualizado: new Date().toISOString() }, 'id_pedido');
+      if (Array.isArray(cambiadas) && cambiadas.length) return;
+      // No cambió nada: o ya tenía ese estado (listo) o la fila todavía no existe (se espera)
+      const existe = await leer('recargas', { id_pedido: idPedido }, 'id_pedido');
+      if (Array.isArray(existe) && existe.length) return;
+    }
+    console.error(`⚠️ historial: el pedido ${idPedido} no apareció en Supabase para anotarle "${estado}"`);
+  })().catch((error) => console.error('⚠️ historial: no se pudo actualizar el estado:', error.message)));
 }

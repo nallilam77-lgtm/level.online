@@ -204,3 +204,9 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 **Regla**: todo cambio de estado de un pago (Verificado → En proceso / Usado / Por completar) pasa por `reclamarPago(hoja, fila, pedido, estado)` (bloque igual al final de los 5 scripts): anota el pedido en la columna H, espera ESPERA_RECLAMO_MS y solo sigue si la H tiene su pedido y el pago sigue libre. Un script nuevo que tome pagos de esa pestaña DEBE usarlo. No usar la columna H de "pagos" para otra cosa.
 **Pagos vencidos**: `pagoVencido(fecha de la columna A)`: más de DIAS_PAGO_VALIDO (3) días no se toman solos (MENSAJE_PAGO_VENCIDO → WhatsApp).
 
+
+## Aviso de Central One antes que la fila del pedido (corregido 2026-11-13)
+
+**Síntoma**: pedido de Central One "En proceso" para siempre en el perfil y sin fichas del minijuego, aunque la recarga llegó.
+**Causa**: `_lib/historial.js` guarda la fila del pedido DESPUÉS de responder al cliente (waitUntil); si el webhook confirmaba la entrega antes, `actualizarEstado` no encontraba la fila y no hacía nada, y luego la fila nacía `en_proceso`.
+**Regla**: `actualizarEstado` pide las filas cambiadas (`actualizar(..., columnas)`); si no cambió ninguna y el pedido todavía no existe, repite tras 3, 6 y 9 s (caben en los 30 s del webhook). Todo aviso que cambie una fila guardada "después de responder" debe contar con que puede llegar antes.
