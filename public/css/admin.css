@@ -156,6 +156,7 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .cuenta-saldo { display: grid; gap: 8px; }
 .cuenta-saldo + .cuenta-saldo { margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--border-glass); }
 .cuenta-saldo__juegos { color: var(--text-muted); font-size: 12px; }
+.motivo-fallo { color: var(--aviso); font-weight: 600; }
 .alerta-saldo { padding: 12px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; line-height: 1.5; border: 1px solid currentColor; background: var(--bg-deep); }
 .alerta-saldo[hidden] { display: none; }
 .alerta-saldo--baja { color: var(--peligro); }

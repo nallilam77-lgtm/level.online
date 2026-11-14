@@ -4,7 +4,94 @@ import { firmaCentralOneValida, primerCodigo, leerCodigos } from './_lib/central
 import { registrarUsoDescuento } from './_lib/descuentos.js';
 import { limpiarMontoVES } from './_lib/recarga-comun.js';
 import { actualizarEstado } from './_lib/historial.js';
-import { supabaseActivo, guardar } from './_lib/supabase.js';
+import { supabaseActivo, guardar, leerDonde, actualizar } from './_lib/supabase.js';
+
+// ---------------------------------------------------------------------------------------------------
+// STOCK Y PRECIOS AL INSTANTE (product.stock_changed / product.price_changed, desde 2026-11-14)
+// Solo se actualizan los productos que ya están en la copia del catálogo (centralone_catalogo); la tienda
+// los oculta o los vuelve a mostrar sola (_lib/precios.js) en 1-2 min (copias de 30-60 s). Cada cambio de
+// un producto de una tienda queda en centralone_cambios (panel → Precios).
+// ---------------------------------------------------------------------------------------------------
+const EVENTOS_CATALOGO = new Set(['product.price_changed', 'product.stock_changed']);
+const UUID = /^[0-9a-f-]{36}$/;
+async function avisoDeCatalogo(aviso) {
+  const productos = (Array.isArray(aviso?.products) ? aviso.products : []).filter((p) => UUID.test(String(p?.product_id || '')));
+  if (!productos.length) return 0;
+  const ids = [...new Set(productos.map((p) => p.product_id))];
+  const actuales = await leerDonde('centralone_catalogo', `producto=in.(${ids.join(',')})`, 'producto,juego,nombre,costo_usd,en_stock') || [];
+  const porId = new Map(actuales.map((a) => [a.producto, a]));
+  const ahora = new Date().toISOString();
+  const evento = String(aviso?.event_id || ahora).slice(0, 60);
+  const filas = [];
+  const cambios = [];
+  for (const p of productos) {
+    const a = porId.get(p.product_id);
+    if (!a) continue;   // no es de ninguna tienda (otra región o juego): no interesa
+    const enCatalogo = p.in_catalog !== false;
+    const enStock = enCatalogo && p.in_stock === true;
+    const precio = Number(p.reseller_price);
+    const costo = enCatalogo && p.reseller_price !== null && Number.isFinite(precio) && precio >= 0 ? String(p.reseller_price) : a.costo_usd;
+    filas.push({ producto: p.product_id, costo_usd: costo, en_stock: enStock,
+      stock: Number.isInteger(p.available_stock) ? p.available_stock : null, precio_desde: p.price_updated_at || null, visto: ahora });
+    if (!a.juego) continue;
+    const base = { producto: p.product_id, juego: a.juego, nombre: String(a.nombre || '').slice(0, 120), evento };
+    if (a.en_stock && !enStock) cambios.push({ ...base, tipo: enCatalogo ? 'agotado' : 'fuera' });
+    if (!a.en_stock && enStock) cambios.push({ ...base, tipo: p.previous_in_catalog === false ? 'dentro' : 'repuesto' });
+    if (costo !== null && a.costo_usd !== null && Math.abs(Number(costo) - Number(a.costo_usd)) >= 0.0001) {
+      cambios.push({ ...base, tipo: 'precio', antes: Number(a.costo_usd), despues: Number(costo) });
+    }
+  }
+  if (filas.length) await guardar('centralone_catalogo', filas, 'producto');
+  if (cambios.length) {
+    await guardar('centralone_cambios', cambios.map((c) => ({ antes: null, despues: null, ...c })), 'evento,producto,tipo');
+    console.info(`📦 Central One: ${cambios.map((c) => `${c.nombre} ${c.tipo}`).join(' · ')}`);
+  }
+  return filas.length;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// MOTIVO DE UN PEDIDO QUE FALLÓ (failure.code / failure.action, desde 2026-11-14)
+// Viene en el aviso cuando Central One activó los eventos nuevos de la cuenta; si no, se busca en
+// GET /orders (la lista trae el failure de cada pedido) con la llave de esa tienda.
+// ---------------------------------------------------------------------------------------------------
+const CODIGO_FALLO = /^[a-z_]{1,40}$/;
+function llaveDelPedido(idPedido) {
+  if (/^ff-/.test(idPedido)) return process.env.freefire_nuevo;
+  if (/^ml-/.test(idPedido)) return process.env.mlbb_nuevo || process.env.blood_nuevo;
+  if (/^rbx-/.test(idPedido)) return process.env.roblox_nuevo;
+  return process.env.blood_nuevo;
+}
+async function falloDelPedido(aviso, idPedido) {
+  const o = aviso?.order || {};
+  let f = o.failure || (Array.isArray(o.lines) ? (o.lines.find((l) => l?.failure) || {}).failure : null);
+  if (!f?.code) {
+    const llave = String(llaveDelPedido(idPedido) || '').trim();
+    if (!llave) return null;
+    try {
+      const r = await fetch('https://portal.centraloneglobal.com/api/v1/orders?limit=50&status=failed,partially_completed',
+        { headers: { Authorization: `Bearer ${llave}` }, signal: AbortSignal.timeout(6000) });
+      const d = await r.json();
+      f = (Array.isArray(d?.orders) ? d.orders : []).find((x) => x?.reference_code === o.reference_code)?.failure || null;
+    } catch {
+      return null;
+    }
+  }
+  return f && CODIGO_FALLO.test(String(f.code)) ? { codigo: String(f.code), accion: CODIGO_FALLO.test(String(f.action || '')) ? String(f.action) : null } : null;
+}
+// Lo anota en el pedido (perfil del cliente y panel). Si la fila todavía no existe, se reintenta una vez.
+function anotarMotivo(aviso, idPedidoCO, idDelPerfil) {
+  if (!supabaseActivo()) return;
+  waitUntil((async () => {
+    const f = await falloDelPedido(aviso, idPedidoCO);
+    if (!f) return;
+    for (let intento = 0; intento < 2; intento++) {
+      if (intento) await new Promise((r) => setTimeout(r, 6000));
+      const filas = await actualizar('recargas', `id_pedido=eq.${encodeURIComponent(idDelPerfil)}`,
+        { motivo_fallo: f.codigo, motivo_accion: f.accion }, 'id_pedido');
+      if (Array.isArray(filas) && filas.length) { console.info(`🧾 Central One: el pedido ${idDelPerfil} falló por ${f.codigo} (${f.accion || 'sin acción'})`); return; }
+    }
+  })().catch((error) => console.error('⚠️ centralone-webhook: no se pudo anotar el motivo del fallo:', error.message)));
+}
 
 // Avisos de saldo (desde 2026-11-14): el último se guarda en Supabase (configuracion "centralone_saldo") y el
 // panel admin lo muestra en Resumen: balance.low = alerta roja; deposit.approved / balance.credited = saldo
@@ -113,6 +200,17 @@ export default async function handler(req, res) {
   const idPedido = String(aviso?.order?.idempotency_key ?? '');
   // Qué llegó (sin datos del jugador ni códigos): para revisar en los logs de Vercel si los avisos llegan
   console.info(`📨 centralone-webhook: ${evento || 'sin evento'} · pedido ${ordenCentralOne || '?'} · estado ${estadoPedido || '?'} · idempotency_key ${idPedido ? idPedido.slice(0, 7) + '…' : 'NO VIENE'}`);
+  if (EVENTOS_CATALOGO.has(evento)) {
+    if (supabaseActivo()) {
+      try {
+        await avisoDeCatalogo(aviso);
+      } catch (error) {
+        console.error('⚠️ centralone-webhook: no se pudo aplicar el aviso de catálogo:', error.message);
+        return res.status(503).json({ ok: false });   // Central One lo repite
+      }
+    }
+    return res.status(200).json({ ok: true });
+  }
   if (EVENTOS_SALDO.has(evento)) {
     if (supabaseActivo()) {
       try {
@@ -140,6 +238,8 @@ export default async function handler(req, res) {
   // "reembolsado": la otra mitad sí llegó y el pedido entero no se devolvió).
   const partido = /^ff-.+-[1-9]$/.test(idPedido);
   const estadoPerfil = ESTADO_EN_PERFIL[estado] || '';
+  // Falló (entero o en parte): por qué, según Central One
+  if (estadoPerfil === 'en_revision') anotarMotivo(aviso, idPedido, idDelPerfil);
   if (!partido) actualizarEstado(idDelPerfil, estadoPerfil);
   else if (estadoPerfil === 'completado') actualizarEstado(idDelPerfil, 'completado', { noPisar: ['en_revision', 'problema', 'reembolsado'] });
   else if (estadoPerfil) actualizarEstado(idDelPerfil, 'en_revision', { noPisar: ['problema', 'reembolsado'] });

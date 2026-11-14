@@ -180,3 +180,7 @@
   .perfil-contenedor { gap: 32px; margin-bottom: 64px; }
   .panel-perfil { padding: 32px; }
 }
+
+/* Por qué falló una recarga (Central One) */
+.recarga-motivo { margin: 8px 0 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5;
+  color: var(--text-main); background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.35); }

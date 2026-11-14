@@ -376,6 +376,13 @@ begin
     ),
     'diferencias', (
       select coalesce(jsonb_agg(to_jsonb(d) order by d.paquete), '[]'::jsonb) from precios_diferencias d where d.juego = p_juego
+    ),
+    -- Últimos avisos de Central One de este juego (se agotó, volvió, cambió el costo)
+    'cambios', (
+      select coalesce(jsonb_agg(to_jsonb(x) order by x.fecha desc), '[]'::jsonb) from (
+        select fecha, nombre, tipo, antes, despues from centralone_cambios
+         where juego = p_juego and fecha > now() - interval '7 days' order by fecha desc limit 30
+      ) x
     )
   );
 end;
@@ -440,3 +447,30 @@ begin
   return new;
 end $$;
 revoke execute on function public.juego_fichas_por_recarga() from public, anon, authenticated;
+
+-- =====================================================================
+-- AVISOS DE CENTRAL ONE (desde 2026-11-14)
+--  1. Stock y precios al instante: api/centralone-webhook.js recibe product.stock_changed y
+--     product.price_changed, actualiza centralone_catalogo (la tienda oculta o muestra el paquete sola) y
+--     anota cada cambio aquí (el panel lo muestra en Precios).
+--  2. Motivo de un pedido que falló: el webhook guarda en el pedido el failure.code y failure.action de
+--     Central One. El perfil del cliente y el panel muestran qué pasó y qué hacer.
+-- =====================================================================
+create table if not exists public.centralone_cambios (
+  id        bigint generated always as identity primary key,
+  fecha     timestamptz not null default now(),
+  producto  text not null,
+  juego     text,
+  nombre    text,
+  tipo      text not null check (tipo in ('agotado', 'repuesto', 'precio', 'fuera', 'dentro')),
+  antes     numeric(12, 4),
+  despues   numeric(12, 4),
+  evento    text not null,                  -- event_id del aviso (un aviso repetido no se anota dos veces)
+  unique (evento, producto, tipo)
+);
+create index if not exists centralone_cambios_fecha on public.centralone_cambios (juego, fecha desc);
+alter table public.centralone_cambios enable row level security;
+revoke all on public.centralone_cambios from anon, authenticated;
+
+alter table public.recargas add column if not exists motivo_fallo text check (motivo_fallo is null or motivo_fallo ~ '^[a-z_]{1,40}$');
+alter table public.recargas add column if not exists motivo_accion text check (motivo_accion is null or motivo_accion ~ '^[a-z_]{1,40}$');

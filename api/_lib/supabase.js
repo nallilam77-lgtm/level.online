@@ -40,6 +40,9 @@ export const rpc = (funcion, args) => pedir(`/rest/v1/rpc/${funcion}`, { method:
 /** Filas de una tabla: leer('fidelidad', { juego, cuenta }, 'recargas,premio'). */
 export const leer = (tabla, donde, columnas = '*') => pedir(`/rest/v1/${tabla}?select=${columnas}&${filtro(donde)}`);
 
+/** Filas con un filtro de PostgREST escrito a mano (p. ej. "producto=in.(a,b)"). */
+export const leerDonde = (tabla, donde, columnas = '*') => pedir(`/rest/v1/${tabla}?select=${columnas}&${donde}`);
+
 /** Inserta una fila (o la reemplaza si choca con `conflicto`). */
 export const guardar = (tabla, fila, conflicto) => pedir(`/rest/v1/${tabla}${conflicto ? `?on_conflict=${conflicto}` : ''}`, {
   method: 'POST', body: fila,

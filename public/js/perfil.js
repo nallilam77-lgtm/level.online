@@ -53,6 +53,17 @@
   const regresarSolo = volverValido && parametros.get('entrar') === '1';
 
   // ---------------------------------------------------------------- recargas
+  // Por qué falló una recarga, según Central One (failure.code; lo anota api/centralone-webhook.js)
+  const MOTIVOS = {
+    invalid_player: 'El ID no existe o no es de la región correcta. Escríbenos por WhatsApp con tu ID para resolverlo.',
+    not_eligible: 'Tu cuenta no puede recibir este paquete (por ejemplo, ya tiene ese pase). Escríbenos por WhatsApp para cambiarlo o devolverte el pago.',
+    out_of_stock: 'El proveedor se quedó sin este paquete justo ahora. Te la hacemos apenas vuelva o te devolvemos el pago.',
+    provider_unavailable: 'El proveedor tuvo una falla momentánea. La estamos reintentando; te avisamos por WhatsApp.',
+    provider_rejected: 'El proveedor rechazó la recarga. La estamos revisando; te avisamos por WhatsApp.',
+    price_changed: 'El precio cambió mientras se procesaba. La estamos revisando; te avisamos por WhatsApp.',
+  };
+  const MOTIVO_GENERAL = 'Estamos revisando tu recarga; te avisamos por WhatsApp.';
+
   function tarjeta(r) {
     const li = el('li', 'recarga');
     li.dataset.juego = r.juego;
@@ -73,6 +84,9 @@
     filaEstado.append(detalle, estado);
 
     li.append(fila, filaEstado);
+    if (r.motivo_fallo && ['en_revision', 'problema'].includes(r.estado)) {
+      li.append(el('p', 'recarga-motivo', MOTIVOS[r.motivo_fallo] || MOTIVO_GENERAL));
+    }
 
     if (r.codigo) {
       const caja = el('div', 'recarga-codigo');
@@ -92,7 +106,7 @@
     acciones.append(otra);
     if (['en_revision', 'problema', 'incompleto'].includes(r.estado)) {
       const ayuda = el('a', '', 'Escribir por WhatsApp');
-      ayuda.href = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola Level Up, tengo una recarga de ${JUEGOS[r.juego]} (${r.paquete}, ${r.cuenta}${r.referencia ? `, referencia …${r.referencia}` : ''}) en estado "${ESTADOS[r.estado]}".`)}`;
+      ayuda.href = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola Level Up, tengo una recarga de ${JUEGOS[r.juego]} (${r.paquete}, ${r.cuenta}${r.referencia ? `, referencia …${r.referencia}` : ''}) en estado "${ESTADOS[r.estado]}"${r.motivo_fallo ? ` (motivo: ${r.motivo_fallo})` : ''}.`)}`;
       ayuda.target = '_blank';
       ayuda.rel = 'noopener';
       acciones.append(ayuda);
@@ -125,7 +139,7 @@
     // Siempre filtrar por la cuenta: un administrador puede LEER todas las recargas (RLS de admin.html)
     // y sin este filtro vería en su perfil las de otros clientes
     const { data, error } = await cliente.from('recargas')
-      .select('id_pedido,juego,cuenta,id_jugador,zona,paquete,precio,referencia,estado,codigo,creado')
+      .select('id_pedido,juego,cuenta,id_jugador,zona,paquete,precio,referencia,estado,codigo,creado,motivo_fallo')
       .eq('usuario', usuario.id)
       .order('creado', { ascending: false }).limit(MAX_RECARGAS);
     if (error) throw error;

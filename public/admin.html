@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=11">
+  <link rel="stylesheet" href="css/admin.css?v=12">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=14" defer></script>
+  <script src="/js/admin.js?v=15" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -196,6 +196,12 @@
           </div>
           <p class="nota" id="estadoCatalogo" role="status"></p>
           <ul class="pedidos" id="listaPrecios"></ul>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Avisos de Central One</h2>
+          <p class="nota">Cuando Central One se queda sin stock de un producto, lo repone o cambia su costo, llega aquí y la tienda lo oculta o lo muestra sola.</p>
+          <ul class="pedidos" id="listaCambios"></ul>
         </div>
 
         <div class="tarjeta">

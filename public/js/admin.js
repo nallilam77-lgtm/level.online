@@ -149,6 +149,17 @@
   $('actualizarSaldo').addEventListener('click', cargarSaldo);
 
   // ---------------------------------------------------------------- pedidos
+  // Motivo de Central One (failure.code / failure.action) para el administrador
+  const MOTIVO_ADMIN = {
+    invalid_player: 'ID inválido o de otra región', not_eligible: 'La cuenta no puede recibir ese producto',
+    quantity_not_supported: 'Cantidad no permitida', price_changed: 'Cambió el precio', out_of_stock: 'Sin stock en Central One',
+    provider_unavailable: 'Proveedor caído o en mantenimiento', provider_rejected: 'El proveedor la rechazó',
+    cancelled: 'Cancelada', unknown: 'Motivo desconocido',
+  };
+  const ACCION_ADMIN = {
+    fix_and_retry: 'corrige el dato y vuelve a comprar', do_not_retry: 'no la reintentes: cambia el producto o devuelve el pago',
+    retry_later: 'reintenta más tarde', contact_support: 'escribe a soporte de Central One con el reference_code',
+  };
   function tarjetaPedido(p, nuevo) {
     const li = el('li', 'pedido' + (nuevo ? ' pedido--nuevo' : ''));
     const cabeza = el('div', 'pedido-cabeza');
@@ -158,6 +169,9 @@
       el('span', '', `${p.cuenta}${p.precio ? ` · ${bs(p.precio)} Bs` : ''}${p.referencia ? ` · ref. …${p.referencia}` : ''}`),
       el('span', '', `${fecha(p.creado)}${p.usuario ? ' · con cuenta' : ''} · ${p.id_pedido}`),
     );
+    if (p.motivo_fallo) {
+      li.append(el('span', 'motivo-fallo', `Central One: ${MOTIVO_ADMIN[p.motivo_fallo] || p.motivo_fallo}${ACCION_ADMIN[p.motivo_accion] ? ` → ${ACCION_ADMIN[p.motivo_accion]}` : ''}`));
+    }
     return li;
   }
 
@@ -174,7 +188,7 @@
 
   async function cargarPedidos() {
     const { data, error } = await cliente.from('recargas')
-      .select('id_pedido,juego,cuenta,paquete,precio,referencia,estado,creado,usuario')
+      .select('id_pedido,juego,cuenta,paquete,precio,referencia,estado,creado,usuario,motivo_fallo,motivo_accion')
       .order('creado', { ascending: false }).limit(MAX_PEDIDOS);
     if (error) { console.error(error); $('listaPedidos').replaceChildren(el('li', 'vacio', 'No se pudieron cargar los pedidos.')); return; }
     pedidos = data || [];
@@ -670,6 +684,7 @@
     if (document.activeElement !== $('costoPartida')) $('costoPartida').value = data.costo_partida || '';
     if (document.activeElement !== $('bsPorFicha')) $('bsPorFicha').value = data.bs_por_ficha ? String(Number(data.bs_por_ficha)) : '';
     pintarDiferencias(data.diferencias || []);
+    pintarCambios(data.cambios || []);
     if (document.activeElement !== $('tasaPrecios')) $('tasaPrecios').value = data.tasa ? String(Number(data.tasa)) : '';
     if (document.activeElement !== $('gananciaPrecios')) $('gananciaPrecios').value = data.ganancia !== null ? String(Number(data.ganancia)) : '';
     const falta = [!data.tasa && 'el dólar', data.ganancia === null && 'la ganancia'].filter(Boolean);
@@ -845,6 +860,22 @@
   });
 
   $('juegoPrecios').addEventListener('change', cargarPrecios);
+
+  // Avisos de Central One de este juego (centralone_cambios): se agotó, volvió, cambió el costo
+  function pintarCambios(lista) {
+    const ul = $('listaCambios');
+    ul.replaceChildren();
+    if (!lista.length) { ul.append(el('li', 'vacio', 'Sin avisos de Central One en los últimos 7 días (o todavía no están activados).')); return; }
+    const TEXTO = { agotado: ['Se agotó', 'etiqueta--problema'], fuera: ['Salió del catálogo', 'etiqueta--problema'], repuesto: ['Volvió el stock', 'etiqueta--completado'], dentro: ['Entró al catálogo', 'etiqueta--completado'], precio: ['Cambió el costo', 'etiqueta--en_revision'] };
+    lista.forEach((c) => {
+      const [texto, clase] = TEXTO[c.tipo] || [c.tipo, ''];
+      const li = el('li', 'pedido');
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', c.nombre || 'Producto'), el('span', 'etiqueta ' + clase, texto));
+      li.append(cabeza, el('span', 'precio-detalle', `${fecha(c.fecha)}${c.tipo === 'precio' ? ` · $${Number(c.antes)} → $${Number(c.despues)}` : ''}`));
+      ul.append(li);
+    });
+  }
 
   // Prueba en paralelo: lo que la hoja cobra distinto de Supabase (precios_diferencias)
   function pintarDiferencias(lista) {
