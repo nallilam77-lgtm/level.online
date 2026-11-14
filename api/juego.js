@@ -10,6 +10,8 @@ export default async function handler(req, res) {
   try {
     // Panel admin → Resumen: saldo de Central One (solo administrador; _lib/precios.js). No es de un juego.
     if (req.query.accion === 'saldo_centralone') return (await import('./_lib/precios.js')).saldoCentralOne(req, res);
+    // Panel admin → Cuadre: compras en Central One contra pedidos de la tienda (solo administrador)
+    if (req.query.accion === 'cuadre_centralone') return (await import('./_lib/precios.js')).cuadreCentralOne(req, res);
     const juego = await cargarJuego(req.query.juego);
     if (!juego) {
       return res.status(400).json({ status: "error", message: "Juego no válido." });

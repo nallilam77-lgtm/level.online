@@ -67,6 +67,7 @@
     if (b.dataset.seccion === 'creadores') cargarCodigos();
     if (b.dataset.seccion === 'precios') cargarPrecios();
     if (b.dataset.seccion === 'roblox') cargarRoblox();
+    if (b.dataset.seccion === 'cuadre' && !cuadreHecho) cuadrar();
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -1165,6 +1166,58 @@
     $('robloxCodigos').value = '';
     cargarRoblox();
   });
+
+  // ---------------------------------------------------------------- cuadre con Central One
+  let cuadreHecho = false;
+  const TIPOS_CUADRE = {
+    entregado_alla: ['Central One lo entregó', 'etiqueta--en_revision', 'Allá está entregado, pero aquí dice otra cosa. Revisa con el cliente y márcalo entregado.'],
+    fallo_alla: ['Falló en Central One', 'etiqueta--problema', 'Aquí dice entregado, pero en Central One falló o se reembolsó. Revisa si el cliente lo recibió.'],
+    doble: ['Posible compra doble', 'etiqueta--problema', 'Hay más compras que las esperadas para este pedido. Revisa en el portal si se gastó dos veces.'],
+    demorado: ['Demorado', 'etiqueta--en_revision', 'Lleva más de 2 horas en proceso en Central One. Si sigue así, escribe a su soporte con la referencia.'],
+    sin_compra: ['Sin compra en Central One', 'etiqueta--pendiente', 'Aquí dice entregado, pero no hay compra allá. ¿Lo entregaste a mano?'],
+    sin_pedido: ['Compra sin pedido', 'etiqueta--pendiente', 'Compra en Central One sin pedido en la tienda (hecha en el portal o de antes del 13/11).'],
+  };
+  async function cuadrar() {
+    cuadreHecho = true;
+    const b = $('btnCuadrar');
+    const lista = $('listaCuadre');
+    b.disabled = true;
+    lista.replaceChildren(el('li', 'vacio', 'Preguntando a Central One… puede tardar unos segundos.'));
+    try {
+      const { data: s } = await cliente.auth.getSession();
+      const res = await fetch(`/api/juego?accion=cuadre_centralone&dias=${$('diasCuadre').value}`, {
+        headers: { Authorization: 'Bearer ' + ((s && s.session && s.session.access_token) || '') },
+      });
+      const r = await res.json();
+      if (r.status !== 'success') throw new Error(r.message || 'falló');
+      $('kpiComprasCO').textContent = r.compras;
+      $('kpiGastadoCO').textContent = dolares(r.gastadoUsd);
+      $('kpiCoinciden').textContent = r.coinciden;
+      $('kpiRevisarCO').textContent = r.problemas.length;
+      $('notaCuadre').textContent = `${r.pedidos} pedidos en la tienda en ese periodo.` + (r.avisos.length ? ' ⚠️ ' + r.avisos.join(' ') : '');
+      lista.replaceChildren();
+      if (!r.problemas.length) { lista.append(el('li', 'vacio', '✅ Todo cuadra: cada compra en Central One tiene su pedido y coinciden los estados.')); return; }
+      r.problemas.forEach((p) => {
+        const [titulo, clase, explicacion] = TIPOS_CUADRE[p.tipo] || [p.tipo, '', ''];
+        const li = el('li', 'pedido');
+        const cabeza = el('div', 'pedido-cabeza');
+        cabeza.append(el('strong', '', p.pedido ? `${p.pedido.juego} · ${p.pedido.paquete}` : (p.nota || 'Compra en Central One')), el('span', 'etiqueta ' + clase, titulo));
+        li.append(cabeza);
+        if (p.pedido) li.append(el('span', '', `Tienda: ${ESTADOS[p.pedido.estado] || p.pedido.estado} · ${p.pedido.cuenta || ''}${p.pedido.precio ? ` · ${bs(p.pedido.precio)} Bs` : ''} · ${fecha(p.pedido.fecha)}`));
+        if (p.compra) li.append(el('span', '', `Central One: ${p.compra.estado}${p.compra.reembolsado ? ' (reembolsado)' : ''} · ${dolares(p.compra.total)} · ${p.compra.referencia}${p.compra.motivo ? ` · ${MOTIVO_ADMIN[p.compra.motivo] || p.compra.motivo}` : ''}`));
+        if (p.tipo === 'doble') li.append(el('span', '', `${p.compras} compras para ${p.esperadas} esperada${p.esperadas === 1 ? '' : 's'}.`));
+        li.append(el('span', 'precio-detalle', explicacion));
+        if (p.pedido) li.append(el('span', 'precio-detalle', `Pedido ${p.pedido.id}`));
+        lista.append(li);
+      });
+    } catch (e) {
+      lista.replaceChildren(el('li', 'vacio', 'No se pudo cuadrar. Intenta de nuevo en un minuto.'));
+    } finally {
+      b.disabled = false;
+    }
+  }
+  $('btnCuadrar').addEventListener('click', cuadrar);
+  $('diasCuadre').addEventListener('change', cuadrar);
 
   // "Entrar con Google": si había otra cuenta (no administradora), primero se cierra
   $('btnEntrarAdmin').addEventListener('click', async (ev) => {

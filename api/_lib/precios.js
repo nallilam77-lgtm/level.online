@@ -13,7 +13,7 @@
 //      (Central One pide no leer el catálogo en cada visita: 15 min por juego y por instancia).
 import { waitUntil } from '@vercel/functions';
 import { pedirJSON, conCache } from './externo.js';
-import { supabaseActivo, guardar, actualizar, rpc, esAdminToken } from './supabase.js';
+import { supabaseActivo, guardar, actualizar, rpc, leerDonde, esAdminToken } from './supabase.js';
 import { tokenDe } from './historial.js';
 import { formatearVES } from './recarga-comun.js';
 
@@ -177,4 +177,113 @@ export async function saldoCentralOne(req, res) {
     }
   }));
   return res.status(200).json({ status: 'success', cuentas });
+}
+
+// =========================================================================
+// CUADRE CON CENTRAL ONE (panel admin → Cuadre). GET /api/juego?accion=cuadre_centralone&dias=1|3|7 con el
+// token del administrador. Compara las compras en Central One (GET /orders, con cada llave distinta) con
+// los pedidos de la tienda (tabla recargas). Cada compra lleva la nota "Level Up <id del pedido>" (con
+// "ml-" en Mobile Legends y "rbx-" en Roblox; "(1 de 2)" en un paquete partido de Free Fire).
+// Marca lo raro:
+//   entregado_alla   Central One lo entregó, pero la tienda no lo dice entregado.
+//   fallo_alla       La tienda lo dice entregado, pero en Central One falló o se reembolsó.
+//   sin_pedido       Compra en Central One sin pedido en la tienda (hecha en el portal, o de antes del 13/11).
+//   sin_compra       Pedido de Blood Strike o Mobile Legends entregado sin compra en Central One.
+//   doble            Más compras que las esperadas para un mismo pedido (posible compra repetida).
+//   demorado         Lleva más de 2 horas en proceso en Central One.
+// =========================================================================
+const NOTA_PEDIDO = /Level Up (?:ml-)?((?:rbx-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?: \((\d) de (\d)\))?/i;
+const NOMBRE_JUEGO = { freefire: 'Free Fire', bloodstrike: 'Blood Strike', mobilelegends: 'Mobile Legends', roblox: 'Roblox' };
+
+async function pedidosCentralOne(llave, desde) {
+  const ordenes = [];
+  let cursor = null;
+  for (let pagina = 0; pagina < 12; pagina++) {
+    const url = `https://portal.centraloneglobal.com/api/v1/orders?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${llave}` }, signal: AbortSignal.timeout(8000) });
+    if (r.status === 403) throw Object.assign(new Error('Una llave no tiene el permiso orders:read.'), { permiso: true });
+    if (!r.ok) throw new Error(`Central One respondió ${r.status}`);
+    const d = await r.json();
+    const lista = Array.isArray(d?.orders) ? d.orders : [];
+    ordenes.push(...lista);
+    cursor = d?.pagination?.next_cursor || null;
+    const ultima = lista.length ? Date.parse(lista[lista.length - 1].created_at) : 0;
+    if (!cursor || !lista.length || ultima < desde) break;
+  }
+  return ordenes.filter((o) => Date.parse(o.created_at) >= desde);
+}
+
+const datosPedido = (p) => ({ id: p.id_pedido, juego: NOMBRE_JUEGO[p.juego] || p.juego, paquete: p.paquete, cuenta: p.cuenta,
+  precio: p.precio, estado: p.estado, fecha: p.creado });
+const datosCompra = (o) => ({ referencia: o.reference_code, estado: o.status, total: Number(o.total_sale_amount) || 0, fecha: o.created_at,
+  reembolsado: o.refund?.refunded === true, motivo: o.failure?.code || null });
+
+export async function cuadreCentralOne(req, res) {
+  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
+  if (!(await esAdminToken(tokenDe(req)))) return res.status(403).json({ status: 'error', message: 'Solo el administrador.' });
+  res.setHeader('Cache-Control', 'no-store');
+  const dias = [1, 3, 7].includes(Number(req.query?.dias)) ? Number(req.query.dias) : 1;
+  const desde = Date.now() - dias * 24 * 3600 * 1000;
+
+  // 1. Compras en Central One (una vez por llave distinta)
+  const llaves = [...new Set(Object.keys(LLAVES).map((j) => String(LLAVES[j]() || '').trim()).filter(Boolean))];
+  const avisos = [];
+  const ordenes = [];
+  for (const llave of llaves) {
+    try {
+      ordenes.push(...await pedidosCentralOne(llave, desde));
+    } catch (error) {
+      avisos.push(error.permiso ? error.message : `No se pudieron leer las compras de una llave (${error.message}).`);
+    }
+  }
+  const vistas = new Set();
+  const unicas = ordenes.filter((o) => (vistas.has(o.id) ? false : vistas.add(o.id)));
+
+  // 2. Pedidos de la tienda en el mismo periodo (1 h antes: la compra puede ser un poco después del pedido)
+  let pedidos = [];
+  try {
+    pedidos = await leerDonde('recargas', `creado=gte.${new Date(desde - 3600 * 1000).toISOString()}&order=creado.desc&limit=3000`,
+      'id_pedido,juego,paquete,cuenta,precio,estado,creado') || [];
+  } catch (error) {
+    return res.status(503).json({ status: 'error', message: 'No se pudieron leer los pedidos de Supabase.' });
+  }
+  const porId = new Map(pedidos.map((p) => [String(p.id_pedido).toLowerCase(), p]));
+
+  // 3. Comparar
+  const problemas = [];
+  const comprasPorPedido = new Map();
+  let gastado = 0;
+  let coinciden = 0;
+  for (const o of unicas) {
+    if (['completed', 'partially_completed'].includes(o.status) && o.refund?.refunded !== true) gastado += Number(o.total_sale_amount) || 0;
+    const m = NOTA_PEDIDO.exec(String(o.reseller_note || ''));
+    const id = m ? m[1].toLowerCase() : '';
+    const p = id ? porId.get(id) : null;
+    if (!p) { problemas.push({ tipo: 'sin_pedido', compra: datosCompra(o), nota: String(o.reseller_note || '').slice(0, 120) }); continue; }
+    if (!comprasPorPedido.has(id)) comprasPorPedido.set(id, { esperadas: m[3] ? Number(m[3]) : 1, compras: [] });
+    comprasPorPedido.get(id).compras.push(o);
+    const fallo = o.status === 'failed' || o.status === 'cancelled' || o.refund?.refunded === true;
+    if (o.status === 'completed' && o.refund?.refunded !== true && p.estado !== 'completado') problemas.push({ tipo: 'entregado_alla', compra: datosCompra(o), pedido: datosPedido(p) });
+    else if (fallo && p.estado === 'completado') problemas.push({ tipo: 'fallo_alla', compra: datosCompra(o), pedido: datosPedido(p) });
+    else if (['confirmed', 'processing', 'created'].includes(o.status) && Date.now() - Date.parse(o.created_at) > 2 * 3600 * 1000) problemas.push({ tipo: 'demorado', compra: datosCompra(o), pedido: datosPedido(p) });
+    else coinciden++;
+  }
+  for (const [id, g] of comprasPorPedido) {
+    const validas = g.compras.filter((o) => !['failed', 'cancelled'].includes(o.status));
+    if (validas.length > g.esperadas) {
+      problemas.push({ tipo: 'doble', compra: datosCompra(validas[0]), compras: validas.length, esperadas: g.esperadas, pedido: datosPedido(porId.get(id)) });
+    }
+  }
+  // Blood Strike y Mobile Legends siempre compran en Central One: entregado aquí sin compra allá es raro
+  for (const p of pedidos) {
+    if (Date.parse(p.creado) < desde || !['bloodstrike', 'mobilelegends'].includes(p.juego) || p.estado !== 'completado') continue;
+    if (!comprasPorPedido.has(String(p.id_pedido).toLowerCase())) problemas.push({ tipo: 'sin_compra', pedido: datosPedido(p) });
+  }
+  problemas.sort((a, b) => Date.parse((b.compra || b.pedido).fecha) - Date.parse((a.compra || a.pedido).fecha));
+  return res.status(200).json({
+    status: 'success', dias, avisos,
+    compras: unicas.length, gastadoUsd: Math.round(gastado * 100) / 100,
+    pedidos: pedidos.filter((p) => Date.parse(p.creado) >= desde).length,
+    coinciden, problemas: problemas.slice(0, 200),
+  });
 }
