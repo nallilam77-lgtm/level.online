@@ -1,5 +1,6 @@
 // Código compartido por las recargas de Free Fire y Blood Strike (api/_lib/juegos/).
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
+import { anotarIncidencia } from './incidencias.js';
 import { waitUntil } from '@vercel/functions';
 import { llamarScript } from './externo.js';
 import { informeError, FASES } from './reporte.js';
@@ -79,6 +80,8 @@ export function crearUtilidadesPedido({ urlScript, idPedido, tiempoIncidenteMs, 
   };
 
   const registrarEnHoja = async (cuerpo) => {
+    // Un problema ("errores" de la hoja) también va a Supabase: admin.html → Revisión (_lib/incidencias.js)
+    anotarIncidencia(urlScript, cuerpo);
     const { ok, motivo } = await llamarSinOcupado(cuerpo, { reintentos: 1 });
     if (!ok) console.error(`❌ ${cuerpo.accion} falló para el pedido ${idPedido}:`, motivo, '| Informe:', cuerpo.urlImagen);
     return ok;

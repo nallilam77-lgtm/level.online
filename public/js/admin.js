@@ -67,6 +67,7 @@
     if (b.dataset.seccion === 'creadores') cargarCodigos();
     if (b.dataset.seccion === 'precios') cargarPrecios();
     if (b.dataset.seccion === 'roblox') cargarRoblox();
+    if (b.dataset.seccion === 'revision') cargarRevision();
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -1166,6 +1167,114 @@
     cargarRoblox();
   });
 
+  // ---------------------------------------------------------------- revisión (supabase/revision.sql)
+  // Pedidos con problema de todas las tiendas y sus incidencias (lo que antes había que buscar en la
+  // pestaña "errores" de cada hoja). Resolver cambia el estado del pedido (admin_revision_resolver).
+  const NOMBRE_JUEGO = Object.assign({}, JUEGOS);
+  async function cargarRevision() {
+    const { data, error } = await cliente.rpc('admin_revision');
+    const lista = $('listaRevision');
+    if (error || !data) {
+      console.error(error);
+      lista.replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/revision.sql?'));
+      return;
+    }
+    const abiertos = data.abiertos || [];
+    const sueltas = data.sueltas || [];
+    const total = abiertos.length + sueltas.length;
+    $('contadorRevision').hidden = total === 0;
+    $('contadorRevision').textContent = total;
+    lista.replaceChildren();
+    if (!total) lista.append(el('li', 'vacio', '✅ No hay nada que revisar.'));
+    abiertos.forEach((p) => lista.append(tarjetaRevision(p)));
+    sueltas.forEach((i) => lista.append(tarjetaSuelta(i)));
+
+    const resueltas = $('listaResueltas');
+    resueltas.replaceChildren();
+    if (!(data.resueltos || []).length) resueltas.append(el('li', 'vacio', 'Todavía no has resuelto ninguna desde el panel.'));
+    (data.resueltos || []).forEach((p) => {
+      const li = el('li', 'pedido');
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', `${NOMBRE_JUEGO[p.juego] || p.juego} · ${p.paquete}`), el('span', 'etiqueta etiqueta--' + p.estado, ESTADOS[p.estado] || p.estado));
+      li.append(cabeza, el('span', '', `${p.cuenta || ''}${p.precio ? ` · ${bs(p.precio)} Bs` : ''} · resuelta ${fecha(p.revisado)}`));
+      if (p.nota_admin) li.append(el('span', 'precio-detalle', `📝 ${p.nota_admin}`));
+      resueltas.append(li);
+    });
+  }
+
+  function lineaIncidencia(i) {
+    const caja = el('div', 'incidencia');
+    caja.append(el('strong', '', `${i.fase || 'Problema'} · ${fecha(i.creado)}`));
+    if (i.motivo) caja.append(el('span', '', i.motivo));
+    if (i.estado_pago) caja.append(el('span', 'incidencia-pago', `Pago: ${i.estado_pago}`));
+    if (i.comprobante) {
+      const a = el('a', 'enlace-comprobante', 'Ver comprobante');
+      a.href = i.comprobante; a.target = '_blank'; a.rel = 'noopener';
+      caja.append(a);
+    }
+    return caja;
+  }
+
+  async function resolver(idPedido, accion, nota, incidencia, b) {
+    if (b) b.disabled = true;
+    const { error } = await cliente.rpc('admin_revision_resolver', { p_id_pedido: idPedido || '', p_accion: accion, p_nota: nota || null, p_incidencia: incidencia || null });
+    if (error) { if (b) b.disabled = false; alert(textoError(error, 'No se pudo guardar.')); return; }
+    cargarRevision();
+    cargarPedidos();
+  }
+
+  function botonesResolver(p, li) {
+    const acciones = el('div', 'acciones-cuenta');
+    if (p.telefono) {
+      acciones.append(enlaceWhatsapp(p.telefono,
+        `Hola, te escribimos de Level Up por tu recarga de ${NOMBRE_JUEGO[p.juego] || p.juego} (${p.paquete}${p.referencia ? `, referencia …${p.referencia}` : ''}).`));
+    }
+    acciones.append(
+      boton('✅ Ya la entregué', 'btn-ver btn-pagar', (b) => {
+        if (confirm(`¿Marcar como ENTREGADA la recarga de ${p.paquete} (${p.cuenta || ''})?\n\nEl cliente la verá entregada en su perfil, y suma fichas y comisión del creador si aplica.`)) resolver(p.id_pedido, 'entregado', '', null, b);
+      }),
+      boton('↩️ Devolví el pago', 'btn-ver', (b) => {
+        if (confirm(`¿Marcar como REEMBOLSADA la recarga de ${p.paquete} (${p.cuenta || ''})?\n\nEl cliente la verá reembolsada en su perfil.`)) resolver(p.id_pedido, 'reembolsado', '', null, b);
+      }),
+      boton('📝 Nota', 'btn-ver', () => {
+        const nota = prompt('Nota para ti (solo la ves tú):', p.nota_admin || '');
+        if (nota !== null) resolver(p.id_pedido, 'nota', nota, null, null);
+      }));
+    return acciones;
+  }
+
+  function tarjetaRevision(p) {
+    const li = el('li', 'pedido revision');
+    const cabeza = el('div', 'pedido-cabeza');
+    cabeza.append(el('strong', '', `${NOMBRE_JUEGO[p.juego] || p.juego} · ${p.paquete}`), el('span', 'etiqueta etiqueta--' + p.estado, ESTADOS[p.estado] || p.estado));
+    li.append(cabeza,
+      el('span', '', `${p.cuenta || ''}${p.precio ? ` · ${bs(p.precio)} Bs` : ''}${p.referencia ? ` · ref. …${p.referencia}` : ''}`),
+      el('span', '', `${fecha(p.creado)} · ${p.id_pedido}`));
+    if (p.motivo_fallo) li.append(el('span', 'motivo-fallo', `Central One: ${MOTIVO_ADMIN[p.motivo_fallo] || p.motivo_fallo}${ACCION_ADMIN[p.motivo_accion] ? ` → ${ACCION_ADMIN[p.motivo_accion]}` : ''}`));
+    if (p.estado === 'en_proceso') li.append(el('span', 'motivo-fallo', 'Lleva más de 1 hora en proceso: revisa en Central One si se entregó.'));
+    (p.incidencias || []).forEach((i) => li.append(lineaIncidencia(i)));
+    if (p.nota_admin) li.append(el('span', 'precio-detalle', `📝 ${p.nota_admin}`));
+    li.append(botonesResolver(p, li));
+    return li;
+  }
+
+  // Problema anotado antes de que el pedido se guardara (p. ej. falló al verificar el pago)
+  function tarjetaSuelta(i) {
+    const li = el('li', 'pedido revision');
+    const cabeza = el('div', 'pedido-cabeza');
+    cabeza.append(el('strong', '', `${NOMBRE_JUEGO[i.juego] || i.juego || 'Tienda'} · ${i.paquete || 'sin paquete'}`), el('span', 'etiqueta etiqueta--problema', 'Sin pedido'));
+    li.append(cabeza, el('span', '', `ID ${i.id_jugador || '?'}${i.referencia ? ` · ref. ${i.referencia}` : ''} · ${i.id_pedido || ''}`), lineaIncidencia(i));
+    const acciones = el('div', 'acciones-cuenta');
+    if (i.telefono) acciones.append(enlaceWhatsapp(i.telefono, `Hola, te escribimos de Level Up por tu recarga${i.paquete ? ` de ${i.paquete}` : ''}${i.referencia ? ` (referencia ${i.referencia})` : ''}.`));
+    acciones.append(
+      boton('✅ Resuelta', 'btn-ver btn-pagar', (b) => resolver('', 'entregado', '', i.id, b)),
+      boton('↩️ Devolví el pago', 'btn-ver', (b) => resolver('', 'reembolsado', '', i.id, b)),
+      boton('Descartar', 'btn-ver', (b) => { if (confirm('¿Descartar este aviso? No cambia nada más.')) resolver('', 'descartado', '', i.id, b); }));
+    li.append(acciones);
+    return li;
+  }
+  $('actualizarRevision').addEventListener('click', cargarRevision);
+
   // "Entrar con Google": si había otra cuenta (no administradora), primero se cierra
   $('btnEntrarAdmin').addEventListener('click', async (ev) => {
     ev.preventDefault();
@@ -1184,7 +1293,7 @@
     if (error || esAdmin !== true) return estado('Esta cuenta no es administradora. Entra con la cuenta correcta.', true);
     $('panelEstado').hidden = true;
     $('panel').hidden = false;
-    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo()]);
+    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision()]);
     escuchar();
   })();
 })();

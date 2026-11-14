@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=12">
+  <link rel="stylesheet" href="css/admin.css?v=14">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=15" defer></script>
+  <script src="/js/admin.js?v=17" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -39,6 +39,7 @@
       <nav class="pestanas" role="tablist" aria-label="Secciones del panel">
         <button type="button" role="tab" data-seccion="resumen" aria-selected="true">Resumen</button>
         <button type="button" role="tab" data-seccion="pedidos" aria-selected="false">Pedidos</button>
+        <button type="button" role="tab" data-seccion="revision" aria-selected="false">Revisión <span class="contador-pestana" id="contadorRevision" hidden></span></button>
         <button type="button" role="tab" data-seccion="cuentas" aria-selected="false">Cuentas</button>
         <button type="button" role="tab" data-seccion="creadores" aria-selected="false">Creadores</button>
         <button type="button" role="tab" data-seccion="precios" aria-selected="false">Precios</button>
@@ -107,6 +108,22 @@
           </div>
           <input type="search" id="buscar" class="buscar" placeholder="Buscar ID, referencia, paquete…" aria-label="Buscar pedidos" autocomplete="off">
           <ul class="pedidos" id="listaPedidos"></ul>
+        </div>
+      </section>
+
+      <!-- REVISIÓN: pedidos con problema (supabase/revision.sql). Reemplaza revisar la pestaña "errores" de cada hoja. -->
+      <section class="seccion" id="seccion-revision" hidden>
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Para revisar</h2>
+            <button type="button" class="btn-ver" id="actualizarRevision">Actualizar</button>
+          </div>
+          <p class="nota">Recargas en revisión, con problema o en proceso hace más de 1 hora, de todas las tiendas. Cuando la resuelvas, el cliente lo ve en su perfil al instante. <strong>Ya no hace falta revisar la pestaña "errores" de cada hoja.</strong></p>
+          <ul class="pedidos" id="listaRevision"></ul>
+        </div>
+        <div class="tarjeta">
+          <h2>Resueltas hace poco</h2>
+          <ul class="pedidos" id="listaResueltas"></ul>
         </div>
       </section>
 
