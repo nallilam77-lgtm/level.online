@@ -14,6 +14,7 @@ export default async function handler(req, res) {
     // Panel admin → Pagos: agregar un pago a mano y limpiar (solo administrador)
     if (req.query.accion === 'pago_manual') return (await import('./_lib/pagos.js')).pagoManual(req, res);
     if (req.query.accion === 'pagos_limpiar') return (await import('./_lib/pagos.js')).limpiarPagos(req, res);
+    if (req.query.accion === 'pago_estado') return (await import('./_lib/pagos.js')).pagoEstado(req, res);
     if (req.query.accion === 'saldo_centralone') return (await import('./_lib/precios.js')).saldoCentralOne(req, res);
     const juego = await cargarJuego(req.query.juego);
     if (!juego) {

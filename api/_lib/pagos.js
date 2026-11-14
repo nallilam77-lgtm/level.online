@@ -13,6 +13,7 @@ import { supabaseActivo, guardar, leer, rpc, esAdminToken } from './supabase.js'
 import { limpiarMontoVES, formatearVES } from './recarga-comun.js';
 import { llamarScript } from './externo.js';
 import { tokenDe } from './historial.js';
+import { cambiarPago } from './motor-pagos.js';
 
 // Limpieza diaria (pagos_limpiar de supabase/pagos.sql): la primera vez que llega un pago cada día
 // (hora de Venezuela) en esta instancia, después de responder.
@@ -133,5 +134,32 @@ export async function limpiarPagos(req, res) {
     return res.status(200).json({ status: 'success', ...(await rpc('pagos_limpiar', {})) });
   } catch (error) {
     return res.status(503).json({ status: 'error', message: 'No se pudo limpiar.' });
+  }
+}
+
+/**
+ * Panel admin → Pagos: "Marcar usado" (un pago que ya se usó a mano, p. ej. una recarga por WhatsApp) o
+ * "Liberar" (un pago apartado o por completar que debe volver a estar libre). POST /api/juego?accion=pago_estado
+ * { referencia, estado: "usado" | "verificado" } con el token del administrador. "usado" también se marca en la hoja.
+ */
+export async function pagoEstado(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
+  if (!(await esAdminToken(tokenDe(req)))) return res.status(403).json({ status: 'error', message: 'Solo el administrador.' });
+  const referencia = String(req.body?.referencia ?? '').replace(/\D/g, '');
+  const estado = String(req.body?.estado ?? '');
+  if (!/^\d{4,30}$/.test(referencia) || !['usado', 'verificado'].includes(estado)) {
+    return res.status(400).json({ status: 'error', message: 'Datos inválidos.' });
+  }
+  try {
+    const ok = estado === 'usado'
+      ? await cambiarPago(referencia, 'usado')
+      : (await cambiarPago(referencia, 'verificado', { soloSi: 'en_proceso' })) || (await cambiarPago(referencia, 'verificado', { soloSi: 'por_completar' }));
+    if (!ok) return res.status(409).json({ status: 'error', message: estado === 'usado' ? 'No se pudo marcar (¿ya estaba usado?).' : 'Solo se libera un pago apartado o por completar.' });
+    console.info(`💵 Pago …${referencia.slice(-5)} marcado ${estado} a mano desde el panel`);
+    return res.status(200).json({ status: 'success' });
+  } catch (error) {
+    console.error('⚠️ pago_estado:', error.message);
+    return res.status(503).json({ status: 'error', message: 'No se pudo cambiar. Intenta de nuevo.' });
   }
 }

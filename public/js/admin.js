@@ -1345,9 +1345,33 @@
           : `Pedido ${p.id_pedido}`));
       }
       if (p.nota) li.append(el('span', 'precio-detalle', `📝 ${p.nota}`));
+      const acciones = el('div', 'acciones-cuenta');
+      if (p.estado !== 'usado') {
+        acciones.append(boton('✔️ Marcar usado', 'btn-ver', (b) => cambiarEstadoPago(p, 'usado', b)));
+      }
+      if (p.estado === 'en_proceso' || p.estado === 'por_completar') {
+        acciones.append(boton('↩️ Liberar', 'btn-ver', (b) => cambiarEstadoPago(p, 'verificado', b)));
+      }
+      if (acciones.childNodes.length) li.append(acciones);
       lista.append(li);
     });
   }
+  async function cambiarEstadoPago(p, estado, b) {
+    const texto = estado === 'usado'
+      ? `¿Marcar como USADO el pago ${p.referencia} (${bs(p.monto)} Bs)?\n\nYa nadie podrá usarlo en la tienda (también se marca en la hoja). Úsalo para un pago que ya gastaste a mano, por ejemplo una recarga por WhatsApp.`
+      : `¿LIBERAR el pago ${p.referencia} (${bs(p.monto)} Bs)?\n\nVuelve a estar libre y el cliente lo puede usar otra vez con sus últimos 5 dígitos.`;
+    if (!confirm(texto)) return;
+    b.disabled = true;
+    try {
+      const r = await llamarAdmin('pago_estado', { referencia: p.referencia, estado });
+      if (r.status !== 'success') { alert(r.message || 'No se pudo cambiar.'); b.disabled = false; return; }
+      cargarPagos();
+    } catch (e) {
+      alert('No se pudo conectar. Intenta de nuevo.');
+      b.disabled = false;
+    }
+  }
+
   $('periodoPagos').addEventListener('change', cargarPagos);
   document.querySelectorAll('[data-motor]').forEach((b) => b.addEventListener('click', async () => {
     if (b.getAttribute('aria-checked') === 'true') return;

@@ -113,7 +113,8 @@ export async function pagoEnSupabase(url, cuerpo) {
       return { status: 'success', cambiado: await cambiarPago(cuerpo.referencia, 'usado', { idPedido: idPedido || null }) };
     case 'bloquear_pedido': {
       const referencia = await llamar('pagos_usar_del_pedido', { p_id_pedido: idPedido });
-      if (referencia) espejoEnHoja(referencia);
+      // Puede traer varias ("ref1 + ref2": un pago completado): cada una se marca en la hoja
+      String(referencia || '').split('+').map((r) => r.trim()).filter(Boolean).forEach(espejoEnHoja);
       return { status: 'success', referencia: String(referencia || '') };
     }
     case 'pago_por_completar':

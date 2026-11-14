@@ -152,7 +152,7 @@ revoke execute on function public.pagos_cambiar(text, text, text, text) from pub
 grant execute on function public.pagos_cambiar(text, text, text, text) to service_role;
 
 -- El pago que apartó ESTE pedido pasa a usado (un error a mitad de la recarga: nunca vuelve a estar libre).
--- Devuelve la referencia ("" si el pedido no llegó a apartar ninguno).
+-- Devuelve la referencia (varias: "ref1 + ref2"; "" si el pedido no llegó a apartar ninguno).
 create or replace function public.pagos_usar_del_pedido(p_id_pedido text)
 returns text
 language plpgsql
@@ -161,10 +161,13 @@ set search_path = public
 as $$
 declare v_ref text;
 begin
-  update pagos set estado = 'usado', usado = coalesce(usado, now())
-   where id_pedido = p_id_pedido and estado = 'en_proceso'
-  returning referencia into v_ref;
-  if v_ref is null then select referencia into v_ref from pagos where id_pedido = p_id_pedido limit 1; end if;
+  -- Un pedido que completó un pago insuficiente tiene varios pagos: todos quedan usados
+  with u as (
+    update pagos set estado = 'usado', usado = coalesce(usado, now())
+     where id_pedido = p_id_pedido and estado in ('en_proceso', 'por_completar')
+    returning referencia
+  ) select string_agg(referencia, ' + ') into v_ref from u;
+  if v_ref is null then select string_agg(referencia, ' + ') into v_ref from pagos where id_pedido = p_id_pedido; end if;
   return coalesce(v_ref, '');
 end;
 $$;
@@ -320,10 +323,13 @@ set search_path = public
 as $$
 declare v_ref text;
 begin
-  update pagos set estado = 'usado', usado = coalesce(usado, now())
-   where id_pedido = p_id_pedido and estado in ('en_proceso', 'por_completar')
-  returning referencia into v_ref;
-  if v_ref is null then select referencia into v_ref from pagos where id_pedido = p_id_pedido limit 1; end if;
+  -- Un pedido que completó un pago insuficiente tiene varios pagos: todos quedan usados
+  with u as (
+    update pagos set estado = 'usado', usado = coalesce(usado, now())
+     where id_pedido = p_id_pedido and estado in ('en_proceso', 'por_completar')
+    returning referencia
+  ) select string_agg(referencia, ' + ') into v_ref from u;
+  if v_ref is null then select string_agg(referencia, ' + ') into v_ref from pagos where id_pedido = p_id_pedido; end if;
   return coalesce(v_ref, '');
 end;
 $$;
