@@ -351,9 +351,11 @@
     return /^4(12|14|16|22|24|26)\d{7}$/.test(d) ? '+58' + d : null;
   }
 
-  function mensajeCreador(codigo, pin) {
+  const CORREO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  function mensajeCreador(codigo, pin, correo) {
     return `¡Hola! Tu código de Level Up es *${codigo}*. Quien recargue con él paga 1,5 % menos y tú ganas el 1,5 % de cada recarga.`
-      + (pin ? ` Mira tus ganancias en ${location.origin}/creadores.html con tu código y tu PIN *${pin}*.` : '');
+      + (correo ? ` Mira tus ganancias en ${location.origin}/creadores.html tocando "Entrar con Google" con tu correo ${correo}.`
+        : pin ? ` Mira tus ganancias en ${location.origin}/creadores.html con tu código y tu PIN *${pin}*.` : '');
   }
 
   async function cargarCodigos() {
@@ -409,12 +411,14 @@
       plata.append(el('span', '', `Ganado ${usd(c.comision_usd)}`), el('strong', debe > 0 ? 'codigo-debe' : '', debe > 0 ? `Le debes ${usd(debe)}` : 'No le debes nada'));
       if (Number(c.pagado_usd) > 0) plata.append(el('span', '', `Pagado ${usd(c.pagado_usd)}${c.ultimo_pago ? ' (último ' + corta(c.ultimo_pago) + ')' : ''}`));
       li.append(plata);
-      if (!c.tiene_pin) li.append(el('span', 'sin-telefono', 'Sin PIN: no puede ver su panel. Ponle uno en Editar.'));
+      if (c.correo) li.append(el('span', 'codigo-acceso', `Entra a su panel con Google: ${c.correo}${c.correo_entro ? ' ✓ ya entró' : ' (todavía no ha entrado)'}`));
+      else if (!c.tiene_pin) li.append(el('span', 'sin-telefono', 'No puede ver su panel: ponle su correo de Google en Editar.'));
+      else li.append(el('span', 'sin-telefono', 'Ve su panel con código y PIN. Ponle su correo de Google en Editar para que entre sin PIN.'));
     }
 
     const acciones = el('div', 'acciones-cuenta');
     const tel = telefonoDe(c.creador);
-    if (tel) acciones.append(enlaceWhatsapp(tel, mensajeCreador(c.codigo)));
+    if (tel) acciones.append(enlaceWhatsapp(tel, mensajeCreador(c.codigo, '', c.correo)));
     if (debe > 0) acciones.append(boton(`Ya le pagué ${usd(debe)}`, 'btn-ver btn-pagar', (b) => pagarCodigo(c, b)));
     if (Number(c.usos) > 0) acciones.append(boton('Ver ventas', 'btn-ver', (b) => verVentasCodigo(c.codigo, li, b)));
     acciones.append(boton('Editar', 'btn-ver', () => editarCodigo(c, li)));
@@ -431,6 +435,7 @@
       p_codigo: c.codigo, p_creador: 'creador' in cambios ? cambios.creador : (c.creador || ''),
       p_pin: cambios.pin || null, p_descuento: c.descuento === null ? null : Number(c.descuento),
       p_activo: 'activo' in cambios ? cambios.activo : c.activo, p_nuevo: false,
+      p_correo: 'correo' in cambios ? cambios.correo : (c.correo || ''),
     });
   }
 
@@ -468,25 +473,35 @@
     const campoCreador = el('label', 'campo', c.creador ? 'Creador (nombre o WhatsApp)' : 'Creador (vacío = promo)');
     const inCreador = el('input'); inCreador.type = 'text'; inCreador.maxLength = 60; inCreador.value = c.creador || '';
     campoCreador.append(inCreador);
-    const campoPin = el('label', 'campo', c.tiene_pin ? 'PIN nuevo (déjalo vacío para no cambiarlo)' : 'PIN (4 a 8 números)');
+    const campoCorreo = el('label', 'campo', 'Correo de Google del creador (para entrar a su panel; vacío = sin acceso)');
+    const inCorreo = el('input'); inCorreo.type = 'email'; inCorreo.maxLength = 120; inCorreo.autocomplete = 'off'; inCorreo.value = c.correo || '';
+    inCorreo.placeholder = 'Ej. carlos@gmail.com';
+    campoCorreo.append(inCorreo);
+    campoCorreo.hidden = !c.creador;
+    inCreador.addEventListener('input', () => { campoCorreo.hidden = !inCreador.value.trim(); });
+    const campoPin = el('label', 'campo', c.tiene_pin ? 'PIN nuevo (déjalo vacío para no cambiarlo)' : 'PIN (4 a 8 números, opcional si tiene correo)');
     const inPin = el('input'); inPin.type = 'text'; inPin.inputMode = 'numeric'; inPin.maxLength = 8; inPin.autocomplete = 'off';
     campoPin.append(inPin);
     const mensaje = el('p', 'mensaje-form'); mensaje.setAttribute('role', 'status');
     const guardar = el('button', 'btn btn--chico', 'Guardar cambios'); guardar.type = 'submit';
-    form.append(campoCreador, campoPin, guardar, mensaje);
+    form.append(campoCreador, campoCorreo, campoPin, guardar, mensaje);
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const pin = inPin.value.trim();
       if (pin && !/^\d{4,8}$/.test(pin)) { mensaje.textContent = 'El PIN debe tener de 4 a 8 números.'; return; }
       if (!inCreador.value.trim() && c.descuento === null) { mensaje.textContent = 'Escribe el creador (un código sin creador necesita un % de promo).'; return; }
+      const correo = inCreador.value.trim() ? inCorreo.value.trim().toLowerCase() : '';
+      if (correo && !CORREO.test(correo)) { mensaje.textContent = 'Ese correo no es válido. Ejemplo: carlos@gmail.com'; return; }
       guardar.disabled = true;
-      const { error } = await guardarCodigo(c, { creador: inCreador.value.trim(), pin });
+      const { error } = await guardarCodigo(c, { creador: inCreador.value.trim(), pin, correo });
       guardar.disabled = false;
       if (error) { mensaje.textContent = textoError(error, 'No se pudo guardar. Intenta de nuevo.'); return; }
-      mensaje.textContent = pin ? `✅ Guardado. Nuevo PIN: ${pin}` : '✅ Guardado.';
+      const correoNuevo = correo && correo !== (c.correo || '');
+      mensaje.textContent = pin ? `✅ Guardado. Nuevo PIN: ${pin}` : correoNuevo ? `✅ Guardado. ${correo} ya puede entrar a su panel con Google.` : '✅ Guardado.';
       const tel = telefonoDe(inCreador.value);
-      if (pin && tel) form.append(enlaceWhatsapp(tel, mensajeCreador(c.codigo, pin)));
-      setTimeout(cargarCodigos, pin && tel ? 8000 : 1200);
+      const avisar = (pin || correoNuevo) && tel;
+      if (avisar) form.append(enlaceWhatsapp(tel, mensajeCreador(c.codigo, pin, correo)));
+      setTimeout(cargarCodigos, avisar ? 8000 : 1200);
     });
     li.append(form);
     inCreador.focus();
@@ -514,6 +529,7 @@
     const promo = $('nuevoTipo').value === 'promo';
     $('campoCreador').hidden = promo;
     $('campoPin').hidden = promo;
+    $('campoCorreo').hidden = promo;
     $('campoDescuento').hidden = !promo;
   });
   $('nuevoCodigo').addEventListener('input', () => {
@@ -532,22 +548,27 @@
     const codigo = $('nuevoCodigo').value.trim().toUpperCase();
     const creador = promo ? '' : $('nuevoCreador').value.trim();
     const pin = promo ? '' : $('nuevoPin').value.trim();
+    const correo = promo ? '' : $('nuevoCorreo').value.trim().toLowerCase();
     const descuento = promo ? Number($('nuevoDescuento').value) : null;
     msg.replaceChildren();
     if (!/^[A-Z0-9_-]{2,30}$/.test(codigo)) { msg.textContent = 'Escribe el código: de 2 a 30 letras o números, sin espacios.'; return; }
     if (!promo && !creador) { msg.textContent = 'Escribe el nombre o el WhatsApp del creador.'; return; }
-    if (!promo && !/^\d{4,8}$/.test(pin)) { msg.textContent = 'Escribe un PIN de 4 a 8 números (o toca "Inventar uno").'; return; }
+    if (correo && !CORREO.test(correo)) { msg.textContent = 'Ese correo no es válido. Ejemplo: carlos@gmail.com'; return; }
+    if (!promo && !correo && !/^\d{4,8}$/.test(pin)) { msg.textContent = 'Pon su correo de Google o un PIN de 4 a 8 números (o toca "Inventar uno").'; return; }
+    if (pin && !/^\d{4,8}$/.test(pin)) { msg.textContent = 'El PIN debe tener de 4 a 8 números.'; return; }
     if (promo && !(descuento > 0 && descuento < 100)) { msg.textContent = 'Escribe el % de descuento de la promo (por ejemplo 5).'; return; }
     $('btnCrearCodigo').disabled = true;
     const { error } = await cliente.rpc('admin_codigo_guardar', {
       p_codigo: codigo, p_creador: creador, p_pin: pin || null, p_descuento: descuento, p_activo: true, p_nuevo: true,
+      p_correo: correo,
     });
     $('btnCrearCodigo').disabled = false;
     if (error) { msg.textContent = textoError(error, 'No se pudo crear. Intenta de nuevo.'); return; }
-    msg.textContent = promo ? `✅ ${codigo} creado: ya funciona en todas las tiendas.` : `✅ ${codigo} creado con el PIN ${pin}: ya funciona en todas las tiendas. Mándale sus datos al creador:`;
+    msg.textContent = promo ? `✅ ${codigo} creado: ya funciona en todas las tiendas.`
+      : `✅ ${codigo} creado${correo ? ` (entra con Google: ${correo})` : ` con el PIN ${pin}`}: ya funciona en todas las tiendas. Mándale sus datos al creador:`;
     const tel = telefonoDe(creador);
-    if (tel) msg.append(' ', enlaceWhatsapp(tel, mensajeCreador(codigo, pin)));
-    else if (!promo) msg.append(el('span', 'texto-copiar', ' ' + mensajeCreador(codigo, pin)));
+    if (tel) msg.append(' ', enlaceWhatsapp(tel, mensajeCreador(codigo, pin, correo)));
+    else if (!promo) msg.append(el('span', 'texto-copiar', ' ' + mensajeCreador(codigo, pin, correo)));
     $('formCodigo').reset();
     $('nuevoTipo').dispatchEvent(new Event('change'));
     cargarCodigos();

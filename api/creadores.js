@@ -2,9 +2,13 @@ import { obtenerIp, minutosBloqueado, registrarFallo } from './_lib/limitador.js
 import { llamarScript, LECTURA_APPS_SCRIPT } from './_lib/externo.js';
 import { faltaConfiguracion } from './_lib/validacion.js';
 import { CODIGO_DESCUENTO_VALIDO, normalizarCodigoDescuento } from './_lib/descuentos.js';
-import { supabaseActivo, rpc } from './_lib/supabase.js';
+import { supabaseActivo, rpc, usuarioDelToken } from './_lib/supabase.js';
+import { tokenDe } from './_lib/historial.js';
 
 // Panel de creadores: POST { codigo, pin } -> ventas, comisión y últimos movimientos.
+// Con "Entrar con Google": POST { cuenta: true } + Authorization: Bearer <token de la sesión> -> los
+// códigos cuyo correo puso el administrador en admin.html (función creador_por_usuario). El creador no
+// puede darse acceso solo: sin su correo en un código, no ve nada.
 // Desde 2026-11-13 los datos viven en Supabase (función creador_panel de supabase/codigos.sql: compara
 // el PIN cifrado). Si Supabase no responde, se usa la hoja de Free Fire (acción consultar_creador de
 // recargas.gs, datos viejos de respaldo). El PIN protege las ganancias de cada creador:
@@ -19,6 +23,7 @@ const numeroONulo = (v) => (v === null || v === undefined || v === '' ? null : n
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
+  if (req.body?.cuenta === true) return panelPorCuenta(req, res);
 
   const codigo = normalizarCodigoDescuento(req.body?.codigo);
   const pin = String(req.body?.pin ?? '').trim();
@@ -78,6 +83,30 @@ export default async function handler(req, res) {
 }
 
 // Solo los campos que muestra la página, nunca la respuesta cruda de Supabase o de Apps Script
+// "Entrar con Google": el usuario sale del token (Supabase lo comprueba), nunca de lo que mande la página
+async function panelPorCuenta(req, res) {
+  if (!supabaseActivo()) return res.status(503).json({ status: "error", message: "El panel con Google no está disponible ahora. Usa tu código y tu PIN." });
+  const usuario = await usuarioDelToken(tokenDe(req));
+  if (!usuario) return res.status(401).json({ status: "error", sesion: false, message: "Tu sesión venció. Vuelve a entrar con Google." });
+  try {
+    const d = await rpc('creador_por_usuario', { p_usuario: usuario });
+    const codigos = (Array.isArray(d?.codigos) ? d.codigos : []).filter(Boolean).map((c) => {
+      const pendienteUsd = numeroONulo(c.pendienteUsd);
+      return {
+        ...respuestaPanel({
+          ...c, descuentoSeguidores: c.porcentaje, comisionPorcentaje: c.porcentaje, retiroMinimoUsd: RETIRO_MINIMO_USD,
+          faltaParaRetiroUsd: pendienteUsd !== null ? Math.max(0, Math.round((RETIRO_MINIMO_USD - pendienteUsd) * 100) / 100) : null,
+        }),
+        activo: c.activo !== false,
+      };
+    });
+    return res.status(200).json({ status: "success", correo: String(d?.correo || ''), codigos });
+  } catch (error) {
+    console.error("Error en el panel de creadores (Google):", error.message);
+    return res.status(503).json({ status: "error", message: "No pudimos abrir tu panel ahora. Intenta de nuevo en unos segundos." });
+  }
+}
+
 const NOMBRES_JUEGO = {
   freefire: 'Free Fire', bloodstrike: 'Blood Strike', mobilelegends: 'Mobile Legends', roblox: 'Roblox',
   fcmobile: 'FC Mobile', codmobile: 'COD Mobile', clashroyale: 'Clash Royale',

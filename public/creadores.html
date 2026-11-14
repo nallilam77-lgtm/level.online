@@ -33,7 +33,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/paginas-legales.css">
-  <link rel="stylesheet" href="css/creadores.css">
+  <link rel="stylesheet" href="css/creadores.css?v=2">
+  <!-- "Entrar con Google" del panel de creadores (desde 2026-11-13): sesión de la tienda -->
+  <script src="/js/sesion.js?v=5" defer></script>
   <link rel="stylesheet" href="css/pie-legal.css">
 </head>
 <body>
@@ -76,7 +78,17 @@
       <!-- CONSULTA: código + PIN -> ventas, comisión y últimos movimientos -->
       <section class="panel-caja animate-up" aria-labelledby="tituloConsulta">
         <h2 id="tituloConsulta">📊 Consulta tu panel</h2>
-        <p>Escribe tu código de creador y el PIN que te dimos por WhatsApp.</p>
+        <p>Entra con el correo de Google que nos diste. Si todavía no nos lo has dado, usa tu código y tu PIN.</p>
+
+        <div class="acceso-google">
+          <a class="btn-google" id="btnGoogle" href="/perfil.html?volver=%2Fcreadores.html&amp;entrar=1">Entrar con Google</a>
+          <div class="acceso-cuenta" id="accesoCuenta" hidden>
+            <span>Entraste como <strong id="correoCuenta"></strong></span>
+            <button type="button" class="btn-salir" id="btnSalirCreador">Salir</button>
+          </div>
+          <div class="mis-codigos" id="misCodigos" role="group" aria-label="Tus códigos" hidden></div>
+        </div>
+        <p class="separador" id="separadorPin"><span>o con tu código y PIN</span></p>
 
         <form id="formPanel" novalidate>
           <div class="consulta-campos">
@@ -254,7 +266,7 @@
     }
 
     // =========================================================================
-    // PANEL DE CREADORES: POST /api/creadores { codigo, pin }
+    // PANEL DE CREADORES: POST /api/creadores { codigo, pin } (o con Google, más abajo)
     // Todo lo que llega del servidor se pinta con textContent (nunca como HTML).
     // =========================================================================
     const WHATSAPP = '584141916377';
@@ -304,7 +316,7 @@
 
     function pintarPanel(d) {
       creadorActual = { codigo: d.codigo, descuentoSeguidores: d.descuentoSeguidores };
-      $('resInsignia').textContent = `⭐ Creador · ${d.codigo}`;
+      $('resInsignia').textContent = `⭐ Creador · ${d.codigo}${d.activo === false ? ' (pausado)' : ''}`;
       $('resDescuento').textContent = formatoPorcentaje(d.descuentoSeguidores);
       $('resGanancia').textContent = formatoPorcentaje(d.comisionPorcentaje);
 
@@ -351,6 +363,67 @@
 
       $('panelResultado').classList.add('visible');
     }
+
+    // =========================================================================
+    // ENTRAR CON GOOGLE: POST /api/creadores { cuenta: true } con el token de la sesión (js/sesion.js).
+    // Solo ve un panel quien tenga su correo puesto en un código desde el panel admin.
+    // =========================================================================
+    function elegirCodigo(lista, i) {
+      $('misCodigos').querySelectorAll('button').forEach((b, j) => b.setAttribute('aria-pressed', String(i === j)));
+      pintarPanel(lista[i]);
+    }
+
+    async function panelConGoogle() {
+      if (!window.Sesion || !Sesion.hay()) return;
+      const d = Sesion.datos();
+      $('btnGoogle').hidden = true;
+      $('accesoCuenta').hidden = false;
+      $('correoCuenta').textContent = (d && d.correo) || 'tu cuenta';
+      $('panelMensaje').textContent = '';
+      try {
+        const token = await Sesion.token();
+        const res = await fetch('/api/creadores', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ cuenta: true }),
+        });
+        const datos = await res.json();
+        if (datos.sesion === false) { $('btnGoogle').hidden = false; $('accesoCuenta').hidden = true; }
+        if (datos.status !== 'success') { mostrarMensaje(datos.message || 'No pudimos abrir tu panel.'); return; }
+        const lista = datos.codigos || [];
+        if (!lista.length) {
+          mostrarMensaje(`La cuenta ${datos.correo || ''} no tiene código de creador. Si eres creador, mándanos este correo por WhatsApp y te damos acceso.`);
+          return;
+        }
+        // Con sesión de creador, el código + PIN ya no hace falta
+        $('formPanel').hidden = true;
+        $('separadorPin').hidden = true;
+        const caja = $('misCodigos');
+        caja.replaceChildren();
+        if (lista.length > 1) {
+          lista.forEach((c, i) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'chip-codigo';
+            b.textContent = c.codigo;
+            b.addEventListener('click', () => elegirCodigo(lista, i));
+            caja.append(b);
+          });
+          caja.hidden = false;
+        }
+        elegirCodigo(lista, 0);
+      } catch (error) {
+        mostrarMensaje('No pudimos abrir tu panel. Revisa tu conexión e intenta de nuevo.');
+      }
+    }
+
+    $('btnSalirCreador').addEventListener('click', async () => {
+      try { await Sesion.salir(); } catch (e) { /* igual se recarga */ }
+      location.reload();
+    });
+    // sesion.js carga con defer: ya está listo al llegar DOMContentLoaded
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', panelConGoogle);
+    else panelConGoogle();
 
     $('formPanel').addEventListener('submit', async (e) => {
       e.preventDefault();

@@ -30,7 +30,7 @@ api/                      Funciones serverless de Vercel (un archivo = un endpoi
 │   └── validacion.js     PAQUETE_VALIDO, textoParaHoja(), faltaConfiguracion()
 ├── juego.js              GET/POST ?juego=<freefire|bloodstrike|roblox|mobilelegends|fcmobile|codmobile|clashroyale>&accion=<precios|verificar|descuento|fidelidad (automáticas)|estado (manuales)> (30 s)
 ├── recargar.js           POST ?juego=<freefire|bloodstrike|roblox|mobilelegends|fcmobile|codmobile|clashroyale> (maxDuration 180). Envuelto en conHistorial (_lib/historial.js)
-├── creadores.js          POST { codigo, pin } -> panel del creador (ventas, comisión, movimientos). Supabase (creador_panel: PIN cifrado con bcrypt); si falla, la hoja (consultar_creador)
+├── creadores.js          POST { codigo, pin } -> panel del creador (ventas, comisión, movimientos). Supabase (creador_panel: PIN cifrado con bcrypt; o { cuenta: true } + token de la sesión → creador_por_usuario: "Entrar con Google" con el correo que el admin puso en el código, columna `codigos.correo`); si falla, la hoja (consultar_creador)
 ├── subir-imagen.js       Comprobante de pago → Drive (límite 4 MB)
 ├── consultar-ordenes.js  Consulta de pedidos (página de inicio): Supabase primero (5 últimos por id_jugador, estado en español + `clase`), si no hay nada la hoja (SCRIPT_RECARGAS_VERIFICACION)
 ├── ruleta.js             Ruleta de la suerte (apps-script/ruleta.gs; reintenta: el giro es idempotente)

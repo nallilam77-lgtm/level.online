@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=5">
+  <link rel="stylesheet" href="css/admin.css?v=6">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=5" defer></script>
-  <script src="/js/admin.js?v=5" defer></script>
+  <script src="/js/admin.js?v=6" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -160,8 +160,11 @@
             <label class="campo" id="campoCreador">Creador (nombre o WhatsApp)
               <input type="text" id="nuevoCreador" maxlength="60" autocomplete="off" placeholder="Ej. Carlos o 0414-1234567">
             </label>
+            <label class="campo" id="campoCorreo">Correo de Google del creador (entra a su panel con él, sin PIN)
+              <input type="email" id="nuevoCorreo" maxlength="120" autocomplete="off" placeholder="Ej. carlos@gmail.com">
+            </label>
             <div class="campo" id="campoPin">
-              <label for="nuevoPin">PIN para ver sus ganancias (4 a 8 números)</label>
+              <label for="nuevoPin">PIN (opcional si pusiste el correo): 4 a 8 números</label>
               <div class="fila-campos">
                 <input type="text" id="nuevoPin" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="Ej. 4821">
                 <button type="button" class="btn-ver" id="generarPin">Inventar uno</button>

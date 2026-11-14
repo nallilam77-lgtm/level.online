@@ -39,6 +39,35 @@
 .panel-mensaje:empty { display: none; }
 .panel-mensaje.error { color: var(--danger, #ff3b3b); }
 
+/* --- Entrar con Google (desde 2026-11-13) --- */
+.acceso-google { display: grid; gap: 12px; }
+.btn-google {
+  display: flex; align-items: center; justify-content: center; min-height: 50px; border-radius: 12px; text-decoration: none;
+  background: var(--cta-gradient); color: var(--on-cta); font-family: 'Montserrat', sans-serif; font-weight: 900;
+  font-size: 14px; letter-spacing: 1px; text-transform: uppercase; box-shadow: var(--shadow-glow);
+  transition: transform 0.2s ease, box-shadow 0.25s ease;
+}
+.btn-google:hover, .btn-google:focus-visible { transform: translateY(-2px); box-shadow: var(--shadow-glow-hover); }
+.btn-google[hidden], .acceso-cuenta[hidden], .mis-codigos[hidden], #formPanel[hidden], .separador[hidden] { display: none; }
+.acceso-cuenta {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px;
+  border-radius: 12px; background: rgba(11, 17, 32, 0.75); border: 1px solid var(--border-glass); font-size: 13px; color: var(--text-muted);
+}
+.acceso-cuenta strong { color: var(--text-main); word-break: break-all; }
+.btn-salir {
+  min-height: 44px; padding: 0 16px; border-radius: 999px; cursor: pointer; background: transparent; color: var(--primary);
+  border: 1px solid rgba(34, 211, 238, 0.4); font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 12px;
+}
+.mis-codigos { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-codigo {
+  min-height: 44px; padding: 0 16px; border-radius: 999px; cursor: pointer; background: rgba(15, 23, 42, 0.6);
+  color: var(--text-muted); border: 1px solid var(--border-glass); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px;
+}
+.chip-codigo[aria-pressed="true"] { color: var(--on-cta); background: var(--cta-gradient); border-color: transparent; }
+.btn-salir:focus-visible, .chip-codigo:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.separador { display: flex; align-items: center; gap: 12px; margin: 20px 0 12px; color: var(--text-muted); font-size: 12px; }
+.separador::before, .separador::after { content: ''; flex: 1; height: 1px; background: var(--border-glass); }
+
 /* --- Resultados --- */
 .panel-resultado { display: none; margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--border-glass); }
 .panel-resultado.visible { display: grid; gap: 24px; animation: fadeUp 0.5s ease forwards; }

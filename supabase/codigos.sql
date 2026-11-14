@@ -88,6 +88,12 @@ create index if not exists recargas_codigo_descuento on public.recargas (codigo_
 alter table public.recargas add column if not exists codigo_contado boolean not null default false;
 alter table public.recargas add column if not exists comision_usd numeric(12, 4);
 
+-- Correo de Google del creador: con él entra a su panel en creadores.html sin PIN ("Entrar con Google").
+-- Solo el administrador lo pone (admin_codigo_guardar); el creador no puede crearse ni cambiarse nada.
+alter table public.codigos add column if not exists correo text
+  check (correo is null or (correo = lower(correo) and correo ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'));
+create index if not exists codigos_correo on public.codigos (correo) where correo is not null;
+
 -- Pagos a creadores (lo que hace "Ya le pagué" en el panel)
 create table if not exists public.codigos_pagos (
   id          bigint generated always as identity primary key,
@@ -184,26 +190,26 @@ create trigger codigos_contar_venta after insert or update of estado, codigo_des
 -- ---------------------------------------------------------------------
 -- Panel del creador (api/creadores.js, solo con la llave secreta): código + PIN → sus números
 -- ---------------------------------------------------------------------
-create or replace function public.creador_panel(p_codigo text, p_pin text)
+-- Números de un código para su creador (lo usan creador_panel y creador_por_usuario; nadie más)
+create or replace function public.codigos_panel_de(p_codigo text)
 returns jsonb
 language plpgsql
 stable
 security definer
-set search_path = public, extensions
+set search_path = public
 as $$
 declare
   k codigos%rowtype;
   v_tasa numeric := codigos_tasa();
   v_extra numeric;
 begin
-  select * into k from codigos where codigo = upper(trim(coalesce(p_codigo, '')));
-  if not found or k.creador is null then return jsonb_build_object('encontrado', false); end if;
-  if k.pin_hash is null then return jsonb_build_object('encontrado', false, 'sinPin', true); end if;
-  if crypt(coalesce(p_pin, ''), k.pin_hash) <> k.pin_hash then return jsonb_build_object('encontrado', false); end if;
+  select * into k from codigos where codigo = p_codigo;
+  if not found then return null; end if;
   v_extra := case when v_tasa is not null then k.por_convertir_bs / v_tasa else 0 end;
   return jsonb_build_object(
     'encontrado', true,
     'codigo', k.codigo,
+    'activo', k.activo,
     'porcentaje', codigos_porcentaje_creador(),
     'usos', k.usos,
     'ventasBs', k.ventas_bs,
@@ -222,8 +228,51 @@ begin
   );
 end;
 $$;
+revoke execute on function public.codigos_panel_de(text) from public, anon, authenticated;
+
+-- Con código + PIN (el PIN se compara cifrado)
+create or replace function public.creador_panel(p_codigo text, p_pin text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, extensions
+as $$
+declare
+  k codigos%rowtype;
+begin
+  select * into k from codigos where codigo = upper(trim(coalesce(p_codigo, '')));
+  if not found or k.creador is null then return jsonb_build_object('encontrado', false); end if;
+  if k.pin_hash is null then return jsonb_build_object('encontrado', false, 'sinPin', true); end if;
+  if crypt(coalesce(p_pin, ''), k.pin_hash) <> k.pin_hash then return jsonb_build_object('encontrado', false); end if;
+  return codigos_panel_de(k.codigo);
+end;
+$$;
 revoke execute on function public.creador_panel(text, text) from public, anon, authenticated;
 grant execute on function public.creador_panel(text, text) to service_role;
+
+-- Con la cuenta de Google (api/creadores.js le pasa el usuario del token ya comprobado): los códigos
+-- cuyo correo puso el administrador. Solo correos confirmados (Google siempre lo confirma).
+create or replace function public.creador_por_usuario(p_usuario uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_correo text;
+begin
+  select lower(email) into v_correo from auth.users where id = p_usuario and email_confirmed_at is not null;
+  if v_correo is null then return jsonb_build_object('correo', null, 'codigos', '[]'::jsonb); end if;
+  return jsonb_build_object('correo', v_correo, 'codigos', (
+    select coalesce(jsonb_agg(codigos_panel_de(k.codigo) order by k.activo desc, k.usos desc), '[]'::jsonb)
+      from codigos k where k.correo = v_correo and k.creador is not null
+  ));
+end;
+$$;
+revoke execute on function public.creador_por_usuario(uuid) from public, anon, authenticated;
+grant execute on function public.creador_por_usuario(uuid) to service_role;
 
 -- ---------------------------------------------------------------------
 -- Panel admin, pestaña "Creadores": ver, crear, editar, pagar y borrar códigos; la tasa del dólar
@@ -249,7 +298,8 @@ begin
     'pagado_usd', (select coalesce(sum(monto_usd), 0) from codigos_pagos),
     'codigos', (
       select coalesce(jsonb_agg(c order by c.activo desc, c.pendiente_usd desc, c.usos desc, c.codigo), '[]'::jsonb) from (
-        select k.codigo, k.creador, k.descuento, k.activo, (k.pin_hash is not null) as tiene_pin,
+        select k.codigo, k.creador, k.correo, k.descuento, k.activo, (k.pin_hash is not null) as tiene_pin,
+               (k.correo is not null and exists (select 1 from auth.users u where lower(u.email) = k.correo)) as correo_entro,
                k.usos, k.ventas_bs, round(k.comision_usd, 2) as comision_usd, round(k.pendiente_usd, 2) as pendiente_usd,
                k.por_convertir_bs, k.creado,
                (select round(coalesce(sum(p.monto_usd), 0), 2) from codigos_pagos p where p.codigo = k.codigo) as pagado_usd,
@@ -264,9 +314,11 @@ revoke execute on function public.admin_codigos() from public, anon;
 grant execute on function public.admin_codigos() to authenticated, service_role;
 
 -- Crea un código (p_nuevo) o cambia uno que ya existe. p_pin vacío = deja el PIN como está.
--- p_descuento solo para promos (sin creador). Devuelve el código guardado.
+-- p_descuento solo para promos (sin creador). p_correo: correo de Google con el que el creador entra a su
+-- panel (vacío = sin acceso con Google). Devuelve el código guardado.
+drop function if exists public.admin_codigo_guardar(text, text, text, numeric, boolean, boolean);
 create or replace function public.admin_codigo_guardar(p_codigo text, p_creador text, p_pin text default null,
-  p_descuento numeric default null, p_activo boolean default true, p_nuevo boolean default false)
+  p_descuento numeric default null, p_activo boolean default true, p_nuevo boolean default false, p_correo text default null)
 returns text
 language plpgsql
 security definer
@@ -276,6 +328,7 @@ declare
   v_codigo text := upper(trim(coalesce(p_codigo, '')));
   v_creador text := nullif(trim(coalesce(p_creador, '')), '');
   v_pin text := nullif(trim(coalesce(p_pin, '')), '');
+  v_correo text := nullif(lower(trim(coalesce(p_correo, ''))), '');
 begin
   perform admin_revisar();
   if v_codigo !~ '^[A-Z0-9_-]{2,30}$' then
@@ -283,6 +336,12 @@ begin
   end if;
   if v_creador is not null and length(v_creador) > 60 then
     raise exception 'El nombre del creador es muy largo (máximo 60).' using errcode = '22023';
+  end if;
+  if v_correo is not null and v_correo !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
+    raise exception 'Ese correo no es válido.' using errcode = '22023';
+  end if;
+  if v_correo is not null and v_creador is null then
+    raise exception 'Una promo sin creador no tiene panel: el correo es solo para creadores.' using errcode = '22023';
   end if;
   if v_pin is not null and v_pin !~ '^\d{4,8}$' then
     raise exception 'El PIN debe tener de 4 a 8 números.' using errcode = '22023';
@@ -294,11 +353,11 @@ begin
     if exists (select 1 from codigos where codigo = v_codigo) then
       raise exception 'Ya existe el código %.', v_codigo using errcode = '23505';
     end if;
-    insert into codigos (codigo, creador, descuento, pin_hash, activo)
-    values (v_codigo, v_creador, case when v_creador is null then p_descuento end,
+    insert into codigos (codigo, creador, correo, descuento, pin_hash, activo)
+    values (v_codigo, v_creador, v_correo, case when v_creador is null then p_descuento end,
             case when v_pin is not null then crypt(v_pin, gen_salt('bf')) end, coalesce(p_activo, true));
   else
-    update codigos set creador = v_creador,
+    update codigos set creador = v_creador, correo = v_correo,
            descuento = case when v_creador is null then p_descuento end,
            pin_hash = case when v_pin is not null then crypt(v_pin, gen_salt('bf')) else pin_hash end,
            activo = coalesce(p_activo, activo)
@@ -308,8 +367,8 @@ begin
   return v_codigo;
 end;
 $$;
-revoke execute on function public.admin_codigo_guardar(text, text, text, numeric, boolean, boolean) from public, anon;
-grant execute on function public.admin_codigo_guardar(text, text, text, numeric, boolean, boolean) to authenticated, service_role;
+revoke execute on function public.admin_codigo_guardar(text, text, text, numeric, boolean, boolean, text) from public, anon;
+grant execute on function public.admin_codigo_guardar(text, text, text, numeric, boolean, boolean, text) to authenticated, service_role;
 
 -- Comisiones guardadas en Bs (ventas sin tasa) → dólares con la tasa actual
 create or replace function public.admin_convertir_pendientes()
