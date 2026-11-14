@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/paginas-legales.css">
-  <link rel="stylesheet" href="css/creadores.css?v=3">
+  <link rel="stylesheet" href="css/creadores.css?v=4">
   <!-- "Entrar con Google" del panel de creadores (desde 2026-11-13): sesión de la tienda -->
   <script src="/js/sesion.js?v=5" defer></script>
   <link rel="stylesheet" href="css/pie-legal.css">
@@ -82,6 +82,7 @@
 
         <div class="acceso-google">
           <a class="btn-google" id="btnGoogle" href="/perfil.html?volver=%2Fcreadores.html&amp;entrar=1">Entrar con Google</a>
+          <button type="button" class="btn-pedir-acceso" id="btnPedirAcceso">📝 ¿No tienes acceso? Pídelo aquí</button>
           <div class="acceso-cuenta" id="accesoCuenta" hidden>
             <span>Entraste como <strong id="correoCuenta"></strong></span>
             <button type="button" class="btn-salir" id="btnSalirCreador">Salir</button>
@@ -232,19 +233,50 @@
     </svg>
   </a>
 
-  <!-- AVISO DEL CAMBIO A "ENTRAR CON GOOGLE" (desde 2026-11-13): sale al entrar desde INFLUENCERS o
-       cualquier enlace, hasta que el creador toca "Entendido" o ya ve su panel con Google -->
+  <!-- AVISO DEL CAMBIO + FORMULARIO DE ACCESO (desde 2026-11-13): sale CADA VEZ que se entra a esta página
+       (botón INFLUENCERS o cualquier enlace), salvo que el creador ya vea su panel con Google.
+       "Enviar" abre el WhatsApp de Level Up con la solicitud escrita: no se guarda nada aquí. -->
   <div class="aviso-cambio" id="avisoCambio" hidden>
     <div class="aviso-cambio__caja" role="dialog" aria-modal="true" aria-labelledby="avisoCambioTitulo">
-      <h2 id="avisoCambioTitulo">📢 Cambio en el panel de creadores</h2>
-      <p>Ahora entras a tu panel <strong>solo con tu cuenta de Google</strong>. El código y PIN ya no sirven para entrar.</p>
-      <ul>
-        <li><span aria-hidden="true">✅</span><p><strong>¿Ya tenías código?</strong> Escríbenos por WhatsApp con tu código y tu correo de Gmail. Nosotros creamos tu acceso: las cuentas de creador solo las hace Level Up.</p></li>
-        <li><span aria-hidden="true">💰</span><p><strong>No pierdes nada.</strong> Tus ventas, tu ganancia y lo que te debemos siguen igual.</p></li>
-        <li><span aria-hidden="true">🎟️</span><p><strong>Tu código sigue igual.</strong> Tus seguidores lo siguen usando para su descuento, como siempre.</p></li>
-      </ul>
-      <a class="aviso-cambio__whatsapp" id="avisoCambioWhatsapp" target="_blank" rel="noopener noreferrer">💬 Pedir mi acceso por WhatsApp</a>
-      <button type="button" class="aviso-cambio__ok" id="avisoCambioOk">Entendido</button>
+      <button type="button" class="aviso-cambio__cerrar" id="avisoCambioCerrar" aria-label="Cerrar">✕</button>
+
+      <div id="avisoPaso1">
+        <h2 id="avisoCambioTitulo">📢 Cambio en el panel de creadores</h2>
+        <p>Ahora entras a tu panel <strong>solo con tu cuenta de Google</strong>. El código y PIN ya no sirven para entrar.</p>
+        <ul>
+          <li><span aria-hidden="true">✅</span><p><strong>¿Ya tenías código?</strong> Pide tu acceso aquí abajo. Nosotros creamos tu cuenta de creador: solo las hace Level Up.</p></li>
+          <li><span aria-hidden="true">💰</span><p><strong>No pierdes nada.</strong> Tus ventas, tu ganancia y lo que te debemos siguen igual.</p></li>
+          <li><span aria-hidden="true">🎟️</span><p><strong>Tu código sigue igual.</strong> Tus seguidores lo siguen usando para su descuento.</p></li>
+          <li><span aria-hidden="true">⭐</span><p><strong>¿Quieres ser creador?</strong> También pide tu código nuevo aquí abajo.</p></li>
+        </ul>
+        <button type="button" class="aviso-cambio__whatsapp" id="avisoIrFormulario">📝 Pedir mi acceso</button>
+        <button type="button" class="aviso-cambio__ok" id="avisoCambioOk">Ahora no</button>
+      </div>
+
+      <form id="formAcceso" class="form-acceso" novalidate hidden>
+        <h2>📝 Pide tu acceso</h2>
+        <fieldset class="opciones-acceso">
+          <legend>¿Ya tienes código de creador?</legend>
+          <label><input type="radio" name="tipoAcceso" value="ya" checked> <span>Sí, ya tengo código</span></label>
+          <label><input type="radio" name="tipoAcceso" value="nuevo"> <span>No, quiero uno nuevo</span></label>
+        </fieldset>
+        <div class="campo">
+          <label for="accesoCodigo" id="accesoCodigoTexto">Tu código actual</label>
+          <input type="text" id="accesoCodigo" placeholder="Ej: JOSEFF" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+        </div>
+        <div class="campo">
+          <label for="accesoCorreo">Tu correo de Gmail (con él entrarás a tu panel)</label>
+          <input type="email" id="accesoCorreo" placeholder="Ej: jose@gmail.com" maxlength="120" autocomplete="email" required>
+        </div>
+        <div class="campo">
+          <label for="accesoEnlace">Enlace de tu TikTok o de un video tuyo</label>
+          <input type="url" id="accesoEnlace" placeholder="Ej: https://www.tiktok.com/@jose" maxlength="300" autocomplete="url" inputmode="url" required>
+        </div>
+        <p class="form-acceso__error" id="accesoError" role="alert"></p>
+        <button type="submit" class="aviso-cambio__whatsapp">💬 Enviar por WhatsApp</button>
+        <button type="button" class="aviso-cambio__ok" id="accesoVolver">Volver</button>
+        <p class="form-acceso__nota">Se abre WhatsApp con tu solicitud lista: solo toca enviar. Te avisamos cuando tu acceso esté listo.</p>
+      </form>
     </div>
   </div>
 
@@ -393,10 +425,12 @@
         if (datos.status !== 'success') { mostrarMensaje(datos.message || 'No pudimos abrir tu panel.'); return; }
         const lista = datos.codigos || [];
         if (!lista.length) {
-          mostrarMensaje(`La cuenta ${datos.correo || ''} no tiene código de creador. Si eres creador, mándanos este correo por WhatsApp y te damos acceso.`);
+          mostrarMensaje(`La cuenta ${datos.correo || ''} todavía no tiene código de creador. Pide tu acceso con el botón de arriba.`);
+          if (datos.correo) $('accesoCorreo').value = datos.correo;
           return;
         }
-        cerrarAviso(true);
+        cerrarAviso();
+        $('btnPedirAcceso').hidden = true;
         const caja = $('misCodigos');
         caja.replaceChildren();
         if (lista.length > 1) {
@@ -420,29 +454,68 @@
       try { await Sesion.salir(); } catch (e) { /* igual se recarga */ }
       location.reload();
     });
-    // Aviso del cambio: hasta que lo cierren o ya vean su panel con Google
-    const CLAVE_AVISO = 'levelup_aviso_creadores_solo_google';
-    function cerrarAviso(recordar) {
+    // Aviso del cambio + formulario de acceso: sale cada vez que se entra (salvo con el panel abierto por Google)
+    function cerrarAviso() {
       $('avisoCambio').hidden = true;
       body.classList.remove('no-scroll');
       document.removeEventListener('keydown', escAviso);
-      if (recordar) { try { localStorage.setItem(CLAVE_AVISO, '1'); } catch (e) { /* sin almacenamiento */ } }
     }
-    function escAviso(e) { if (e.key === 'Escape') cerrarAviso(true); }
-    function mostrarAviso() {
-      let visto = false;
-      try { visto = localStorage.getItem(CLAVE_AVISO) === '1'; } catch (e) { /* sin almacenamiento */ }
-      if (visto) return;
-      $('avisoCambioWhatsapp').href = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent('Hola, soy creador de Level Up. Mi código es: ____ y mi correo de Gmail es: ____. Quiero mi acceso al panel con Google.')}`;
+    function escAviso(e) { if (e.key === 'Escape') cerrarAviso(); }
+    function verPaso(formulario) {
+      $('avisoPaso1').hidden = formulario;
+      $('formAcceso').hidden = !formulario;
+      $('accesoError').textContent = '';
+      (formulario ? $('accesoCodigo') : $('avisoIrFormulario')).focus();
+    }
+    function mostrarAviso(formulario) {
       $('avisoCambio').hidden = false;
       body.classList.add('no-scroll');
       document.addEventListener('keydown', escAviso);
-      $('avisoCambioOk').focus();
+      verPaso(!!formulario);
     }
-    $('avisoCambioOk').addEventListener('click', () => cerrarAviso(true));
-    $('avisoCambio').addEventListener('click', (e) => { if (e.target === $('avisoCambio')) cerrarAviso(true); });
-    // Quien ya entró con Google y tiene panel no necesita el aviso
-    if (!(window.Sesion && Sesion.hay())) mostrarAviso();
+    $('avisoCambioOk').addEventListener('click', cerrarAviso);
+    $('avisoCambioCerrar').addEventListener('click', cerrarAviso);
+    $('avisoCambio').addEventListener('click', (e) => { if (e.target === $('avisoCambio')) cerrarAviso(); });
+    $('avisoIrFormulario').addEventListener('click', () => verPaso(true));
+    $('accesoVolver').addEventListener('click', () => verPaso(false));
+    $('btnPedirAcceso').addEventListener('click', () => mostrarAviso(true));
+
+    document.querySelectorAll('input[name="tipoAcceso"]').forEach((r) => r.addEventListener('change', () => {
+      const nuevo = document.querySelector('input[name="tipoAcceso"]:checked').value === 'nuevo';
+      $('accesoCodigoTexto').textContent = nuevo ? '¿Cómo quieres tu código?' : 'Tu código actual';
+    }));
+    $('accesoCodigo').addEventListener('input', () => {
+      const limpio = $('accesoCodigo').value.toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+      if (limpio !== $('accesoCodigo').value) $('accesoCodigo').value = limpio;
+    });
+
+    $('formAcceso').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const error = $('accesoError');
+      const nuevo = document.querySelector('input[name="tipoAcceso"]:checked').value === 'nuevo';
+      const codigo = $('accesoCodigo').value.trim().toUpperCase();
+      const correo = $('accesoCorreo').value.trim().toLowerCase();
+      let enlace = $('accesoEnlace').value.trim();
+      if (enlace && !/^https?:\/\//i.test(enlace)) enlace = 'https://' + enlace;
+      if (!/^[A-Z0-9_-]{2,30}$/.test(codigo)) { error.textContent = 'Escribe el código: de 2 a 30 letras o números, sin espacios (ej: JOSEFF).'; $('accesoCodigo').focus(); return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) { error.textContent = 'Escribe tu correo de Gmail (ej: jose@gmail.com).'; $('accesoCorreo').focus(); return; }
+      if (!/^https?:\/\/[^\s/]+\.[^\s]+$/i.test(enlace)) { error.textContent = 'Pega el enlace de tu TikTok o de un video tuyo.'; $('accesoEnlace').focus(); return; }
+      error.textContent = '';
+      const texto = [
+        'Hola Level Up 👋 Quiero mi acceso al panel de creadores.',
+        '',
+        nuevo ? '⭐ Soy nuevo: quiero un código' : '✅ Ya tengo código',
+        `🎟️ Código${nuevo ? ' que quiero' : ''}: ${codigo}`,
+        `📧 Gmail: ${correo}`,
+        `🎬 TikTok / video: ${enlace}`,
+      ].join('\n');
+      const url = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(texto)}`;
+      // Sin "noopener" en window.open: con él devuelve null siempre y se abriría dos veces
+      const ventana = window.open(url, '_blank');
+      if (ventana) ventana.opener = null; else location.href = url;
+    });
+
+    mostrarAviso(false);
 
     // sesion.js carga con defer: ya está listo al llegar DOMContentLoaded
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', panelConGoogle);

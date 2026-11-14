@@ -96,6 +96,34 @@
 .aviso-cambio__ok { background: transparent; color: var(--primary); border: 1px solid rgba(34, 211, 238, 0.4); }
 .aviso-cambio__whatsapp:focus-visible, .aviso-cambio__ok:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
+/* --- Formulario de acceso (dentro del aviso) --- */
+.aviso-cambio__caja { position: relative; }
+.aviso-cambio__caja > div, .form-acceso { display: grid; gap: 14px; }
+.aviso-cambio__caja > div[hidden], .form-acceso[hidden], .btn-pedir-acceso[hidden] { display: none; }
+.aviso-cambio__caja h2 { padding-right: 40px; }
+.aviso-cambio__cerrar {
+  position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+  background: transparent; border: 1px solid var(--border-glass); color: var(--text-muted); font-size: 16px;
+}
+.aviso-cambio__cerrar:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.form-acceso h2 { font-family: 'Montserrat', sans-serif; font-size: 17px; font-weight: 900; color: var(--primary); text-transform: uppercase; }
+.opciones-acceso { border: 0; display: grid; gap: 8px; }
+.opciones-acceso legend { font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
+.opciones-acceso label {
+  display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border-radius: 12px; cursor: pointer;
+  background: rgba(11, 17, 32, 0.75); border: 1px solid var(--border-glass); color: var(--text-main); font-size: 14px;
+}
+.opciones-acceso label:has(input:checked) { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15); }
+.opciones-acceso input { accent-color: var(--accent-cyan); width: 18px; height: 18px; }
+.form-acceso__error { font-size: 13px; font-weight: 600; color: var(--danger, #ff3b3b); }
+.form-acceso__error:empty { display: none; }
+.form-acceso__nota { font-size: 12px; color: var(--text-muted); text-align: center; line-height: 1.5; }
+.btn-pedir-acceso {
+  min-height: 48px; border-radius: 12px; cursor: pointer; background: transparent; color: var(--primary);
+  border: 1px solid rgba(34, 211, 238, 0.4); font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 13px;
+}
+.btn-pedir-acceso:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
 /* --- Resultados --- */
 .panel-resultado { display: none; margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--border-glass); }
 .panel-resultado.visible { display: grid; gap: 24px; animation: fadeUp 0.5s ease forwards; }
