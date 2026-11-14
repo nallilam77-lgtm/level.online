@@ -32,7 +32,8 @@ const LLAVES = {
 // ¿El producto es de este juego? Por la familia de Central One (nunca por el SKU)
 const sinAcentos = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
 const DEL_JUEGO = {
-  freefire: (p) => sinAcentos(p.product_family_name).includes('freefire'),
+  // Free Fire: solo LATAM (la región de Venezuela; los de BR, ID, EU… no sirven para cuentas de aquí)
+  freefire: (p) => sinAcentos(p.product_family_name).includes('freefire') && String(p.region || p.market || '').trim().toUpperCase() === 'LATAM',
   bloodstrike: (p) => sinAcentos(p.product_family_name).includes('bloodstrike'),
   // Solo la familia normal (igual que esFamiliaNormalML de apps-script/mobilelegends.gs)
   mobilelegends: (p) => sinAcentos(p.product_family_name).replace(/bangbang$/, '') === 'mobilelegends',
@@ -65,10 +66,11 @@ async function actualizarCatalogo(juego) {
     };
   });
   if (filas.length) await guardar('centralone_catalogo', filas, 'producto');
-  // Lo que antes era de este juego y ya no está en el catálogo: sin stock (no se borra: puede volver)
+  // Lo que antes era de este juego y ya no entra (no está en Central One o es de otra región): sin stock y
+  // sin juego, así sale de la lista "sin vender" del panel. No se borra: un paquete puede seguir unido a él.
   const ids = filas.map((f) => f.producto);
   await actualizar('centralone_catalogo', `juego=eq.${juego}${ids.length ? `&producto=not.in.(${ids.join(',')})` : ''}`,
-    { en_stock: false, visto: ahora });
+    { en_stock: false, visto: ahora, juego: null });
   return { total: filas.length, conStock: filas.filter((f) => f.en_stock).length };
 }
 
