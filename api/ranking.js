@@ -1,6 +1,6 @@
 // MEJORES CLIENTES DEL DÍA Y DE LA SEMANA (GET /api/ranking → { status, dia: [...], semana: [...] }).
 // Sale de la función SQL ranking_clientes (supabase/levelup.sql): recargas COMPLETADAS de clientes con
-// sesión. Cada fila: { puesto, nombre ("Jesús D."), foto, recargas, total } — nunca correo ni ID del juego.
+// sesión, ordenadas por bolívares recargados (desde 2026-11-14; antes por cantidad de recargas). Cada fila: { puesto, nombre ("Jesús D."), foto, recargas, total } — nunca correo ni ID del juego.
 // Hora de Venezuela (UTC-4 todo el año): el día empieza a las 00:00 y la semana el lunes a las 00:00.
 // 5 min en la CDN de Vercel: muchas visitas al inicio = una sola llamada a Supabase cada 5 min.
 import { supabaseActivo, rpc } from './_lib/supabase.js';

@@ -151,10 +151,12 @@ as $$
   with conteo as (
     select r.usuario, count(*)::integer as recargas, coalesce(sum(r.precio), 0) as total
       from recargas r
-     where r.estado = 'completado' and r.creado >= p_desde
+     -- Solo clientes con sesión: los pedidos sin cuenta (usuario vacío, desde 2026-11-13) no compiten
+     where r.estado = 'completado' and r.creado >= p_desde and r.usuario is not null
      group by r.usuario
   )
-  select (row_number() over (order by c.recargas desc, c.total desc))::integer,
+  -- Desde 2026-11-14 el puesto va por bolívares recargados (desempata la cantidad de recargas)
+  select (row_number() over (order by c.total desc, c.recargas desc))::integer,
          -- Primer nombre + inicial del apellido
          coalesce(nullif(trim(
            split_part(trim(coalesce(u.raw_user_meta_data ->> 'full_name', u.raw_user_meta_data ->> 'name', '')), ' ', 1) || ' ' ||
@@ -165,7 +167,7 @@ as $$
          round(c.total, 2)
     from conteo c
     join auth.users u on u.id = c.usuario
-   order by c.recargas desc, c.total desc
+   order by c.total desc, c.recargas desc
    limit least(greatest(coalesce(p_limite, 10), 1), 20);
 $$;
 

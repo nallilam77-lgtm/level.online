@@ -170,8 +170,9 @@ async function estadisticas(req, res) {
     try {
       const { datos } = await conCache(`estadisticas:supabase:${hoyVE}`,
         async () => ({ hoy: Number(await rpc('recargas_completadas_desde', { p_desde: iniciosVE().dia })) }),
-        { frescoMs: 2 * 60_000, respaldoMs: 30 * 60_000, esValido: (d) => Number.isFinite(d?.hoy) });
-      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=120');
+        { frescoMs: 30_000, respaldoMs: 30 * 60_000, esValido: (d) => Number.isFinite(d?.hoy) });
+      // 30 s aquí y 30 s en la CDN: una recarga nueva sale en el contador en menos de un minuto
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30');
       return res.status(200).json({ total: Math.max(0, Math.floor(datos.hoy)) });
     } catch (error) {
       console.error("⚠️ estadisticas: Supabase no respondió, se cuenta en la hoja:", error.message);

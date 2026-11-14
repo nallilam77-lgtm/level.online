@@ -39,11 +39,12 @@
 
     const cuenta = document.createElement('span');
     cuenta.className = 'ranking-cuenta';
-    const n = document.createElement('strong');
-    n.textContent = f.recargas + (f.recargas === 1 ? ' recarga' : ' recargas');
-    const total = document.createElement('small');
+    // Se ordena por bolívares recargados: eso va grande; la cantidad de recargas, debajo
+    const total = document.createElement('strong');
     total.textContent = bs(f.total) + ' Bs';
-    cuenta.append(n, total);
+    const n = document.createElement('small');
+    n.textContent = f.recargas + (f.recargas === 1 ? ' recarga' : ' recargas');
+    cuenta.append(total, n);
 
     li.append(puesto, foto, nombre, cuenta);
     return li;
