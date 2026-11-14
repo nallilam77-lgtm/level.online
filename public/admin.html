@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=17" defer></script>
+  <script src="/js/admin.js?v=18" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -40,6 +40,7 @@
         <button type="button" role="tab" data-seccion="resumen" aria-selected="true">Resumen</button>
         <button type="button" role="tab" data-seccion="pedidos" aria-selected="false">Pedidos</button>
         <button type="button" role="tab" data-seccion="revision" aria-selected="false">Revisión <span class="contador-pestana" id="contadorRevision" hidden></span></button>
+        <button type="button" role="tab" data-seccion="pagos" aria-selected="false">Pagos</button>
         <button type="button" role="tab" data-seccion="cuentas" aria-selected="false">Cuentas</button>
         <button type="button" role="tab" data-seccion="creadores" aria-selected="false">Creadores</button>
         <button type="button" role="tab" data-seccion="precios" aria-selected="false">Precios</button>
@@ -124,6 +125,28 @@
         <div class="tarjeta">
           <h2>Resueltas hace poco</h2>
           <ul class="pedidos" id="listaResueltas"></ul>
+        </div>
+      </section>
+
+      <!-- PAGOS (supabase/pagos.sql): lo que MacroDroid avisa. Etapa 1: en paralelo con la hoja "pagos". -->
+      <section class="seccion" id="seccion-pagos" hidden>
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Pagos recibidos</h2>
+            <select id="periodoPagos" aria-label="Periodo">
+              <option value="dia">Hoy</option>
+              <option value="7">Últimos 7 días</option>
+            </select>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><small>Pagos</small><strong id="kpiPagos">–</strong></div>
+            <div class="kpi"><small>Total (Bs)</small><strong id="kpiPagosBs">–</strong></div>
+            <div class="kpi"><small>Pago móvil</small><strong id="kpiPagosPm">–</strong></div>
+            <div class="kpi"><small>Transferencias</small><strong id="kpiPagosTr">–</strong></div>
+          </div>
+          <p class="nota"><strong>Prueba en paralelo:</strong> la tienda todavía cobra con la hoja "pagos". Aquí ves lo que MacroDroid manda a Supabase; compara con la hoja que estén los mismos pagos.</p>
+          <input type="search" id="buscarPago" class="buscar" placeholder="Buscar referencia o monto…" aria-label="Buscar pagos" autocomplete="off">
+          <ul class="pedidos" id="listaPagos"></ul>
         </div>
       </section>
 

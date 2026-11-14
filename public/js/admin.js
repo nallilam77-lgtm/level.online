@@ -68,6 +68,7 @@
     if (b.dataset.seccion === 'precios') cargarPrecios();
     if (b.dataset.seccion === 'roblox') cargarRoblox();
     if (b.dataset.seccion === 'revision') cargarRevision();
+    if (b.dataset.seccion === 'pagos') cargarPagos();
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -1274,6 +1275,42 @@
     return li;
   }
   $('actualizarRevision').addEventListener('click', cargarRevision);
+
+  // ---------------------------------------------------------------- pagos (supabase/pagos.sql)
+  const ORIGEN_PAGO = { pago_movil: 'Pago móvil', bdv: 'BDV a BDV', transferencia: 'Transferencia', otro: 'Otro' };
+  const ESTADO_PAGO = { verificado: ['Libre', 'etiqueta--completado'], en_proceso: ['En proceso', 'etiqueta--en_proceso'],
+    usado: ['Usado', 'etiqueta--reembolsado'], por_completar: ['Por completar', 'etiqueta--incompleto'], vencido: ['Vencido', 'etiqueta--problema'] };
+  let pagos = [];
+  async function cargarPagos() {
+    const desde = $('periodoPagos').value === 'dia' ? iniciosVE().dia : new Date(Date.now() - 7 * 864e5);
+    const { data, error } = await cliente.from('pagos').select('referencia,monto,monto_texto,remitente,origen,recibido,estado,id_pedido')
+      .gte('recibido', desde.toISOString()).order('recibido', { ascending: false }).limit(500);
+    if (error) { console.error(error); $('listaPagos').replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/pagos.sql?')); return; }
+    pagos = data || [];
+    $('kpiPagos').textContent = pagos.length;
+    $('kpiPagosBs').textContent = bs(pagos.reduce((s, p) => s + Number(p.monto || 0), 0));
+    $('kpiPagosPm').textContent = pagos.filter((p) => p.origen === 'pago_movil').length;
+    $('kpiPagosTr').textContent = pagos.filter((p) => p.origen !== 'pago_movil').length;
+    pintarPagos();
+  }
+  function pintarPagos() {
+    const texto = $('buscarPago').value.replace(/\s/g, '').toLowerCase();
+    const lista = $('listaPagos');
+    lista.replaceChildren();
+    const visibles = pagos.filter((p) => !texto || `${p.referencia} ${p.monto} ${p.monto_texto || ''} ${p.remitente || ''}`.toLowerCase().includes(texto));
+    if (!visibles.length) { lista.append(el('li', 'vacio', pagos.length ? 'Ningún pago con esa búsqueda.' : 'Todavía no llega ningún pago a Supabase en este periodo.')); return; }
+    visibles.forEach((p) => {
+      const [estado, clase] = ESTADO_PAGO[p.estado] || [p.estado, ''];
+      const li = el('li', 'pedido');
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', `${bs(p.monto)} Bs · ref. ${p.referencia}`), el('span', 'etiqueta ' + clase, estado));
+      li.append(cabeza, el('span', '', `${ORIGEN_PAGO[p.origen] || p.origen}${p.remitente ? ` · ${p.remitente}` : ''} · ${fecha(p.recibido)}`));
+      if (p.id_pedido) li.append(el('span', 'precio-detalle', `Pedido ${p.id_pedido}`));
+      lista.append(li);
+    });
+  }
+  $('periodoPagos').addEventListener('change', cargarPagos);
+  $('buscarPago').addEventListener('input', pintarPagos);
 
   // "Entrar con Google": si había otra cuenta (no administradora), primero se cierra
   $('btnEntrarAdmin').addEventListener('click', async (ev) => {

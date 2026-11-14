@@ -9,6 +9,8 @@ import { cargarJuego } from './_lib/juegos/index.js';
 export default async function handler(req, res) {
   try {
     // Panel admin → Resumen: saldo de Central One (solo administrador; _lib/precios.js). No es de un juego.
+    // MacroDroid: cada pago que llega al teléfono (etapa 1 de los pagos en Supabase; _lib/pagos.js)
+    if (req.query.accion === 'pago_recibido') return (await import('./_lib/pagos.js')).pagoRecibido(req, res);
     if (req.query.accion === 'saldo_centralone') return (await import('./_lib/precios.js')).saldoCentralOne(req, res);
     const juego = await cargarJuego(req.query.juego);
     if (!juego) {
