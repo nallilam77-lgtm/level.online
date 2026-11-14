@@ -1311,12 +1311,6 @@
     if (error) { console.error(error); $('listaPagos').replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/pagos.sql?')); return; }
     pagos = data || [];
     await cargarPedidosDePagos(pagos);
-    const { data: motor } = await cliente.from('configuracion').select('valor').eq('clave', 'pagos_motor').maybeSingle();
-    const conSupabase = !!(motor && motor.valor === 'supabase');
-    document.querySelectorAll('[data-motor]').forEach((b) => b.setAttribute('aria-checked', String((b.dataset.motor === 'supabase') === conSupabase)));
-    $('notaMotor').textContent = conSupabase
-      ? '✅ Las tiendas cobran con estos pagos (Supabase).'
-      : 'Las tiendas cobran con la hoja "pagos". Aquí ves lo que MacroDroid manda a Supabase.';
     $('kpiPagos').textContent = pagos.length;
     $('kpiPagosBs').textContent = bs(pagos.reduce((s, p) => s + Number(p.monto || 0), 0));
     $('kpiPagosPm').textContent = pagos.filter((p) => p.origen === 'pago_movil').length;
@@ -1378,7 +1372,7 @@
   }
   async function cambiarEstadoPago(p, estado, b) {
     const texto = estado === 'usado'
-      ? `¿Marcar como USADO el pago ${p.referencia} (${bs(p.monto)} Bs)?\n\nYa nadie podrá usarlo en la tienda (también se marca en la hoja). Úsalo para un pago que ya gastaste a mano, por ejemplo una recarga por WhatsApp.`
+      ? `¿Marcar como USADO el pago ${p.referencia} (${bs(p.monto)} Bs)?\n\nYa nadie podrá usarlo en la tienda. Úsalo para un pago que ya gastaste a mano, por ejemplo una recarga por WhatsApp.`
       : `¿LIBERAR el pago ${p.referencia} (${bs(p.monto)} Bs)?\n\nVuelve a estar libre y el cliente lo puede usar otra vez con sus últimos 5 dígitos.`;
     if (!confirm(texto)) return;
     b.disabled = true;
@@ -1393,18 +1387,6 @@
   }
 
   $('periodoPagos').addEventListener('change', cargarPagos);
-  document.querySelectorAll('[data-motor]').forEach((b) => b.addEventListener('click', async () => {
-    if (b.getAttribute('aria-checked') === 'true') return;
-    const aSupabase = b.dataset.motor === 'supabase';
-    const aviso = aSupabase
-      ? '¿Cobrar con SUPABASE en las 5 tiendas?\n\nLos clientes solo podrán usar pagos que estén en la pestaña Pagos (los que llegaron por MacroDroid desde que lo conectamos). Si alguien tiene un pago viejo que no está aquí, agrégalo con "Agregar pago a mano".'
-      : '¿Volver a cobrar con la HOJA DE CÁLCULO en las 5 tiendas?';
-    if (!confirm(aviso)) return;
-    const { error } = await cliente.rpc('admin_pagos_motor', { p_motor: b.dataset.motor });
-    if (error) { alert(textoError(error, 'No se pudo cambiar.')); return; }
-    alert(aSupabase ? '✅ Listo: en menos de 30 segundos las 5 tiendas cobran con Supabase.' : 'Listo: en menos de 30 segundos las tiendas vuelven a cobrar con la hoja.');
-    cargarPagos();
-  }));
   let esperaBusqueda = 0;
   $('buscarPago').addEventListener('input', () => {
     pintarPagos();
@@ -1434,7 +1416,7 @@
     try {
       const r = await llamarAdmin('pago_manual', { referencia, monto, remitente: $('manualRemitente').value, nota: $('manualNota').value });
       msg.textContent = r.status === 'success'
-        ? (r.enHoja ? `✅ Pago agregado (aquí y en la hoja). El cliente ya puede usar …${referencia.slice(-5)}.` : '✅ Agregado aquí, pero NO se pudo anotar en la hoja: agrégalo también en la hoja mientras la tienda cobre con ella.')
+        ? `✅ Pago agregado. El cliente ya puede usar …${referencia.slice(-5)}.`
         : (r.message || 'No se pudo agregar.');
       if (r.status === 'success') { $('formPagoManual').reset(); cargarPagos(); }
     } catch (e) {

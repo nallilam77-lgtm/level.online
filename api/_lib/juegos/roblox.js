@@ -5,6 +5,7 @@
 // el código (entregarDeSupabase). Sin Supabase, como antes: la pestaña "Codigos" de la hoja y, si no quedan
 // y el paquete tiene product_id (fila 3 de PreciosRoblox), Central One (ver comprarEnCentralOne).
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
+import { waitUntil } from '@vercel/functions';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
@@ -188,6 +189,15 @@ export const acciones = {
   fidelidad: crearAccionFidelidad('roblox', async () => conDestacados('roblox', await catalogoRoblox())),
 };
 
+// Libro diario: cada venta entregada se anota en "Exitosas" (roblox.gs, tipo registrar_venta) después de
+// responder. Los pagos y los códigos están en Supabase: la hoja solo guarda lo que se vendió.
+function anotarVentaEnHoja(scriptUrl, venta) {
+  waitUntil(llamarScript(scriptUrl, { tipo: 'registrar_venta', ...venta }, { tiempoMs: 25000 })
+    .then((r) => { if (r?.status !== 'success') throw new Error(r?.message || 'respuesta sin éxito'); })
+    .catch((error) => console.error(`⚠️ Roblox: venta ${venta.idPedido} entregada pero NO anotada en "Exitosas" `
+      + `(${venta.usuario} · ${venta.paquete} · ${venta.precio} Bs · ref ${venta.referencia}): ${error.message}`)));
+}
+
 // Solo los campos que usa la página, nunca la respuesta cruda de Apps Script.
 // clave: la del pago por completar; solo se devuelve si roblox.gs guardó el pedido en "por_completar".
 function respuestaCompra(data, clave) {
@@ -326,6 +336,11 @@ export async function recargar(req, res) {
       data = await compraConSupabase({ idPedido, referencia: String(referencia), usuario, paquete: String(producto),
         precio: montoACobrar ?? precioLista, claveHash: huella(clave), codigoDescuento: desc?.codigo || '',
         telefono: telefonoCliente(req.body?.telefono) });
+      if (data?.status === 'success') {
+        anotarVentaEnHoja(scriptUrl, { idPedido, usuario, paquete: String(producto), referencia: (data.referencias || []).join(' + '),
+          codigo: data.code, url_capture: payload.url_capture, precio: montoACobrar ?? precioLista,
+          codigoDescuento: desc?.codigo || '', telefono: payload.telefono });
+      }
     } else try {
       // Apps Script verifica el pago y la entrega, puede tardar más. Sin reintento
       // (podría duplicar la compra). Si se agota el tiempo, la compra sigue en Apps Script.
@@ -397,6 +412,11 @@ async function completarCompra(req, res, inicio) {
     let data;
     if ((await motorPagos()) === 'supabase') {
       data = await completarConSupabase({ idPedido, claveHash, referencia });
+      if (data?.status === 'success') {
+        anotarVentaEnHoja(scriptUrl, { idPedido, usuario: String(data.usuario || ''), paquete: String(data.paquete || ''),
+          referencia: (data.referencias || []).join(' + '), codigo: data.code, url_capture: 'Sin comprobante (pago completado)',
+          precio: Number(data.precio) || 0, codigoDescuento: data.codigoDescuento || '', telefono: telefonoCliente(req.body?.telefono) });
+      }
     } else try {
       data = await llamarScript(scriptUrl, {
         tipo: 'completar', claveHash, referencia, idPedido, ...(llaveRoblox() && { api: true }),
@@ -475,7 +495,7 @@ async function entregarCodigoSupabase({ idPedido, paquete, usuario, referencias,
     return { status: 'error', agotado: true, sinCulpa: true, message: '⚠️ Este paquete se agotó justo ahora. Tu pago anterior sigue guardado: escríbenos por WhatsApp y te lo entregamos.' };
   }
   for (const ref of referencias) await cambiarPago(ref, 'usado', { idPedido }).catch((e) => console.error(`🚨 Roblox: código entregado pero el pago …${String(ref).slice(-5)} no se pudo marcar usado: ${e.message}`));
-  return { status: 'success', code: codigo, message: '¡Código canjeado con éxito!' };
+  return { status: 'success', code: codigo, referencias, message: '¡Código canjeado con éxito!' };
 }
 
 async function completarConSupabase({ idPedido, claveHash, referencia }) {
@@ -488,7 +508,7 @@ async function completarConSupabase({ idPedido, claveHash, referencia }) {
       falta, horas: 48, message: `Pago insuficiente: con este pago llevas ${formatearVES(Number(r.pagadoTotal) || 0)} Bs y faltan ${formatearVES(falta)} Bs. Paga la diferencia y escribe la nueva referencia.` };
   }
   const datos = await entregarCodigoSupabase({ idPedido, paquete: String(r.paquete || ''), usuario: String(r.usuario || ''), referencias: r.referencias || [] });
-  return { ...datos, usuario: r.usuario, precio: r.precio, codigoDescuento: r.codigoDescuento };
+  return { ...datos, usuario: r.usuario, paquete: r.paquete, precio: r.precio, codigoDescuento: r.codigoDescuento };
 }
 
 /**

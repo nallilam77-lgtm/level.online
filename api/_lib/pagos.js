@@ -1,6 +1,5 @@
-// PAGOS EN SUPABASE (supabase/pagos.sql, desde 2026-11-14). Etapa 1: EN PARALELO con la hoja "pagos".
-// Cada macro de MacroDroid (Pago móvil, BDV a BDV, Transferencia de otros bancos) manda el pago a la hoja
-// como siempre y, en otra acción, aquí:
+// PAGOS EN SUPABASE (supabase/pagos.sql, desde 2026-11-14). La hoja "pagos" ya no se usa para cobrar.
+// Cada macro de MacroDroid (Pago móvil, BDV a BDV, Transferencia de otros bancos) manda el pago aquí:
 //   POST /api/juego?accion=pago_recibido
 //   { "clave": "<MACRODROID_CLAVE_VERCEL>", "origen": "pago_movil"|"bdv"|"transferencia",
 //     "telefono": "...", "referencia": "...", "monto": "1.560,00" }
@@ -11,7 +10,6 @@ import { timingSafeEqual } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { supabaseActivo, guardar, leer, rpc, esAdminToken } from './supabase.js';
 import { limpiarMontoVES, formatearVES } from './recarga-comun.js';
-import { llamarScript } from './externo.js';
 import { tokenDe } from './historial.js';
 import { cambiarPago } from './motor-pagos.js';
 
@@ -86,8 +84,7 @@ export async function pagoRecibido(req, res) {
 
 /**
  * Panel admin → Pagos → "Agregar pago" (un pago que MacroDroid no anotó). POST /api/juego?accion=pago_manual
- * { referencia, monto, remitente?, nota? } con el token del administrador. Se guarda en Supabase y también en la
- * hoja "pagos" (igual que MacroDroid), así sirve cobre la tienda con una o con otra.
+ * { referencia, monto, remitente?, nota? } con el token del administrador. Solo Supabase.
  */
 export async function pagoManual(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -101,33 +98,18 @@ export async function pagoManual(req, res) {
   const remitente = String(b.remitente ?? '').trim().slice(0, 80) || null;
   const nota = String(b.nota ?? '').trim().slice(0, 200) || null;
 
-  // 1. Supabase (la regla de la base no deja repetir la referencia)
+  // La regla de la base no deja repetir la referencia (ni una que ya se usó: pagos_usados)
   try {
     const ya = await leer('pagos', { referencia }, 'id,estado');
     if (Array.isArray(ya) && ya.length) return res.status(409).json({ status: 'error', message: `Esa referencia ya está registrada (${ya[0].estado}).` });
     await guardar('pagos', { referencia, monto: Math.round(monto * 100) / 100, monto_texto: formatearVES(monto), remitente, origen: 'manual', nota });
   } catch (error) {
-    if (/Supabase 409/.test(error.message)) return res.status(409).json({ status: 'error', message: 'Esa referencia ya está registrada.' });
+    if (/Supabase 409/.test(error.message)) return res.status(409).json({ status: 'error', message: 'Esa referencia ya está registrada o ya se usó.' });
     console.error('⚠️ pago_manual: no se pudo guardar en Supabase:', error.message);
     return res.status(503).json({ status: 'error', message: 'No se pudo guardar. Intenta de nuevo.' });
   }
-
-  // 2. La hoja "pagos" (el Apps Script de Free Fire, como MacroDroid: sin "accion")
-  let enHoja = false;
-  const url = process.env.SCRIPT_RECARGAS_URL;
-  if (url) {
-    try {
-      const r = await llamarScript(url, {
-        referencia, monto: formatearVES(monto), telefono: remitente || 'Agregado a mano',
-        ...(process.env.MACRODROID_CLAVE && { clave: process.env.MACRODROID_CLAVE }),
-      }, { tiempoMs: 25000 });
-      enHoja = r?.status === 'success';
-    } catch (error) {
-      console.error('⚠️ pago_manual: no se pudo anotar en la hoja:', error.message);
-    }
-  }
-  console.info(`💵 Pago agregado a mano: …${referencia.slice(-5)} · ${monto} Bs · hoja: ${enHoja ? 'sí' : 'NO'}`);
-  return res.status(200).json({ status: 'success', enHoja });
+  console.info(`💵 Pago agregado a mano: …${referencia.slice(-5)} · ${monto} Bs`);
+  return res.status(200).json({ status: 'success' });
 }
 
 /** Panel admin → Pagos → "Limpiar ahora": la misma limpieza diaria. */
@@ -144,7 +126,7 @@ export async function limpiarPagos(req, res) {
 /**
  * Panel admin → Pagos: "Marcar usado" (un pago que ya se usó a mano, p. ej. una recarga por WhatsApp) o
  * "Liberar" (un pago apartado o por completar que debe volver a estar libre). POST /api/juego?accion=pago_estado
- * { referencia, estado: "usado" | "verificado" } con el token del administrador. "usado" también se marca en la hoja.
+ * { referencia, estado: "usado" | "verificado" } con el token del administrador.
  */
 export async function pagoEstado(req, res) {
   res.setHeader('Cache-Control', 'no-store');

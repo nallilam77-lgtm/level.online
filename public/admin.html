@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=16">
+  <link rel="stylesheet" href="css/admin.css?v=17">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=22" defer></script>
+  <script src="/js/admin.js?v=23" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -133,21 +133,8 @@
         </div>
       </section>
 
-      <!-- PAGOS (supabase/pagos.sql): lo que MacroDroid avisa. Etapa 1: en paralelo con la hoja "pagos". -->
+      <!-- PAGOS (supabase/pagos.sql): lo que MacroDroid avisa. Las tiendas cobran SOLO con esto (la hoja ya no). -->
       <section class="seccion" id="seccion-pagos" hidden>
-        <div class="tarjeta">
-          <h2>¿Con qué cobran las tiendas?</h2>
-          <div class="selector-motor" role="radiogroup" aria-label="Con qué cobran las tiendas">
-            <button type="button" role="radio" class="opcion-motor" data-motor="supabase" aria-checked="false">
-              <strong>⚡ Supabase</strong><small>Rápido. Un pago nunca se usa dos veces.</small>
-            </button>
-            <button type="button" role="radio" class="opcion-motor" data-motor="hoja" aria-checked="false">
-              <strong>📄 Hoja de cálculo</strong><small>Como antes (respaldo).</small>
-            </button>
-          </div>
-          <p class="nota" id="notaSelectorMotor">Cambia las 5 tiendas a la vez, en menos de 30 segundos. Con Supabase, cada pago usado también se marca "Usado" en la hoja: si vuelves a la hoja, nadie puede reusarlo.</p>
-        </div>
-
         <div class="tarjeta">
           <div class="fila-titulo">
             <h2>Pagos recibidos</h2>
@@ -163,7 +150,7 @@
             <div class="kpi"><small>Pago móvil</small><strong id="kpiPagosPm">–</strong></div>
             <div class="kpi"><small>Transferencias</small><strong id="kpiPagosTr">–</strong></div>
           </div>
-          <p class="nota" id="notaMotor">La tienda todavía cobra con la hoja "pagos". Aquí ves lo que MacroDroid manda a Supabase.</p>
+          <p class="nota">Las 5 tiendas cobran solo con estos pagos. La hoja de cálculo ya no tiene nada que ver con los pagos: solo anota las ventas.</p>
           <input type="search" id="buscarPago" class="buscar" placeholder="Buscar referencia (o sus últimos 5), monto o teléfono…" aria-label="Buscar pagos" autocomplete="off" inputmode="search">
           <ul class="pedidos" id="listaPagos"></ul>
           <p class="nota">Cada día se borran solos los pagos <strong>usados</strong> de días anteriores. Los libres se guardan 3 días (después quedan "Vencido") y los vencidos se borran a los 7 días. <button type="button" class="btn-ver" id="btnLimpiarPagos">Limpiar ahora</button></p>
@@ -171,7 +158,7 @@
 
         <div class="tarjeta">
           <h2>Agregar pago a mano</h2>
-          <p class="nota">Para un pago que MacroDroid no anotó. Se guarda aquí <strong>y en la hoja "pagos"</strong>, así el cliente lo puede usar.</p>
+          <p class="nota">Para un pago que MacroDroid no anotó. Queda libre al instante para que el cliente lo use con sus últimos 5 dígitos.</p>
           <form class="formulario" id="formPagoManual" novalidate>
             <div class="dos-campos">
               <label class="campo">Referencia completa<input type="text" id="manualReferencia" inputmode="numeric" maxlength="30" placeholder="Ej. 030227531521" autocomplete="off"></label>

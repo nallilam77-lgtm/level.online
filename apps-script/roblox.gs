@@ -148,7 +148,7 @@ function doPost(e) {
     if (datos.tipo === "obtener_precios") return obtenerPrecios();
     var acciones = {
       compra: procesarPagoYExtraerCodigo, verificacion: procesarPagoYExtraerCodigo, completar: completarCompra,
-      entregar_api: entregarApi, liberar_api: liberarApi, nota_api: notaApi
+      entregar_api: entregarApi, liberar_api: liberarApi, nota_api: notaApi, registrar_venta: registrarVenta
     };
     if (!Object.prototype.hasOwnProperty.call(acciones, String(datos.tipo))) {
       return responder({ status: "error", message: "Tipo de solicitud no válido." });
@@ -337,6 +337,27 @@ function entregarCodigo(c) {
     console.error("Roblox: no se pudo compactar la columna " + col + " de Codigos: " + err);
   }
   SpreadsheetApp.flush();
+}
+
+// LIBRO DIARIO (desde 2026-11-14): los pagos y los códigos de Roblox están en Supabase; Vercel manda aquí
+// cada venta ya entregada (tipo "registrar_venta") solo para anotarla en "Exitosas". No toca pagos ni códigos.
+// Repetirla con el mismo idPedido no la anota dos veces.
+function registrarVenta(datos) {
+  var hojaExitosas = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetNameExitosas);
+  if (!hojaExitosas) return { status: "error", message: "Falta la pestaña " + sheetNameExitosas };
+  var idPedido = String(datos.idPedido || "").slice(0, 60);
+  if (!idPedido) return { status: "error", message: "Falta idPedido" };
+  var ultima = hojaExitosas.getLastRow();
+  if (ultima > 1 && hojaExitosas.getRange(2, 9, ultima - 1, 1).createTextFinder(idPedido).matchEntireCell(true).findNext()) {
+    return { status: "success", repetido: true };
+  }
+  anotarExitosa(hojaExitosas, {
+    usuario: String(datos.usuario || ""), paquete: String(datos.paquete || ""), referencia: String(datos.referencia || ""),
+    codigo: String(datos.codigo || ""), urlCapture: String(datos.url_capture || "Sin comprobante"),
+    precioACobrar: Number(datos.precio) || 0, codigoDescuento: String(datos.codigoDescuento || ""),
+    idPedido: idPedido, telefono: String(datos.telefono || "")
+  }, "Supabase");
+  return { status: "success" };
 }
 
 // Una fila de "Exitosas" por venta. Si falla, el cliente igual recibe su código: queda en el registro.
