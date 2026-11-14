@@ -113,10 +113,10 @@ async function paquetesDe(juego) {
  * datos de la hoja ({ status, catalogo: [{ diamantes, precio, producto }], version, … }) con el catálogo
  * de Supabase en vez del de la hoja. Sin Supabase (o si falla), los datos de la hoja tal cual.
  */
-// Blood Strike y Mobile Legends: los precios salen SOLO de Supabase (desde 2026-11-14 la hoja de precios ya
+// Free Fire, Blood Strike y Mobile Legends: los precios salen SOLO de Supabase (desde 2026-11-14 la hoja de precios ya
 // no se lee). "version" es la del Apps Script instalado (.gs v3): la tienda la usa para el cierre en "finalizados".
 // Sin Supabase o sin paquetes a la venta: error (la tienda dice que no pudo leer los precios), nunca la hoja.
-const VERSION_SCRIPT = { bloodstrike: 3, mobilelegends: 3 };
+const VERSION_SCRIPT = { freefire: 3, bloodstrike: 3, mobilelegends: 3 };
 export async function preciosSoloSupabase(juego) {
   const datos = await conPreciosSupabase(juego, { status: 'success', catalogo: [], version: VERSION_SCRIPT[juego] });
   if (datos.origenPrecios !== 'supabase') throw new Error(`Supabase no dio precios de ${juego}`);

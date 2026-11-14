@@ -8,7 +8,7 @@ import { llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasC
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { FASES, ESTADO_PINES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
-import { conPreciosSupabase } from '../precios.js';
+import { preciosSoloSupabase } from '../precios.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
@@ -88,21 +88,16 @@ const validados = new Map();
 async function precios(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
 
-  const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
-  if (!URL_GOOGLE_SCRIPT) {
-    return faltaConfiguracion(res, ["SCRIPT_RECARGAS_URL"], { status: "error", message: "Error al conectar con la hoja de precios." });
-  }
-
   try {
-    // Lectura sin efectos secundarios (20 s con 1 reintento). Con copia en caché el cliente no espera.
+    // Precios SOLO de Supabase (_lib/precios.js, preciosSoloSupabase): la hoja ya no se lee. Copia de 60 s en caché.
     const { datos } = await conCache('precios:ff',
-      async () => conPreciosSupabase('freefire', await llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT)),
+      async () => preciosSoloSupabase('freefire'),
       { esValido: catalogoValido });
     cabecerasCachePrecios(res);
     return res.status(200).json({ ...datos, catalogo: await conDestacados('freefire', datos.catalogo.map(sinProducto)) });
   } catch (error) {
     console.error("Error al obtener precios de Free Fire:", error.message);
-    return res.status(503).json({ status: "error", message: "Error al conectar con la hoja de precios." });
+    return res.status(503).json({ status: "error", message: "No pudimos cargar los precios. Intenta de nuevo en un momento." });
   }
 }
 
@@ -153,7 +148,7 @@ async function verificar(req, res) {
 // Catálogo de Free Fire para la acción "descuento" (misma caché que la acción precios)
 async function catalogoFreeFire() {
   const { datos } = await conCache('precios:ff',
-    async () => conPreciosSupabase('freefire', await llamarScript(process.env.SCRIPT_RECARGAS_URL, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT)),
+    async () => preciosSoloSupabase('freefire'),
     { esValido: catalogoValido });
   return datos.catalogo.map(sinProducto);
 }
@@ -310,7 +305,7 @@ async function prepararCentralOne({ apiKey, producto, id, paquete }) {
 async function productoDelCatalogo(urlScript, clave) {
   try {
     const { datos } = await conCache('precios:ff',
-      async () => conPreciosSupabase('freefire', await llamarScript(urlScript, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
+      async () => preciosSoloSupabase('freefire'),
       { esValido: catalogoValido, respaldoMs: 0 });
     return datos.catalogo.find((p) => clavePaquete(p.diamantes) === clave)?.producto || '';
   } catch (error) {
@@ -614,7 +609,7 @@ export async function recargar(req, res) {
     let dataPrecios;
     try {
       ({ datos: dataPrecios } = await conCache('precios:ff',
-        async () => conPreciosSupabase('freefire', await llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
+        async () => preciosSoloSupabase('freefire'),
         { esValido: catalogoValido, respaldoMs: 0 }));
     } catch (error) {
       console.error(`❌ [${FASES.precios}] ${error.message}`);
