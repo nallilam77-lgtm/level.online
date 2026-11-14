@@ -52,7 +52,11 @@ export async function pagoRecibido(req, res) {
   const monto = limpiarMontoVES(montoTexto);
   if (!/^\d{4,30}$/.test(referencia)) {
     console.error(`⚠️ pago_recibido: referencia inválida ("${String(b.referencia ?? '').slice(0, 40)}")`);
-    return res.status(400).json({ status: 'error', message: 'Referencia vacía o inválida' });
+    // Ya pasó la clave: se devuelve lo recibido para ver en MacroDroid qué mandó la macro
+    return res.status(400).json({
+      status: 'error', message: 'Referencia vacía o inválida',
+      recibido: { referencia: String(b.referencia ?? '').slice(0, 60), monto: montoTexto, origen: String(b.origen ?? '').slice(0, 30) },
+    });
   }
   if (!(monto >= 0) || !Number.isFinite(monto)) {
     return res.status(400).json({ status: 'error', message: 'Monto inválido' });
