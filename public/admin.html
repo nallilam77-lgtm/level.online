@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=17">
+  <link rel="stylesheet" href="css/admin.css?v=18">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=25" defer></script>
+  <script src="/js/admin.js?v=26" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -100,7 +100,16 @@
       <section class="seccion" id="seccion-pedidos" hidden>
         <div class="tarjeta">
           <div class="fila-titulo">
-            <h2>Últimos pedidos <span class="punto-vivo" aria-hidden="true"></span></h2>
+            <h2>Pedidos <span class="punto-vivo" aria-hidden="true"></span></h2>
+            <select id="periodoPedidos" aria-label="Periodo de los pedidos">
+              <option value="todos">Todo</option>
+              <option value="dia">Hoy</option>
+              <option value="7">Últimos 7 días</option>
+              <option value="30">Últimos 30 días</option>
+            </select>
+          </div>
+          <div class="fila-titulo">
+            <p class="nota" id="cuentaPedidos" role="status"></p>
             <select id="filtroEstado" aria-label="Filtrar por estado">
               <option value="">Todos</option>
               <option value="completado">Entregada</option>
@@ -113,6 +122,7 @@
             </select>
           </div>
           <input type="search" id="buscar" class="buscar" placeholder="Buscar ID, referencia, paquete…" aria-label="Buscar pedidos" autocomplete="off">
+          <p class="nota">Toca un pedido para ver todo su detalle.</p>
           <ul class="pedidos" id="listaPedidos"></ul>
         </div>
       </section>
@@ -139,9 +149,9 @@
           <div class="fila-titulo">
             <h2>Pagos recibidos</h2>
             <select id="periodoPagos" aria-label="Periodo">
+              <option value="todos">Todos los guardados</option>
               <option value="dia">Hoy</option>
               <option value="7">Últimos 7 días</option>
-              <option value="todos">Todos los guardados</option>
             </select>
           </div>
           <div class="kpis">

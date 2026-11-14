@@ -102,6 +102,21 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .etiqueta--incompleto, .etiqueta--en_revision { color: var(--aviso); }
 .etiqueta--problema, .etiqueta--reembolsado { color: var(--peligro); }
 .etiqueta--revisar { color: var(--peligro); }
+/* Filas compactas (Pedidos y Pagos): una línea; al tocarla se abre el detalle */
+.fila { border-radius: 12px; background: var(--bg-deep); border: 1px solid var(--border-glass); font-size: 12px; color: var(--text-muted); transition: border-color 0.2s; }
+.fila--nueva { border-color: var(--accent-cyan); }
+.fila:has(details[open]) { border-color: var(--accent-cyan); }
+.fila-resumen { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; cursor: pointer; list-style: none; }
+.fila-resumen::-webkit-details-marker { display: none; }
+.fila-resumen:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; border-radius: 12px; }
+.fila-hora { font-size: 11px; white-space: nowrap; }
+.fila-texto { color: var(--text-main); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fila-monto { font-family: 'Montserrat', sans-serif; font-weight: 800; color: var(--text-main); white-space: nowrap; }
+.fila-detalle { display: grid; gap: 4px; padding: 10px 12px 12px; border-top: 1px solid var(--border-glass); overflow-wrap: anywhere; }
+@media (max-width: 380px) {
+  .fila-resumen { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .fila-monto { display: none; }
+}
 .vacio { padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
 .medidor { height: 12px; border-radius: 999px; background: var(--bg-deep); border: 1px solid var(--border-glass); overflow: hidden; }

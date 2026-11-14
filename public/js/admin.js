@@ -19,7 +19,6 @@
     en_revision: 'En revisión', problema: 'Con problema', reembolsado: 'Reembolsada',
   };
   const CLAVE_TASA = 'levelup_admin_tasa';
-  const MAX_PEDIDOS = 100;
   let cliente = null;
   let pedidos = [];
   let canal = null;
@@ -48,6 +47,53 @@
     const dia = Math.floor((ahora - DESFASE) / DIA) * DIA;
     const lunes = dia - ((new Date(dia).getUTCDay() + 6) % 7) * DIA;
     return { dia: new Date(dia + DESFASE), semana: new Date(lunes + DESFASE), semanaPasada: new Date(lunes - 7 * DIA + DESFASE) };
+  }
+
+  // Hora corta para las filas: hoy solo la hora; otro día, también la fecha
+  function horaCorta(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const hoy = d >= iniciosVE().dia;
+    return d.toLocaleString('es-VE', hoy
+      ? { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit', hour12: true }
+      : { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+
+  // Fila compacta (pedidos y pagos): una línea con hora, qué es, monto y estado; al tocarla se abre el
+  // detalle. "abiertas" recuerda las que abrió el administrador para que renovar la lista no las cierre.
+  const abiertas = new Set();
+  function filaCompacta({ clave, hora, titulo, monto, etiqueta, claseEtiqueta, nueva, abrir }) {
+    const li = el('li', 'fila' + (nueva ? ' fila--nueva' : ''));
+    const det = el('details');
+    const resumen = el('summary', 'fila-resumen');
+    resumen.append(el('span', 'fila-hora', hora), el('span', 'fila-texto', titulo), el('span', 'fila-monto', monto || ''),
+      el('span', 'etiqueta ' + (claseEtiqueta || ''), etiqueta));
+    const cuerpo = el('div', 'fila-detalle');
+    det.append(resumen, cuerpo);
+    if (abrir || (clave && abiertas.has(clave))) det.open = true;
+    resumen.addEventListener('click', () => setTimeout(() => {
+      if (!clave) return;
+      if (det.open) abiertas.add(clave); else abiertas.delete(clave);
+    }, 0));
+    li.append(det);
+    return { li, cuerpo };
+  }
+
+  // Lee TODAS las filas de una consulta, de 1000 en 1000 (Supabase no da más de 1000 por vez)
+  async function leerTodo(armar) {
+    const filas = [];
+    for (let desde = 0; ; desde += 1000) {
+      const { data, error } = await armar().range(desde, desde + 999);
+      if (error) throw error;
+      filas.push(...(data || []));
+      if (!data || data.length < 1000) return filas;
+    }
+  }
+  // Desde cuándo según el periodo elegido (null = todo)
+  function desdePeriodo(periodo) {
+    if (periodo === 'dia') return iniciosVE().dia;
+    if (periodo === '7' || periodo === '30') return new Date(Date.now() - Number(periodo) * 864e5);
+    return null;
   }
 
   function estado(texto, conBoton) {
@@ -182,17 +228,20 @@
     fix_and_retry: 'corrige el dato y vuelve a comprar', do_not_retry: 'no la reintentes: cambia el producto o devuelve el pago',
     retry_later: 'reintenta más tarde', contact_support: 'escribe a soporte de Central One con el reference_code',
   };
-  function tarjetaPedido(p, nuevo) {
-    const li = el('li', 'pedido' + (nuevo ? ' pedido--nuevo' : ''));
-    const cabeza = el('div', 'pedido-cabeza');
-    cabeza.append(el('strong', '', `${JUEGOS[p.juego] || p.juego} · ${p.paquete}`), el('span', 'etiqueta etiqueta--' + p.estado, ESTADOS[p.estado] || p.estado));
-    li.append(
-      cabeza,
-      el('span', '', `${p.cuenta}${p.precio ? ` · ${bs(p.precio)} Bs` : ''}${p.referencia ? ` · ref. …${p.referencia}` : ''}`),
-      el('span', '', `${fecha(p.creado)}${p.usuario ? ' · con cuenta' : ''} · ${p.id_pedido}`),
+  function tarjetaPedido(p, nuevo, abrir) {
+    const { li, cuerpo } = filaCompacta({
+      clave: 'pedido:' + p.id_pedido, hora: horaCorta(p.creado), titulo: `${JUEGOS[p.juego] || p.juego} · ${p.paquete}`,
+      monto: p.precio ? `${bs(p.precio)} Bs` : '', etiqueta: ESTADOS[p.estado] || p.estado, claseEtiqueta: 'etiqueta--' + p.estado,
+      nueva: nuevo, abrir,
+    });
+    cuerpo.append(
+      el('span', '', `Cuenta: ${p.cuenta}`),
+      el('span', '', `${p.precio ? `${bs(p.precio)} Bs` : 'Sin precio'}${p.referencia ? ` · ref. …${p.referencia}` : ''}`),
+      el('span', '', `${fecha(p.creado)}${p.usuario ? ' · con cuenta' : ' · sin cuenta'}`),
+      el('span', '', `Pedido ${p.id_pedido}`),
     );
     if (p.motivo_fallo) {
-      li.append(el('span', 'motivo-fallo', `Central One: ${MOTIVO_ADMIN[p.motivo_fallo] || p.motivo_fallo}${ACCION_ADMIN[p.motivo_accion] ? ` → ${ACCION_ADMIN[p.motivo_accion]}` : ''}`));
+      cuerpo.append(el('span', 'motivo-fallo', `Central One: ${MOTIVO_ADMIN[p.motivo_fallo] || p.motivo_fallo}${ACCION_ADMIN[p.motivo_accion] ? ` → ${ACCION_ADMIN[p.motivo_accion]}` : ''}`));
     }
     return li;
   }
@@ -204,18 +253,35 @@
     lista.replaceChildren();
     const visibles = pedidos.filter((p) => (!filtro || p.estado === filtro)
       && (!texto || [p.cuenta, p.paquete, p.referencia, p.id_pedido, JUEGOS[p.juego]].join(' ').toLowerCase().includes(texto)));
+    $('cuentaPedidos').textContent = `${visibles.length} ${visibles.length === 1 ? 'pedido' : 'pedidos'}`;
     if (!visibles.length) { lista.append(el('li', 'vacio', 'No hay pedidos con ese filtro.')); return; }
-    visibles.forEach((p) => lista.append(tarjetaPedido(p, p.id_pedido === nuevoId)));
+    // Buscando con pocos resultados: se abren solos
+    const abrir = !!texto && visibles.length <= 3;
+    const trozo = document.createDocumentFragment();
+    visibles.forEach((p) => trozo.append(tarjetaPedido(p, p.id_pedido === nuevoId, abrir)));
+    lista.append(trozo);
   }
 
   async function cargarPedidos() {
-    const { data, error } = await cliente.from('recargas')
-      .select('id_pedido,juego,cuenta,paquete,precio,referencia,estado,creado,usuario,motivo_fallo,motivo_accion')
-      .order('creado', { ascending: false }).limit(MAX_PEDIDOS);
-    if (error) { console.error(error); $('listaPedidos').replaceChildren(el('li', 'vacio', 'No se pudieron cargar los pedidos.')); return; }
-    pedidos = data || [];
+    $('cuentaPedidos').textContent = 'Cargando…';
+    const desde = desdePeriodo($('periodoPedidos').value);
+    try {
+      pedidos = await leerTodo(() => {
+        let q = cliente.from('recargas')
+          .select('id_pedido,juego,cuenta,paquete,precio,referencia,estado,creado,usuario,motivo_fallo,motivo_accion')
+          .order('creado', { ascending: false });
+        if (desde) q = q.gte('creado', desde.toISOString());
+        return q;
+      });
+    } catch (error) {
+      console.error(error);
+      $('cuentaPedidos').textContent = '';
+      $('listaPedidos').replaceChildren(el('li', 'vacio', 'No se pudieron cargar los pedidos.'));
+      return;
+    }
     pintarPedidos();
   }
+  $('periodoPedidos').addEventListener('change', cargarPedidos);
   $('filtroEstado').addEventListener('change', () => pintarPedidos());
   $('buscar').addEventListener('input', () => pintarPedidos());
 
@@ -228,7 +294,6 @@
         if (!n || !n.id_pedido) return;
         const i = pedidos.findIndex((p) => p.id_pedido === n.id_pedido);
         if (i >= 0) pedidos[i] = Object.assign({}, pedidos[i], n); else pedidos.unshift(n);
-        pedidos = pedidos.slice(0, MAX_PEDIDOS);
         pintarPedidos(n.id_pedido);
         cargarResumen();
       })
@@ -1304,12 +1369,20 @@
   let pedidosDePagos = {};   // id_pedido -> { juego, paquete, cuenta, estado }
   const COLUMNAS_PAGO = 'referencia,monto,monto_texto,remitente,origen,recibido,estado,id_pedido,juego,tomado,usado,nota';
   async function cargarPagos() {
-    const periodo = $('periodoPagos').value;
-    let q = cliente.from('pagos').select(COLUMNAS_PAGO).order('recibido', { ascending: false }).limit(500);
-    if (periodo !== 'todos') q = q.gte('recibido', (periodo === 'dia' ? iniciosVE().dia : new Date(Date.now() - 7 * 864e5)).toISOString());
-    const { data, error } = await q;
-    if (error) { console.error(error); $('listaPagos').replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/pagos.sql?')); return; }
-    pagos = data || [];
+    const desde = desdePeriodo($('periodoPagos').value);
+    let data;
+    try {
+      data = await leerTodo(() => {
+        let q = cliente.from('pagos').select(COLUMNAS_PAGO).order('recibido', { ascending: false });
+        if (desde) q = q.gte('recibido', desde.toISOString());
+        return q;
+      });
+    } catch (error) {
+      console.error(error);
+      $('listaPagos').replaceChildren(el('li', 'vacio', 'No se pudieron cargar los pagos.'));
+      return;
+    }
+    pagos = data;
     await cargarPedidosDePagos(pagos);
     $('kpiPagos').textContent = pagos.length;
     $('kpiPagosBs').textContent = bs(pagos.reduce((s, p) => s + Number(p.monto || 0), 0));
@@ -1319,10 +1392,11 @@
   }
   // Juego, paquete y cuenta del pedido que usó cada pago
   async function cargarPedidosDePagos(lista) {
-    const ids = [...new Set(lista.map((p) => p.id_pedido).filter((id) => id && !pedidosDePagos[id]))].slice(0, 200);
-    if (!ids.length) return;
-    const { data } = await cliente.from('recargas').select('id_pedido,juego,paquete,cuenta,estado').in('id_pedido', ids);
-    (data || []).forEach((r) => { pedidosDePagos[r.id_pedido] = r; });
+    const ids = [...new Set(lista.map((p) => p.id_pedido).filter((id) => id && !pedidosDePagos[id]))];
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data } = await cliente.from('recargas').select('id_pedido,juego,paquete,cuenta,estado').in('id_pedido', ids.slice(i, i + 200));
+      (data || []).forEach((r) => { pedidosDePagos[r.id_pedido] = r; });
+    }
   }
   // Buscar en TODOS los pagos guardados (no solo el periodo): por referencia o sus últimos 5
   let buscando = 0;
@@ -1355,29 +1429,33 @@
     lista.replaceChildren();
     const visibles = pagos.filter((p) => !texto || `${p.referencia} ${p.monto} ${p.monto_texto || ''} ${p.remitente || ''}`.toLowerCase().includes(texto));
     if (!visibles.length) { lista.append(el('li', 'vacio', pagos.length ? 'Ningún pago con esa búsqueda.' : 'Todavía no llega ningún pago a Supabase en este periodo.')); return; }
+    // Buscando con pocos resultados: se abren solos
+    const abrir = !!texto && visibles.length <= 3;
+    const trozo = document.createDocumentFragment();
     visibles.forEach((p) => {
       if (p.borrado) {
-        const li = el('li', 'pedido');
-        const cabeza = el('div', 'pedido-cabeza');
-        cabeza.append(el('strong', '', `ref. ${p.referencia}`), el('span', 'etiqueta etiqueta--problema', 'Usado (ya borrado)'));
-        li.append(cabeza, el('span', '', `Se usó el ${fecha(p.usado)}. La limpieza diaria lo borró: nadie puede volver a usarlo ni agregarlo a mano.`));
-        lista.append(li);
+        const { li, cuerpo } = filaCompacta({ clave: 'pago:' + p.referencia, hora: horaCorta(p.usado), titulo: `ref. …${p.referencia.slice(-5)}`,
+          etiqueta: 'Usado (borrado)', claseEtiqueta: 'etiqueta--problema', abrir });
+        cuerpo.append(el('span', '', `Referencia ${p.referencia}`),
+          el('span', '', `Se usó el ${fecha(p.usado)}. La limpieza diaria lo borró: nadie puede volver a usarlo ni agregarlo a mano.`));
+        trozo.append(li);
         return;
       }
       const [estado, clase] = ESTADO_PAGO[p.estado] || [p.estado, ''];
-      const li = el('li', 'pedido');
-      const cabeza = el('div', 'pedido-cabeza');
-      cabeza.append(el('strong', '', `${bs(p.monto)} Bs · ref. ${p.referencia}`), el('span', 'etiqueta ' + clase, estado));
-      li.append(cabeza, el('span', '', `Llegó ${fecha(p.recibido)} · ${ORIGEN_PAGO[p.origen] || p.origen}${p.remitente ? ` · ${p.remitente}` : ''}`));
-      if (p.tomado) li.append(el('span', '', `Apartado ${fecha(p.tomado)}${p.usado ? ` · usado ${fecha(p.usado)}` : ''}${p.juego ? ` · ${JUEGOS[p.juego] || p.juego}` : ''}`));
-      else if (p.usado) li.append(el('span', '', `Usado ${fecha(p.usado)}`));
+      const { li, cuerpo } = filaCompacta({ clave: 'pago:' + p.referencia, hora: horaCorta(p.recibido),
+        titulo: `ref. …${p.referencia.slice(-5)}${p.remitente ? ` · ${p.remitente}` : ''}`, monto: `${bs(p.monto)} Bs`,
+        etiqueta: estado, claseEtiqueta: clase, abrir });
+      cuerpo.append(el('span', '', `Referencia ${p.referencia} · ${bs(p.monto)} Bs`),
+        el('span', '', `Llegó ${fecha(p.recibido)} · ${ORIGEN_PAGO[p.origen] || p.origen}${p.remitente ? ` · ${p.remitente}` : ''}`));
+      if (p.tomado) cuerpo.append(el('span', '', `Apartado ${fecha(p.tomado)}${p.usado ? ` · usado ${fecha(p.usado)}` : ''}${p.juego ? ` · ${JUEGOS[p.juego] || p.juego}` : ''}`));
+      else if (p.usado) cuerpo.append(el('span', '', `Usado ${fecha(p.usado)}`));
       if (p.id_pedido) {
         const ped = pedidosDePagos[p.id_pedido];
-        li.append(el('span', 'precio-detalle', ped
+        cuerpo.append(el('span', 'precio-detalle', ped
           ? `Pedido: ${JUEGOS[ped.juego] || ped.juego} · ${ped.paquete} · ${ped.cuenta} · ${ESTADOS[ped.estado] || ped.estado}`
           : `Pedido ${p.id_pedido}`));
       }
-      if (p.nota) li.append(el('span', 'precio-detalle', `📝 ${p.nota}`));
+      if (p.nota) cuerpo.append(el('span', 'precio-detalle', `📝 ${p.nota}`));
       const acciones = el('div', 'acciones-cuenta');
       if (p.estado !== 'usado') {
         acciones.append(boton('✔️ Marcar usado', 'btn-ver', (b) => cambiarEstadoPago(p, 'usado', b)));
@@ -1385,9 +1463,10 @@
       if (p.estado === 'en_proceso' || p.estado === 'por_completar') {
         acciones.append(boton('↩️ Liberar', 'btn-ver', (b) => cambiarEstadoPago(p, 'verificado', b)));
       }
-      if (acciones.childNodes.length) li.append(acciones);
-      lista.append(li);
+      if (acciones.childNodes.length) cuerpo.append(acciones);
+      trozo.append(li);
     });
+    lista.append(trozo);
   }
   async function cambiarEstadoPago(p, estado, b) {
     const texto = estado === 'usado'
