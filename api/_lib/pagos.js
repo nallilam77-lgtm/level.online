@@ -41,10 +41,20 @@ export async function pagoRecibido(req, res) {
     console.error('🚨 pago_recibido: falta MACRODROID_CLAVE_VERCEL o Supabase en Vercel');
     return res.status(503).json({ status: 'error', message: 'No configurado' });
   }
-  const b = req.body && typeof req.body === 'object' ? req.body : {};
+  // Los mensajes de error dicen QUÉ llegó: MacroDroid los muestra en su aviso (respuesta de la Solicitud HTTP)
+  let b;
+  try {
+    b = req.body && typeof req.body === 'object' ? req.body : null;
+  } catch (error) {
+    b = null;
+  }
+  if (!b) {
+    console.error('⚠️ pago_recibido: el cuerpo no es JSON válido');
+    return res.status(400).json({ status: 'error', message: 'El cuerpo no es JSON valido: revisa las comillas y llaves del cuerpo, o que el nombre o el texto no traiga comillas' });
+  }
   if (!mismaClave(String(b.clave || '').trim(), claveEsperada)) {
     console.error('⚠️ pago_recibido: clave incorrecta');
-    return res.status(401).json({ status: 'error', message: 'No autorizado' });
+    return res.status(401).json({ status: 'error', message: 'Clave incorrecta: copia otra vez la clave en el cuerpo' });
   }
 
   const referencia = String(b.referencia ?? '').replace(/\D/g, '');
@@ -52,10 +62,11 @@ export async function pagoRecibido(req, res) {
   const monto = limpiarMontoVES(montoTexto);
   if (!/^\d{4,30}$/.test(referencia)) {
     console.error(`⚠️ pago_recibido: referencia inválida ("${String(b.referencia ?? '').slice(0, 40)}")`);
-    return res.status(400).json({ status: 'error', message: 'Referencia vacía o inválida' });
+    return res.status(400).json({ status: 'error', message: `Referencia vacia o invalida: llego "${String(b.referencia ?? '').slice(0, 40)}"` });
   }
-  if (!(monto >= 0) || !Number.isFinite(monto)) {
-    return res.status(400).json({ status: 'error', message: 'Monto inválido' });
+  if (!(monto > 0) || !Number.isFinite(monto)) {
+    console.error(`⚠️ pago_recibido: monto inválido ("${montoTexto}") ref …${referencia.slice(-5)}`);
+    return res.status(400).json({ status: 'error', message: `Monto invalido: llego "${montoTexto}"` });
   }
   const origen = ORIGENES.has(String(b.origen)) ? String(b.origen) : 'otro';
 
