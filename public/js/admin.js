@@ -352,6 +352,20 @@
   }
 
   const CORREO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  // Bancos de Pago Móvil (igual que api/creadores.js)
+  const BANCOS = {
+    '0102': 'Venezuela', '0104': 'Venezolano de Crédito', '0105': 'Mercantil', '0108': 'Provincial', '0114': 'Bancaribe',
+    '0115': 'Exterior', '0128': 'Caroní', '0134': 'Banesco', '0137': 'Sofitasa', '0138': 'Plaza', '0146': 'Bangente',
+    '0151': 'BFC', '0156': '100% Banco', '0157': 'DelSur', '0163': 'Tesoro', '0166': 'Agrícola', '0168': 'Bancrecer',
+    '0169': 'R4', '0171': 'Activo', '0172': 'Bancamiga', '0173': 'BID', '0174': 'Banplus', '0175': 'Digital de los Trabajadores',
+    '0177': 'Banfanb', '0178': 'N58', '0191': 'BNC',
+  };
+  const telCorto = (t) => String(t || '').replace(/^\+58(\d{3})(\d{7})$/, '0$1-$2');
+  // "💵 Bolívares · Pago Móvil 0134 Banesco · V-12345678 · 0414-1234567" (para ver y para pagar)
+  function textoCobro(f) {
+    const pm = `Pago Móvil ${f.pm_banco} ${BANCOS[f.pm_banco] || ''} · ${String(f.pm_cedula).replace(/^([VE])/, '$1-')} · ${telCorto(f.pm_telefono)}`;
+    return f.preferencia === 'diamantes' ? `💎 Diamantes · ID Free Fire ${f.id_jugador} (o ${pm})` : `💵 Bolívares · ${pm}`;
+  }
   function mensajeCreador(codigo, pin, correo) {
     return `¡Hola! Tu código de Level Up es *${codigo}*. Quien recargue con él paga 1,5 % menos y tú ganas el 1,5 % de cada recarga.`
       + (correo ? ` Mira tus ganancias en ${location.origin}/creadores.html tocando "Entrar con Google" con tu correo ${correo}.`
@@ -412,11 +426,16 @@
       if (Number(c.pagado_usd) > 0) plata.append(el('span', '', `Pagado ${usd(c.pagado_usd)}${c.ultimo_pago ? ' (último ' + corta(c.ultimo_pago) + ')' : ''}`));
       li.append(plata);
       if (c.correo) li.append(el('span', 'codigo-acceso', `Entra a su panel con Google: ${c.correo}${c.correo_entro ? ' ✓ ya entró' : ' (todavía no ha entrado)'}`));
+      if (c.perfil) {
+        const pago = el('div', 'codigo-pago');
+        pago.append(el('strong', '', textoCobro(c.perfil)), el('span', '', `${c.perfil.edad} años · WhatsApp ${telCorto(c.perfil.telefono)}`));
+        li.append(pago);
+      } else if (c.correo) li.append(el('span', 'sin-telefono', 'Todavía no llenó sus datos de pago (se le piden al entrar).'));
       else li.append(el('span', 'sin-telefono', 'No puede ver su panel: pídele su Gmail y ponlo en Editar.'));
     }
 
     const acciones = el('div', 'acciones-cuenta');
-    const tel = telefonoDe(c.creador);
+    const tel = (c.perfil && c.perfil.telefono) || telefonoDe(c.creador);
     if (tel) acciones.append(enlaceWhatsapp(tel, mensajeCreador(c.codigo, '', c.correo)));
     if (debe > 0) acciones.append(boton(`Ya le pagué ${usd(debe)}`, 'btn-ver btn-pagar', (b) => pagarCodigo(c, b)));
     if (Number(c.usos) > 0) acciones.append(boton('Ver ventas', 'btn-ver', (b) => verVentasCodigo(c.codigo, li, b)));
@@ -447,7 +466,8 @@
   }
 
   async function pagarCodigo(c, b) {
-    if (!confirm(`¿Ya le pagaste ${usd(c.pendiente_usd)} a ${c.creador} (${c.codigo})?\n\nLo que le debes vuelve a $0.00 y el pago queda anotado. Lo que ya ganó y sus ventas no cambian.`)) return;
+    const como = c.perfil ? `\n\nCómo cobra: ${textoCobro(c.perfil)}` : '';
+    if (!confirm(`¿Ya le pagaste ${usd(c.pendiente_usd)} a ${c.creador} (${c.codigo})?${como}\n\nLo que le debes vuelve a $0.00 y el pago queda anotado. Lo que ya ganó y sus ventas no cambian.`)) return;
     b.disabled = true;
     const { data, error } = await cliente.rpc('admin_codigo_pagar', { p_codigo: c.codigo });
     if (error) { alert(textoError(error, 'No se pudo anotar el pago. Intenta de nuevo.')); b.disabled = false; return; }

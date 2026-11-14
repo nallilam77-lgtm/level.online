@@ -94,6 +94,70 @@ alter table public.codigos add column if not exists correo text
   check (correo is null or (correo = lower(correo) and correo ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'));
 create index if not exists codigos_correo on public.codigos (correo) where correo is not null;
 
+-- Datos del creador para pagarle (los llena él al entrar a creadores.html con Google; desde 2026-11-14).
+-- Uno por correo: si tiene varios códigos, los mismos datos sirven para todos. Solo lo leen Vercel
+-- (creador_por_usuario) y el administrador (admin_codigos). Nadie desde el navegador.
+create table if not exists public.creadores_perfil (
+  correo       text primary key check (correo = lower(correo)),
+  usuario      uuid references auth.users (id) on delete set null,
+  preferencia  text not null check (preferencia in ('bolivares', 'diamantes')),  -- cómo quiere cobrar
+  id_jugador   text check (id_jugador is null or id_jugador ~ '^\d{5,15}$'),      -- ID de Free Fire (si cobra en diamantes)
+  edad         smallint not null check (edad between 8 and 99),
+  telefono     text not null check (telefono ~ '^\+584(12|14|16|22|24|26)\d{7}$'), -- WhatsApp de contacto
+  pm_cedula    text not null check (pm_cedula ~ '^[VE]\d{6,9}$'),                 -- Pago Móvil: cédula
+  pm_telefono  text not null check (pm_telefono ~ '^\+584(12|14|16|22|24|26)\d{7}$'), -- Pago Móvil: teléfono
+  pm_banco     text not null check (pm_banco ~ '^\d{4}$'),                         -- Pago Móvil: código del banco
+  actualizado  timestamptz not null default now(),
+  constraint creadores_perfil_diamantes check (preferencia <> 'diamantes' or id_jugador is not null)
+);
+alter table public.creadores_perfil enable row level security;
+revoke all on public.creadores_perfil from anon, authenticated;
+
+-- Guarda los datos del creador que entró con Google (api/creadores.js; el usuario sale del token).
+-- Solo puede quien tenga su correo en un código de creador. Devuelve los datos guardados.
+create or replace function public.creador_guardar_perfil(p_usuario uuid, p_datos jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_correo text;
+  v_pref text := p_datos->>'preferencia';
+  v_id text := nullif(regexp_replace(coalesce(p_datos->>'id_jugador', ''), '\D', '', 'g'), '');
+  v_edad int;
+  v_fila creadores_perfil%rowtype;
+begin
+  select lower(email) into v_correo from auth.users where id = p_usuario and email_confirmed_at is not null;
+  if v_correo is null or not exists (select 1 from codigos where correo = v_correo and creador is not null) then
+    raise exception 'Tu cuenta no tiene código de creador.' using errcode = '42501';
+  end if;
+  begin v_edad := (p_datos->>'edad')::int; exception when others then v_edad := null; end;
+  if v_pref is null or v_pref not in ('bolivares', 'diamantes') then
+    raise exception 'Elige cómo quieres cobrar: bolívares o diamantes.' using errcode = '22023';
+  end if;
+  if v_pref = 'diamantes' and (v_id is null or v_id !~ '^\d{5,15}$') then
+    raise exception 'Para cobrar en diamantes escribe tu ID de Free Fire.' using errcode = '22023';
+  end if;
+  if v_edad is null or v_edad < 8 or v_edad > 99 then
+    raise exception 'Escribe tu edad.' using errcode = '22023';
+  end if;
+  insert into creadores_perfil (correo, usuario, preferencia, id_jugador, edad, telefono, pm_cedula, pm_telefono, pm_banco, actualizado)
+  values (v_correo, p_usuario, v_pref, v_id, v_edad, p_datos->>'telefono', upper(p_datos->>'pm_cedula'),
+          p_datos->>'pm_telefono', p_datos->>'pm_banco', now())
+  on conflict (correo) do update set usuario = excluded.usuario, preferencia = excluded.preferencia,
+    id_jugador = excluded.id_jugador, edad = excluded.edad, telefono = excluded.telefono, pm_cedula = excluded.pm_cedula,
+    pm_telefono = excluded.pm_telefono, pm_banco = excluded.pm_banco, actualizado = now()
+  returning * into v_fila;
+  return to_jsonb(v_fila) - 'usuario' - 'correo';
+exception
+  when check_violation or not_null_violation or invalid_text_representation then
+    raise exception 'Revisa tus datos: teléfono, cédula o banco no son válidos.' using errcode = '22023';
+end;
+$$;
+revoke execute on function public.creador_guardar_perfil(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.creador_guardar_perfil(uuid, jsonb) to service_role;
+
 -- Pagos a creadores (lo que hace "Ya le pagué" en el panel)
 create table if not exists public.codigos_pagos (
   id          bigint generated always as identity primary key,
@@ -265,10 +329,12 @@ declare
 begin
   select lower(email) into v_correo from auth.users where id = p_usuario and email_confirmed_at is not null;
   if v_correo is null then return jsonb_build_object('correo', null, 'codigos', '[]'::jsonb); end if;
-  return jsonb_build_object('correo', v_correo, 'codigos', (
-    select coalesce(jsonb_agg(codigos_panel_de(k.codigo) order by k.activo desc, k.usos desc), '[]'::jsonb)
-      from codigos k where k.correo = v_correo and k.creador is not null
-  ));
+  return jsonb_build_object('correo', v_correo,
+    'perfil', (select to_jsonb(f) - 'usuario' - 'correo' from creadores_perfil f where f.correo = v_correo),
+    'codigos', (
+      select coalesce(jsonb_agg(codigos_panel_de(k.codigo) order by k.activo desc, k.usos desc), '[]'::jsonb)
+        from codigos k where k.correo = v_correo and k.creador is not null
+    ));
 end;
 $$;
 revoke execute on function public.creador_por_usuario(uuid) from public, anon, authenticated;
@@ -303,7 +369,8 @@ begin
                k.usos, k.ventas_bs, round(k.comision_usd, 2) as comision_usd, round(k.pendiente_usd, 2) as pendiente_usd,
                k.por_convertir_bs, k.creado,
                (select round(coalesce(sum(p.monto_usd), 0), 2) from codigos_pagos p where p.codigo = k.codigo) as pagado_usd,
-               (select max(p.fecha) from codigos_pagos p where p.codigo = k.codigo) as ultimo_pago
+               (select max(p.fecha) from codigos_pagos p where p.codigo = k.codigo) as ultimo_pago,
+               (select to_jsonb(f) - 'usuario' - 'correo' from creadores_perfil f where f.correo = k.correo) as perfil
           from codigos k
       ) c
     )

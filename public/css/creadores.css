@@ -124,6 +124,62 @@
 }
 .btn-pedir-acceso:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
+/* --- Datos de pago del creador (desde 2026-11-14) --- */
+.datos-creador { margin-top: 20px; display: grid; gap: 16px; }
+.datos-creador[hidden], .datos-resumen[hidden], .form-datos[hidden], #campoIdJugador[hidden], #resIdFila[hidden],
+.btn-cancelar-datos[hidden] { display: none; }
+.datos-resumen, .form-datos {
+  display: grid; gap: 16px; padding: 20px; border-radius: 16px;
+  background: linear-gradient(160deg, rgba(34, 211, 238, 0.08), rgba(57, 255, 20, 0.04)), rgba(11, 17, 32, 0.75);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+}
+.datos-resumen__cabeza { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.datos-resumen h3, .form-datos h3 { font-family: 'Montserrat', sans-serif; font-size: 15px; font-weight: 900; color: var(--text-main); }
+.btn-editar-datos, .btn-cancelar-datos {
+  min-height: 44px; padding: 0 18px; border-radius: 999px; cursor: pointer; background: transparent; color: var(--primary);
+  border: 1px solid rgba(34, 211, 238, 0.4); font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 12px;
+}
+.btn-cancelar-datos { width: 100%; border-radius: 12px; }
+.datos-resumen__cobro {
+  display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px;
+  background: rgba(57, 255, 20, 0.08); border: 1px solid rgba(57, 255, 20, 0.3); color: var(--text-muted); font-size: 14px;
+}
+.datos-resumen__cobro > span:first-child { font-size: 24px; }
+.datos-resumen__cobro strong { color: var(--accent-neon); font-family: 'Montserrat', sans-serif; }
+.datos-lista { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.datos-lista > div { padding: 10px 12px; border-radius: 10px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-glass); }
+.datos-lista dt { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.datos-lista dd { font-size: 14px; color: var(--text-main); font-weight: 600; word-break: break-word; }
+
+.form-datos__intro { display: grid; gap: 6px; }
+.form-datos__intro p { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.form-datos__intro strong { color: var(--accent-neon); }
+.opciones-cobro { border: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.opciones-cobro legend { font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; }
+.opcion-cobro {
+  position: relative; display: grid; justify-items: center; gap: 6px; padding: 16px 10px; border-radius: 14px; cursor: pointer;
+  text-align: center; background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-glass);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.opcion-cobro input { position: absolute; opacity: 0; pointer-events: none; }
+.opcion-cobro__icono { font-size: 28px; }
+.opcion-cobro__texto { display: grid; gap: 2px; }
+.opcion-cobro__texto strong { font-family: 'Montserrat', sans-serif; font-size: 14px; color: var(--text-main); }
+.opcion-cobro__texto small { font-size: 11px; color: var(--text-muted); }
+.opcion-cobro:has(input:checked) { border-color: var(--accent-neon); box-shadow: 0 0 0 3px rgba(57, 255, 20, 0.15), var(--shadow-glow); transform: translateY(-2px); }
+.opcion-cobro:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.form-datos__fila { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 520px) { .form-datos__fila { grid-template-columns: 1fr 1fr; } }
+.bloque-pm { display: grid; gap: 12px; padding: 16px; border-radius: 14px; border: 1px dashed rgba(34, 211, 238, 0.35); }
+.bloque-pm h4 { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--primary); text-transform: uppercase; }
+.form-datos select, .cedula select {
+  width: 100%; min-height: 48px; padding: 0 12px; border-radius: 12px; font-size: 15px; font-family: 'Poppins', sans-serif;
+  background: rgba(11, 17, 32, 0.75); border: 1px solid var(--border-glass); color: var(--text-main);
+}
+.form-datos select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15); }
+.cedula { display: grid; grid-template-columns: 72px 1fr; gap: 8px; }
+.form-datos .btn-consultar-panel { margin-top: 4px; }
+
 /* --- Resultados --- */
 .panel-resultado { display: none; margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--border-glass); }
 .panel-resultado.visible { display: grid; gap: 24px; animation: fadeUp 0.5s ease forwards; }
