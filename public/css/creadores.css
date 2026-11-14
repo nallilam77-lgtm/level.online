@@ -68,6 +68,34 @@
 .separador { display: flex; align-items: center; gap: 12px; margin: 20px 0 12px; color: var(--text-muted); font-size: 12px; }
 .separador::before, .separador::after { content: ''; flex: 1; height: 1px; background: var(--border-glass); }
 
+/* --- Aviso del cambio a "Entrar con Google" --- */
+.aviso-cambio {
+  position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px;
+  background: rgba(11, 17, 32, 0.8); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.aviso-cambio[hidden] { display: none; }
+.aviso-cambio__caja {
+  width: 100%; max-width: 440px; max-height: calc(100vh - 32px); overflow-y: auto; display: grid; gap: 14px; padding: 28px 22px;
+  border-radius: var(--radius-card); background: var(--bg-base); border: 1px solid rgba(34, 211, 238, 0.35);
+  box-shadow: var(--shadow-lg), var(--shadow-glow-hover); animation: fadeUp 0.35s ease forwards;
+}
+.aviso-cambio__caja h2 { font-family: 'Montserrat', sans-serif; font-size: 17px; font-weight: 900; color: var(--primary); text-transform: uppercase; }
+.aviso-cambio__caja > p { font-size: 14px; color: var(--text-main); line-height: 1.6; }
+.aviso-cambio__caja ul { list-style: none; display: grid; gap: 10px; }
+.aviso-cambio__caja li {
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 12px;
+  background: rgba(11, 17, 32, 0.75); border: 1px solid var(--border-glass);
+}
+.aviso-cambio__caja li p { font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+.aviso-cambio__caja li strong { color: var(--text-main); }
+.aviso-cambio__whatsapp, .aviso-cambio__ok {
+  display: flex; align-items: center; justify-content: center; min-height: 48px; border-radius: 12px; cursor: pointer;
+  font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; text-decoration: none;
+}
+.aviso-cambio__whatsapp { background: var(--cta-gradient); color: var(--on-cta); border: none; box-shadow: var(--shadow-glow); }
+.aviso-cambio__ok { background: transparent; color: var(--primary); border: 1px solid rgba(34, 211, 238, 0.4); }
+.aviso-cambio__whatsapp:focus-visible, .aviso-cambio__ok:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
 /* --- Resultados --- */
 .panel-resultado { display: none; margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--border-glass); }
 .panel-resultado.visible { display: grid; gap: 24px; animation: fadeUp 0.5s ease forwards; }

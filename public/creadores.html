@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/paginas-legales.css">
-  <link rel="stylesheet" href="css/creadores.css?v=2">
+  <link rel="stylesheet" href="css/creadores.css?v=3">
   <!-- "Entrar con Google" del panel de creadores (desde 2026-11-13): sesión de la tienda -->
   <script src="/js/sesion.js?v=5" defer></script>
   <link rel="stylesheet" href="css/pie-legal.css">
@@ -247,6 +247,22 @@
     </svg>
   </a>
 
+  <!-- AVISO DEL CAMBIO A "ENTRAR CON GOOGLE" (desde 2026-11-13): sale al entrar desde INFLUENCERS o
+       cualquier enlace, hasta que el creador toca "Entendido" o ya ve su panel con Google -->
+  <div class="aviso-cambio" id="avisoCambio" hidden>
+    <div class="aviso-cambio__caja" role="dialog" aria-modal="true" aria-labelledby="avisoCambioTitulo">
+      <h2 id="avisoCambioTitulo">📢 Cambio en el panel de creadores</h2>
+      <p>Ahora entras a tu panel con tu <strong>cuenta de Google</strong>, sin PIN.</p>
+      <ul>
+        <li><span aria-hidden="true">✅</span><p><strong>¿Ya tenías código?</strong> Escríbenos por WhatsApp con tu código y tu correo de Gmail. Nosotros creamos tu acceso: las cuentas de creador solo las hace Level Up.</p></li>
+        <li><span aria-hidden="true">💰</span><p><strong>No pierdes nada.</strong> Tus ventas, tu ganancia y lo que te debemos siguen igual.</p></li>
+        <li><span aria-hidden="true">🔑</span><p><strong>Mientras tanto</strong> puedes seguir entrando con tu código y tu PIN.</p></li>
+      </ul>
+      <a class="aviso-cambio__whatsapp" id="avisoCambioWhatsapp" target="_blank" rel="noopener noreferrer">💬 Pedir mi acceso por WhatsApp</a>
+      <button type="button" class="aviso-cambio__ok" id="avisoCambioOk">Entendido</button>
+    </div>
+  </div>
+
   <script>
     const body = document.body;
 
@@ -395,6 +411,7 @@
           mostrarMensaje(`La cuenta ${datos.correo || ''} no tiene código de creador. Si eres creador, mándanos este correo por WhatsApp y te damos acceso.`);
           return;
         }
+        cerrarAviso(true);
         // Con sesión de creador, el código + PIN ya no hace falta
         $('formPanel').hidden = true;
         $('separadorPin').hidden = true;
@@ -421,6 +438,30 @@
       try { await Sesion.salir(); } catch (e) { /* igual se recarga */ }
       location.reload();
     });
+    // Aviso del cambio: hasta que lo cierren o ya vean su panel con Google
+    const CLAVE_AVISO = 'levelup_aviso_creadores_google';
+    function cerrarAviso(recordar) {
+      $('avisoCambio').hidden = true;
+      body.classList.remove('no-scroll');
+      document.removeEventListener('keydown', escAviso);
+      if (recordar) { try { localStorage.setItem(CLAVE_AVISO, '1'); } catch (e) { /* sin almacenamiento */ } }
+    }
+    function escAviso(e) { if (e.key === 'Escape') cerrarAviso(true); }
+    function mostrarAviso() {
+      let visto = false;
+      try { visto = localStorage.getItem(CLAVE_AVISO) === '1'; } catch (e) { /* sin almacenamiento */ }
+      if (visto) return;
+      $('avisoCambioWhatsapp').href = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent('Hola, soy creador de Level Up. Mi código es: ____ y mi correo de Gmail es: ____. Quiero mi acceso al panel con Google.')}`;
+      $('avisoCambio').hidden = false;
+      body.classList.add('no-scroll');
+      document.addEventListener('keydown', escAviso);
+      $('avisoCambioOk').focus();
+    }
+    $('avisoCambioOk').addEventListener('click', () => cerrarAviso(true));
+    $('avisoCambio').addEventListener('click', (e) => { if (e.target === $('avisoCambio')) cerrarAviso(true); });
+    // Quien ya entró con Google y tiene panel no necesita el aviso
+    if (!(window.Sesion && Sesion.hay())) mostrarAviso();
+
     // sesion.js carga con defer: ya está listo al llegar DOMContentLoaded
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', panelConGoogle);
     else panelConGoogle();
