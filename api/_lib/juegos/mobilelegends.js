@@ -9,7 +9,7 @@ import { pedirJSON, llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido,
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
-import { conPreciosSupabase } from '../precios.js';
+import { preciosSupabasePrimero } from '../precios.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
@@ -94,7 +94,7 @@ async function precios(req, res) {
   try {
     // GET con la acción en la URL para evitar redirecciones de POST.
     // Lectura sin efectos secundarios (20 s con 1 reintento). Con copia en caché el cliente no espera.
-    const { datos } = await conCache(CLAVE_CACHE_PRECIOS, async () => conPreciosSupabase('mobilelegends', await leerPrecios(URL_GOOGLE_SCRIPT)), { esValido: catalogoValido });
+    const { datos } = await conCache(CLAVE_CACHE_PRECIOS, async () => preciosSupabasePrimero('mobilelegends', () => leerPrecios(URL_GOOGLE_SCRIPT)), { esValido: catalogoValido });
     cabecerasCachePrecios(res);
     return res.status(200).json({ ...datos, catalogo: await conDestacados('mobilelegends', datos.catalogo.map(sinProducto)) });
   } catch (error) {
@@ -155,7 +155,7 @@ async function verificar(req, res) {
 
 // Catálogo para la acción "descuento" (misma caché que la acción precios)
 async function catalogoMobileLegends() {
-  const { datos } = await conCache(CLAVE_CACHE_PRECIOS, async () => conPreciosSupabase('mobilelegends', await leerPrecios(process.env.SCRIPT_MLBB)), { esValido: catalogoValido });
+  const { datos } = await conCache(CLAVE_CACHE_PRECIOS, async () => preciosSupabasePrimero('mobilelegends', () => leerPrecios(process.env.SCRIPT_MLBB)), { esValido: catalogoValido });
   return datos.catalogo.map(sinProducto);
 }
 
@@ -350,7 +350,7 @@ export async function recargar(req, res) {
     let dataPrecios;
     try {
       ({ datos: dataPrecios } = await conCache(CLAVE_CACHE_PRECIOS,
-        async () => conPreciosSupabase('mobilelegends', await llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
+        async () => preciosSupabasePrimero('mobilelegends', () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
         { esValido: catalogoValido, respaldoMs: 0 }));
     } catch (error) {
       console.error(`❌ [${FASES.precios}] ${error.message}`);
@@ -598,7 +598,7 @@ async function completarPago(req, res) {
     let productId = '';
     try {
       const { datos: dataPrecios } = await conCache(CLAVE_CACHE_PRECIOS,
-        async () => conPreciosSupabase('mobilelegends', await llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
+        async () => preciosSupabasePrimero('mobilelegends', () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
         { esValido: catalogoValido });
       const { paquete: paqueteGsheet, repetido } = buscarPaquete(dataPrecios.catalogo, clave);
       productId = repetido ? '' : productoDe(paqueteGsheet);

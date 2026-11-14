@@ -6,7 +6,7 @@ import { pedirJSON, llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido,
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
-import { conPreciosSupabase } from '../precios.js';
+import { preciosSupabasePrimero } from '../precios.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
@@ -81,7 +81,7 @@ async function precios(req, res) {
     // GET con la acción en la URL para evitar redirecciones de POST.
     // Lectura sin efectos secundarios (20 s con 1 reintento). Con copia en caché el cliente no espera.
     const { datos } = await conCache('precios:bs',
-      async () => conPreciosSupabase('bloodstrike', await pedirJSON(`${URL_GOOGLE_SCRIPT}?accion=obtener_precios`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT })),
+      async () => preciosSupabasePrimero('bloodstrike', () => pedirJSON(`${URL_GOOGLE_SCRIPT}?accion=obtener_precios`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT })),
       { esValido: catalogoValido });
     cabecerasCachePrecios(res);
     return res.status(200).json({ ...datos, catalogo: await conDestacados('bloodstrike', datos.catalogo.map(sinProducto)) });
@@ -143,7 +143,7 @@ async function verificar(req, res) {
 // Catálogo de Blood Strike para la acción "descuento" (misma caché que la acción precios)
 async function catalogoBloodStrike() {
   const { datos } = await conCache('precios:bs',
-    async () => conPreciosSupabase('bloodstrike', await pedirJSON(`${process.env.SCRIPT_BLOOD}?accion=obtener_precios`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT })),
+    async () => preciosSupabasePrimero('bloodstrike', () => pedirJSON(`${process.env.SCRIPT_BLOOD}?accion=obtener_precios`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT })),
     { esValido: catalogoValido });
   return datos.catalogo.map(sinProducto);
 }
@@ -333,7 +333,7 @@ export async function recargar(req, res) {
     let dataPrecios;
     try {
       ({ datos: dataPrecios } = await conCache('precios:bs',
-        async () => conPreciosSupabase('bloodstrike', await llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
+        async () => preciosSupabasePrimero('bloodstrike', () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
         { esValido: catalogoValido, respaldoMs: 0 }));
     } catch (error) {
       console.error(`❌ [${FASES.precios}] ${error.message}`);
@@ -586,7 +586,7 @@ async function completarPago(req, res) {
     let productId = '';
     try {
       const { datos: dataPrecios } = await conCache('precios:bs',
-        async () => conPreciosSupabase('bloodstrike', await llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
+        async () => preciosSupabasePrimero('bloodstrike', () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
         { esValido: catalogoValido });
       const { paquete: paqueteGsheet, repetido } = buscarPaquete(dataPrecios.catalogo, numeroOro);
       productId = repetido ? '' : productoDe(paqueteGsheet);
