@@ -453,3 +453,84 @@ $$;
 drop trigger if exists pagos_limpiar_huellas on public.pagos;
 create trigger pagos_limpiar_huellas after delete on public.pagos
   for each statement execute function public.pagos_limpiar_huellas();
+
+-- =====================================================================
+-- ALARMA (2026-11-14): alguien prueba referencias al azar
+-- =====================================================================
+-- Cada búsqueda de un pago que NO existe (los 5 dígitos no son de ningún pago) se anota aquí una hora.
+-- Si en 10 minutos hay 20 o más referencias DISTINTAS que no existen, se prende la alarma en el panel
+-- (configuracion "alarma_referencias"): alguien puede estar adivinando los últimos 5 dígitos para usar el
+-- pago de otro cliente. Un cliente que escribe mal su referencia varias veces cuenta una sola vez.
+-- El panel la apaga con "Ya lo revisé" (valor {}); si siguen probando, se vuelve a prender.
+create table if not exists public.pagos_intentos (
+  id       bigint generated always as identity primary key,
+  creado   timestamptz not null default now(),
+  ultimos5 text not null
+);
+create index if not exists pagos_intentos_creado on public.pagos_intentos (creado);
+alter table public.pagos_intentos enable row level security;
+revoke all on public.pagos_intentos from anon, authenticated;
+
+create or replace function public.pagos_anotar_intento(p_ultimos5 text)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_distintos int;
+begin
+  insert into pagos_intentos (ultimos5) values (left(p_ultimos5, 5));
+  delete from pagos_intentos where creado < now() - interval '1 hour';
+  select count(distinct ultimos5) into v_distintos from pagos_intentos where creado > now() - interval '10 minutes';
+  if v_distintos < 20 then return; end if;
+  insert into configuracion (clave, valor, publico, actualizado)
+  values ('alarma_referencias', jsonb_build_object('desde', now(), 'hasta', now(), 'pico', v_distintos, 'total', v_distintos), false, now())
+  on conflict (clave) do update set
+    valor = case when configuracion.valor ? 'desde'
+      then configuracion.valor || jsonb_build_object('hasta', now(),
+             'pico', greatest(coalesce((configuracion.valor->>'pico')::int, 0), v_distintos),
+             'total', coalesce((configuracion.valor->>'total')::int, 0) + 1)
+      else excluded.valor end,
+    actualizado = now();
+end;
+$$;
+revoke execute on function public.pagos_anotar_intento(text) from public, anon, authenticated;
+
+-- pagos_tomar: igual que antes, pero anota la referencia que no existe
+create or replace function public.pagos_tomar(p_ultimos5 text, p_id_pedido text, p_juego text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v pagos%rowtype;
+begin
+  if p_ultimos5 !~ '^\d{5}$' then return jsonb_build_object('encontrado', false, 'motivo', 'formato'); end if;
+  if p_id_pedido is not null then
+    select * into v from pagos where id_pedido = p_id_pedido and estado = 'en_proceso' and right(referencia, 5) = p_ultimos5 limit 1;
+    if found then return jsonb_build_object('encontrado', true, 'referencia', v.referencia, 'monto', v.monto, 'repetido', true); end if;
+  end if;
+  select * into v from pagos
+   where right(referencia, 5) = p_ultimos5 and estado = 'verificado' and recibido > now() - interval '3 days'
+   order by recibido desc limit 1 for update skip locked;
+  if found then
+    update pagos set estado = 'en_proceso', id_pedido = left(p_id_pedido, 80), juego = left(p_juego, 30), tomado = now()
+     where id = v.id;
+    return jsonb_build_object('encontrado', true, 'referencia', v.referencia, 'monto', v.monto, 'repetido', false);
+  end if;
+  if exists (select 1 from pagos where right(referencia, 5) = p_ultimos5
+              and (estado = 'en_proceso' or (estado = 'verificado' and recibido > now() - interval '3 days'))) then
+    return jsonb_build_object('encontrado', false, 'motivo', 'en_proceso'); end if;
+  if exists (select 1 from pagos where right(referencia, 5) = p_ultimos5 and (estado = 'vencido' or (estado = 'verificado' and recibido <= now() - interval '3 days'))) then
+    return jsonb_build_object('encontrado', false, 'motivo', 'vencido'); end if;
+  if exists (select 1 from pagos where right(referencia, 5) = p_ultimos5 and estado = 'por_completar') then
+    return jsonb_build_object('encontrado', false, 'motivo', 'por_completar'); end if;
+  if exists (select 1 from pagos where right(referencia, 5) = p_ultimos5 and estado = 'usado') then
+    return jsonb_build_object('encontrado', false, 'motivo', 'usado'); end if;
+  perform pagos_anotar_intento(p_ultimos5);
+  return jsonb_build_object('encontrado', false, 'motivo', 'no_existe');
+end;
+$$;
+revoke execute on function public.pagos_tomar(text, text, text) from public, anon, authenticated;
+grant execute on function public.pagos_tomar(text, text, text) to service_role;
+
+-- De paso: los clientes con sesión no necesitan estos permisos sobre "recargas" (nunca se usaban)
+revoke truncate, trigger, references on public.recargas from anon, authenticated;

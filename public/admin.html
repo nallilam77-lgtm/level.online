@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=15">
+  <link rel="stylesheet" href="css/admin.css?v=16">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=21" defer></script>
+  <script src="/js/admin.js?v=22" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -51,6 +51,11 @@
 
       <!-- RESUMEN -->
       <section class="seccion" id="seccion-resumen">
+        <div class="tarjeta alarma-referencias" id="alarmaReferencias" role="alert" hidden>
+          <h2>Están probando referencias al azar</h2>
+          <p id="alarmaTexto"></p>
+          <button type="button" class="btn-ver" id="alarmaVisto">Ya lo revisé</button>
+        </div>
         <div class="tarjeta" id="tarjetaSaldo">
           <div class="fila-titulo">
             <h2>Saldo en Central One</h2>

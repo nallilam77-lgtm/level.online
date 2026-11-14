@@ -167,6 +167,11 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .motivo-fallo { color: var(--aviso); font-weight: 600; }
 .alerta-saldo { padding: 12px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; line-height: 1.5; border: 1px solid currentColor; background: var(--bg-deep); }
 .alerta-saldo[hidden] { display: none; }
+.alarma-referencias { display: grid; gap: 12px; border-color: var(--peligro); }
+.alarma-referencias[hidden] { display: none; }
+.alarma-referencias h2 { color: var(--peligro); }
+.alarma-referencias p { line-height: 1.5; }
+.alarma-referencias .btn-ver { justify-self: start; min-height: 44px; }
 .alerta-saldo--baja { color: var(--peligro); }
 .alerta-saldo--ok { color: var(--accent-neon); }
 .selector-motor { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

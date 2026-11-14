@@ -150,6 +150,26 @@
   }
   $('actualizarSaldo').addEventListener('click', cargarSaldo);
 
+  // ---------------------------------------------------------------- alarma de referencias
+  // supabase/pagos.sql (pagos_anotar_intento): 20 o más referencias distintas que no existen en 10 minutos
+  // = alguien puede estar adivinando los últimos 5 dígitos. Se revisa cada minuto con el panel abierto.
+  async function cargarAlarma() {
+    const { data } = await cliente.from('configuracion').select('valor').eq('clave', 'alarma_referencias').maybeSingle();
+    const a = data && data.valor;
+    const activa = !!(a && a.desde);
+    $('alarmaReferencias').hidden = !activa;
+    if (!activa) return;
+    $('alarmaTexto').textContent = `Desde ${fecha(a.desde)} hasta ${fecha(a.hasta)} escribieron ${a.total} referencias que no existen `
+      + `(hasta ${a.pico} distintas en 10 minutos). Puede ser alguien adivinando los últimos 5 dígitos para usar el pago de otro cliente. `
+      + 'Cada conexión ya queda bloqueada 1 hora después de 15 fallos. Si un cliente reclama que su pago "ya fue usado", revisa en Pedidos las recargas de esas horas.';
+  }
+  $('alarmaVisto').addEventListener('click', async () => {
+    const { error } = await cliente.from('configuracion').update({ valor: {} }).eq('clave', 'alarma_referencias');
+    if (error) { alert(textoError(error, 'No se pudo apagar la alarma.')); return; }
+    $('alarmaReferencias').hidden = true;
+  });
+  setInterval(() => { if (cliente && document.visibilityState === 'visible') cargarAlarma().catch(() => {}); }, 60000);
+
   // ---------------------------------------------------------------- pedidos
   // Motivo de Central One (failure.code / failure.action) para el administrador
   const MOTIVO_ADMIN = {
@@ -1449,7 +1469,7 @@
     if (error || esAdmin !== true) return estado('Esta cuenta no es administradora. Entra con la cuenta correcta.', true);
     $('panelEstado').hidden = true;
     $('panel').hidden = false;
-    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision()]);
+    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarAlarma().catch(() => {})]);
     escuchar();
   })();
 })();
