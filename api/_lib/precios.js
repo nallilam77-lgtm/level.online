@@ -113,23 +113,14 @@ async function paquetesDe(juego) {
  * datos de la hoja ({ status, catalogo: [{ diamantes, precio, producto }], version, … }) con el catálogo
  * de Supabase en vez del de la hoja. Sin Supabase (o si falla), los datos de la hoja tal cual.
  */
-// Blood Strike y Mobile Legends: los precios salen de Supabase; la hoja solo aporta la versión de su Apps
-// Script (y campos extra de cada paquete). Se le pregunta a la vez que a Supabase, pero si falla o tarda más
-// de 3 s la tienda sigue con Supabase y la versión conocida del .gs: una hoja caída ya no deja la tienda sin
-// precios. Solo si Supabase tampoco tiene precios se espera a la hoja (como antes).
-const VERSION_HOJA = { bloodstrike: 3, mobilelegends: 3 };
-const ESPERA_HOJA_MS = 3000;
-export async function preciosSupabasePrimero(juego, leerHoja) {
-  const hoja = leerHoja().then((d) => d, (error) => {
-    console.error(`⚠️ precios: la hoja de ${juego} no respondió (se sigue con Supabase):`, error.message);
-    return null;
-  });
-  const rapida = await Promise.race([hoja, new Promise((r) => setTimeout(() => r(null), ESPERA_HOJA_MS))]);
-  const valida = rapida && rapida.status === 'success' && Array.isArray(rapida.catalogo) ? rapida : null;
-  const datos = await conPreciosSupabase(juego, valida || { status: 'success', catalogo: [], version: VERSION_HOJA[juego] });
-  if (datos.origenPrecios === 'supabase') return datos;
-  // Supabase sin precios de este juego: hace falta la hoja completa
-  return valida || (await hoja) || datos;
+// Blood Strike y Mobile Legends: los precios salen SOLO de Supabase (desde 2026-11-14 la hoja de precios ya
+// no se lee). "version" es la del Apps Script instalado (.gs v3): la tienda la usa para el cierre en "finalizados".
+// Sin Supabase o sin paquetes a la venta: error (la tienda dice que no pudo leer los precios), nunca la hoja.
+const VERSION_SCRIPT = { bloodstrike: 3, mobilelegends: 3 };
+export async function preciosSoloSupabase(juego) {
+  const datos = await conPreciosSupabase(juego, { status: 'success', catalogo: [], version: VERSION_SCRIPT[juego] });
+  if (datos.origenPrecios !== 'supabase') throw new Error(`Supabase no dio precios de ${juego}`);
+  return datos;
 }
 
 export async function conPreciosSupabase(juego, datos) {

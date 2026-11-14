@@ -5,11 +5,11 @@
 // mismos de Free Fire) y los finalizados se anotan en la pestaña "finalizados" de Free Fire.
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
-import { pedirJSON, llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasCachePrecios, ErrorExterno } from '../externo.js';
+import { llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasCachePrecios, ErrorExterno } from '../externo.js';
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
-import { preciosSupabasePrimero } from '../precios.js';
+import { preciosSoloSupabase } from '../precios.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
@@ -79,27 +79,19 @@ function clavePaquete(texto) {
 // ACCIONES DE api/juego.js
 // =========================================================================
 
-const leerPrecios = (url) => pedirJSON(`${url}?accion=obtener_precios`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT });
-
 async function precios(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ status: "error", message: "Método no permitido" });
   }
 
-  const URL_GOOGLE_SCRIPT = process.env.SCRIPT_MLBB;
-  if (!URL_GOOGLE_SCRIPT) {
-    return faltaConfiguracion(res, ["SCRIPT_MLBB"], { status: "error", message: "Error interno al conectar con Google Sheets" });
-  }
-
   try {
-    // GET con la acción en la URL para evitar redirecciones de POST.
-    // Lectura sin efectos secundarios (20 s con 1 reintento). Con copia en caché el cliente no espera.
-    const { datos } = await conCache(CLAVE_CACHE_PRECIOS, async () => preciosSupabasePrimero('mobilelegends', () => leerPrecios(URL_GOOGLE_SCRIPT)), { esValido: catalogoValido });
+    // Precios SOLO de Supabase (_lib/precios.js, preciosSoloSupabase): la hoja ya no se lee. Copia de 60 s en caché.
+    const { datos } = await conCache(CLAVE_CACHE_PRECIOS, async () => preciosSoloSupabase('mobilelegends'), { esValido: catalogoValido });
     cabecerasCachePrecios(res);
     return res.status(200).json({ ...datos, catalogo: await conDestacados('mobilelegends', datos.catalogo.map(sinProducto)) });
   } catch (error) {
     console.error("Error al obtener precios de Mobile Legends:", error.message);
-    return res.status(503).json({ status: "error", message: "Error interno al conectar con Google Sheets" });
+    return res.status(503).json({ status: "error", message: "No pudimos cargar los precios. Intenta de nuevo en un momento." });
   }
 }
 
@@ -155,7 +147,7 @@ async function verificar(req, res) {
 
 // Catálogo para la acción "descuento" (misma caché que la acción precios)
 async function catalogoMobileLegends() {
-  const { datos } = await conCache(CLAVE_CACHE_PRECIOS, async () => preciosSupabasePrimero('mobilelegends', () => leerPrecios(process.env.SCRIPT_MLBB)), { esValido: catalogoValido });
+  const { datos } = await conCache(CLAVE_CACHE_PRECIOS, async () => preciosSoloSupabase('mobilelegends'), { esValido: catalogoValido });
   return datos.catalogo.map(sinProducto);
 }
 
@@ -350,7 +342,7 @@ export async function recargar(req, res) {
     let dataPrecios;
     try {
       ({ datos: dataPrecios } = await conCache(CLAVE_CACHE_PRECIOS,
-        async () => preciosSupabasePrimero('mobilelegends', () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
+        async () => preciosSoloSupabase('mobilelegends'),
         { esValido: catalogoValido, respaldoMs: 0 }));
     } catch (error) {
       console.error(`❌ [${FASES.precios}] ${error.message}`);
@@ -598,7 +590,7 @@ async function completarPago(req, res) {
     let productId = '';
     try {
       const { datos: dataPrecios } = await conCache(CLAVE_CACHE_PRECIOS,
-        async () => preciosSupabasePrimero('mobilelegends', () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, { reintentos: 2, intentoMs: 8000, tiempoMs: 12000, reintentarTrasTimeout: true })),
+        async () => preciosSoloSupabase('mobilelegends'),
         { esValido: catalogoValido });
       const { paquete: paqueteGsheet, repetido } = buscarPaquete(dataPrecios.catalogo, clave);
       productId = repetido ? '' : productoDe(paqueteGsheet);
