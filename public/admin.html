@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=13">
+  <link rel="stylesheet" href="css/admin.css?v=12">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=16" defer></script>
+  <script src="/js/admin.js?v=15" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -43,7 +43,6 @@
         <button type="button" role="tab" data-seccion="creadores" aria-selected="false">Creadores</button>
         <button type="button" role="tab" data-seccion="precios" aria-selected="false">Precios</button>
         <button type="button" role="tab" data-seccion="roblox" aria-selected="false">Roblox</button>
-        <button type="button" role="tab" data-seccion="cuadre" aria-selected="false">Cuadre</button>
         <button type="button" role="tab" data-seccion="juego" aria-selected="false">Minijuego</button>
         <button type="button" role="tab" data-seccion="espacio" aria-selected="false">Supabase</button>
       </nav>
@@ -222,32 +221,6 @@
             <button type="submit" class="btn btn--chico">Agregar paquete</button>
             <p class="mensaje-form" id="mensajeManual" role="status"></p>
           </form>
-        </div>
-      </section>
-
-      <!-- CUADRE con Central One (api/_lib/precios.js, cuadreCentralOne) -->
-      <section class="seccion" id="seccion-cuadre" hidden>
-        <div class="tarjeta">
-          <div class="fila-titulo">
-            <h2>Cuadre con Central One</h2>
-            <select id="diasCuadre" aria-label="Periodo">
-              <option value="1">Últimas 24 horas</option>
-              <option value="3">Últimos 3 días</option>
-              <option value="7">Últimos 7 días</option>
-            </select>
-          </div>
-          <button type="button" class="btn btn--chico" id="btnCuadrar">Cuadrar ahora</button>
-          <div class="kpis">
-            <div class="kpi"><small>Compras en Central One</small><strong id="kpiComprasCO">–</strong></div>
-            <div class="kpi"><small>Gastado allá</small><strong id="kpiGastadoCO">–</strong></div>
-            <div class="kpi"><small>Coinciden</small><strong id="kpiCoinciden">–</strong></div>
-            <div class="kpi kpi--aviso"><small>Para revisar</small><strong id="kpiRevisarCO">–</strong></div>
-          </div>
-          <p class="nota" id="notaCuadre">Compara cada compra en Central One con su pedido en la tienda y te muestra solo lo que no cuadra.</p>
-        </div>
-        <div class="tarjeta">
-          <h2>Para revisar</h2>
-          <ul class="pedidos" id="listaCuadre"><li class="vacio">Toca "Cuadrar ahora".</li></ul>
         </div>
       </section>
 
