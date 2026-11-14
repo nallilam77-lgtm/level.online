@@ -15,6 +15,8 @@
   --estado-proceso: #22d3ee;
   --estado-alerta: #fb7185;
   --estado-neutro: #94a3b8;
+  --espera-fondo: rgba(251, 191, 36, 0.08);
+  --espera-borde: rgba(251, 191, 36, 0.35);
   /* Logo de Google (colores oficiales del botón "Continuar con Google") */
   --google-azul: #4285f4;
   --google-verde: #34a853;
@@ -184,3 +186,25 @@
 /* Por qué falló una recarga (Central One) */
 .recarga-motivo { margin: 8px 0 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5;
   color: var(--text-main); background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.35); }
+
+/* Completar un pago insuficiente desde el perfil */
+.completar { display: grid; gap: 10px; margin-top: 8px; padding: 14px; border-radius: 12px; background: var(--espera-fondo); border: 1px solid var(--espera-borde); }
+.completar-titulo { margin: 0; font-family: 'Montserrat', sans-serif; font-size: 15px; font-weight: 900; color: var(--estado-espera); }
+.completar-texto { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-main); }
+.completar-datos { display: grid; gap: 6px; }
+.completar-dato { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+.completar-dato strong { color: var(--text-main); overflow-wrap: anywhere; }
+.completar-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.completar-form input {
+  min-width: 0; min-height: 44px; padding: 0 12px; border-radius: 10px; background: var(--bg-deep); border: 1px solid var(--border-glass);
+  color: var(--text-main); font-family: 'Montserrat', sans-serif; font-size: 16px; font-weight: 800; letter-spacing: 2px;
+}
+.completar-form input:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.btn-completar {
+  min-height: 44px; padding: 0 16px; border-radius: 10px; border: none; cursor: pointer; background: var(--estado-ok); color: var(--bg-base);
+  font-family: 'Montserrat', sans-serif; font-size: 12px; font-weight: 900; text-transform: uppercase; transition: box-shadow 0.25s ease;
+}
+.btn-completar:hover, .btn-completar:focus-visible { box-shadow: 0 0 16px var(--primary-glow); }
+.btn-completar:disabled { opacity: 0.6; cursor: wait; }
+.completar-mensaje { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-main); }
+.completar-mensaje:empty { display: none; }

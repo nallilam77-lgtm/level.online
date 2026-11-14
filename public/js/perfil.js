@@ -64,6 +64,96 @@
   };
   const MOTIVO_GENERAL = 'Estamos revisando tu recarga; te avisamos por WhatsApp.';
 
+  // ---------------------------------------------------------------- completar un pago insuficiente
+  // Pedidos "Pago incompleto" que todavía se pueden completar (supabase/pagos.sql: mis_pagos_por_completar):
+  // cuánto falta y hasta cuándo. Desde cualquier teléfono con la cuenta: el servidor comprueba que el pedido
+  // sea de esta cuenta (POST /api/recargar con completarPedido; sesion.js agrega el token).
+  let porCompletar = {};   // id_pedido -> { falta, vence, pagos }
+  let datosPago = null;    // Pago Móvil de Level Up (js/datos-pago.js)
+  async function cargarPorCompletar() {
+    if (!recargas.some((r) => r.estado === 'incompleto')) { porCompletar = {}; return; }
+    const { data, error } = await cliente.rpc('mis_pagos_por_completar');
+    if (error) { console.error(error); return; }
+    porCompletar = Object.fromEntries((data || []).map((f) => [f.id_pedido, f]));
+    if (Object.keys(porCompletar).length && !datosPago && window.DatosPago) datosPago = await window.DatosPago.leer();
+  }
+  const montoParaCopiar = (n) => Number(n).toFixed(2).replace('.', ',');
+
+  function cajaCompletar(r, p) {
+    const caja = el('div', 'completar');
+    const titulo = el('p', 'completar-titulo', `Te faltan ${bs(p.falta)} para tu recarga`);
+    caja.append(titulo, el('p', 'completar-texto',
+      `Paga la diferencia por Pago Móvil y escribe abajo los últimos 5 dígitos de la referencia. Tienes hasta el ${fechaHora(p.vence)}.`));
+    let montoValor = null;
+    if (datosPago) {
+      const datos = el('div', 'completar-datos');
+      [['Banco', datosPago.banco], ['Teléfono', datosPago.telefono], ['Cédula', datosPago.cedula], ['Monto', bs(p.falta)]].forEach(([nombre, valor]) => {
+        if (!valor) return;
+        const fila = el('div', 'completar-dato');
+        const fuerte = el('strong', '', valor);
+        if (nombre === 'Monto') montoValor = fuerte;
+        const copiar = el('button', 'btn-copiar-codigo', 'Copiar');
+        copiar.type = 'button';
+        copiar.setAttribute('aria-label', `Copiar ${nombre.toLowerCase()}`);
+        copiar.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(nombre === 'Monto' ? montoParaCopiar(p.falta) : valor);
+            copiar.textContent = '¡Copiado!';
+          } catch (e) { copiar.textContent = 'Mantén presionado'; }
+        });
+        fila.append(el('span', '', nombre), fuerte, copiar);
+        datos.append(fila);
+      });
+      caja.append(datos);
+    }
+    const formulario = el('form', 'completar-form');
+    const entrada = el('input');
+    entrada.type = 'text';
+    entrada.inputMode = 'numeric';
+    entrada.maxLength = 5;
+    entrada.autocomplete = 'off';
+    entrada.placeholder = 'Últimos 5 dígitos';
+    entrada.setAttribute('aria-label', 'Últimos 5 dígitos de la referencia del pago nuevo');
+    const boton = el('button', 'btn-completar', 'Completar pago');
+    boton.type = 'submit';
+    formulario.append(entrada, boton);
+    const mensaje = el('p', 'completar-mensaje');
+    mensaje.setAttribute('role', 'status');
+    formulario.addEventListener('submit', async (evento) => {
+      evento.preventDefault();
+      const referencia = entrada.value.replace(/\D/g, '');
+      if (referencia.length !== 5) { mensaje.textContent = 'Escribe exactamente los últimos 5 dígitos de la referencia.'; return; }
+      boton.disabled = true;
+      entrada.disabled = true;
+      mensaje.textContent = 'Revisando tu pago… no cierres esta página.';
+      try {
+        const res = await fetch(`/api/recargar?juego=${encodeURIComponent(r.juego)}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ completarPedido: r.id_pedido, referencia }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (d.status === 'success') {
+          // El pedido pasa a "Entregada" / "En proceso" en vivo (Realtime) y esta caja desaparece
+          mensaje.textContent = d.code ? '✅ ¡Listo! Tu código aparece en esta recarga.' : '✅ ¡Listo! Pago completo: tu recarga se está entregando.';
+          return;
+        }
+        mensaje.textContent = d.message || 'No pudimos completar el pago. Intenta de nuevo.';
+        if (d.insuficiente && Number(d.faltante) > 0) {
+          p.falta = Number(d.faltante);
+          titulo.textContent = `Te faltan ${bs(p.falta)} para tu recarga`;
+          if (montoValor) montoValor.textContent = bs(p.falta);
+          entrada.value = '';
+        }
+      } catch (e) {
+        mensaje.textContent = 'No pudimos conectar. Revisa tu internet e intenta de nuevo.';
+      }
+      boton.disabled = false;
+      entrada.disabled = false;
+    });
+    caja.append(formulario, mensaje);
+    return caja;
+  }
+
   function tarjeta(r) {
     const li = el('li', 'recarga');
     li.dataset.juego = r.juego;
@@ -87,6 +177,8 @@
     if (r.motivo_fallo && ['en_revision', 'problema'].includes(r.estado)) {
       li.append(el('p', 'recarga-motivo', MOTIVOS[r.motivo_fallo] || MOTIVO_GENERAL));
     }
+
+    if (r.estado === 'incompleto' && porCompletar[r.id_pedido]) li.append(cajaCompletar(r, porCompletar[r.id_pedido]));
 
     if (r.codigo) {
       const caja = el('div', 'recarga-codigo');
@@ -144,6 +236,7 @@
       .order('creado', { ascending: false }).limit(MAX_RECARGAS);
     if (error) throw error;
     recargas = data || [];
+    await cargarPorCompletar().catch(() => {});
     pintarRecargas();
   }
 
@@ -158,7 +251,7 @@
         if (i >= 0) recargas[i] = Object.assign({}, recargas[i], nueva);
         else recargas.unshift(nueva);
         recargas = recargas.slice(0, MAX_RECARGAS);
-        pintarRecargas(nueva.id_pedido);
+        cargarPorCompletar().catch(() => {}).finally(() => pintarRecargas(nueva.id_pedido));
         pintarFiel();
       })
       .subscribe();

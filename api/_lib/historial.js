@@ -90,12 +90,12 @@ async function guardarFila({ usuario: promesaUsuario, juego, body, pedido, respu
   }, 'id_pedido');
 }
 
-// Pago completado con la clave del pago insuficiente: misma fila, estado nuevo
-async function completarFila({ clave, respuesta }) {
+// Pago completado con la clave del pago insuficiente (o desde el perfil, con su huella): misma fila, estado nuevo
+async function completarFila({ claveHash, respuesta }) {
   const cuerpo = respuesta.cuerpo || {};
   const estado = cuerpo.status === 'success' ? 'completado' : respuesta.codigo === 202 ? 'en_revision' : null;
   if (!estado) return; // clave o referencia rechazada: el pedido sigue "incompleto"
-  await actualizar('recargas', `clave_hash=eq.${huella(clave)}`, {
+  await actualizar('recargas', `clave_hash=eq.${claveHash}`, {
     estado, actualizado: new Date().toISOString(), ...(cuerpo.code && { codigo: corto(cuerpo.code, 80) }),
   });
 }
@@ -117,10 +117,46 @@ export async function conHistorial(req, res, juego, fn) {
   } finally {
     const body = req.body || {};
     const clave = typeof body.tokenComplemento === 'string' ? body.tokenComplemento : '';
+    const claveHash = req.claveHashPerfil || (clave ? huella(clave) : '');
     const tarea = ctx.pedido ? guardarFila({ usuario: ctx.usuario, juego, body, pedido: ctx.pedido, respuesta })
-      : clave && respuesta.cuerpo ? completarFila({ clave, respuesta }) : null;
+      : claveHash && respuesta.cuerpo ? completarFila({ claveHash, respuesta }) : null;
     if (tarea) waitUntil(tarea.catch((error) => console.error(`⚠️ historial: no se pudo guardar la recarga (${juego}):`, error.message)));
   }
+}
+
+/**
+ * Completar un pago insuficiente DESDE EL PERFIL (perfil.html): POST /api/recargar?juego=X
+ * { completarPedido: idPedido, referencia } con Authorization. El cliente no tiene la clave del pago (vive en el
+ * teléfono donde compró): se usa la huella guardada en SU pedido, solo si el pedido es de esa cuenta, del mismo
+ * juego y sigue "incompleto". Deja la petición como la de la tienda (tokenComplemento) y req.claveHashPerfil
+ * para que cada tienda use la huella. Devuelve null (seguir) o { codigo, cuerpo } (responder ya).
+ */
+export async function prepararCompletarDesdePerfil(req, juego) {
+  const error = (codigo, message) => ({ codigo, cuerpo: { status: 'error', ...(codigo !== 503 && { complementoInvalido: true }), message } });
+  if (!supabaseActivo()) return error(503, 'No podemos completar pagos en este momento. Intenta de nuevo en un minuto.');
+  const idPedido = String(req.body?.completarPedido ?? '');
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(idPedido)) return error(400, 'Pedido inválido.');
+  const token = tokenDe(req);
+  const usuario = token ? await usuarioDelToken(token) : null;
+  if (!usuario) return error(401, 'Entra con tu cuenta para completar el pago.');
+  let fila;
+  try {
+    [fila] = await leer('recargas', { id_pedido: idPedido, usuario }, 'juego,estado,clave_hash');
+  } catch (e) {
+    console.error('⚠️ completar desde el perfil: no se pudo leer el pedido:', e.message);
+    return error(503, 'No pudimos revisar tu pedido. Intenta de nuevo en un minuto.');
+  }
+  if (!fila || fila.juego !== juego) return error(404, 'No encontramos ese pedido en tu cuenta.');
+  if (fila.estado !== 'incompleto' || !/^[a-f0-9]{64}$/.test(String(fila.clave_hash || ''))) {
+    return error(409, 'Este pedido ya no se puede completar. Si no recibiste tu recarga, escríbenos por WhatsApp.');
+  }
+  req.claveHashPerfil = fila.clave_hash;
+  // Solo lo que usa "completar" de cada tienda (se cambia el mismo objeto: req.body puede no aceptar otro)
+  const cuerpo = req.body;
+  Object.keys(cuerpo).forEach((k) => { if (k !== 'referencia' && k !== 'telefono') delete cuerpo[k]; });
+  cuerpo.referencia = String(cuerpo.referencia ?? '').replace(/\D/g, '');
+  cuerpo.tokenComplemento = '';
+  return null;
 }
 
 /**

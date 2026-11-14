@@ -153,17 +153,12 @@ async function catalogoFreeFire() {
   return datos.catalogo.map(sinProducto);
 }
 
-// Contador del inicio: recargas entregadas (pestaña "finalizados", Free Fire y Mobile Legends).
-// Copia de 1 h en esta instancia y 1 h en la CDN: la hoja casi nunca se despierta por esto.
-// Sin dato (Apps Script anterior o caído) responde total 0 y la página no muestra nada.
-// Desde este día (hora de Venezuela) el contador sale de Supabase, que desde 2026-11-13 tiene TODOS los
-// pedidos de todas las tiendas (_lib/historial.js). Antes de esa fecha Supabase no tenía el día completo.
-const CONTADOR_SUPABASE_DESDE = '2026-11-14';
-
+// Contador del inicio: recargas entregadas HOY (hora de Venezuela) en todas las tiendas, SOLO de Supabase
+// (recargas_completadas_desde; desde 2026-11-14 la hoja "finalizados" ya no se consulta). 30 s en esta
+// instancia y 30 s en la CDN. Sin dato responde total null y la página no muestra el contador.
 async function estadisticas(req, res) {
-  const URL_GOOGLE_SCRIPT = process.env.SCRIPT_RECARGAS_URL;
   const hoyVE = new Date(Date.now() - 4 * 60 * 60_000).toISOString().slice(0, 10);
-  if (supabaseActivo() && hoyVE >= CONTADOR_SUPABASE_DESDE) {
+  if (supabaseActivo()) {
     try {
       const { datos } = await conCache(`estadisticas:supabase:${hoyVE}`,
         async () => ({ hoy: Number(await rpc('recargas_completadas_desde', { p_desde: iniciosVE().dia })) }),
@@ -172,28 +167,12 @@ async function estadisticas(req, res) {
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30');
       return res.status(200).json({ total: Math.max(0, Math.floor(datos.hoy)) });
     } catch (error) {
-      console.error("⚠️ estadisticas: Supabase no respondió, se cuenta en la hoja:", error.message);
+      console.error("⚠️ estadisticas: Supabase no respondió:", error.message);
     }
   }
-  // Solo un dato real se guarda en la CDN: un 0 por fallo se volvería a pedir enseguida
+  // Sin dato: total null (un 0 se mostraría como "0 recargas hoy") y nada en la CDN
   res.setHeader('Cache-Control', 'no-store');
-  // Sin dato: total null (un 0 se mostraría como "0 recargas hoy")
-  if (!URL_GOOGLE_SCRIPT) return res.status(200).json({ total: null });
-  try {
-    // Recargas de HOY (hora de Venezuela, UTC-4 todo el año). La fecha va en la clave de la caché y la CDN
-    // no guarda la respuesta más allá de la medianoche: nunca se muestra el número de ayer
-    const ahoraVenezuela = new Date(Date.now() - 4 * 60 * 60_000);
-    const hoy = ahoraVenezuela.toISOString().slice(0, 10);
-    const segundosHastaMedianoche = 86_400 - Math.floor((ahoraVenezuela.getTime() % 86_400_000) / 1000);
-    const { datos } = await conCache(`estadisticas:ff:${hoy}`,
-      () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "contar_finalizados_hoy" }, LECTURA_APPS_SCRIPT),
-      { frescoMs: 10 * 60_000, respaldoMs: 60 * 60_000, esValido: (d) => d?.status === 'success' && Number.isFinite(Number(d.hoy)) });
-    res.setHeader('Cache-Control', `public, max-age=0, s-maxage=${Math.max(1, Math.min(600, segundosHastaMedianoche))}`);
-    return res.status(200).json({ total: Math.max(0, Math.floor(Number(datos.hoy))) });
-  } catch (error) {
-    console.error("⚠️ estadisticas: no se pudo contar las recargas:", error.message);
-    return res.status(200).json({ total: null });
-  }
+  return res.status(200).json({ total: null });
 }
 
 const catalogoDestacado = async () => conDestacados('freefire', await catalogoFreeFire());
@@ -761,8 +740,10 @@ async function completarPago(req, res) {
   const inicio = Date.now();
   try {
     const clave = String(req.body?.tokenComplemento ?? '');
+    // Desde el perfil (api/recargar.js ya comprobó que el pedido es de esa cuenta): la huella guardada
+    const hashPerfil = typeof req.claveHashPerfil === 'string' ? req.claveHashPerfil : '';
     const referencia = String(req.body?.referencia ?? '');
-    if (!CLAVE_COMPLEMENTO.test(clave) || !/^\d{5}$/.test(referencia)) {
+    if ((!hashPerfil && !CLAVE_COMPLEMENTO.test(clave)) || !/^\d{5}$/.test(referencia)) {
       return res.status(400).json({ status: "error", message: "Escribe los últimos 5 dígitos de la referencia del pago que hiciste para completar." });
     }
 
@@ -774,7 +755,7 @@ async function completarPago(req, res) {
         { status: "error", message: "No podemos completar tu pago en este momento. Escríbenos por WhatsApp con tus referencias." });
     }
 
-    const claveHash = huella(clave);
+    const claveHash = hashPerfil || huella(clave);
     // Intentos fallidos por IP y por clave (frena probar referencias al azar)
     const clavesLimite = [`ip:${obtenerIp(req)}`, `completar:ff:${claveHash.slice(0, 24)}`];
     const minutosEspera = await minutosBloqueado(clavesLimite);
@@ -823,7 +804,7 @@ async function completarPago(req, res) {
     if (!datos.completo) {
       const falta = Number(datos.falta) || 0;
       return res.status(400).json({
-        status: "error", insuficiente: true, tokenComplemento: clave,
+        status: "error", insuficiente: true, ...(clave && { tokenComplemento: clave }),
         montoPagado: Number(datos.pagadoTotal) || 0, precioRequerido: Number(datos.precio) || 0, faltante: falta,
         message: `Pago insuficiente: con este pago llevas ${formatearVES(Number(datos.pagadoTotal) || 0)} Bs y faltan ${formatearVES(falta)} Bs. Paga la diferencia y escribe la nueva referencia.`,
       });

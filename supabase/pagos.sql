@@ -559,3 +559,28 @@ end;
 $$;
 revoke execute on function public.admin_pagos_usados_buscar(text) from public, anon;
 grant execute on function public.admin_pagos_usados_buscar(text) to authenticated;
+
+-- =====================================================================
+-- PERFIL (2026-11-14): completar un pago insuficiente desde "Mis recargas"
+-- =====================================================================
+-- El cliente con sesión ve, en cada pedido suyo "Pago incompleto", cuánto le falta y hasta cuándo puede
+-- completarlo. Solo sus pedidos (auth.uid()); nunca ve referencias ni la clave. El pago lo completa
+-- /api/recargar con { completarPedido } (api/_lib/historial.js comprueba que el pedido sea de esa cuenta).
+create or replace function public.mis_pagos_por_completar()
+returns table (id_pedido text, precio numeric, pagado numeric, falta numeric, vence timestamptz, pagos int)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select r.id_pedido, f.precio, f.pagado, greatest(0, round(f.precio - f.pagado, 2)), f.vence,
+         coalesce(array_length(f.referencias, 1), 0)
+    from recargas r
+    join pagos_por_completar f on f.clave_hash = r.clave_hash
+   where r.usuario = (select auth.uid())
+     and r.estado = 'incompleto'
+     and f.estado = 'pendiente'
+     and f.vence > now();
+$$;
+revoke execute on function public.mis_pagos_por_completar() from public, anon;
+grant execute on function public.mis_pagos_por_completar() to authenticated;

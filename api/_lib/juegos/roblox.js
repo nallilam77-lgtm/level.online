@@ -391,8 +391,10 @@ export async function recargar(req, res) {
 async function completarCompra(req, res, inicio) {
   try {
     const clave = String(req.body?.tokenComplemento ?? '');
+    // Desde el perfil (api/recargar.js ya comprobó que el pedido es de esa cuenta): la huella guardada
+    const hashPerfil = typeof req.claveHashPerfil === 'string' ? req.claveHashPerfil : '';
     const referencia = String(req.body?.referencia ?? '');
-    if (!CLAVE_COMPLEMENTO.test(clave) || !/^\d{5}$/.test(referencia)) {
+    if ((!hashPerfil && !CLAVE_COMPLEMENTO.test(clave)) || !/^\d{5}$/.test(referencia)) {
       return res.status(400).json({ status: 'error', message: 'Escribe los últimos 5 dígitos de la referencia del pago que hiciste para completar.' });
     }
     const scriptUrl = process.env.GAS_URL;
@@ -400,7 +402,7 @@ async function completarCompra(req, res, inicio) {
       return faltaConfiguracion(res, ['GAS_URL'], { status: 'error', message: MENSAJE_SIN_CONFIGURAR });
     }
 
-    const claveHash = huella(clave);
+    const claveHash = hashPerfil || huella(clave);
     // Intentos fallidos por IP y por clave (frena probar referencias al azar)
     const clavesLimite = [`ip:${obtenerIp(req)}`, `completar:roblox:${claveHash.slice(0, 24)}`];
     const minutosEspera = await minutosBloqueado(clavesLimite);

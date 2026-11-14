@@ -1,5 +1,5 @@
 import { cargarJuego } from './_lib/juegos/index.js';
-import { conHistorial } from './_lib/historial.js';
+import { conHistorial, prepararCompletarDesdePerfil } from './_lib/historial.js';
 
 // Recargas: POST /api/recargar?juego=<freefire|bloodstrike|roblox> (maxDuration 180 en vercel.json).
 // Cada módulo de api/_lib/juegos/ valida sus datos y mantiene sus propios tiempos y reglas de
@@ -16,6 +16,11 @@ export default async function handler(req, res) {
     }
 
     const clave = String(req.query.juego ?? 'freefire');
+    // Completar un pago insuficiente desde el perfil (cuenta de Level Up): se comprueba el dueño del pedido
+    if (req.method === 'POST' && req.body && typeof req.body === 'object' && req.body.completarPedido !== undefined) {
+      const rechazo = await prepararCompletarDesdePerfil(req, clave);
+      if (rechazo) return res.status(rechazo.codigo).json(rechazo.cuerpo);
+    }
     return await conHistorial(req, res, clave, () => juego.recargar(req, res));
   } catch (error) {
     // Fallo al cargar el módulo del juego (cada recarga maneja sus propios errores)

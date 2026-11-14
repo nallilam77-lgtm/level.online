@@ -483,8 +483,10 @@ async function completarPago(req, res) {
   const inicio = Date.now();
   try {
     const clave = String(req.body?.tokenComplemento ?? '');
+    // Desde el perfil (api/recargar.js ya comprobó que el pedido es de esa cuenta): la huella guardada
+    const hashPerfil = typeof req.claveHashPerfil === 'string' ? req.claveHashPerfil : '';
     const referencia = String(req.body?.referencia ?? '');
-    if (!CLAVE_COMPLEMENTO.test(clave) || !/^\d{5}$/.test(referencia)) {
+    if ((!hashPerfil && !CLAVE_COMPLEMENTO.test(clave)) || !/^\d{5}$/.test(referencia)) {
       return res.status(400).json({ status: "error", message: "Escribe los últimos 5 dígitos de la referencia del pago que hiciste para completar." });
     }
 
@@ -495,7 +497,7 @@ async function completarPago(req, res) {
         { status: "error", message: "No podemos completar tu pago en este momento. Escríbenos por WhatsApp con tus referencias." });
     }
 
-    const claveHash = huella(clave);
+    const claveHash = hashPerfil || huella(clave);
     // Intentos fallidos por IP y por clave (frena probar referencias al azar)
     const clavesLimite = [`ip:${obtenerIp(req)}`, `completar:bs:${claveHash.slice(0, 24)}`];
     const minutosEspera = await minutosBloqueado(clavesLimite);
@@ -544,7 +546,7 @@ async function completarPago(req, res) {
     if (!datos.completo) {
       const falta = Number(datos.falta) || 0;
       return res.status(400).json({
-        status: "error", insuficiente: true, tokenComplemento: clave,
+        status: "error", insuficiente: true, ...(clave && { tokenComplemento: clave }),
         montoPagado: Number(datos.pagadoTotal) || 0, precioRequerido: Number(datos.precio) || 0, faltante: falta,
         message: `Pago insuficiente: con este pago llevas ${formatearVES(Number(datos.pagadoTotal) || 0)} Bs y faltan ${formatearVES(falta)} Bs. Paga la diferencia y escribe la nueva referencia.`,
       });
