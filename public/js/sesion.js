@@ -144,7 +144,8 @@
 
   async function salir() {
     const c = await cliente();
-    if (c) await c.auth.signOut();
+    // Solo en este equipo: con el "global" de antes, salir en la PC dejaba al teléfono con una sesión muerta
+    if (c) await c.auth.signOut({ scope: 'local' });
     pintarBotones();
   }
 

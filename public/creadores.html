@@ -35,7 +35,7 @@
   <link rel="stylesheet" href="css/paginas-legales.css">
   <link rel="stylesheet" href="css/creadores.css?v=5">
   <!-- "Entrar con Google" del panel de creadores (desde 2026-11-13): sesión de la tienda -->
-  <script src="/js/sesion.js?v=5" defer></script>
+  <script src="/js/sesion.js?v=6" defer></script>
   <link rel="stylesheet" href="css/pie-legal.css">
 </head>
 <body>
@@ -602,13 +602,8 @@
       const textoBoton = boton.textContent;
       boton.textContent = 'Guardando...';
       try {
-        const token = await Sesion.token();
-        const res = await fetch('/api/creadores', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-          body: JSON.stringify({ cuenta: true, accion: 'perfil', datos }),
-        });
-        const r = await res.json();
+        const r = await pedirCreador({ accion: 'perfil', datos });
+        if (r.sesion === false) { mostrarMensaje('Tu sesión se cerró. Toca "Entrar con Google" otra vez y vuelve a llenar tus datos.'); return; }
         if (r.status !== 'success' || !r.perfil) { error.textContent = r.message || 'No pudimos guardar tus datos.'; return; }
         const primeraVez = !perfilActual;
         perfilActual = r.perfil;
@@ -629,6 +624,41 @@
       pintarPanel(lista[i]);
     }
 
+    // Sesión vieja (cerrada en otro equipo o vencida): se renueva una vez; si no se puede, se borra la de
+    // este teléfono para que "Entrar con Google" pida la cuenta de nuevo (si no, volvía aquí sin entrar)
+    async function tokenRenovado() {
+      try {
+        const c = await Sesion.cliente();
+        if (!c) return '';
+        const r = await c.auth.refreshSession();
+        return (r && r.data && r.data.session && r.data.session.access_token) || '';
+      } catch (e) { return ''; }
+    }
+    async function borrarSesionLocal() {
+      try { const c = await Sesion.cliente(); if (c) await c.auth.signOut({ scope: 'local' }); } catch (e) { /* sigue */ }
+      try { Object.keys(localStorage).filter((k) => /^sb-.+-auth-token$/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* sin almacenamiento */ }
+    }
+    async function pedirCreador(cuerpo) {
+      const enviar = (token) => fetch('/api/creadores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify(Object.assign({ cuenta: true }, cuerpo)),
+      });
+      let res = await enviar(await Sesion.token());
+      if (res.status === 401) {
+        const nuevo = await tokenRenovado();
+        if (nuevo) res = await enviar(nuevo);
+      }
+      if (res.status === 401) {
+        await borrarSesionLocal();
+        $('btnGoogle').hidden = false;
+        $('accesoCuenta').hidden = true;
+        $('datosCreador').hidden = true;
+        $('panelResultado').classList.remove('visible');
+      }
+      return res.json();
+    }
+
     async function panelConGoogle() {
       if (!window.Sesion || !Sesion.hay()) return;
       const d = Sesion.datos();
@@ -637,14 +667,8 @@
       $('correoCuenta').textContent = (d && d.correo) || 'tu cuenta';
       $('panelMensaje').textContent = '';
       try {
-        const token = await Sesion.token();
-        const res = await fetch('/api/creadores', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-          body: JSON.stringify({ cuenta: true }),
-        });
-        const datos = await res.json();
-        if (datos.sesion === false) { $('btnGoogle').hidden = false; $('accesoCuenta').hidden = true; }
+        const datos = await pedirCreador({});
+        if (datos.sesion === false) { mostrarMensaje('Tu sesión se cerró. Toca "Entrar con Google" otra vez.'); return; }
         if (datos.status !== 'success') { mostrarMensaje(datos.message || 'No pudimos abrir tu panel.'); return; }
         const lista = datos.codigos || [];
         if (!lista.length) {
@@ -682,6 +706,13 @@
         mostrarMensaje('No pudimos abrir tu panel. Revisa tu conexión e intenta de nuevo.');
       }
     }
+
+    $('btnGoogle').addEventListener('click', async (e) => {
+      if (!(window.Sesion && Sesion.hay())) return;
+      e.preventDefault();
+      await borrarSesionLocal();
+      location.href = $('btnGoogle').href;
+    });
 
     $('btnSalirCreador').addEventListener('click', async () => {
       try { await Sesion.salir(); } catch (e) { /* igual se recarga */ }
