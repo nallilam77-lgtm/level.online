@@ -1406,6 +1406,16 @@
   }
 
   $('periodoPagos').addEventListener('change', cargarPagos);
+  // Con la pestaña Pagos abierta (y la página visible) la lista se renueva sola cada 15 s; si hay una
+  // búsqueda escrita, se repite para no perder los resultados del servidor (p. ej. los usados ya borrados)
+  setInterval(async () => {
+    if (!cliente || document.visibilityState !== 'visible' || $('seccion-pagos').hidden) return;
+    try {
+      await cargarPagos();
+      const texto = $('buscarPago').value;
+      if (texto.replace(/\D/g, '').length >= 4) await buscarPagosServidor(texto);
+    } catch (e) { /* el próximo intento */ }
+  }, 15000);
   let esperaBusqueda = 0;
   $('buscarPago').addEventListener('input', () => {
     pintarPagos();
