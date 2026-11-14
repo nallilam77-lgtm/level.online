@@ -66,6 +66,7 @@
     if (b.dataset.seccion === 'cuentas') cargarCuentas();
     if (b.dataset.seccion === 'creadores') cargarCodigos();
     if (b.dataset.seccion === 'precios') cargarPrecios();
+    if (b.dataset.seccion === 'roblox') cargarRoblox();
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -820,6 +821,74 @@
     $('mensajeManual').textContent = `✅ ${nombre} agregado.`;
     $('formPaqueteManual').reset();
     cargarPrecios();
+  });
+
+  // ---------------------------------------------------------------- roblox (supabase/roblox.sql)
+  // Los códigos son dinero: la base solo devuelve los últimos 4 caracteres (admin_roblox).
+  const PAQUETES_ROBLOX = ['50', '100', '270', '355'];
+  async function cargarRoblox() {
+    const { data, error } = await cliente.rpc('admin_roblox');
+    if (error || !data) {
+      console.error(error);
+      $('listaRobloxLibres').replaceChildren(el('li', 'vacio', 'No se pudieron cargar. ¿Ya corriste supabase/roblox.sql?'));
+      return;
+    }
+    const porPaquete = Object.fromEntries((data.paquetes || []).map((p) => [p.paquete, p]));
+    $('kpisRoblox').replaceChildren(...PAQUETES_ROBLOX.map((k) => {
+      const libres = Number((porPaquete[k] || {}).libres) || 0;
+      const kpi = el('div', 'kpi' + (libres <= 3 ? ' kpi--aviso' : ''));
+      kpi.append(el('small', '', `${k} Robux`), el('strong', '', libres === 0 ? 'Agotado' : `${libres} libres`));
+      return kpi;
+    }));
+
+    const entregados = $('listaRobloxEntregados');
+    entregados.replaceChildren();
+    if (!(data.ultimos || []).length) entregados.append(el('li', 'vacio', 'Todavía no se ha entregado ningún código desde Supabase.'));
+    (data.ultimos || []).forEach((c) => {
+      const li = el('li', 'pedido');
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', `${c.paquete} Robux · …${c.fin}`), el('span', 'etiqueta etiqueta--completado', 'Entregado'));
+      li.append(cabeza, el('span', '', `${c.usuario || 'sin usuario'} · ${c.entregado ? fecha(c.entregado) : ''} · ${c.id_pedido || ''}`));
+      entregados.append(li);
+    });
+
+    const libres = $('listaRobloxLibres');
+    libres.replaceChildren();
+    if (!(data.libres || []).length) libres.append(el('li', 'vacio', 'No hay códigos sin entregar. Cárgalos arriba.'));
+    (data.libres || []).forEach((c) => {
+      const li = el('li', 'pedido');
+      const fila = el('div', 'borrar-fila');
+      const texto = el('div');
+      texto.append(el('strong', '', `${c.paquete} Robux · …${c.fin}`), el('span', 'precio-detalle', `Cargado ${corta(c.cargado)}`));
+      fila.append(texto, boton('Anular', 'btn-ver btn-ver--peligro', async (b) => {
+        if (!confirm(`¿Anular el código …${c.fin} de ${c.paquete} Robux?\n\nYa no se le entregará a nadie. No se puede deshacer.`)) return;
+        b.disabled = true;
+        const { error: e } = await cliente.rpc('admin_roblox_anular', { p_id: c.id });
+        if (e) { alert(textoError(e, 'No se pudo anular.')); b.disabled = false; return; }
+        cargarRoblox();
+      }));
+      li.append(fila);
+      libres.append(li);
+    });
+  }
+
+  $('formRoblox').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const msg = $('mensajeRoblox');
+    const codigos = $('robloxCodigos').value.split(/[\r\n,;]+/).map((c) => c.replace(/\s/g, '')).filter(Boolean);
+    if (!codigos.length) { msg.textContent = 'Pega al menos un código.'; return; }
+    if (codigos.length > 500) { msg.textContent = 'Máximo 500 códigos por vez.'; return; }
+    const paquete = $('robloxPaquete').value;
+    if (!confirm(`¿Guardar ${codigos.length} código${codigos.length === 1 ? '' : 's'} en ${paquete} Robux?\n\nRevisa que sea el paquete correcto: un código en el paquete equivocado le daría al cliente otra cantidad de Robux.`)) return;
+    $('btnCargarRoblox').disabled = true;
+    const { data, error } = await cliente.rpc('admin_roblox_cargar', { p_paquete: paquete, p_codigos: codigos });
+    $('btnCargarRoblox').disabled = false;
+    if (error || !data) { msg.textContent = textoError(error, 'No se pudieron guardar.'); return; }
+    msg.textContent = `✅ ${data.nuevos} nuevo${data.nuevos === 1 ? '' : 's'} en ${paquete} Robux`
+      + (data.repetidos ? ` · ${data.repetidos} ya estaban (no se repiten)` : '')
+      + (data.invalidos ? ` · ${data.invalidos} con caracteres raros (no se guardaron)` : '') + '.';
+    $('robloxCodigos').value = '';
+    cargarRoblox();
   });
 
   // "Entrar con Google": si había otra cuenta (no administradora), primero se cierra

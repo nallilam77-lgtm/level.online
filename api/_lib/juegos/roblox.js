@@ -1,7 +1,9 @@
 // Roblox: precios, códigos de descuento y compra (el Apps Script de GAS_URL, apps-script/roblox.gs,
 // verifica el pago y entrega). Lo usan api/juego.js (precios, descuento) y api/recargar.js (recargar).
-// Primero se entregan los códigos guardados en la pestaña "Codigos"; si no quedan y el paquete tiene
-// product_id (fila 3 de PreciosRoblox), el código se compra en Central One (ver comprarEnCentralOne).
+// Desde 2026-11-14 los códigos viven en Supabase (supabase/roblox.sql): con Supabase activo se manda
+// codigosSupabase: true, roblox.gs aparta el pago (status "comprar", productId "SUPABASE") y aquí se toma
+// el código (entregarDeSupabase). Sin Supabase, como antes: la pestaña "Codigos" de la hoja y, si no quedan
+// y el paquete tiene product_id (fila 3 de PreciosRoblox), Central One (ver comprarEnCentralOne).
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { obtenerIp, minutosBloqueado, registrarFallo } from '../limitador.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache, cabecerasCachePrecios } from '../externo.js';
@@ -10,6 +12,7 @@ import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento, 
 import { porcentajePremio, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { limpiarMontoVES } from '../recarga-comun.js';
 import { catalogo as catalogoCentralOne, datosParaPedido, crearPedidoCentralOne, esperarCodigo } from '../centralone.js';
+import { supabaseActivo, rpc } from '../supabase.js';
 
 // Debe ser menor que maxDuration de api/recargar.js en vercel.json (180 s).
 // La compra no se reintenta: el Apps Script de Roblox no tiene idPedido y repetirla podría duplicarla.
@@ -30,6 +33,27 @@ const TIEMPO_PEDIDO_CENTRALONE_MS = 30000;
 const ESCRITURA_IDEMPOTENTE = { tiempoMs: 20000, intentoMs: 10000, reintentos: 1, reintentarTrasTimeout: true };
 const PRODUCTO_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const llaveRoblox = () => (process.env.roblox_nuevo || '').trim();
+const PRODUCTO_SUPABASE = 'SUPABASE';
+
+// Clave de un paquete, igual que claveDePaquete de roblox.gs y la columna "paquete" de roblox_codigos:
+// "355 Robux" -> "355", "800 Robux EE. UU." -> "800-EEUU"
+function claveDePaquete(nombre) {
+  const numero = String(nombre || '').replace(/[^0-9]/g, '');
+  if (!numero) return '';
+  return /EE\.?\s*UU|ESTADOS\s+UNIDOS|UNITED\s+STATES|\bUSA?\b/i.test(String(nombre)) ? `${numero}-EEUU` : numero;
+}
+
+// Códigos libres en Supabase por paquete ({ "355": 31 }), 20 s en memoria. null si Supabase no respondió.
+async function stockSupabase() {
+  try {
+    const { datos } = await conCache('roblox:stock:supabase', () => rpc('roblox_stock', {}),
+      { frescoMs: 20_000, respaldoMs: 10 * 60_000, esValido: (d) => d && typeof d === 'object' });
+    return datos;
+  } catch (error) {
+    console.error('Roblox: no se pudo leer el stock de códigos en Supabase:', error.message);
+    return null;
+  }
+}
 
 // CORS: solo tu dominio (igual que vercel.json)
 function cabecerasCors(res) {
@@ -49,7 +73,16 @@ async function obtenerPreciosRoblox(scriptUrl) {
 // Stock de cada paquete para el cliente: nunca la cantidad exacta de códigos del inventario,
 // solo 'disponible', 'pocos' o 'agotado'. Sin datos de stock (Apps Script anterior) → {}.
 // Sin códigos guardados, un paquete con product_id sigue a la venta si Central One tiene stock.
-async function estadoStock({ stock, productos } = {}) {
+async function estadoStock({ stock, productos, precios } = {}) {
+  if (supabaseActivo() && precios && typeof precios === 'object') {
+    const libres = await stockSupabase();
+    // Sin respuesta de Supabase no se sabe: se deja comprar (si no quedan, la compra libera el pago)
+    return Object.fromEntries(Object.keys(precios).map((producto) => {
+      if (!libres) return [producto, 'disponible'];
+      const n = Number(libres[claveDePaquete(producto)]) || 0;
+      return [producto, n <= 0 ? 'agotado' : n <= POCOS_CODIGOS ? 'pocos' : 'disponible'];
+    }));
+  }
   if (!stock || typeof stock !== 'object') return {};
   const estados = {};
   for (const [producto, cantidad] of Object.entries(stock)) {
@@ -233,6 +266,8 @@ export async function recargar(req, res) {
       telefono: telefonoCliente(req.body?.telefono),
       // Sin códigos guardados, roblox.gs reserva el pago y responde "comprar" (solo si hay llave)
       ...(llaveRoblox() && { api: true }),
+      // Códigos en Supabase: roblox.gs aparta el pago y el código se toma aquí (entregarDeSupabase)
+      ...(supabaseActivo() && { codigosSupabase: true }),
     };
 
     // Apps Script verifica el pago y la entrega, puede tardar más. Sin reintento
@@ -246,7 +281,11 @@ export async function recargar(req, res) {
         desc ? `| código ${desc.codigo} (${montoACobrar} Bs, pedido ${idPedido}): si se entregó, anotar el uso a mano` : '');
       return res.status(202).json({ status: 'error', message: 'Fallo técnico momentáneo: tu compra quedó en proceso. Si en 5 minutos no la recibes, escríbenos por WhatsApp.' });
     }
-    if (data?.status === 'comprar') data = await comprarEnCentralOne({ scriptUrl, idPedido, productId: data.productId, usuario, inicio });
+    if (data?.status === 'comprar') {
+      data = data.productId === PRODUCTO_SUPABASE
+        ? await entregarDeSupabase({ scriptUrl, idPedido, paquete: String(producto), usuario })
+        : await comprarEnCentralOne({ scriptUrl, idPedido, productId: data.productId, usuario, inicio });
+    }
 
     // Pago encontrado (entregado o insuficiente): +1 compra de la cuenta, el premio se gasta y +1 venta del producto
     if (data?.status === 'success' || data?.insuficiente) {
@@ -304,6 +343,7 @@ async function completarCompra(req, res, inicio) {
     try {
       data = await llamarScript(scriptUrl, {
         tipo: 'completar', claveHash, referencia, idPedido, ...(llaveRoblox() && { api: true }),
+        ...(supabaseActivo() && { codigosSupabase: true }),
         // Si en el primer pago no dejó WhatsApp, roblox.gs usa este
         telefono: telefonoCliente(req.body?.telefono),
       }, { tiempoMs: TIEMPO_COMPRA_MS });
@@ -314,7 +354,9 @@ async function completarCompra(req, res, inicio) {
     }
 
     if (data?.status === 'comprar') {
-      data = await comprarEnCentralOne({ scriptUrl, idPedido, productId: data.productId, usuario: String(data.usuario || ''), inicio });
+      data = data.productId === PRODUCTO_SUPABASE
+        ? await entregarDeSupabase({ scriptUrl, idPedido, paquete: String(data.paquete || ''), usuario: String(data.usuario || '') })
+        : await comprarEnCentralOne({ scriptUrl, idPedido, productId: data.productId, usuario: String(data.usuario || ''), inicio });
     }
 
     if (data?.status !== 'success' && !data?.insuficiente && !data?.sinCulpa) await registrarFallo(clavesLimite);
@@ -332,6 +374,52 @@ async function completarCompra(req, res, inicio) {
     console.error('Error al completar un pago de Roblox:', error.message);
     return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ status: 'error', message: 'Error interno de conexión con el servidor.' });
   }
+}
+
+/**
+ * Códigos en Supabase: roblox.gs ya dejó el pago "En proceso" y el pedido en "pedidos_api" (productId
+ * "SUPABASE"). Se toma un código (roblox_tomar_codigo: uno por pedido; repetirlo da el mismo) y:
+ *  - hay código   → entregar_api: pago(s) "Usado", venta en "Exitosas" y el código para el cliente.
+ *  - no quedan    → liberar_api: el pago vuelve a "Verificado" y el cliente ve "Agotado".
+ *  - no responde  → se reintenta una vez; si sigue sin responder, el pago se libera (sin código no hay venta).
+ */
+async function entregarDeSupabase({ scriptUrl, idPedido, paquete, usuario }) {
+  const avisar = (tipo, datos) => llamarScript(scriptUrl, { tipo, idPedido, ...datos }, ESCRITURA_IDEMPOTENTE)
+    .catch((error) => ({ status: 'error', message: error.message }));
+  const clave = claveDePaquete(paquete);
+  let codigo = null;
+  let fallo = '';
+  for (let intento = 0; intento < 2 && codigo === null; intento++) {
+    try {
+      codigo = await rpc('roblox_tomar_codigo', { p_paquete: clave, p_id_pedido: idPedido, p_usuario: usuario });
+      fallo = '';
+      if (codigo === null) break;          // no quedan códigos de ese paquete
+    } catch (error) {
+      fallo = error.message;
+    }
+  }
+  if (typeof codigo !== 'string' || !codigo) {
+    const motivo = fallo ? `Supabase no respondió (${fallo.slice(0, 120)})` : `sin códigos de ${clave} Robux en Supabase`;
+    console.error(`❌ Roblox, pedido ${idPedido}: ${motivo} → se libera el pago.`);
+    const r = await avisar('liberar_api', { motivo: textoParaHoja(motivo, 400) });
+    if (r?.status !== 'success') {
+      console.error(`🚨 Roblox: no se pudo liberar el pago del pedido ${idPedido} (${r?.message}): sigue "En proceso". Revisar "pedidos_api".`);
+      return { status: 'error', sinCulpa: true, message: 'Fallo técnico momentáneo: no pudimos completar tu compra y tu pago quedó en revisión. Escríbenos por WhatsApp con tu referencia.' };
+    }
+    return fallo
+      ? { status: 'error', sinCulpa: true, message: 'Fallo técnico momentáneo: tu pago no se usó. Intenta de nuevo en un minuto.' }
+      : { status: 'error', agotado: true, sinCulpa: true, message: '⚠️ Este paquete se acaba de agotar. Tu pago no se usó: elige otro paquete o escríbenos por WhatsApp.' };
+  }
+
+  const entrega = await avisar('entregar_api', { codigo, ordenCentralOne: PRODUCTO_SUPABASE, enPagina: true });
+  if (entrega?.status !== 'success') {
+    // El código ya es de este pedido: el cliente lo recibe igual
+    console.error(`🚨 Roblox: código entregado en la página pero NO anotado en la hoja (pedido ${idPedido}, usuario ${usuario}): ${entrega?.message}. Marcar el pago "Usado" y anotar la venta a mano.`);
+  }
+  return {
+    status: 'success', code: codigo, message: '¡Código canjeado con éxito!',
+    usuario: entrega?.usuario, precio: entrega?.precio, codigoDescuento: entrega?.codigoDescuento,
+  };
 }
 
 /**

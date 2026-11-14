@@ -25,6 +25,12 @@
 //      dice "📲 ENVIAR POR WHATSAPP". Las tres acciones miran el estado de la fila: repetirlas no cambia nada.
 // Los pagos se leen de la hoja de pagos compartida (ID_HOJA_PAGOS: C referencia, D monto, E estado).
 //
+// CÓDIGOS EN SUPABASE (desde 2026-11-14): si Vercel manda codigosSupabase: true, la pestaña "Codigos" ya
+// NO se usa. Con el pago encontrado y suficiente, aquí solo se aparta el pago ("En proceso" + fila en
+// "pedidos_api", productId "SUPABASE") y se responde status "comprar"; Vercel toma el código de Supabase
+// (supabase/roblox.sql) y llama a entregar_api (o a liberar_api si no quedan). Los códigos se cargan en
+// admin.html → pestaña "Roblox".
+//
 // Seguridad (Configuración del proyecto > Propiedades del script):
 //   TOKEN_VERCEL = el mismo valor que SCRIPT_RECARGAS_TOKEN en Vercel. OBLIGATORIA desde 2026-11-08:
 //   sin ella el script responde "No autorizado" a todo (si no, cualquiera con la URL /exec podría
@@ -112,6 +118,9 @@ const COLUMNAS_PEDIDOS_API = ["fecha-hora", "id pedido", "usuario", "paquete", "
 const COLUMNA_DATOS_INTERNOS_API = 14;
 // Columna J (estado). Empieza por ⏳ mientras se compra: solo entonces entregar_api y liberar_api cambian algo.
 const ESTADO_COMPRANDO = "⏳ COMPRANDO EN CENTRAL ONE";
+// Códigos en Supabase: el "productId" con el que se aparta el pago y su estado en "pedidos_api"
+const PRODUCTO_SUPABASE = "SUPABASE";
+const ESTADO_TOMANDO_SUPABASE = "⏳ TOMANDO CÓDIGO DE SUPABASE";
 const ESTADO_ENTREGADO_PAGINA = "✅ ENTREGADO EN LA PÁGINA";
 const ESTADO_ENTREGADO_WHATSAPP = "📲 ENVIAR POR WHATSAPP: el código llegó cuando el cliente ya no esperaba en la página";
 const ESTADO_LIBERADO = "↩️ NO SE COMPRÓ (pago liberado): ";
@@ -245,6 +254,15 @@ function procesarPagoYExtraerCodigo(datos) {
       }
     }
     return insuficiente;
+  }
+
+  // ---- Códigos en Supabase: se aparta el pago y Vercel toma el código ----
+  if (datos.codigosSupabase === true) {
+    return reservarParaCentralOne({
+      hojaPagos: hojaPagos, filaPago: filaPago, idPedido: idPedido, usuario: usuario, paquete: paquete,
+      precio: precioACobrar, codigoDescuento: codigoDescuento, urlCapture: urlCapture, productId: PRODUCTO_SUPABASE,
+      pagos: [pago.referencia], porCompletar: null, telefono: telefono, estado: ESTADO_TOMANDO_SUPABASE
+    });
   }
 
   // ---- Buscar un código libre (todavía sin tocarlo) ----
@@ -415,9 +433,11 @@ function completarCompra(datos) {
   }
 
   // Alcanza: primero el código (si se agotó, el pago nuevo NO se toca y la compra sigue pendiente)
-  var col = columnaDePaquete(hojaCodigos, claveDePaquete(paquete));
+  var enSupabase = datos.codigosSupabase === true;
+  var col = enSupabase ? -1 : columnaDePaquete(hojaCodigos, claveDePaquete(paquete));
   var libre = col === -1 ? { codigo: null } : buscarCodigoLibre(hojaCodigos, col);
-  var productoApi = !libre.codigo && COMPRAR_EN_CENTRAL_ONE && datos.api === true ? productoDePaquete(libro, claveDePaquete(paquete)) : "";
+  var productoApi = enSupabase ? PRODUCTO_SUPABASE
+    : !libre.codigo && COMPRAR_EN_CENTRAL_ONE && datos.api === true ? productoDePaquete(libro, claveDePaquete(paquete)) : "";
   if (productoApi) {
     // Sin códigos guardados: se compra en Central One. La fila de "por_completar" queda "⏳" (no se puede
     // completar dos veces) y entregar_api la cierra; si no se compra, liberar_api le devuelve su estado.
@@ -427,10 +447,10 @@ function completarCompra(datos) {
       hojaPagos: hojaPagos, filaPago: pago.filaPago, idPedido: idPedido, usuario: usuario, paquete: paquete,
       precio: precio, codigoDescuento: String(v[8] || ""), urlCapture: String(v[9] || "Sin comprobante"), productId: productoApi,
       pagos: todas, porCompletar: { claveHash: claveHash, pagado: pagado, falta: falta, estadoAnterior: estadoAnterior },
-      telefono: telefono
+      telefono: telefono, estado: enSupabase ? ESTADO_TOMANDO_SUPABASE : ESTADO_COMPRANDO
     });
     if (reserva.status === "comprar") {
-      hojaPc.getRange(fila, 11).setValue("⏳ COMPRANDO EN CENTRAL ONE (pedido " + idPedido + ")");
+      hojaPc.getRange(fila, 11).setValue((enSupabase ? ESTADO_TOMANDO_SUPABASE : "⏳ COMPRANDO EN CENTRAL ONE") + " (pedido " + idPedido + ")");
       hojaPc.getRange(fila, 13).setValue(ahora());
       SpreadsheetApp.flush();
     }
@@ -488,12 +508,12 @@ function reservarParaCentralOne(c) {
   }
   hojaPedidosApi().appendRow([
     ahora(), textoSeguro(c.idPedido), textoSeguro(c.usuario), textoSeguro(c.paquete), c.precio, c.pagos.join(" + "),
-    textoSeguro(c.codigoDescuento), textoSeguro(c.urlCapture), textoSeguro(c.productId), ESTADO_COMPRANDO, "", "", ahora(),
+    textoSeguro(c.codigoDescuento), textoSeguro(c.urlCapture), textoSeguro(c.productId), c.estado || ESTADO_COMPRANDO, "", "", ahora(),
     JSON.stringify({ enProceso: enProceso, pagos: c.pagos, porCompletar: c.porCompletar }),
     c.telefono || ""
   ]);
   SpreadsheetApp.flush();
-  return { status: "comprar", productId: c.productId, idPedido: c.idPedido, usuario: c.usuario };
+  return { status: "comprar", productId: c.productId, idPedido: c.idPedido, usuario: c.usuario, paquete: c.paquete };
 }
 
 // Paso 3 (Vercel con el código, o el aviso de Central One): pago(s) "Usado" y venta en "Exitosas".
@@ -550,7 +570,7 @@ function entregarApi(datos) {
   anotarExitosa(hojaExitosas, {
     usuario: v[2], paquete: v[3], referencia: v[5], codigo: codigo, urlCapture: v[7],
     precioACobrar: v[4], codigoDescuento: v[6], idPedido: idPedido, telefono: v[14]
-  }, "Central One " + ordenCO);
+  }, ordenCO === PRODUCTO_SUPABASE ? "Inventario (Supabase)" : "Central One " + ordenCO);
   SpreadsheetApp.flush();
   return { status: "success", yaEntregado: false, code: codigo, usuario: resumen.usuario, precio: resumen.precio, codigoDescuento: resumen.codigoDescuento };
 }

@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=8">
+  <link rel="stylesheet" href="css/admin.css?v=9">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=9" defer></script>
+  <script src="/js/admin.js?v=10" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -42,6 +42,7 @@
         <button type="button" role="tab" data-seccion="cuentas" aria-selected="false">Cuentas</button>
         <button type="button" role="tab" data-seccion="creadores" aria-selected="false">Creadores</button>
         <button type="button" role="tab" data-seccion="precios" aria-selected="false">Precios</button>
+        <button type="button" role="tab" data-seccion="roblox" aria-selected="false">Roblox</button>
         <button type="button" role="tab" data-seccion="juego" aria-selected="false">Minijuego</button>
         <button type="button" role="tab" data-seccion="espacio" aria-selected="false">Supabase</button>
       </nav>
@@ -184,6 +185,45 @@
             <button type="submit" class="btn btn--chico">Agregar paquete</button>
             <p class="mensaje-form" id="mensajeManual" role="status"></p>
           </form>
+        </div>
+      </section>
+
+      <!-- ROBLOX: códigos en Supabase (supabase/roblox.sql). El panel nunca ve el código entero. -->
+      <section class="seccion" id="seccion-roblox" hidden>
+        <div class="tarjeta">
+          <h2>Códigos de Roblox</h2>
+          <div class="kpis" id="kpisRoblox"></div>
+          <p class="nota">Cada compra se lleva un código de aquí, uno solo y nunca repetido. Si un paquete llega a 0, la tienda lo muestra <strong>Agotado</strong> y no cobra.</p>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Cargar códigos</h2>
+          <form class="formulario" id="formRoblox" novalidate>
+            <label class="campo">Paquete
+              <select id="robloxPaquete">
+                <option value="50">50 Robux</option>
+                <option value="100">100 Robux</option>
+                <option value="270">270 Robux</option>
+                <option value="355">355 Robux</option>
+              </select>
+            </label>
+            <label class="campo">Códigos (uno por línea)
+              <textarea id="robloxCodigos" rows="6" spellcheck="false" autocomplete="off" placeholder="Pega aquí los códigos, uno debajo del otro"></textarea>
+            </label>
+            <button type="submit" class="btn btn--chico" id="btnCargarRoblox">Guardar códigos</button>
+            <p class="mensaje-form" id="mensajeRoblox" role="status"></p>
+          </form>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Últimos entregados</h2>
+          <ul class="pedidos" id="listaRobloxEntregados"></ul>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Códigos sin entregar</h2>
+          <p class="nota">Por seguridad solo se ven los últimos 4 caracteres. <strong>Anular</strong> sirve para un código malo o que ya entregaste a mano.</p>
+          <ul class="pedidos" id="listaRobloxLibres"></ul>
         </div>
       </section>
 
