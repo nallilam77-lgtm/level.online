@@ -4,6 +4,8 @@
 // Aquí solo: pedir la partida al servidor (cobra las fichas y da la semilla), jugarla en pantalla,
 // mandar el registro de movimientos al terminar y mostrar lo que el servidor calculó.
 // Fichas, ranking y partidas: /api/minijuego (Supabase). Requiere sesión (js/sesion.js agrega el token).
+// PRÁCTICA (desde 2026-11-14): "Practicar gratis" juega una partida solo en el teléfono, sin sesión, sin
+// gastar fichas y sin mandar nada al servidor: los puntos no cuentan para nada.
 // =========================================================================
 import {
   W, H, SUELO, COFRE_Y, COFRE_MEDIO, DURACION_S, PASO, OBJETOS, X_MIN, X_MAX,
@@ -33,6 +35,7 @@ let avisoPausaHasta = 0;    // aviso "no salgas del juego" (visibilitychange)
 let envioPendiente = null;  // { id, registro, puntos, fin } si falló el envío al terminar (también en el teléfono)
 let claveJugar = '';        // una por cada "Jugar": si se corta y se reintenta, el servidor da la MISMA partida
 let ocupado = false;
+let practica = false;        // partida de práctica en pantalla (no se cobra ni se envía)
 const CLAVE_ENVIO = 'lluvia_envio_pendiente';
 const espera = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const nuevaClave = () => (crypto.randomUUID ? crypto.randomUUID()
@@ -118,13 +121,15 @@ async function tablaEjemplos() {
 }
 
 async function cargar() {
-  if (!window.Sesion || !Sesion.hay()) return irALogin();
+  const conSesion = !!(window.Sesion && Sesion.hay());
   mostrarCapa('capaCargando');
   try {
     const r = await api(API);
     if (!r.activo) return error('El juego no está disponible por ahora.');
     info = { fichas: r.fichas, costo: r.costo, bsPorFicha: r.bsPorFicha, sesion: r.sesion, cierre: r.cierre };
     pintarFichas(); pintarRanking(r.ranking); cuentaAtras();
+    // Sin sesión (o vencida): "Entrar con Google" o "Practicar gratis" (la práctica no necesita cuenta)
+    if (!conSesion) return mostrarCapa('capaEntrar');
     if (!r.sesion) return irALogin();   // sesión vencida o no válida
     const guardado = leer(CLAVE_ENVIO, null);
     if (guardado && guardado.id && Array.isArray(guardado.registro)) return enviarResultado(guardado);
@@ -244,7 +249,8 @@ function pintarHud() {
   $('hudVidas').textContent = '♥'.repeat(Math.max(0, e.vidas)) || '0';
   $('hudCombo').textContent = 'x' + multiplicador(e);
   const activos = [
-    Date.now() < avisoPausaHasta && ['aviso', 'No salgas del juego: una pausa larga anula la partida'],
+    practica && ['practica', 'Práctica: no cuenta'],
+    !practica && Date.now() < avisoPausaHasta && ['aviso', 'No salgas del juego: una pausa larga anula la partida'],
     e.escudo > 0 && ['escudo', `Escudo ${Math.ceil(e.escudo)} s`],
     e.lento > 0 && ['lento', `Lento ${Math.ceil(e.lento)} s`],
     e.rapido > 0 && ['rapido', `Rápido ×2 ${Math.ceil(e.rapido)} s`],
@@ -271,7 +277,44 @@ function bucle(t) {
   pintarHud();
   dibujar();
   if (estado.jugando) animacion = requestAnimationFrame(bucle);
+  else if (practica) finPractica();
   else enviarResultado({ id: idPartida, registro: estado.registro, puntos: estado.puntos, fin: estado.fin });
+}
+
+// Empieza la partida en pantalla (de verdad o de práctica)
+function arrancar(semilla) {
+  estado = partidaNueva(semilla);
+  destinoX = W / 2; acumulado = 0;
+  mostrarCapa(null);
+  $('canvas').closest('.juego').classList.toggle('juego--practica', practica);
+  pintarHud();
+  // En el teléfono, que el juego quede entero a la vista
+  $('canvas').closest('.juego').scrollIntoView({ block: 'end', behavior: 'auto' });
+  cancelAnimationFrame(animacion);
+  ultimo = performance.now();
+  animacion = requestAnimationFrame(bucle);
+}
+
+// Práctica: semilla al azar en el teléfono; nada de servidor, fichas ni ranking
+function practicar() {
+  if (ocupado || !$('tutorial').hidden) return;
+  if (envioPendiente) return enviarResultado(envioPendiente);   // primero, la partida de verdad sin enviar
+  practica = true;
+  const n = new Uint32Array(1);
+  crypto.getRandomValues(n);
+  arrancar(n[0]);
+}
+
+function finPractica() {
+  practica = false;
+  $('canvas').closest('.juego').classList.remove('juego--practica');
+  $('finTitulo').textContent = estado.fin === 'tiempo' ? '¡Práctica terminada!' : '¡Sin vidas! (práctica)';
+  $('finPuntos').textContent = numero(estado.puntos);
+  $('finTexto').textContent = 'Era una práctica: no gastó fichas ni cuenta para el ranking.';
+  $('btnOtra').textContent = !info.sesion ? 'Entrar para jugar por el premio'
+    : info.fichas >= info.costo ? `Jugar en serio · ${info.costo} fichas` : 'Recargar para jugar';
+  $('btnOtra').hidden = false;
+  mostrarCapa('capaFin');
 }
 
 async function jugar() {
@@ -291,15 +334,8 @@ async function jugar() {
     if (r.status !== 'success') return error(r.message || 'No se pudo empezar la partida.');
     info.fichas = r.fichas; pintarFichas();
     idPartida = r.id;
-    estado = partidaNueva(r.semilla);
-    destinoX = W / 2; acumulado = 0;
-    mostrarCapa(null);
-    pintarHud();
-    // En el teléfono, que el juego quede entero a la vista
-    $('canvas').closest('.juego').scrollIntoView({ block: 'end', behavior: 'auto' });
-    cancelAnimationFrame(animacion);
-    ultimo = performance.now();
-    animacion = requestAnimationFrame(bucle);
+    practica = false;
+    arrancar(r.semilla);
   } catch (e) {
     // claveJugar se conserva: "Reintentar" recupera la misma partida si ya se había cobrado
     error('Sin conexión. Toca Reintentar: si la partida ya se cobró, no se cobra otra vez.');
@@ -355,6 +391,7 @@ async function enviarResultado(envio) {
 
 function otra() {
   if (envioPendiente) return enviarResultado(envioPendiente);
+  if (!info.sesion) return entrarConGoogle();
   if (info.fichas < info.costo) { window.location.href = 'index.html'; return; }
   jugar();
 }
@@ -386,15 +423,17 @@ document.addEventListener('visibilitychange', () => {
   salioA = 0;
 });
 // Salir a mitad de partida la pierde: se avisa
-window.addEventListener('beforeunload', (ev) => { if ((estado && estado.jugando) || envioPendiente) { ev.preventDefault(); ev.returnValue = ''; } });
+window.addEventListener('beforeunload', (ev) => { if ((estado && estado.jugando && !practica) || envioPendiente) { ev.preventDefault(); ev.returnValue = ''; } });
 $('btnJugar').addEventListener('click', jugar);
 $('btnOtra').addEventListener('click', otra);
 $('btnReintentar').addEventListener('click', cargar);
-$('btnEntrar').addEventListener('click', async (ev) => {
-  ev.preventDefault();
-  try { if (window.Sesion) await Sesion.salir(); } catch (e) { /* igual se va a entrar */ }
+// Entrar: si había una sesión vieja guardada, primero se cierra en este teléfono (si no, volvía aquí sin entrar)
+async function entrarConGoogle() {
+  try { if (window.Sesion && Sesion.hay()) await Sesion.salir(); } catch (e) { /* igual se va a entrar */ }
   location.href = LOGIN;
-});
+}
+$('btnEntrar').addEventListener('click', (ev) => { ev.preventDefault(); entrarConGoogle(); });
+document.querySelectorAll('[data-practicar]').forEach((b) => b.addEventListener('click', practicar));
 
 // ------------------------------------------------------------------ tutorial
 const GUIA = [

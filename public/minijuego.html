@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
-    // El juego exige sesión: sin sesión guardada se va directo a iniciarla (y vuelve aquí solo)
-    (function () { try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i))) return; } } catch (e) { return; } location.replace('/perfil.html?volver=%2Fminijuego.html&entrar=1'); })();
+    // Sin sesión ya NO se manda a iniciarla (desde 2026-11-14): el juego muestra "Entrar con Google" y
+    // "Practicar gratis" (js/minijuego.js). Para jugar por el premio sigue haciendo falta la sesión.
     // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque, animaciones ni transiciones (css/ligero.css)
     (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css?v=3'; document.head.appendChild(l); } })();
   </script>
@@ -20,10 +20,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/minijuego.css?v=3">
+  <link rel="stylesheet" href="css/minijuego.css?v=4">
   <!-- Sesión (agrega el token a /api/minijuego) y después el juego (módulo: usa el motor compartido con el servidor) -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script type="module" src="/js/minijuego.js?v=5"></script>
+  <script type="module" src="/js/minijuego.js?v=6"></script>
 </head>
 <body>
   <div class="barra">
@@ -56,14 +56,16 @@
 
           <div class="capa" id="capaEntrar" hidden>
             <h3>Inicia sesión</h3>
-            <p>Tus fichas y puntos se guardan en tu cuenta.</p>
+            <p>Para jugar por el premio, entra con tu cuenta: ahí se guardan tus fichas y tus puntos.</p>
             <a class="btn" id="btnEntrar" href="/perfil.html?volver=%2Fminijuego.html&amp;entrar=1">Entrar con Google</a>
+            <button type="button" class="btn-sec btn-practica" data-practicar>🎮 Practicar gratis</button>
           </div>
 
           <div class="capa" id="capaInicio" hidden>
             <h3>¿Listo?</h3>
             <p>Desliza el dedo para mover el cofre.</p>
             <button type="button" class="btn" id="btnJugar">Jugar · 5 fichas</button>
+            <button type="button" class="btn-sec btn-practica" data-practicar>🎮 Practicar gratis</button>
             <button type="button" class="btn-sec" data-ayuda>¿Cómo se juega?</button>
           </div>
 
@@ -71,6 +73,7 @@
             <h3>Sin fichas</h3>
             <p id="sinFichasTexto">Recarga para ganar fichas.</p>
             <a class="btn" href="index.html">Recargar</a>
+            <button type="button" class="btn-sec btn-practica" data-practicar>🎮 Practicar gratis</button>
           </div>
 
           <div class="capa" id="capaFin" hidden>
@@ -78,6 +81,7 @@
             <div class="resultado" id="finPuntos">0</div>
             <p id="finTexto"></p>
             <button type="button" class="btn" id="btnOtra">Otra partida</button>
+            <button type="button" class="btn-sec btn-practica" data-practicar>🎮 Practicar gratis</button>
           </div>
 
           <div class="capa" id="capaError" hidden>
@@ -120,6 +124,7 @@
       <ul class="reglas">
         <li><strong>5 fichas</strong> por partida. Ganas fichas recargando con tu sesión.</li>
         <li>La <strong>mejor partida de la semana</strong> gana <strong>341 💎</strong>.</li>
+        <li><strong>¿Primera vez?</strong> Toca <strong>Practicar gratis</strong>: no gasta fichas ni cuenta para el ranking.</li>
         <li>No salgas del juego mientras juegas: una pausa larga anula la partida.</li>
         <li>Hacer trampa = fuera del torneo.</li>
       </ul>
