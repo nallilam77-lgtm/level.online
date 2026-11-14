@@ -50,26 +50,28 @@ export async function pagoRecibido(req, res) {
   const referencia = String(b.referencia ?? '').replace(/\D/g, '');
   const montoTexto = String(b.monto ?? '').trim().slice(0, 40);
   const monto = limpiarMontoVES(montoTexto);
+  // Ya pasó la clave: toda respuesta dice lo que llegó, para verlo en las variables de MacroDroid
+  const recibido = {
+    referencia: String(b.referencia ?? '').slice(0, 60), monto: montoTexto,
+    origen: String(b.origen ?? '').slice(0, 30), telefono: String(b.telefono ?? '').slice(0, 80),
+  };
+  const responder = (codigo, cuerpo) => res.status(codigo).json({ ...cuerpo, recibido });
   if (!/^\d{4,30}$/.test(referencia)) {
-    console.error(`⚠️ pago_recibido: referencia inválida ("${String(b.referencia ?? '').slice(0, 40)}")`);
-    // Ya pasó la clave: se devuelve lo recibido para ver en MacroDroid qué mandó la macro
-    return res.status(400).json({
-      status: 'error', message: 'Referencia vacía o inválida',
-      recibido: { referencia: String(b.referencia ?? '').slice(0, 60), monto: montoTexto, origen: String(b.origen ?? '').slice(0, 30) },
-    });
+    console.error(`⚠️ pago_recibido: referencia inválida ("${recibido.referencia.slice(0, 40)}")`);
+    return responder(400, { status: 'error', message: 'Referencia vacía o inválida' });
   }
   if (!(monto >= 0) || !Number.isFinite(monto)) {
-    return res.status(400).json({ status: 'error', message: 'Monto inválido' });
+    return responder(400, { status: 'error', message: 'Monto inválido' });
   }
   const origen = ORIGENES.has(String(b.origen)) ? String(b.origen) : 'otro';
 
   try {
     const ya = await leer('pagos', { referencia }, 'id');
-    if (Array.isArray(ya) && ya.length) return res.status(200).json({ status: 'success', duplicado: true, message: 'Pago ya registrado' });
+    if (Array.isArray(ya) && ya.length) return responder(200, { status: 'success', duplicado: true, message: 'Pago ya registrado' });
     // Ya se usó y la limpieza diaria lo borró: un aviso repetido no lo hace renacer libre
     // (si esa consulta falla, igual protege la regla de la base al guardar: pagos_no_repetir_usado)
     const usada = await leer('pagos_usados', { referencia }, 'referencia').catch(() => null);
-    if (Array.isArray(usada) && usada.length) return res.status(200).json({ status: 'success', duplicado: true, message: 'Pago ya usado' });
+    if (Array.isArray(usada) && usada.length) return responder(200, { status: 'success', duplicado: true, message: 'Pago ya usado' });
     // Sin "on_conflict": si dos avisos iguales llegan a la vez, el segundo choca con la regla de la base
     // (referencia única) y se toma como duplicado. Nunca se pisa un pago que ya existe.
     await guardar('pagos', {
@@ -78,11 +80,11 @@ export async function pagoRecibido(req, res) {
     });
     console.info(`💵 Pago recibido en Supabase: …${referencia.slice(-5)} · ${monto} Bs · ${origen}`);
     limpiarSiToca();
-    return res.status(200).json({ status: 'success', message: 'Pago guardado en Supabase' });
+    return responder(200, { status: 'success', message: 'Pago guardado en Supabase' });
   } catch (error) {
-    if (/Supabase 409/.test(error.message)) return res.status(200).json({ status: 'success', duplicado: true, message: 'Pago ya registrado' });
+    if (/Supabase 409/.test(error.message)) return responder(200, { status: 'success', duplicado: true, message: 'Pago ya registrado' });
     console.error('⚠️ pago_recibido: no se pudo guardar:', error.message);
-    return res.status(503).json({ status: 'error', message: 'No se pudo guardar, reintenta' });
+    return responder(503, { status: 'error', message: 'No se pudo guardar, reintenta' });
   }
 }
 
