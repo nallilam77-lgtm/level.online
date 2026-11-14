@@ -251,6 +251,11 @@ export async function recargar(req, res) {
       if (pagoSupabase && data?.status === 'success') {
         if (data.registrado) await cambiarPago(pagoSupabase.referencia, 'usado', { idPedido });
         else await cambiarPago(pagoSupabase.referencia, 'verificado', { soloSi: 'en_proceso' });
+      } else if (pagoSupabase) {
+        // "Ocupado": la hoja no hizo nada, el pago vuelve a estar libre. Otro error: no se sabe si se anotó,
+        // el pago queda usado (como sin respuesta) y se revisa a mano
+        if (data?.ocupado) await cambiarPago(pagoSupabase.referencia, 'verificado', { soloSi: 'en_proceso' });
+        else await cambiarPago(pagoSupabase.referencia, 'usado', { idPedido });
       }
     } catch (error) {
       // Sin respuesta: no se sabe si se anotó, así que el pago no vuelve a estar libre (se revisa a mano)

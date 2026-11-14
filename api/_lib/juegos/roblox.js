@@ -317,7 +317,12 @@ export async function recargar(req, res) {
 
     // Pagos en Supabase (interruptor del panel): todo aquí, sin Apps Script (compraConSupabase)
     let data;
-    if (paqueteSupabase && (await motorPagos()) === 'supabase') {
+    const cobroSupabase = (await motorPagos()) === 'supabase';
+    if (cobroSupabase && !paqueteSupabase) {
+      // Pagos en Supabase pero sin sus paquetes (Supabase no respondió): nunca se cobra con la hoja
+      return res.status(503).json({ status: 'error', message: 'Fallo técnico momentáneo: tu pago no se usó. Intenta de nuevo en un minuto.' });
+    }
+    if (cobroSupabase) {
       data = await compraConSupabase({ idPedido, referencia: String(referencia), usuario, paquete: String(producto),
         precio: montoACobrar ?? precioLista, claveHash: huella(clave), codigoDescuento: desc?.codigo || '',
         telefono: telefonoCliente(req.body?.telefono) });

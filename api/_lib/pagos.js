@@ -64,6 +64,10 @@ export async function pagoRecibido(req, res) {
   try {
     const ya = await leer('pagos', { referencia }, 'id');
     if (Array.isArray(ya) && ya.length) return res.status(200).json({ status: 'success', duplicado: true, message: 'Pago ya registrado' });
+    // Ya se usó y la limpieza diaria lo borró: un aviso repetido no lo hace renacer libre
+    // (si esa consulta falla, igual protege la regla de la base al guardar: pagos_no_repetir_usado)
+    const usada = await leer('pagos_usados', { referencia }, 'referencia').catch(() => null);
+    if (Array.isArray(usada) && usada.length) return res.status(200).json({ status: 'success', duplicado: true, message: 'Pago ya usado' });
     // Sin "on_conflict": si dos avisos iguales llegan a la vez, el segundo choca con la regla de la base
     // (referencia única) y se toma como duplicado. Nunca se pisa un pago que ya existe.
     await guardar('pagos', {

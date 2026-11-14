@@ -362,3 +362,94 @@ end;
 $$;
 revoke execute on function public.pagos_limpiar() from public, anon, authenticated;
 grant execute on function public.pagos_limpiar() to service_role;
+
+-- =====================================================================
+-- REVISIÓN (2026-11-14): huellas de los pagos usados que se borran y mensaje de dos pedidos a la vez
+-- =====================================================================
+-- Cuando la limpieza diaria borra un pago usado, su referencia queda aquí (60 días): si MacroDroid vuelve a
+-- mandar esa notificación, no renace como pago libre (api/_lib/pagos.js la toma como duplicada).
+create table if not exists public.pagos_usados (
+  referencia text primary key,
+  usado      timestamptz not null default now()
+);
+alter table public.pagos_usados enable row level security;
+revoke all on public.pagos_usados from anon, authenticated;
+
+create or replace function public.pagos_guardar_usado()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if old.estado = 'usado' then
+    insert into pagos_usados (referencia, usado) values (old.referencia, coalesce(old.usado, now()))
+    on conflict (referencia) do nothing;
+  end if;
+  return old;
+end;
+$$;
+drop trigger if exists pagos_guardar_usado on public.pagos;
+create trigger pagos_guardar_usado before delete on public.pagos
+  for each row execute function public.pagos_guardar_usado();
+
+-- La referencia tampoco puede entrar otra vez por "Agregar pago a mano" ni por otra vía
+create or replace function public.pagos_no_repetir_usado()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from pagos_usados where referencia = new.referencia) then
+    raise exception 'Esa referencia ya se usó antes.' using errcode = '23505';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists pagos_no_repetir_usado on public.pagos;
+create trigger pagos_no_repetir_usado before insert on public.pagos
+  for each row execute function public.pagos_no_repetir_usado();
+
+-- pagos_tomar: si el pago existe y está libre pero otro pedido lo está apartando en este mismo instante
+-- (fila bloqueada), el mensaje es "otro cliente lo está procesando" y no "no encontrada"
+create or replace function public.pagos_tomar(p_ultimos5 text, p_id_pedido text, p_juego text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v pagos%rowtype;
+begin
+  if p_ultimos5 !~ '^\d{5}$' then return jsonb_build_object('encontrado', false, 'motivo', 'formato'); end if;
+  if p_id_pedido is not null then
+    select * into v from pagos where id_pedido = p_id_pedido and estado = 'en_proceso' and right(referencia, 5) = p_ultimos5 limit 1;
+    if found then return jsonb_build_object('encontrado', true, 'referencia', v.referencia, 'monto', v.monto, 'repetido', true); end if;
+  end if;
+  select * into v from pagos
+   where right(referencia, 5) = p_ultimos5 and estado = 'verificado' and recibido > now() - interval '3 days'
+   order by recibido desc limit 1 for update skip locked;
+  if found then
+    update pagos set estado = 'en_proceso', id_pedido = left(p_id_pedido, 80), juego = left(p_juego, 30), tomado = now()
+     where id = v.id;
+    return jsonb_build_object('encontrado', true, 'referencia', v.referencia, 'monto', v.monto, 'repetido', false);
+  end if;
+  if exists (select 1 from pagos where right(referencia, 5) = p_ultimos5
+              and (estado = 'en_proceso' or (estado = 'verificado' and recibido > now() - interval '3 days'))) then
+    return jsonb_build_object('encontrado', false, 'motivo', 'en_proceso'); end if;
+  if exists (select 1 from pagos where right(referencia, 5) = p_ultimos5 and (estado = 'vencido' or (estado = 'verificado' and recibido <= now() - interval '3 days'))) then
+    return jsonb_build_object('encontrado', false, 'motivo', 'vencido'); end if;
+  if exists (select 1 from pagos where right(referencia, 5) = p_ultimos5 and estado = 'por_completar') then
+    return jsonb_build_object('encontrado', false, 'motivo', 'por_completar'); end if;
+  if exists (select 1 from pagos where right(referencia, 5) = p_ultimos5 and estado = 'usado') then
+    return jsonb_build_object('encontrado', false, 'motivo', 'usado'); end if;
+  return jsonb_build_object('encontrado', false, 'motivo', 'no_existe');
+end;
+$$;
+revoke execute on function public.pagos_tomar(text, text, text) from public, anon, authenticated;
+grant execute on function public.pagos_tomar(text, text, text) to service_role;
+
+-- Las huellas de más de 60 días se borran con la limpieza diaria
+create or replace function public.pagos_limpiar_huellas()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  delete from pagos_usados where usado < now() - interval '60 days';
+  return null;
+end;
+$$;
+drop trigger if exists pagos_limpiar_huellas on public.pagos;
+create trigger pagos_limpiar_huellas after delete on public.pagos
+  for each statement execute function public.pagos_limpiar_huellas();

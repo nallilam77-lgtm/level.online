@@ -24,14 +24,18 @@ export const MENSAJES_PAGO = {
 };
 
 // ¿Con qué se cobra? 20 s en memoria. Si Supabase no responde, se queda con lo último que supo.
-let motor = { valor: 'hoja', hasta: 0 };
+// Una instancia recién arrancada que todavía no lo sabe NO adivina "hoja": falla (la recarga queda como
+// fallo técnico y el cliente reintenta). Si adivinara, con Supabase activo podría cobrar con la hoja un
+// pago que en Supabase ya está usado.
+let motor = { valor: null, hasta: 0 };
 export async function motorPagos() {
   if (!supabaseActivo()) return 'hoja';
-  if (Date.now() < motor.hasta) return motor.valor;
+  if (motor.valor && Date.now() < motor.hasta) return motor.valor;
   try {
     const v = await rpc('pagos_motor', {});
     motor = { valor: v === 'supabase' ? 'supabase' : 'hoja', hasta: Date.now() + 20_000 };
   } catch (error) {
+    if (!motor.valor) throw new Error(`Supabase (pagos_motor) no respondió: ${error.message}`);
     motor.hasta = Date.now() + 5_000;
     console.error('⚠️ motor de pagos: Supabase no respondió, se sigue con', motor.valor, error.message);
   }
@@ -62,10 +66,12 @@ function espejoEnHoja(referencia) {
   const token = String(process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
   const ref = String(referencia || '').replace(/\D/g, '');
   if (!url || !ref) return;
-  waitUntil(fetch(url, {
+  // La hoja guarda la referencia como número y se come el cero inicial ("0302…" → "302…"): se marcan las dos
+  const variantes = [...new Set([ref, ref.replace(/^0+/, '')])].filter(Boolean);
+  waitUntil(Promise.all(variantes.map((r) => fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, redirect: 'follow',
-    body: JSON.stringify({ accion: 'marcar_usado', referencia: ref, token }), signal: AbortSignal.timeout(20000),
-  }).catch((error) => console.error(`⚠️ motor de pagos: no se pudo marcar "Usado" en la hoja la referencia …${ref.slice(-5)}:`, error.message)));
+    body: JSON.stringify({ accion: 'marcar_usado', referencia: r, token }), signal: AbortSignal.timeout(20000),
+  }))).catch((error) => console.error(`⚠️ motor de pagos: no se pudo marcar "Usado" en la hoja la referencia …${ref.slice(-5)}:`, error.message)));
 }
 
 /** Aparta un pago (últimos 5) para un pedido. { encontrado, referencia, monto, repetido } o { encontrado: false, message } */

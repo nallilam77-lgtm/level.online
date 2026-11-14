@@ -213,3 +213,8 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 
 ## Códigos de descuento: crearlos en la hoja ya no sirve (desde 2026-11-13)
 Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creadores. Uno creado solo en la pestaña "Descuentos" de la hoja no funciona (la tienda pregunta a Supabase; la hoja es solo el respaldo si Supabase no responde). La comisión nunca se recalcula desde `ventas_bs`: ese total cuenta desde siempre y la comisión desde 2026-10-13. `usos`, `ventas_bs` y `comision_usd` solo suben (disparador codigos_solo_suben).
+
+## Pagos en Supabase: nunca adivinar el motor ni dejar que un pago usado renazca (2026-11-14)
+- `motorPagos()` (_lib/motor-pagos.js) falla si una instancia nueva no puede leer `pagos_motor`: si adivinara "hoja", cobraría con la hoja pagos que en Supabase ya están usados (la hoja no se entera: guarda la referencia como número y pierde el cero inicial; el espejo marca las dos variantes).
+- La limpieza diaria borra los pagos usados, pero su referencia queda en `pagos_usados` (60 días): un aviso repetido de MacroDroid no la vuelve a crear libre (`pagos_no_repetir_usado`).
+- Manuales: si la hoja responde "ocupado" el pago se libera; cualquier otro error lo deja usado (no se sabe si el pedido se anotó). Roblox con el motor en Supabase y sin paquetes de Supabase: 503, nunca la hoja.
