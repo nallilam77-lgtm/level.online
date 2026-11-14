@@ -1330,12 +1330,23 @@
     const digitos = texto.replace(/\D/g, '');
     if (digitos.length < 4) return;
     const turno = ++buscando;
-    const { data } = await cliente.from('pagos').select(COLUMNAS_PAGO).like('referencia', `%${digitos}%`).order('recibido', { ascending: false }).limit(50);
+    const [{ data }, borrados] = await Promise.all([
+      cliente.from('pagos').select(COLUMNAS_PAGO).like('referencia', `%${digitos}%`).order('recibido', { ascending: false }).limit(50),
+      usadosBorrados(digitos),
+    ]);
     if (turno !== buscando || !data) return;
     const vistos = new Set(pagos.map((p) => p.referencia));
-    data.forEach((p) => { if (!vistos.has(p.referencia)) pagos.push(p); });
+    data.forEach((p) => { if (!vistos.has(p.referencia)) { pagos.push(p); vistos.add(p.referencia); } });
+    borrados.forEach((p) => { if (!vistos.has(p.referencia)) pagos.push(p); });
     await cargarPedidosDePagos(data);
     pintarPagos();
+  }
+
+  // Pagos usados que la limpieza diaria ya borró (sus referencias quedan 60 días: admin_pagos_usados_buscar)
+  async function usadosBorrados(digitos) {
+    const { data, error } = await cliente.rpc('admin_pagos_usados_buscar', { p_digitos: digitos });
+    if (error) { console.error(error); return []; }
+    return (data || []).map((u) => ({ referencia: u.referencia, usado: u.usado, estado: 'borrado', borrado: true }));
   }
 
   function pintarPagos() {
@@ -1345,6 +1356,14 @@
     const visibles = pagos.filter((p) => !texto || `${p.referencia} ${p.monto} ${p.monto_texto || ''} ${p.remitente || ''}`.toLowerCase().includes(texto));
     if (!visibles.length) { lista.append(el('li', 'vacio', pagos.length ? 'Ningún pago con esa búsqueda.' : 'Todavía no llega ningún pago a Supabase en este periodo.')); return; }
     visibles.forEach((p) => {
+      if (p.borrado) {
+        const li = el('li', 'pedido');
+        const cabeza = el('div', 'pedido-cabeza');
+        cabeza.append(el('strong', '', `ref. ${p.referencia}`), el('span', 'etiqueta etiqueta--problema', 'Usado (ya borrado)'));
+        li.append(cabeza, el('span', '', `Se usó el ${fecha(p.usado)}. La limpieza diaria lo borró: nadie puede volver a usarlo ni agregarlo a mano.`));
+        lista.append(li);
+        return;
+      }
       const [estado, clase] = ESTADO_PAGO[p.estado] || [p.estado, ''];
       const li = el('li', 'pedido');
       const cabeza = el('div', 'pedido-cabeza');
@@ -1411,7 +1430,32 @@
     const monto = $('manualMonto').value.trim();
     if (referencia.length < 6) { msg.textContent = 'Escribe la referencia completa (solo números).'; return; }
     if (!monto) { msg.textContent = 'Escribe el monto en Bs.'; return; }
-    if (!confirm(`¿Agregar el pago ${referencia} por ${monto} Bs?\n\nQuedará libre para que el cliente lo use con sus últimos 5 dígitos (${referencia.slice(-5)}).`)) return;
+    const ultimos5 = referencia.slice(-5);
+    $('btnPagoManual').disabled = true;
+    let iguales = [];
+    try {
+      const [{ data }, borrados] = await Promise.all([
+        cliente.from('pagos').select('referencia,monto,estado,recibido').like('referencia', `%${ultimos5}`).limit(20),
+        usadosBorrados(ultimos5),
+      ]);
+      iguales = [...(data || []), ...borrados].filter((p) => p.referencia.endsWith(ultimos5));
+    } catch (e) { /* sin la comprobación se pregunta igual */ }
+    $('btnPagoManual').disabled = false;
+    const mismo = iguales.find((p) => p.referencia === referencia);
+    if (mismo) {
+      msg.textContent = mismo.borrado
+        ? `❌ Ese pago ya se usó el ${fecha(mismo.usado)}: no se puede agregar otra vez.`
+        : `❌ Ese pago ya está en la lista (${(ESTADO_PAGO[mismo.estado] || [mismo.estado])[0]}): no hace falta agregarlo.`;
+      return;
+    }
+    const aviso = iguales.length
+      ? `\n\n⚠️ OJO: ya hay ${iguales.length === 1 ? 'otro pago que termina' : `${iguales.length} pagos que terminan`} en ${ultimos5}:\n`
+        + iguales.map((p) => p.borrado
+          ? `• ${p.referencia} · usado el ${fecha(p.usado)} (ya borrado)`
+          : `• ${p.referencia} · ${bs(p.monto)} Bs · ${(ESTADO_PAGO[p.estado] || [p.estado])[0]} · llegó ${fecha(p.recibido)}`).join('\n')
+        + `\n\nRevisa que no sea el mismo pago con otra referencia. Si los dos quedan libres, el cliente que escriba ${ultimos5} se lleva el más reciente.`
+      : '';
+    if (!confirm(`¿Agregar el pago ${referencia} por ${monto} Bs?\n\nQuedará libre para que el cliente lo use con sus últimos 5 dígitos (${ultimos5}).${aviso}`)) return;
     $('btnPagoManual').disabled = true;
     try {
       const r = await llamarAdmin('pago_manual', { referencia, monto, remitente: $('manualRemitente').value, nota: $('manualNota').value });

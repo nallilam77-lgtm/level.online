@@ -534,3 +534,28 @@ grant execute on function public.pagos_tomar(text, text, text) to service_role;
 
 -- De paso: los clientes con sesión no necesitan estos permisos sobre "recargas" (nunca se usaban)
 revoke truncate, trigger, references on public.recargas from anon, authenticated;
+
+-- =====================================================================
+-- PANEL (2026-11-14): buscar también los pagos usados que la limpieza diaria ya borró
+-- =====================================================================
+-- Sus referencias quedan 60 días en pagos_usados (nadie las lee salvo esta función, solo administradores).
+-- admin.html → Pagos: el buscador las muestra como "Usado (ya borrado)" y "Agregar pago a mano" avisa si los
+-- últimos 5 dígitos ya existen.
+create or replace function public.admin_pagos_usados_buscar(p_digitos text)
+returns table (referencia text, usado timestamptz)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  perform admin_revisar();
+  if coalesce(p_digitos, '') !~ '^\d{4,30}$' then return; end if;
+  return query
+    select u.referencia, u.usado from pagos_usados u
+     where u.referencia like '%' || p_digitos || '%'
+     order by u.usado desc limit 50;
+end;
+$$;
+revoke execute on function public.admin_pagos_usados_buscar(text) from public, anon;
+grant execute on function public.admin_pagos_usados_buscar(text) to authenticated;
