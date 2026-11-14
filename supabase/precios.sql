@@ -63,35 +63,7 @@ as $$
 $$;
 revoke execute on function public.precios_ganancia() from public, anon, authenticated;
 
--- Los paquetes de un juego con su precio final (lo usará la tienda en el paso 6 y el panel ya mismo).
--- precio: el manual o el calculado (null si es calculado y falta el dólar, la ganancia o el costo: no se vende).
-create or replace function public.precios_de(p_juego text)
-returns table (id bigint, paquete text, producto text, cantidad smallint, precio_manual numeric, costo_usd numeric,
-               precio_calculado numeric, precio numeric, en_stock boolean, stock integer, visto timestamptz,
-               orden smallint, activo boolean)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  with conf as (select codigos_tasa() as tasa, precios_ganancia() as ganancia)
-  select p.id, p.paquete, p.producto, p.cantidad, p.precio_manual, c.costo_usd,
-         case when c.costo_usd is not null and conf.tasa is not null and conf.ganancia is not null
-              then round(c.costo_usd * p.cantidad * conf.tasa * (1 + conf.ganancia / 100), 2) end,
-         coalesce(p.precio_manual,
-           case when c.costo_usd is not null and conf.tasa is not null and conf.ganancia is not null
-                then round(c.costo_usd * p.cantidad * conf.tasa * (1 + conf.ganancia / 100), 2) end),
-         -- Sin producto de Central One (Roblox con códigos propios) el stock lo decide la tienda
-         case when p.producto is null then true else coalesce(c.en_stock, false) end,
-         c.stock, c.visto, p.orden, p.activo
-    from precios p
-    cross join conf
-    left join centralone_catalogo c on c.producto = p.producto
-   where p.juego = p_juego
-   order by p.orden, p.id;
-$$;
-revoke execute on function public.precios_de(text) from public, anon, authenticated;
-grant execute on function public.precios_de(text) to service_role;
+-- precios_de (los paquetes de un juego con su precio final y sus fichas) está más abajo, en la parte de fichas.
 
 -- ---------------------------------------------------------------------
 -- Panel admin: pestaña "Precios"
@@ -236,3 +208,210 @@ end;
 $$;
 revoke execute on function public.admin_ganancia_guardar(numeric) from public, anon;
 grant execute on function public.admin_ganancia_guardar(numeric) to authenticated, service_role;
+
+-- =====================================================================
+-- PRUEBA EN PARALELO (paso 5, desde 2026-11-14): la tienda sigue cobrando con las hojas; cuando un cliente
+-- abre una tienda, el servidor compara cada precio de la hoja con el de Supabase y anota aquí lo que no
+-- coincide (api/_lib/precios.js, compararConHoja). El panel lo muestra en Precios. Lo que ya coincide se borra.
+-- =====================================================================
+create table if not exists public.precios_diferencias (
+  juego           text not null,
+  paquete         text not null,
+  precio_hoja     numeric(12, 2),       -- null: el paquete no está en la hoja
+  precio_supabase numeric(12, 2),       -- null: no está en Supabase o no tiene precio
+  visto           timestamptz not null default now(),
+  primary key (juego, paquete)
+);
+alter table public.precios_diferencias enable row level security;
+revoke all on public.precios_diferencias from anon, authenticated;
+
+-- =====================================================================
+-- FICHAS DEL MINIJUEGO POR PAQUETE (desde 2026-11-14) y ajustes del juego desde el panel
+--   precios.fichas: cuántas fichas da ese paquete (lo pone el administrador en la pestaña Precios).
+--   Vacío = como antes: precio pagado / bs_por_ficha (mínimo 1). 0 = ese paquete no da fichas.
+-- El disparador juego_fichas_por_recarga (supabase/tienda.sql, que ya trae este cambio) las busca por
+-- juego + nombre del paquete del pedido.
+-- =====================================================================
+alter table public.precios add column if not exists fichas integer check (fichas is null or fichas between 0 and 1000);
+
+-- precios_de con las fichas (cambia lo que devuelve: hay que borrarla y crearla de nuevo)
+drop function if exists public.precios_de(text);
+create or replace function public.precios_de(p_juego text)
+returns table (id bigint, paquete text, producto text, cantidad smallint, precio_manual numeric, costo_usd numeric,
+               precio_calculado numeric, precio numeric, en_stock boolean, stock integer, visto timestamptz,
+               orden smallint, activo boolean, fichas_manual integer, fichas integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with conf as (select codigos_tasa() as tasa, precios_ganancia() as ganancia,
+                       (select bs_por_ficha from juego_ajustes where id = 1) as bs_ficha),
+  base as (
+    select p.id, p.paquete, p.producto, p.cantidad, p.precio_manual, p.orden, p.activo, p.fichas,
+           c.costo_usd, c.en_stock as c_stock, c.stock as c_cantidad, c.visto as c_visto,
+           case when c.costo_usd is not null and conf.tasa is not null and conf.ganancia is not null
+                then round(c.costo_usd * p.cantidad * conf.tasa * (1 + conf.ganancia / 100), 2) end as calculado,
+           conf.bs_ficha
+      from precios p cross join conf left join centralone_catalogo c on c.producto = p.producto
+     where p.juego = p_juego
+  )
+  select b.id, b.paquete, b.producto, b.cantidad, b.precio_manual, b.costo_usd, b.calculado,
+         coalesce(b.precio_manual, b.calculado),
+         case when b.producto is null then true else coalesce(b.c_stock, false) end,
+         b.c_cantidad, b.c_visto, b.orden, b.activo, b.fichas,
+         coalesce(b.fichas, case when coalesce(b.precio_manual, b.calculado) > 0 and b.bs_ficha > 0
+                                 then greatest(1, floor(coalesce(b.precio_manual, b.calculado) / b.bs_ficha))::integer end)
+    from base b
+   order by b.orden, b.id;
+$$;
+revoke execute on function public.precios_de(text) from public, anon, authenticated;
+grant execute on function public.precios_de(text) to service_role;
+
+-- Fichas de un paquete (null = vacío: se calculan por precio)
+create or replace function public.admin_precio_fichas(p_id bigint, p_fichas integer)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform admin_revisar();
+  if p_fichas is not null and (p_fichas < 0 or p_fichas > 1000) then
+    raise exception 'Las fichas van de 0 a 1000 (vacío = según el precio).' using errcode = '22023';
+  end if;
+  update precios set fichas = p_fichas, actualizado = now() where id = p_id;
+  return found;
+end;
+$$;
+revoke execute on function public.admin_precio_fichas(bigint, integer) from public, anon;
+grant execute on function public.admin_precio_fichas(bigint, integer) to authenticated, service_role;
+
+-- Fichas de cada paquete para las tiendas ("+N fichas" bajo cada precio): { "freefire": { "110 Diamantes": 1 } }
+create or replace function public.fichas_por_paquete()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(jsonb_object_agg(t.juego, t.paquetes), '{}'::jsonb) from (
+    -- Solo las puestas a mano: las demás las calcula la página con el precio que se ve (con descuento, el final)
+    select j as juego, (select coalesce(jsonb_object_agg(x.paquete, x.fichas_manual), '{}'::jsonb)
+                          from precios_de(j) x where x.activo and x.fichas_manual is not null) as paquetes
+      from unnest(array['freefire', 'bloodstrike', 'mobilelegends', 'roblox']) j
+  ) t;
+$$;
+revoke execute on function public.fichas_por_paquete() from public, anon, authenticated;
+grant execute on function public.fichas_por_paquete() to service_role;
+
+-- Ajustes del minijuego: fichas por partida y Bs por ficha (para los paquetes sin fichas a mano)
+create or replace function public.admin_juego_ajustes(p_costo integer, p_bs_por_ficha numeric)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform admin_revisar();
+  if p_costo is null or p_costo < 1 or p_costo > 100 then
+    raise exception 'Las fichas por partida van de 1 a 100.' using errcode = '22023';
+  end if;
+  if p_bs_por_ficha is null or p_bs_por_ficha <= 0 then
+    raise exception 'Escribe cuántos Bs vale una ficha.' using errcode = '22023';
+  end if;
+  update juego_ajustes set costo_partida = p_costo, bs_por_ficha = round(p_bs_por_ficha, 2) where id = 1;
+  return jsonb_build_object('costo', p_costo, 'bs_por_ficha', round(p_bs_por_ficha, 2));
+end;
+$$;
+revoke execute on function public.admin_juego_ajustes(integer, numeric) from public, anon;
+grant execute on function public.admin_juego_ajustes(integer, numeric) to authenticated, service_role;
+
+-- admin_precios con los ajustes del minijuego y las diferencias con la hoja
+create or replace function public.admin_precios(p_juego text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  perform admin_revisar();
+  return jsonb_build_object(
+    'tasa', codigos_tasa(),
+    'ganancia', precios_ganancia(),
+    'costo_partida', (select costo_partida from juego_ajustes where id = 1),
+    'bs_por_ficha', (select bs_por_ficha from juego_ajustes where id = 1),
+    'paquetes', (select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from precios_de(p_juego) x),
+    'sin_usar', (
+      select coalesce(jsonb_agg(jsonb_build_object('producto', c.producto, 'nombre', c.nombre, 'region', c.region,
+               'costo_usd', c.costo_usd, 'en_stock', c.en_stock) order by c.costo_usd), '[]'::jsonb)
+        from centralone_catalogo c
+       where c.juego = p_juego and not exists (select 1 from precios p where p.producto = c.producto and p.juego = p_juego)
+    ),
+    'diferencias', (
+      select coalesce(jsonb_agg(to_jsonb(d) order by d.paquete), '[]'::jsonb) from precios_diferencias d where d.juego = p_juego
+    )
+  );
+end;
+$$;
+revoke execute on function public.admin_precios(text) from public, anon;
+grant execute on function public.admin_precios(text) to authenticated, service_role;
+
+-- Desde 2026-11-14 cada partida cuesta 4 fichas (antes 5). Después se cambia desde el panel → Precios.
+update public.juego_ajustes set costo_partida = 4 where id = 1 and costo_partida = 5;
+
+-- Fichas por recarga: las del paquete si se pusieron a mano; si no, precio / bs_por_ficha (mínimo 1).
+-- (Misma función que supabase/tienda.sql, que ya trae este cambio: correr cualquiera de los dos deja esta.)
+create or replace function public.juego_fichas_por_recarga()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_fichas integer;
+  v_manual integer;
+  v_filas  integer;
+begin
+  if new.usuario is null or new.juego not in ('freefire', 'bloodstrike', 'mobilelegends', 'roblox') then
+    return new;
+  end if;
+  if new.estado = 'completado' and (tg_op = 'INSERT' or old.estado is distinct from 'completado') then
+    -- Fichas puestas a mano en ese paquete (admin.html → Precios). Si la tabla no existe, como antes.
+    begin
+      select p.fichas into v_manual from precios p where p.juego = new.juego and p.paquete = new.paquete;
+    exception when others then v_manual := null;
+    end;
+    if v_manual is not null then
+      v_fichas := v_manual;
+    else
+      select greatest(1, floor(coalesce(new.precio, 0) / a.bs_por_ficha))::integer into v_fichas
+        from juego_ajustes a where a.id = 1;
+    end if;
+    if coalesce(v_fichas, 0) > 0 then
+      insert into juego_movimientos (usuario, cambio, motivo, id_pedido)
+        values (new.usuario, v_fichas, 'recarga', new.id_pedido)
+        on conflict (id_pedido, motivo) do nothing;
+      get diagnostics v_filas = row_count;
+      if v_filas > 0 then
+        insert into juego_fichas (usuario, fichas) values (new.usuario, v_fichas)
+          on conflict (usuario) do update set fichas = juego_fichas.fichas + v_fichas, actualizado = now();
+      end if;
+    end if;
+  end if;
+  if new.estado = 'reembolsado' and tg_op = 'UPDATE' and old.estado is distinct from 'reembolsado' then
+    select m.cambio into v_fichas from juego_movimientos m where m.id_pedido = new.id_pedido and m.motivo = 'recarga';
+    if v_fichas is not null then
+      insert into juego_movimientos (usuario, cambio, motivo, id_pedido)
+        values (new.usuario, -v_fichas, 'reembolso', new.id_pedido)
+        on conflict (id_pedido, motivo) do nothing;
+      get diagnostics v_filas = row_count;
+      if v_filas > 0 then
+        update juego_fichas set fichas = fichas - v_fichas, actualizado = now() where usuario = new.usuario;
+      end if;
+    end if;
+  end if;
+  return new;
+end $$;
+revoke execute on function public.juego_fichas_por_recarga() from public, anon, authenticated;

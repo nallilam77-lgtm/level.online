@@ -54,6 +54,9 @@ export const actualizar = (tabla, donde, datos, columnas) => pedir(`/rest/v1/${t
   method: 'PATCH', body: datos, headers: { Prefer: columnas ? 'return=representation' : 'return=minimal' },
 });
 
+/** Borra las filas que cumplan `donde` (texto de filtro de PostgREST, p. ej. "juego=eq.freefire"). */
+export const borrar = (tabla, donde) => pedir(`/rest/v1/${tabla}?${donde}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+
 /** UUID del cliente dueño de este token de sesión (el que manda la página), o null si no vale. */
 export async function usuarioDelToken(token) {
   if (!supabaseActivo() || !/^[A-Za-z0-9._-]{20,4000}$/.test(String(token || ''))) return null;

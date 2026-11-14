@@ -40,7 +40,7 @@
   <script src="/js/mis-recargas.js?v=1" defer></script>
   <script src="/js/fidelidad.js?v=4" defer></script>
   <!-- "+N fichas" del minijuego en cada paquete -->
-  <script src="/js/fichas-tienda.js?v=1" defer></script>
+  <script src="/js/fichas-tienda.js?v=2" defer></script>
   <script src="/js/descuento.js" defer></script>
   <script src="/js/ultimo-id.js" defer></script>
   <script src="/js/datos-pago.js" defer></script>
@@ -1130,6 +1130,7 @@
           const esUltimoImpar = (paquetes.length % 2 !== 0) && (index === paquetes.length - 1);
           let delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
           card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar || item.spanFull ? 'full-width' : ''} ${item.etiqueta ? 'has-badge' : ''}`;
+          card.dataset.paquete = String(item.diamantes);   // js/fichas-tienda.js: fichas de este paquete
           // Accesible con teclado y lectores de pantalla
           card.setAttribute('role', 'button');
           card.setAttribute('tabindex', '0');

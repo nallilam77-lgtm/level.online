@@ -6,6 +6,7 @@ import { pedirJSON, llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido,
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
+import { compararConHoja } from '../precios.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
@@ -82,6 +83,7 @@ async function precios(req, res) {
       () => pedirJSON(`${URL_GOOGLE_SCRIPT}?accion=obtener_precios`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT }),
       { esValido: catalogoValido });
     cabecerasCachePrecios(res);
+    compararConHoja('bloodstrike', datos.catalogo);   // prueba en paralelo de precios (_lib/precios.js)
     return res.status(200).json({ ...datos, catalogo: await conDestacados('bloodstrike', datos.catalogo.map(sinProducto)) });
   } catch (error) {
     console.error("Error al obtener precios de Blood Strike:", error.message);

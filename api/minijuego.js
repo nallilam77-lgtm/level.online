@@ -39,7 +39,7 @@ let ajustes = null;
 async function leerAjustes() {
   if (ajustes && Date.now() - ajustes.fecha < 5 * 60 * 1000) return ajustes;
   const [fila] = (await leer('juego_ajustes', { id: 1 }, 'bs_por_ficha,costo_partida')) || [];
-  ajustes = { fecha: Date.now(), bsPorFicha: Number(fila?.bs_por_ficha) || 780, costo: Number(fila?.costo_partida) || 5 };
+  ajustes = { fecha: Date.now(), bsPorFicha: Number(fila?.bs_por_ficha) || 780, costo: Number(fila?.costo_partida) || 4 };
   return ajustes;
 }
 
@@ -143,8 +143,10 @@ export default async function handler(req, res) {
   if (req.method === 'GET' && req.query?.accion === 'ajustes') {
     try {
       const aj = await leerAjustes();
+      // Fichas puestas a mano en algún paquete (admin.html → Precios): { freefire: { "110 Diamantes": 2 } }
+      const fichas = await rpc('fichas_por_paquete', {}).catch(() => null);
       res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=3600');
-      return res.status(200).json({ status: 'success', activo: true, bsPorFicha: aj.bsPorFicha, costo: aj.costo });
+      return res.status(200).json({ status: 'success', activo: true, bsPorFicha: aj.bsPorFicha, costo: aj.costo, ...(fichas && { fichas }) });
     } catch (error) {
       console.error('⚠️ minijuego (ajustes):', error.message);
       return res.status(503).json({ status: 'error', message: 'No disponible.' });

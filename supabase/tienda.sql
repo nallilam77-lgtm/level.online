@@ -188,21 +188,33 @@ set search_path = public
 as $$
 declare
   v_fichas integer;
+  v_manual integer;
   v_filas  integer;
 begin
   if new.usuario is null or new.juego not in ('freefire', 'bloodstrike', 'mobilelegends', 'roblox') then
     return new;
   end if;
   if new.estado = 'completado' and (tg_op = 'INSERT' or old.estado is distinct from 'completado') then
-    select greatest(1, floor(coalesce(new.precio, 0) / a.bs_por_ficha))::integer into v_fichas
-      from juego_ajustes a where a.id = 1;
-    insert into juego_movimientos (usuario, cambio, motivo, id_pedido)
-      values (new.usuario, v_fichas, 'recarga', new.id_pedido)
-      on conflict (id_pedido, motivo) do nothing;
-    get diagnostics v_filas = row_count;
-    if v_filas > 0 then
-      insert into juego_fichas (usuario, fichas) values (new.usuario, v_fichas)
-        on conflict (usuario) do update set fichas = juego_fichas.fichas + v_fichas, actualizado = now();
+    -- Fichas puestas a mano en ese paquete (admin.html → Precios). Si la tabla no existe, como antes.
+    begin
+      select p.fichas into v_manual from precios p where p.juego = new.juego and p.paquete = new.paquete;
+    exception when others then v_manual := null;
+    end;
+    if v_manual is not null then
+      v_fichas := v_manual;
+    else
+      select greatest(1, floor(coalesce(new.precio, 0) / a.bs_por_ficha))::integer into v_fichas
+        from juego_ajustes a where a.id = 1;
+    end if;
+    if coalesce(v_fichas, 0) > 0 then
+      insert into juego_movimientos (usuario, cambio, motivo, id_pedido)
+        values (new.usuario, v_fichas, 'recarga', new.id_pedido)
+        on conflict (id_pedido, motivo) do nothing;
+      get diagnostics v_filas = row_count;
+      if v_filas > 0 then
+        insert into juego_fichas (usuario, fichas) values (new.usuario, v_fichas)
+          on conflict (usuario) do update set fichas = juego_fichas.fichas + v_fichas, actualizado = now();
+      end if;
     end if;
   end if;
   if new.estado = 'reembolsado' and tg_op = 'UPDATE' and old.estado is distinct from 'reembolsado' then

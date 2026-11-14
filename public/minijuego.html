@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="css/minijuego.css?v=4">
   <!-- Sesión (agrega el token a /api/minijuego) y después el juego (módulo: usa el motor compartido con el servidor) -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script type="module" src="/js/minijuego.js?v=6"></script>
+  <script type="module" src="/js/minijuego.js?v=7"></script>
 </head>
 <body>
   <div class="barra">
@@ -64,7 +64,7 @@
           <div class="capa" id="capaInicio" hidden>
             <h3>¿Listo?</h3>
             <p>Desliza el dedo para mover el cofre.</p>
-            <button type="button" class="btn" id="btnJugar">Jugar · 5 fichas</button>
+            <button type="button" class="btn" id="btnJugar">Jugar · 4 fichas</button>
             <button type="button" class="btn-sec btn-practica" data-practicar>🎮 Practicar gratis</button>
             <button type="button" class="btn-sec" data-ayuda>¿Cómo se juega?</button>
           </div>
@@ -102,7 +102,7 @@
 
         <section class="tarjeta" aria-labelledby="tituloFichas">
           <h2 id="tituloFichas">Tus fichas</h2>
-          <div class="saldo"><strong id="saldoFichas">–</strong><span id="saldoCosto">5 fichas = 1 partida</span></div>
+          <div class="saldo"><strong id="saldoFichas">–</strong><span id="saldoCosto">4 fichas = 1 partida</span></div>
           <p class="nota">Ganas <strong id="reglaFichas">1 ficha por cada 780 Bs</strong> que recargas con tu sesión iniciada.</p>
           <table class="tabla-fichas" aria-label="Ejemplos de fichas por recarga"><tbody id="tablaFichas"></tbody></table>
           <button type="button" class="btn-sec" data-ayuda>¿Cómo se juega?</button>
@@ -122,7 +122,7 @@
       </ol>
       <ul class="objetos" id="tutObjetos"></ul>
       <ul class="reglas">
-        <li><strong>5 fichas</strong> por partida. Ganas fichas recargando con tu sesión.</li>
+        <li><strong><span id="tutCosto">4</span> fichas</strong> por partida. Ganas fichas recargando con tu sesión.</li>
         <li>La <strong>mejor partida de la semana</strong> gana <strong>341 💎</strong>.</li>
         <li><strong>¿Primera vez?</strong> Toca <strong>Practicar gratis</strong>: no gasta fichas ni cuenta para el ranking.</li>
         <li>No salgas del juego mientras juegas: una pausa larga anula la partida.</li>

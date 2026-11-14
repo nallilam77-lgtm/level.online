@@ -5,9 +5,11 @@
 // Lee el catálogo de Central One con la llave de ese juego (solo vive en Vercel), se queda con los
 // productos del juego y guarda en centralone_catalogo su costo (4 decimales, como texto) y su stock.
 // Los que ya no aparecen quedan "sin stock". El panel después elige cuáles se venden (admin_precio_guardar).
+import { waitUntil } from '@vercel/functions';
 import { pedirJSON } from './externo.js';
-import { supabaseActivo, guardar, actualizar, esAdminToken } from './supabase.js';
+import { supabaseActivo, guardar, actualizar, borrar, rpc, esAdminToken } from './supabase.js';
 import { tokenDe } from './historial.js';
+import { limpiarMontoVES } from './recarga-comun.js';
 
 const URL_CATALOGO = 'https://portal.centraloneglobal.com/api/v1/catalog';
 const UUID = /^[0-9a-f-]{36}$/;
@@ -79,4 +81,37 @@ export async function traerProductos(req, res, juego) {
   }
 
   return res.status(200).json({ status: 'success', total: filas.length, conStock: filas.filter((f) => f.en_stock).length });
+}
+
+// =========================================================================
+// PRUEBA EN PARALELO (paso 5): la tienda sigue cobrando con la hoja. Cuando alguien abre una tienda, después
+// de responderle, se compara cada precio de la hoja con el de Supabase (precios_de) y se guarda en
+// precios_diferencias lo que no coincide (el panel lo muestra en Precios). Como mucho una vez cada 5 min
+// por juego en cada instancia: no frena a nadie ni gasta Supabase.
+// catalogo: la lista de la hoja [{ diamantes: "110 Diamantes", precio: "780,00" }, ...]
+// =========================================================================
+const ultimaComparacion = new Map();
+const CADA_MS = 5 * 60_000;
+
+export function compararConHoja(juego, catalogo) {
+  if (!supabaseActivo() || !Array.isArray(catalogo)) return;
+  const ahora = Date.now();
+  if (ahora - (ultimaComparacion.get(juego) || 0) < CADA_MS) return;
+  ultimaComparacion.set(juego, ahora);
+  waitUntil((async () => {
+    const filas = await rpc('precios_de', { p_juego: juego });
+    const enSupabase = new Map((filas || []).filter((f) => f.activo).map((f) => [String(f.paquete).trim(), f.precio === null ? null : Number(f.precio)]));
+    const enHoja = new Map(catalogo.map((p) => [String(p.diamantes ?? p.paquete ?? p.producto ?? '').trim(), limpiarMontoVES(p.precio)]).filter(([n]) => n));
+    const visto = new Date().toISOString();
+    const diferencias = [];
+    for (const paquete of new Set([...enHoja.keys(), ...enSupabase.keys()])) {
+      const hoja = enHoja.has(paquete) ? enHoja.get(paquete) : null;
+      const supa = enSupabase.has(paquete) ? enSupabase.get(paquete) : null;
+      if (hoja !== null && supa !== null && Math.abs(hoja - supa) < 0.01) continue;
+      diferencias.push({ juego, paquete: paquete.slice(0, 80), precio_hoja: hoja, precio_supabase: supa, visto });
+    }
+    await borrar('precios_diferencias', `juego=eq.${juego}`);
+    if (diferencias.length) await guardar('precios_diferencias', diferencias, 'juego,paquete');
+    if (diferencias.length) console.info(`💲 prueba de precios (${juego}): ${diferencias.length} diferencia(s) entre la hoja y Supabase`);
+  })().catch((error) => console.error(`⚠️ prueba de precios (${juego}):`, error.message)));
 }

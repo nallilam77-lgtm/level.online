@@ -28,7 +28,7 @@ function irALogin() {
 const API = '/api/minijuego';
 const CAPAS = ['capaCargando', 'capaEntrar', 'capaInicio', 'capaSinFichas', 'capaFin', 'capaError'];
 
-let info = { fichas: 0, costo: 5, bsPorFicha: 780, sesion: false, cierre: null };
+let info = { fichas: 0, costo: 4, bsPorFicha: 780, sesion: false, cierre: null };
 let estado = null;          // partida en pantalla (del motor)
 let idPartida = '';
 let avisoPausaHasta = 0;    // aviso "no salgas del juego" (visibilitychange)
@@ -67,6 +67,7 @@ function pintarFichas() {
   $('saldoCosto').textContent = `${info.costo} fichas = 1 partida`;
   $('reglaFichas').textContent = `1 ficha por cada ${numero(info.bsPorFicha)} Bs`;
   $('btnJugar').textContent = `Jugar · ${info.costo} fichas`;
+  $('tutCosto').textContent = info.costo;
   $('sinFichasTexto').textContent = `Tienes ${numero(info.fichas)} de ${info.costo}. Recarga con tu sesión para ganar más.`;
 }
 

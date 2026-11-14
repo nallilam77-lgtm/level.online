@@ -9,6 +9,7 @@ import { pedirJSON, llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido,
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
+import { compararConHoja } from '../precios.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
@@ -94,6 +95,7 @@ async function precios(req, res) {
     // Lectura sin efectos secundarios (20 s con 1 reintento). Con copia en caché el cliente no espera.
     const { datos } = await conCache(CLAVE_CACHE_PRECIOS, () => leerPrecios(URL_GOOGLE_SCRIPT), { esValido: catalogoValido });
     cabecerasCachePrecios(res);
+    compararConHoja('mobilelegends', datos.catalogo);   // prueba en paralelo de precios (_lib/precios.js)
     return res.status(200).json({ ...datos, catalogo: await conDestacados('mobilelegends', datos.catalogo.map(sinProducto)) });
   } catch (error) {
     console.error("Error al obtener precios de Mobile Legends:", error.message);

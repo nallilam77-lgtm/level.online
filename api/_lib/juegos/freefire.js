@@ -8,6 +8,7 @@ import { llamarScript, LECTURA_APPS_SCRIPT, conCache, catalogoValido, cabecerasC
 import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } from '../validacion.js';
 import { FASES, ESTADO_PINES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
+import { compararConHoja } from '../precios.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
@@ -97,6 +98,7 @@ async function precios(req, res) {
       () => llamarScript(URL_GOOGLE_SCRIPT, { accion: "obtener_precios" }, LECTURA_APPS_SCRIPT),
       { esValido: catalogoValido });
     cabecerasCachePrecios(res);
+    compararConHoja('freefire', datos.catalogo);   // prueba en paralelo de precios (_lib/precios.js)
     return res.status(200).json({ ...datos, catalogo: await conDestacados('freefire', datos.catalogo.map(sinProducto)) });
   } catch (error) {
     console.error("Error al obtener precios de Free Fire:", error.message);

@@ -40,7 +40,7 @@
   <script src="/js/mis-recargas.js?v=1" defer></script>
   <script src="/js/fidelidad.js?v=4" defer></script>
   <!-- "+N fichas" del minijuego en cada paquete -->
-  <script src="/js/fichas-tienda.js?v=1" defer></script>
+  <script src="/js/fichas-tienda.js?v=2" defer></script>
   <!-- Código de descuento (compartido con Free Fire y Blood Strike) -->
   <script src="/js/descuento.js" defer></script>
   <script src="/js/ultimo-id.js" defer></script>
@@ -1125,6 +1125,7 @@
         const delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
         const esUltimoImpar = (lista.length % 2 !== 0) && (index === lista.length - 1);
         card.className = `product-card anim-slide-up ${delayClass}${esUltimoImpar ? ' full-width' : ''}${agotado ? ' agotado' : ''}`;
+        card.dataset.paquete = String(item.producto);   // js/fichas-tienda.js: fichas de este paquete
         // Accesible con teclado y lectores de pantalla
         card.setAttribute('role', 'button');
         card.setAttribute('tabindex', agotado ? '-1' : '0');

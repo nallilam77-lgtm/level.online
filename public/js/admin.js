@@ -627,6 +627,9 @@
       return;
     }
     preciosDatos = data;
+    if (document.activeElement !== $('costoPartida')) $('costoPartida').value = data.costo_partida || '';
+    if (document.activeElement !== $('bsPorFicha')) $('bsPorFicha').value = data.bs_por_ficha ? String(Number(data.bs_por_ficha)) : '';
+    pintarDiferencias(data.diferencias || []);
     if (document.activeElement !== $('tasaPrecios')) $('tasaPrecios').value = data.tasa ? String(Number(data.tasa)) : '';
     if (document.activeElement !== $('gananciaPrecios')) $('gananciaPrecios').value = data.ganancia !== null ? String(Number(data.ganancia)) : '';
     const falta = [!data.tasa && 'el dólar', data.ganancia === null && 'la ganancia'].filter(Boolean);
@@ -684,6 +687,9 @@
       if (p.precio_manual !== null && p.precio_calculado !== null) li.append(el('span', 'precio-detalle', `Automático sería ${bs(p.precio_calculado)} Bs.`));
     } else if (p.producto) li.append(el('span', 'precio-detalle', 'Sin costo de Central One todavía: toca "Traer productos".'));
     else li.append(el('span', 'precio-detalle', 'Lo entregas tú (sin Central One).'));
+    li.append(el('span', 'precio-detalle precio-fichas', p.fichas_manual !== null
+      ? (p.fichas_manual === 0 ? '🎟️ No da fichas (a mano)' : `🎟️ Da ${p.fichas_manual} ficha${p.fichas_manual === 1 ? '' : 's'} (a mano)`)
+      : p.fichas ? `🎟️ Da ${p.fichas} ficha${p.fichas === 1 ? '' : 's'} (según el precio)` : '🎟️ Sin fichas (sin precio)'));
 
     const acciones = el('div', 'acciones-cuenta');
     const subir = boton('↑', 'btn-ver btn-mini', (b) => moverPrecio(p.id, -1, b)); subir.disabled = i === 0; subir.setAttribute('aria-label', 'Subir');
@@ -720,18 +726,29 @@
     inPrecio.value = p.precio_manual !== null ? String(Number(p.precio_manual)) : '';
     inPrecio.placeholder = p.producto ? 'Vacío = automático' : 'Precio en Bs';
     const inCantidad = el('input'); inCantidad.type = 'number'; inCantidad.min = '1'; inCantidad.max = '10'; inCantidad.value = String(p.cantidad);
+    const inFichas = el('input'); inFichas.type = 'number'; inFichas.inputMode = 'numeric'; inFichas.min = '0'; inFichas.max = '1000'; inFichas.step = '1';
+    inFichas.value = p.fichas_manual !== null ? String(p.fichas_manual) : '';
+    inFichas.placeholder = p.fichas ? `Vacío = ${p.fichas} según el precio` : 'Vacío = según el precio';
     const mensaje = el('p', 'mensaje-form'); mensaje.setAttribute('role', 'status');
     const guardar = el('button', 'btn btn--chico', 'Guardar'); guardar.type = 'submit';
     const filas = el('div', 'dos-campos');
     filas.append(campo('Nombre que ve el cliente', inNombre), campo(p.producto ? 'Precio a mano (Bs) · vacío = automático' : 'Precio (Bs)', inPrecio));
     form.append(filas);
     if (p.producto) form.append(campo('Cantidad (cuántos de ese producto se compran)', inCantidad));
+    form.append(campo('Fichas del minijuego que da (vacío = según el precio · 0 = no da)', inFichas));
     form.append(guardar, mensaje);
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const precio = inPrecio.value.trim();
       if (precio && !(Number(precio) > 0)) { mensaje.textContent = 'El precio tiene que ser mayor que 0.'; return; }
+      const fichas = inFichas.value.trim();
+      if (fichas !== '' && !(Number.isInteger(Number(fichas)) && Number(fichas) >= 0 && Number(fichas) <= 1000)) { mensaje.textContent = 'Las fichas van de 0 a 1000 (o vacío).'; return; }
       guardar.disabled = true;
+      const nuevasFichas = fichas === '' ? null : Number(fichas);
+      if (nuevasFichas !== p.fichas_manual) {
+        const { error: e } = await cliente.rpc('admin_precio_fichas', { p_id: p.id, p_fichas: nuevasFichas });
+        if (e) { guardar.disabled = false; mensaje.textContent = textoError(e, 'No se pudieron guardar las fichas.'); return; }
+      }
       const fallo = await guardarPrecio(p, { paquete: inNombre.value.trim(), precio_manual: precio === '' ? null : precio, cantidad: inCantidad.value });
       guardar.disabled = false;
       if (fallo) mensaje.textContent = fallo;
@@ -788,6 +805,42 @@
   });
 
   $('juegoPrecios').addEventListener('change', cargarPrecios);
+
+  // Prueba en paralelo: lo que la hoja cobra distinto de Supabase (precios_diferencias)
+  function pintarDiferencias(lista) {
+    const ul = $('listaDiferencias');
+    ul.replaceChildren();
+    if (!lista.length) { ul.append(el('li', 'vacio', '✅ Sin diferencias en este juego (o todavía nadie abrió la tienda desde el último cambio).')); return; }
+    lista.forEach((d) => {
+      const li = el('li', 'pedido');
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', d.paquete), el('span', 'etiqueta etiqueta--en_revision', 'Diferente'));
+      const texto = d.precio_hoja === null ? `No está en la hoja. Aquí: ${bs(d.precio_supabase)} Bs`
+        : d.precio_supabase === null ? `Hoja: ${bs(d.precio_hoja)} Bs. Aquí no está (o no tiene precio)`
+        : `Hoja: ${bs(d.precio_hoja)} Bs · aquí: ${bs(d.precio_supabase)} Bs (${d.precio_supabase > d.precio_hoja ? '+' : ''}${bs(d.precio_supabase - d.precio_hoja)})`;
+      li.append(cabeza, el('span', '', texto), el('span', 'precio-detalle', `Visto ${hace(d.visto)}`));
+      ul.append(li);
+    });
+  }
+
+  $('formCostoPartida').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const costo = Number($('costoPartida').value);
+    if (!(Number.isInteger(costo) && costo >= 1)) return;
+    const { error } = await cliente.rpc('admin_juego_ajustes', { p_costo: costo, p_bs_por_ficha: Number(preciosDatos && preciosDatos.bs_por_ficha) || Number($('bsPorFicha').value) });
+    if (error) { alert(textoError(error, 'No se pudo guardar.')); return; }
+    $('costoPartida').blur();
+    cargarPrecios();
+  });
+  $('formBsFicha').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const bsFicha = Number($('bsPorFicha').value);
+    if (!(bsFicha > 0)) return;
+    const { error } = await cliente.rpc('admin_juego_ajustes', { p_costo: Number(preciosDatos && preciosDatos.costo_partida) || Number($('costoPartida').value), p_bs_por_ficha: bsFicha });
+    if (error) { alert(textoError(error, 'No se pudo guardar.')); return; }
+    $('bsPorFicha').blur();
+    cargarPrecios();
+  });
   $('formTasaPrecios').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const tasa = Number($('tasaPrecios').value);

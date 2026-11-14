@@ -8,7 +8,7 @@
 --   - Las fichas se ganan con las recargas COMPLETADAS de clientes con sesión (tabla "recargas") en las
 --     tiendas automáticas: fichas = precio pagado ÷ bs_por_ficha (redondeado hacia abajo, mínimo 1).
 --     Lo hace el disparador de abajo, una sola vez por pedido. Si el pedido se reembolsa, se descuentan.
---   - Cada partida cuesta costo_partida fichas (5). Al empezar, el servidor cobra y da la SEMILLA.
+--   - Cada partida cuesta costo_partida fichas (4 desde 2026-11-14; se cambia en admin.html → Precios). Al empezar, el servidor cobra y da la SEMILLA.
 --   - Al terminar, el servidor (api/minijuego.js) REPITE la partida con la semilla y los movimientos y
 --     guarda los puntos que calcula él. Las partidas que no cuadran quedan "invalida" y no cuentan.
 --   - Ranking: mejor partida válida de cada cliente desde el lunes 00:00 (hora de Venezuela). Empate:
@@ -24,7 +24,7 @@
 create table if not exists public.juego_ajustes (
   id            integer primary key default 1 check (id = 1),
   bs_por_ficha  numeric(12, 2) not null default 780 check (bs_por_ficha > 0),
-  costo_partida integer not null default 5 check (costo_partida > 0),
+  costo_partida integer not null default 4 check (costo_partida > 0),
   actualizado   timestamptz not null default now()
 );
 insert into public.juego_ajustes (id) values (1) on conflict (id) do nothing;
