@@ -4,6 +4,25 @@ import { firmaCentralOneValida, primerCodigo, leerCodigos } from './_lib/central
 import { registrarUsoDescuento } from './_lib/descuentos.js';
 import { limpiarMontoVES } from './_lib/recarga-comun.js';
 import { actualizarEstado } from './_lib/historial.js';
+import { supabaseActivo, guardar } from './_lib/supabase.js';
+
+// Avisos de saldo (desde 2026-11-14): el último se guarda en Supabase (configuracion "centralone_saldo") y el
+// panel admin lo muestra en Resumen: balance.low = alerta roja; deposit.approved / balance.credited = saldo
+// acreditado (la alerta se quita). Hay que marcarlos en el portal: Integración → Webhooks.
+const EVENTOS_SALDO = new Set(['balance.low', 'deposit.approved', 'balance.credited', 'deposit.rejected']);
+async function avisoDeSaldo(aviso, evento) {
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  const valor = {
+    evento,
+    disponible: num(aviso?.balance?.available),
+    umbral: num(aviso?.balance?.threshold),
+    monto: num(aviso?.deposit?.credited_amount ?? aviso?.credit?.amount ?? aviso?.deposit?.amount),
+    motivo: evento === 'deposit.rejected' ? String(aviso?.deposit?.reason || '').slice(0, 200) : null,
+    fecha: String(aviso?.occurred_at || new Date().toISOString()).slice(0, 40),
+    id: String(aviso?.event_id || '').slice(0, 60),
+  };
+  await guardar('configuracion', { clave: 'centralone_saldo', valor, publico: false, actualizado: new Date().toISOString() }, 'clave');
+}
 
 // Webhook de Central One: POST https://levelupstore.online/api/centralone-webhook
 // (registrar en el portal de Central One: Integración → Webhooks, con los eventos de cierre de pedido;
@@ -94,7 +113,19 @@ export default async function handler(req, res) {
   const idPedido = String(aviso?.order?.idempotency_key ?? '');
   // Qué llegó (sin datos del jugador ni códigos): para revisar en los logs de Vercel si los avisos llegan
   console.info(`📨 centralone-webhook: ${evento || 'sin evento'} · pedido ${ordenCentralOne || '?'} · estado ${estadoPedido || '?'} · idempotency_key ${idPedido ? idPedido.slice(0, 7) + '…' : 'NO VIENE'}`);
-  // webhook.test, avisos de saldo o de catálogo, order.created…: nada que anotar. Un evento de pedido con
+  if (EVENTOS_SALDO.has(evento)) {
+    if (supabaseActivo()) {
+      try {
+        await avisoDeSaldo(aviso, evento);
+        if (evento === 'balance.low') console.error(`🚨 Central One: SALDO BAJO ($${aviso?.balance?.available} de $${aviso?.balance?.threshold}). Recargar saldo.`);
+      } catch (error) {
+        console.error('⚠️ centralone-webhook: no se pudo guardar el aviso de saldo:', error.message);
+        return res.status(503).json({ ok: false });   // Central One lo repite
+      }
+    }
+    return res.status(200).json({ ok: true });
+  }
+  // webhook.test, avisos de catálogo, order.created…: nada que anotar. Un evento de pedido con
   // otro nombre (p. ej. order.completed) se anota si el pedido ya terminó.
   const eventoDeCierre = Object.hasOwn(ESTADO_POR_EVENTO, evento) || (evento.startsWith('order.') && ESTADOS_FINALES.has(estadoPedido));
   if (!eventoDeCierre || !ORDEN_VALIDA.test(ordenCentralOne) || !ESTADO_VALIDO.test(estado)) {

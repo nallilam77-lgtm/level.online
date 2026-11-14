@@ -108,6 +108,46 @@
   try { $('tasa').value = localStorage.getItem(CLAVE_TASA) || ''; } catch (e) { /* sin almacenamiento */ }
   $('tasa').addEventListener('input', () => { try { localStorage.setItem(CLAVE_TASA, $('tasa').value); } catch (e) { /* sin almacenamiento */ } pintarResumen(); });
 
+  // ---------------------------------------------------------------- saldo de Central One
+  // GET /api/juego?accion=saldo_centralone (Vercel tiene las llaves) y el último aviso de saldo que mandó
+  // Central One al webhook (configuracion "centralone_saldo": balance.low, deposit.approved…).
+  const dolares = (n) => (n === null || n === undefined ? '–' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  async function cargarSaldo() {
+    const caja = $('cuentasSaldo');
+    try {
+      const { data: s } = await cliente.auth.getSession();
+      const res = await fetch('/api/juego?accion=saldo_centralone', { headers: { Authorization: 'Bearer ' + ((s && s.session && s.session.access_token) || '') } });
+      const r = await res.json();
+      if (r.status !== 'success') throw new Error(r.message || 'sin saldo');
+      caja.replaceChildren(...(r.cuentas || []).map((c) => {
+        const bloque = el('div', 'cuenta-saldo');
+        if (r.cuentas.length > 1) bloque.append(el('small', 'cuenta-saldo__juegos', 'Llave de ' + c.juegos.join(', ')));
+        if (c.error) { bloque.append(el('p', 'nota', '⚠️ ' + c.error)); return bloque; }
+        const kpis = el('div', 'kpis');
+        const kpi = (titulo, valor, clase) => { const k = el('div', 'kpi' + (clase ? ' ' + clase : '')); k.append(el('small', '', titulo), el('strong', '', dolares(valor))); return k; };
+        kpis.append(kpi('Disponible', c.disponible, c.disponible !== null && c.disponible < 30 ? 'kpi--aviso' : ''), kpi('Retenido', c.retenido), kpi('Total', c.total));
+        bloque.append(kpis);
+        return bloque;
+      }));
+      if (!(r.cuentas || []).length) caja.replaceChildren(el('p', 'nota', 'Vercel no tiene llaves de Central One.'));
+    } catch (e) {
+      caja.replaceChildren(el('p', 'nota', 'No se pudo leer el saldo. Toca Actualizar.'));
+    }
+    // Último aviso de saldo (webhook)
+    const { data } = await cliente.from('configuracion').select('valor').eq('clave', 'centralone_saldo').maybeSingle();
+    const a = data && data.valor;
+    const alerta = $('alertaSaldo');
+    alerta.hidden = !a;
+    if (!a) return;
+    alerta.className = 'alerta-saldo' + (a.evento === 'balance.low' ? ' alerta-saldo--baja' : a.evento === 'deposit.rejected' ? ' alerta-saldo--baja' : ' alerta-saldo--ok');
+    alerta.textContent = a.evento === 'balance.low'
+      ? `🚨 Saldo bajo: quedaban ${dolares(a.disponible)} (tu mínimo es ${dolares(a.umbral)}) · ${fecha(a.fecha)}. Recarga saldo para que no fallen las ventas.`
+      : a.evento === 'deposit.rejected'
+        ? `❌ Central One rechazó un depósito · ${fecha(a.fecha)}${a.motivo ? ': ' + a.motivo : ''}`
+        : `✅ Saldo acreditado${a.monto !== null ? ': ' + dolares(a.monto) : ''}${a.disponible !== null ? ` · disponible ${dolares(a.disponible)}` : ''} · ${fecha(a.fecha)}`;
+  }
+  $('actualizarSaldo').addEventListener('click', cargarSaldo);
+
   // ---------------------------------------------------------------- pedidos
   function tarjetaPedido(p, nuevo) {
     const li = el('li', 'pedido' + (nuevo ? ' pedido--nuevo' : ''));
@@ -1113,7 +1153,7 @@
     if (error || esAdmin !== true) return estado('Esta cuenta no es administradora. Entra con la cuenta correcta.', true);
     $('panelEstado').hidden = true;
     $('panel').hidden = false;
-    await Promise.all([cargarResumen(), cargarPedidos()]);
+    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo()]);
     escuchar();
   })();
 })();

@@ -143,3 +143,38 @@ export async function conPreciosSupabase(juego, datos) {
   }
   return { ...datos, catalogo, origenPrecios: 'supabase' };
 }
+
+// =========================================================================
+// SALDO DE CENTRAL ONE (panel admin → Resumen). GET /api/juego?accion=saldo_centralone con el token del
+// administrador. Cada llave de Vercel puede ser de la misma cuenta o de otra: se pregunta una vez por llave
+// distinta y se dice qué tiendas la usan. Necesita el permiso balance:read en la llave (si no, lo avisa).
+// =========================================================================
+const NOMBRES = { freefire: 'Free Fire', bloodstrike: 'Blood Strike', mobilelegends: 'Mobile Legends', roblox: 'Roblox' };
+
+export async function saldoCentralOne(req, res) {
+  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
+  if (!(await esAdminToken(tokenDe(req)))) return res.status(403).json({ status: 'error', message: 'Solo el administrador.' });
+  res.setHeader('Cache-Control', 'no-store');
+  const porLlave = new Map();
+  for (const juego of Object.keys(LLAVES)) {
+    const llave = String(LLAVES[juego]() || '').trim();
+    if (!llave) continue;
+    if (!porLlave.has(llave)) porLlave.set(llave, []);
+    porLlave.get(llave).push(NOMBRES[juego]);
+  }
+  const cuentas = await Promise.all([...porLlave.entries()].map(async ([llave, juegos]) => {
+    try {
+      const r = await fetch('https://portal.centraloneglobal.com/api/v1/balance', {
+        headers: { Authorization: `Bearer ${llave}` }, signal: AbortSignal.timeout(8000),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 403) return { juegos, error: 'Esta llave no tiene el permiso balance:read (márcalo en el portal de Central One o crea una llave con él).' };
+      if (!r.ok) return { juegos, error: `Central One respondió ${r.status}.` };
+      const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+      return { juegos, disponible: num(d.available_balance), retenido: num(d.held_balance), total: num(d.total_balance), moneda: String(d.currency || 'USD') };
+    } catch (error) {
+      return { juegos, error: 'Central One no respondió.' };
+    }
+  }));
+  return res.status(200).json({ status: 'success', cuentas });
+}
