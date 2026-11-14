@@ -65,6 +65,7 @@
     if (b.dataset.seccion === 'espacio') cargarEspacio();
     if (b.dataset.seccion === 'cuentas') cargarCuentas();
     if (b.dataset.seccion === 'creadores') cargarCodigos();
+    if (b.dataset.seccion === 'precios') cargarPrecios();
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -603,6 +604,223 @@
   });
   $('buscarCodigo').addEventListener('input', pintarCodigos);
   $('filtroCodigos').addEventListener('change', pintarCodigos);
+
+  // ---------------------------------------------------------------- precios (supabase/precios.sql)
+  // Precio de un paquete: el manual o costo de Central One × cantidad × dólar × (1 + ganancia %). La base
+  // calcula (precios_de) y valida; aquí solo se muestra y se edita. "Traer productos" va por Vercel porque
+  // necesita la llave de Central One (api/_lib/precios.js).
+  let preciosDatos = null;
+  const usd4 = (n) => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  const hace = (iso) => {
+    if (!iso) return 'nunca';
+    const min = Math.round((Date.now() - Date.parse(iso)) / 60000);
+    return min < 1 ? 'hace un momento' : min < 60 ? `hace ${min} min` : min < 1440 ? `hace ${Math.round(min / 60)} h` : `hace ${Math.round(min / 1440)} días`;
+  };
+
+  async function cargarPrecios() {
+    const juego = $('juegoPrecios').value;
+    const { data, error } = await cliente.rpc('admin_precios', { p_juego: juego });
+    if (error || !data) {
+      console.error(error);
+      $('listaPrecios').replaceChildren(el('li', 'vacio', 'No se pudieron cargar. ¿Ya corriste supabase/precios.sql?'));
+      return;
+    }
+    preciosDatos = data;
+    if (document.activeElement !== $('tasaPrecios')) $('tasaPrecios').value = data.tasa ? String(Number(data.tasa)) : '';
+    if (document.activeElement !== $('gananciaPrecios')) $('gananciaPrecios').value = data.ganancia !== null ? String(Number(data.ganancia)) : '';
+    const falta = [!data.tasa && 'el dólar', data.ganancia === null && 'la ganancia'].filter(Boolean);
+    $('notaPrecios').textContent = falta.length
+      ? `⚠️ Falta ${falta.join(' y ')}: sin eso, los paquetes sin precio a mano no tienen precio.`
+      : `Dólar ${bs(data.tasa)} Bs · ganancia ${Number(data.ganancia).toLocaleString('es-VE')} %. Todo paquete sin precio a mano = costo de Central One × ${bs(data.tasa)} × ${(1 + Number(data.ganancia) / 100).toLocaleString('es-VE', { maximumFractionDigits: 4 })}.`;
+    const vistos = (data.paquetes || []).map((p) => p.visto).filter(Boolean).sort();
+    $('estadoCatalogo').textContent = vistos.length ? `Costos de Central One leídos ${hace(vistos[vistos.length - 1])}.` : '';
+    pintarPrecios();
+  }
+
+  function pintarPrecios() {
+    const d = preciosDatos;
+    const lista = $('listaPrecios');
+    lista.replaceChildren();
+    const paquetes = d.paquetes || [];
+    if (!paquetes.length) lista.append(el('li', 'vacio', 'Este juego todavía no tiene paquetes. Trae los productos de Central One y agrégalos.'));
+    paquetes.forEach((p, i) => lista.append(tarjetaPrecio(p, i, paquetes.length)));
+
+    const sinUsar = $('listaSinUsar');
+    sinUsar.replaceChildren();
+    if (!(d.sin_usar || []).length) sinUsar.append(el('li', 'vacio', 'Nada pendiente. Toca "Traer productos" para ver lo nuevo de Central One.'));
+    (d.sin_usar || []).forEach((c) => {
+      const li = el('li', 'pedido');
+      const fila = el('div', 'borrar-fila');
+      const texto = el('div');
+      texto.append(el('strong', '', c.nombre || c.producto),
+        el('span', 'precio-detalle', `${c.region || ''} · costo ${usd4(c.costo_usd)}${d.tasa ? ` (${bs(c.costo_usd * d.tasa)} Bs)` : ''}${c.en_stock ? '' : ' · sin stock'}`));
+      fila.append(texto, boton('Agregar', 'btn-ver', (b) => agregarProducto(c, b)));
+      li.append(fila);
+      sinUsar.append(li);
+    });
+  }
+
+  function tarjetaPrecio(p, i, total) {
+    const d = preciosDatos;
+    const li = el('li', 'pedido' + (p.activo ? '' : ' codigo--inactivo'));
+    const cabeza = el('div', 'pedido-cabeza');
+    const etiquetas = el('span', 'etiquetas');
+    etiquetas.append(el('span', 'etiqueta ' + (p.precio_manual !== null ? 'etiqueta--pendiente' : 'etiqueta--completado'), p.precio_manual !== null ? 'A mano' : 'Automático'));
+    if (!p.en_stock) etiquetas.append(el('span', 'etiqueta etiqueta--problema', 'Sin stock'));
+    if (!p.activo) etiquetas.append(el('span', 'etiqueta etiqueta--reembolsado', 'Oculto'));
+    cabeza.append(el('strong', '', p.paquete + (p.cantidad > 1 ? ` (×${p.cantidad})` : '')), etiquetas);
+    li.append(cabeza);
+    li.append(el('span', 'precio-final', p.precio !== null ? `${bs(p.precio)} Bs` : 'Sin precio (falta dólar, ganancia o costo)'));
+    if (p.costo_usd !== null && d.tasa) {
+      const costoBs = Number(p.costo_usd) * p.cantidad * Number(d.tasa);
+      const linea = el('span', 'precio-detalle', `Te cuesta ${usd4(p.costo_usd)}${p.cantidad > 1 ? ` ×${p.cantidad}` : ''} = ${bs(costoBs)} Bs`);
+      if (p.precio !== null) {
+        const gana = Number(p.precio) - costoBs;
+        linea.append(document.createTextNode(' · '),
+          el('strong', gana < 0 ? 'pierdes' : 'ganas', gana < 0 ? `¡pierdes ${bs(-gana)} Bs!` : `ganas ${bs(gana)} Bs (${Math.round((gana / costoBs) * 1000) / 10} %)`));
+      }
+      li.append(linea);
+      if (p.precio_manual !== null && p.precio_calculado !== null) li.append(el('span', 'precio-detalle', `Automático sería ${bs(p.precio_calculado)} Bs.`));
+    } else if (p.producto) li.append(el('span', 'precio-detalle', 'Sin costo de Central One todavía: toca "Traer productos".'));
+    else li.append(el('span', 'precio-detalle', 'Lo entregas tú (sin Central One).'));
+
+    const acciones = el('div', 'acciones-cuenta');
+    const subir = boton('↑', 'btn-ver btn-mini', (b) => moverPrecio(p.id, -1, b)); subir.disabled = i === 0; subir.setAttribute('aria-label', 'Subir');
+    const bajar = boton('↓', 'btn-ver btn-mini', (b) => moverPrecio(p.id, 1, b)); bajar.disabled = i === total - 1; bajar.setAttribute('aria-label', 'Bajar');
+    acciones.append(subir, bajar,
+      boton('Editar', 'btn-ver', () => editarPrecio(p, li)),
+      boton(p.activo ? 'Ocultar' : 'Mostrar', 'btn-ver', (b) => guardarPrecio(p, { activo: !p.activo }, b)),
+      boton('Quitar', 'btn-ver btn-ver--peligro', (b) => quitarPrecio(p, b)));
+    li.append(acciones);
+    return li;
+  }
+
+  async function guardarPrecio(p, cambios, b) {
+    if (b) b.disabled = true;
+    const v = Object.assign({ paquete: p.paquete, cantidad: p.cantidad, precio_manual: p.precio_manual, activo: p.activo }, cambios);
+    const { error } = await cliente.rpc('admin_precio_guardar', {
+      p_id: p.id, p_juego: $('juegoPrecios').value, p_paquete: v.paquete, p_producto: p.producto || '',
+      p_cantidad: Number(v.cantidad), p_precio_manual: v.precio_manual === null || v.precio_manual === '' ? null : Number(v.precio_manual),
+      p_activo: v.activo, p_orden: null,
+    });
+    if (error) { if (b) b.disabled = false; return textoError(error, 'No se pudo guardar. Intenta de nuevo.'); }
+    cargarPrecios();
+    return '';
+  }
+
+  function editarPrecio(p, li) {
+    const abierto = li.querySelector('.editar-codigo');
+    if (abierto) { abierto.remove(); return; }
+    const form = el('form', 'formulario editar-codigo');
+    form.noValidate = true;
+    const campo = (texto, input) => { const l = el('label', 'campo', texto); l.append(input); return l; };
+    const inNombre = el('input'); inNombre.type = 'text'; inNombre.maxLength = 80; inNombre.value = p.paquete;
+    const inPrecio = el('input'); inPrecio.type = 'number'; inPrecio.inputMode = 'decimal'; inPrecio.min = '0'; inPrecio.step = '0.01';
+    inPrecio.value = p.precio_manual !== null ? String(Number(p.precio_manual)) : '';
+    inPrecio.placeholder = p.producto ? 'Vacío = automático' : 'Precio en Bs';
+    const inCantidad = el('input'); inCantidad.type = 'number'; inCantidad.min = '1'; inCantidad.max = '10'; inCantidad.value = String(p.cantidad);
+    const mensaje = el('p', 'mensaje-form'); mensaje.setAttribute('role', 'status');
+    const guardar = el('button', 'btn btn--chico', 'Guardar'); guardar.type = 'submit';
+    const filas = el('div', 'dos-campos');
+    filas.append(campo('Nombre que ve el cliente', inNombre), campo(p.producto ? 'Precio a mano (Bs) · vacío = automático' : 'Precio (Bs)', inPrecio));
+    form.append(filas);
+    if (p.producto) form.append(campo('Cantidad (cuántos de ese producto se compran)', inCantidad));
+    form.append(guardar, mensaje);
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const precio = inPrecio.value.trim();
+      if (precio && !(Number(precio) > 0)) { mensaje.textContent = 'El precio tiene que ser mayor que 0.'; return; }
+      guardar.disabled = true;
+      const fallo = await guardarPrecio(p, { paquete: inNombre.value.trim(), precio_manual: precio === '' ? null : precio, cantidad: inCantidad.value });
+      guardar.disabled = false;
+      if (fallo) mensaje.textContent = fallo;
+    });
+    li.append(form);
+    inPrecio.focus();
+  }
+
+  async function moverPrecio(id, paso, b) {
+    b.disabled = true;
+    const { error } = await cliente.rpc('admin_precio_mover', { p_id: id, p_paso: paso });
+    if (error) console.error(error);
+    cargarPrecios();
+  }
+
+  async function quitarPrecio(p, b) {
+    if (!confirm(`¿Quitar "${p.paquete}" de la lista de ${$('juegoPrecios').selectedOptions[0].textContent}?\n\nSi solo quieres que no se venda un tiempo, mejor usa "Ocultar".`)) return;
+    b.disabled = true;
+    const { error } = await cliente.rpc('admin_precio_borrar', { p_id: p.id });
+    if (error) { alert(textoError(error, 'No se pudo quitar.')); b.disabled = false; return; }
+    cargarPrecios();
+  }
+
+  async function agregarProducto(c, b) {
+    b.disabled = true;
+    const { error } = await cliente.rpc('admin_precio_guardar', {
+      p_id: null, p_juego: $('juegoPrecios').value, p_paquete: String(c.nombre || 'Paquete').slice(0, 80), p_producto: c.producto,
+      p_cantidad: 1, p_precio_manual: null, p_activo: true, p_orden: null,
+    });
+    if (error) { alert(textoError(error, 'No se pudo agregar.')); b.disabled = false; return; }
+    cargarPrecios();
+  }
+
+  $('btnTraerProductos').addEventListener('click', async () => {
+    const b = $('btnTraerProductos');
+    const juego = $('juegoPrecios').value;
+    b.disabled = true;
+    $('estadoCatalogo').textContent = 'Preguntando a Central One…';
+    try {
+      const { data: s } = await cliente.auth.getSession();
+      const res = await fetch(`/api/juego?juego=${juego}&accion=traer_productos`, {
+        method: 'POST', headers: { Authorization: 'Bearer ' + ((s && s.session && s.session.access_token) || '') },
+      });
+      const r = await res.json();
+      $('estadoCatalogo').textContent = r.status === 'success'
+        ? `✅ Central One tiene ${r.total} productos de este juego (${r.conStock} con stock). Costos y stock actualizados.`
+        : (r.message || 'No se pudo traer el catálogo.');
+      if (r.status === 'success') await cargarPrecios();
+    } catch (e) {
+      $('estadoCatalogo').textContent = 'No se pudo conectar. Intenta de nuevo.';
+    } finally {
+      b.disabled = false;
+    }
+  });
+
+  $('juegoPrecios').addEventListener('change', cargarPrecios);
+  $('formTasaPrecios').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const tasa = Number($('tasaPrecios').value);
+    const antes = preciosDatos && Number(preciosDatos.tasa);
+    if (!(tasa > 0)) return;
+    if (antes && Math.abs(tasa - antes) / antes > 0.1 && !confirm(`El dólar pasa de ${bs(antes)} a ${bs(tasa)} Bs (${Math.round(((tasa - antes) / antes) * 100)} %).\n\n¿Seguro? Cambia todos los precios automáticos.`)) return;
+    const { error } = await cliente.rpc('admin_tasa_guardar', { p_tasa: tasa });
+    if (error) { alert(textoError(error, 'No se pudo guardar el dólar.')); return; }
+    $('tasaPrecios').blur();
+    cargarPrecios();
+  });
+  $('formGanancia').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const pct = Number($('gananciaPrecios').value);
+    if (!(pct >= 0)) return;
+    const { error } = await cliente.rpc('admin_ganancia_guardar', { p_pct: pct });
+    if (error) { alert(textoError(error, 'No se pudo guardar la ganancia.')); return; }
+    $('gananciaPrecios').blur();
+    cargarPrecios();
+  });
+  $('formPaqueteManual').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const nombre = $('manualNombre').value.trim();
+    const precio = Number($('manualPrecio').value);
+    if (!nombre || !(precio > 0)) { $('mensajeManual').textContent = 'Escribe el nombre y el precio.'; return; }
+    const { error } = await cliente.rpc('admin_precio_guardar', {
+      p_id: null, p_juego: $('juegoPrecios').value, p_paquete: nombre, p_producto: '', p_cantidad: 1,
+      p_precio_manual: precio, p_activo: true, p_orden: null,
+    });
+    if (error) { $('mensajeManual').textContent = textoError(error, 'No se pudo agregar.'); return; }
+    $('mensajeManual').textContent = `✅ ${nombre} agregado.`;
+    $('formPaqueteManual').reset();
+    cargarPrecios();
+  });
 
   // "Entrar con Google": si había otra cuenta (no administradora), primero se cierra
   $('btnEntrarAdmin').addEventListener('click', async (ev) => {

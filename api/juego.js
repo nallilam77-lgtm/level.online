@@ -3,6 +3,7 @@ import { cargarJuego } from './_lib/juegos/index.js';
 // Consultas por juego: /api/juego?juego=<freefire|bloodstrike|roblox>&accion=<precios|verificar>
 //   - precios   (GET):  catálogo del juego, con caché.
 //   - verificar (POST): { id } -> valida el ID del jugador (Free Fire y Blood Strike).
+//   - traer_productos (POST, solo administrador): copia el catálogo de Central One del juego a Supabase.
 // El juego y la acción van siempre en la URL; el cuerpo solo lleva datos. Cada módulo de
 // api/_lib/juegos/ declara sus acciones, valida sus datos y responde como los endpoints anteriores.
 export default async function handler(req, res) {
@@ -13,6 +14,8 @@ export default async function handler(req, res) {
     }
 
     const { accion } = req.query;
+    // Panel admin → Precios: "🔄 Traer productos de Central One" (solo administrador; _lib/precios.js)
+    if (accion === 'traer_productos') return (await import('./_lib/precios.js')).traerProductos(req, res, req.query.juego);
     if (typeof accion !== 'string' || !Object.hasOwn(juego.acciones, accion)) {
       return res.status(400).json({ status: "error", message: "Acción no disponible para este juego." });
     }

@@ -70,5 +70,20 @@ export async function usuarioDelToken(token) {
   }
 }
 
+/** ¿El dueño de este token de sesión es administrador? (es_admin() de supabase/tienda.sql, con SU token) */
+export async function esAdminToken(token) {
+  if (!supabaseActivo() || !/^[A-Za-z0-9._-]{20,4000}$/.test(String(token || ''))) return false;
+  try {
+    const respuesta = await fetch(`${base()}/rest/v1/rpc/es_admin`, {
+      method: 'POST', body: '{}',
+      headers: { apikey: llavePublica() || llaveSecreta(), Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(TIEMPO_MS),
+    });
+    return respuesta.ok && (await respuesta.json()) === true;
+  } catch {
+    return false;
+  }
+}
+
 /** Lo que el navegador necesita para iniciar sesión (todo público). */
 export const configuracionPublica = () => (base() && llavePublica() ? { supabaseUrl: base(), supabaseKey: llavePublica() } : {});

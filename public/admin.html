@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=7">
+  <link rel="stylesheet" href="css/admin.css?v=8">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=8" defer></script>
+  <script src="/js/admin.js?v=9" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -41,6 +41,7 @@
         <button type="button" role="tab" data-seccion="pedidos" aria-selected="false">Pedidos</button>
         <button type="button" role="tab" data-seccion="cuentas" aria-selected="false">Cuentas</button>
         <button type="button" role="tab" data-seccion="creadores" aria-selected="false">Creadores</button>
+        <button type="button" role="tab" data-seccion="precios" aria-selected="false">Precios</button>
         <button type="button" role="tab" data-seccion="juego" aria-selected="false">Minijuego</button>
         <button type="button" role="tab" data-seccion="espacio" aria-selected="false">Supabase</button>
       </nav>
@@ -122,6 +123,67 @@
           </div>
           <input type="search" id="buscarCuenta" class="buscar" placeholder="Buscar correo o nombre…" aria-label="Buscar cuentas" autocomplete="off">
           <ul class="pedidos" id="listaCuentas"></ul>
+        </div>
+      </section>
+
+      <!-- PRECIOS (supabase/precios.sql, desde 2026-11-14). La tienda todavía usa las hojas: aquí se preparan. -->
+      <section class="seccion" id="seccion-precios" hidden>
+        <div class="tarjeta">
+          <h2>Dólar y ganancia</h2>
+          <div class="dos-campos">
+            <form class="campo" id="formTasaPrecios">
+              <label for="tasaPrecios">Dólar (Bs por $)</label>
+              <div class="fila-campos">
+                <input type="number" id="tasaPrecios" inputmode="decimal" min="0" step="0.01" placeholder="Ej. 910" required>
+                <button type="submit" class="btn btn--chico">Guardar</button>
+              </div>
+            </form>
+            <form class="campo" id="formGanancia">
+              <label for="gananciaPrecios">Ganancia (%)</label>
+              <div class="fila-campos">
+                <input type="number" id="gananciaPrecios" inputmode="decimal" min="0" max="300" step="0.1" placeholder="Ej. 25" required>
+                <button type="submit" class="btn btn--chico">Guardar</button>
+              </div>
+            </form>
+          </div>
+          <p class="nota" id="notaPrecios">Valen para los 4 juegos: todo paquete <strong>sin precio a mano</strong> cuesta <strong>costo de Central One × dólar × (1 + ganancia)</strong>. El dólar es el mismo de Creadores.</p>
+          <p class="aviso-precios"><strong>La tienda todavía usa las hojas.</strong> Aquí preparas los precios; cuando estén listos los pasamos a la tienda.</p>
+        </div>
+
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Paquetes</h2>
+            <select id="juegoPrecios" aria-label="Juego">
+              <option value="freefire">Free Fire</option>
+              <option value="bloodstrike">Blood Strike</option>
+              <option value="mobilelegends">Mobile Legends</option>
+              <option value="roblox">Roblox</option>
+            </select>
+          </div>
+          <div class="fila-campos">
+            <button type="button" class="btn btn--chico" id="btnTraerProductos">🔄 Traer productos de Central One</button>
+          </div>
+          <p class="nota" id="estadoCatalogo" role="status"></p>
+          <ul class="pedidos" id="listaPrecios"></ul>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Productos de Central One sin vender</h2>
+          <p class="nota">Lo que trajiste de Central One para este juego y todavía no está en la tienda. Toca <strong>Agregar</strong> para venderlo (sale con precio automático; después puedes ponerle uno a mano).</p>
+          <ul class="pedidos" id="listaSinUsar"></ul>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Paquete sin Central One</h2>
+          <p class="nota">Para paquetes que entregas tú (como los códigos de Roblox): nombre y precio a mano.</p>
+          <form class="formulario" id="formPaqueteManual" novalidate>
+            <div class="dos-campos">
+              <label class="campo">Nombre<input type="text" id="manualNombre" maxlength="80" placeholder="Ej. 800 Robux" autocomplete="off"></label>
+              <label class="campo">Precio (Bs)<input type="number" id="manualPrecio" inputmode="decimal" min="0" step="0.01" placeholder="Ej. 5000"></label>
+            </div>
+            <button type="submit" class="btn btn--chico">Agregar paquete</button>
+            <p class="mensaje-form" id="mensajeManual" role="status"></p>
+          </form>
         </div>
       </section>
 
