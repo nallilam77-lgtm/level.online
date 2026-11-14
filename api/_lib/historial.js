@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { supabaseActivo, guardar, actualizar, leer, usuarioDelToken } from './supabase.js';
 import { limpiarMontoVES } from './recarga-comun.js';
+import { CODIGO_DESCUENTO_VALIDO, normalizarCodigoDescuento } from './descuentos.js';
 
 const MANUALES = new Set(['fcmobile', 'codmobile', 'clashroyale']);
 export const ESTADOS = ['pendiente', 'en_proceso', 'completado', 'incompleto', 'en_revision', 'problema', 'reembolsado'];
@@ -72,6 +73,9 @@ async function guardarFila({ usuario: promesaUsuario, juego, body, pedido, respu
   const cuerpo = respuesta.cuerpo || {};
   const referencia = String(body?.referencia ?? '').replace(/\D/g, '');
   const precio = typeof pedido.precio === 'number' ? pedido.precio : limpiarMontoVES(cuerpo.precio || pedido.precio || '');
+  // Código de descuento usado (la recarga ya lo validó antes de tocar el pago). Al quedar el pedido
+  // entregado, Supabase suma la venta y la comisión al código (disparador codigos_contar_venta).
+  const codigoDescuento = normalizarCodigoDescuento(body?.codigoDescuento);
   await guardar('recargas', {
     id_pedido: corto(pedido.idPedido, 80), usuario, juego,
     ...cuentaVisible(juego, pedido.cuenta, body),
@@ -81,6 +85,7 @@ async function guardarFila({ usuario: promesaUsuario, juego, body, pedido, respu
     estado: estadoDeRespuesta(juego, cuerpo),
     codigo: juego === 'roblox' && cuerpo.code ? corto(cuerpo.code, 80) : null,
     clave_hash: cuerpo.tokenComplemento ? huella(cuerpo.tokenComplemento) : null,
+    codigo_descuento: CODIGO_DESCUENTO_VALIDO.test(codigoDescuento) ? codigoDescuento : null,
     actualizado: new Date().toISOString(),
   }, 'id_pedido');
 }

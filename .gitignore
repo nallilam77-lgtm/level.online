@@ -11,3 +11,6 @@ node_modules/
 
 # Configuración local de Claude Code
 .claude/settings.local.json
+
+# Datos privados (CSV con PIN y teléfonos de creadores): nunca subir
+privado/

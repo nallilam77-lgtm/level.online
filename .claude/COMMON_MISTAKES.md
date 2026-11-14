@@ -210,3 +210,6 @@ Desde 2026-10-21 Free Fire ya no pide a FazerCards (compra en Central One, ver 9
 **Síntoma**: pedido de Central One "En proceso" para siempre en el perfil y sin fichas del minijuego, aunque la recarga llegó.
 **Causa**: `_lib/historial.js` guarda la fila del pedido DESPUÉS de responder al cliente (waitUntil); si el webhook confirmaba la entrega antes, `actualizarEstado` no encontraba la fila y no hacía nada, y luego la fila nacía `en_proceso`.
 **Regla**: `actualizarEstado` pide las filas cambiadas (`actualizar(..., columnas)`); si no cambió ninguna y el pedido todavía no existe, repite tras 3, 6 y 9 s (caben en los 30 s del webhook). Todo aviso que cambie una fila guardada "después de responder" debe contar con que puede llegar antes.
+
+## Códigos de descuento: crearlos en la hoja ya no sirve (desde 2026-11-13)
+Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creadores. Uno creado solo en la pestaña "Descuentos" de la hoja no funciona (la tienda pregunta a Supabase; la hoja es solo el respaldo si Supabase no responde). La comisión nunca se recalcula desde `ventas_bs`: ese total cuenta desde siempre y la comisión desde 2026-10-13. `usos`, `ventas_bs` y `comision_usd` solo suben (disparador codigos_solo_suben).

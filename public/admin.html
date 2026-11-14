@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=4">
+  <link rel="stylesheet" href="css/admin.css?v=5">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
   <script src="/js/sesion.js?v=5" defer></script>
-  <script src="/js/admin.js?v=4" defer></script>
+  <script src="/js/admin.js?v=5" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -40,6 +40,7 @@
         <button type="button" role="tab" data-seccion="resumen" aria-selected="true">Resumen</button>
         <button type="button" role="tab" data-seccion="pedidos" aria-selected="false">Pedidos</button>
         <button type="button" role="tab" data-seccion="cuentas" aria-selected="false">Cuentas</button>
+        <button type="button" role="tab" data-seccion="creadores" aria-selected="false">Creadores</button>
         <button type="button" role="tab" data-seccion="juego" aria-selected="false">Minijuego</button>
         <button type="button" role="tab" data-seccion="espacio" aria-selected="false">Supabase</button>
       </nav>
@@ -121,6 +122,71 @@
           </div>
           <input type="search" id="buscarCuenta" class="buscar" placeholder="Buscar correo o nombre…" aria-label="Buscar cuentas" autocomplete="off">
           <ul class="pedidos" id="listaCuentas"></ul>
+        </div>
+      </section>
+
+      <!-- CREADORES: códigos de descuento (supabase/codigos.sql) -->
+      <section class="seccion" id="seccion-creadores" hidden>
+        <div class="tarjeta">
+          <h2>Creadores</h2>
+          <div class="kpis">
+            <div class="kpi"><small>Códigos activos</small><strong id="kpiCodigos">–</strong></div>
+            <div class="kpi"><small>Ventas con código</small><strong id="kpiUsosCodigos">–</strong></div>
+            <div class="kpi kpi--aviso"><small>Les debes</small><strong id="kpiDebes">–</strong></div>
+            <div class="kpi"><small>Ya pagado</small><strong id="kpiPagado">–</strong></div>
+          </div>
+          <form class="campo campo--tasa" id="formTasa">
+            <label for="tasaCreadores">Tasa del dólar (Bs por $)</label>
+            <div class="fila-campos">
+              <input type="number" id="tasaCreadores" inputmode="decimal" min="0" step="0.01" placeholder="Ej. 230" required>
+              <button type="submit" class="btn btn--chico">Guardar tasa</button>
+            </div>
+          </form>
+          <p class="nota" id="notaCreadores">Cada venta con código le da al creador el 1,5 % en dólares, con la tasa de ese día. Actualiza la tasa cuando cambie.</p>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Crear código</h2>
+          <form class="formulario" id="formCodigo" novalidate>
+            <label class="campo">Código
+              <input type="text" id="nuevoCodigo" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Ej. CARLOSFF" required>
+            </label>
+            <label class="campo">Tipo
+              <select id="nuevoTipo">
+                <option value="creador">De creador: 1,5 % al cliente y 1,5 % para el creador</option>
+                <option value="promo">Promo: solo descuento, nadie gana comisión</option>
+              </select>
+            </label>
+            <label class="campo" id="campoCreador">Creador (nombre o WhatsApp)
+              <input type="text" id="nuevoCreador" maxlength="60" autocomplete="off" placeholder="Ej. Carlos o 0414-1234567">
+            </label>
+            <div class="campo" id="campoPin">
+              <label for="nuevoPin">PIN para ver sus ganancias (4 a 8 números)</label>
+              <div class="fila-campos">
+                <input type="text" id="nuevoPin" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="Ej. 4821">
+                <button type="button" class="btn-ver" id="generarPin">Inventar uno</button>
+              </div>
+            </div>
+            <label class="campo" id="campoDescuento" hidden>Descuento de la promo (%)
+              <input type="number" id="nuevoDescuento" inputmode="decimal" min="0.1" max="99" step="0.1" placeholder="Ej. 5">
+            </label>
+            <button type="submit" class="btn" id="btnCrearCodigo">Crear código</button>
+            <p class="mensaje-form" id="mensajeCodigo" role="status"></p>
+          </form>
+        </div>
+
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Códigos</h2>
+            <select id="filtroCodigos" aria-label="Qué códigos mostrar">
+              <option value="">Todos</option>
+              <option value="debe">Les debo</option>
+              <option value="activos">Activos</option>
+              <option value="inactivos">Desactivados</option>
+            </select>
+          </div>
+          <input type="search" id="buscarCodigo" class="buscar" placeholder="Buscar código o creador…" aria-label="Buscar códigos" autocomplete="off">
+          <ul class="pedidos" id="listaCodigos"></ul>
         </div>
       </section>
 

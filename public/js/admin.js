@@ -5,7 +5,8 @@
 // "administradores": la base lo comprueba en cada consulta (RLS y es_admin(), supabase/tienda.sql), así
 // que esta página no protege nada por sí sola. Secciones: resumen de ventas (admin_resumen), pedidos en
 // vivo (tabla "recargas"), cuentas con sus recargas y fichas (admin_cuentas), ranking del minijuego
-// (juego_revision) y espacio de la base con limpieza de semanas viejas (admin_espacio / admin_borrar_viejo). Todo lo que viene de la base se pinta con textContent.
+// (juego_revision), códigos de creadores con su tasa, pagos y PIN (admin_codigo*, supabase/codigos.sql) y
+// espacio de la base con limpieza de semanas viejas (admin_espacio / admin_borrar_viejo). Todo lo que viene de la base se pinta con textContent.
 // =========================================================================
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -63,6 +64,7 @@
     if (b.dataset.seccion === 'juego') cargarJuego();
     if (b.dataset.seccion === 'espacio') cargarEspacio();
     if (b.dataset.seccion === 'cuentas') cargarCuentas();
+    if (b.dataset.seccion === 'creadores') cargarCodigos();
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -331,6 +333,237 @@
   }
   $('limiteCuentas').addEventListener('change', cargarCuentas);
   $('buscarCuenta').addEventListener('input', pintarCuentas);
+
+  // ---------------------------------------------------------------- creadores (códigos de descuento)
+  // Todo pasa por funciones de supabase/codigos.sql (admin_codigos, admin_codigo_guardar, admin_codigo_pagar,
+  // admin_codigo_borrar, admin_tasa_guardar): la base revisa que seas administrador y que los datos sean válidos.
+  let codigos = [];
+  const usd = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Errores que la base escribe para ti (código vacío, PIN corto, ya existe…); los demás, genéricos
+  const ERRORES_PROPIOS = ['22023', '23505', '23503', 'P0002'];
+  const textoError = (error, otro) => (error && ERRORES_PROPIOS.includes(error.code) ? error.message : otro);
+
+  // "0414-1234567", "4141234567", "+58 414…" -> "+584141234567" (o null si no es un celular)
+  function telefonoDe(texto) {
+    let d = String(texto || '').replace(/\D/g, '');
+    if (d.startsWith('58')) d = d.slice(2);
+    if (d.startsWith('0')) d = d.slice(1);
+    return /^4(12|14|16|22|24|26)\d{7}$/.test(d) ? '+58' + d : null;
+  }
+
+  function mensajeCreador(codigo, pin) {
+    return `¡Hola! Tu código de Level Up es *${codigo}*. Quien recargue con él paga 1,5 % menos y tú ganas el 1,5 % de cada recarga.`
+      + (pin ? ` Mira tus ganancias en ${location.origin}/creadores.html con tu código y tu PIN *${pin}*.` : '');
+  }
+
+  async function cargarCodigos() {
+    const { data, error } = await cliente.rpc('admin_codigos');
+    if (error || !data) {
+      console.error(error);
+      $('listaCodigos').replaceChildren(el('li', 'vacio', 'No se pudieron cargar los códigos. ¿Ya corriste supabase/codigos.sql?'));
+      return;
+    }
+    $('kpiCodigos').textContent = `${data.activos} de ${data.total}`;
+    $('kpiUsosCodigos').textContent = Number(data.usos || 0).toLocaleString('es-VE');
+    $('kpiDebes').textContent = usd(data.pendiente_usd);
+    $('kpiPagado').textContent = usd(data.pagado_usd);
+    if (document.activeElement !== $('tasaCreadores')) $('tasaCreadores').value = data.tasa ? String(Number(data.tasa)) : '';
+    $('notaCreadores').textContent = data.tasa
+      ? `Tasa guardada: ${bs(data.tasa)} Bs por dólar. Cada venta con código le da al creador el 1,5 % en dólares con la tasa de ese día. Actualízala cuando cambie.`
+      : '⚠️ Falta la tasa del dólar: sin ella, las ganancias nuevas de los creadores esperan en bolívares. Escríbela y dale a Guardar.';
+    if (Number(data.por_convertir_bs) > 0 && data.tasa) $('notaCreadores').textContent += ` Hay ${bs(data.por_convertir_bs)} Bs por pasar a dólares: se pasan al guardar la tasa.`;
+    codigos = Array.isArray(data.codigos) ? data.codigos : [];
+    pintarCodigos();
+  }
+
+  function pintarCodigos() {
+    const texto = $('buscarCodigo').value.trim().toLowerCase();
+    const filtro = $('filtroCodigos').value;
+    const lista = $('listaCodigos');
+    lista.replaceChildren();
+    const visibles = codigos.filter((c) => (!texto || `${c.codigo} ${c.creador || ''}`.toLowerCase().includes(texto))
+      && (filtro !== 'debe' || Number(c.pendiente_usd) > 0)
+      && (filtro !== 'activos' || c.activo) && (filtro !== 'inactivos' || !c.activo));
+    if (!visibles.length) { lista.append(el('li', 'vacio', 'No hay códigos con ese filtro.')); return; }
+    visibles.forEach((c) => lista.append(tarjetaCodigo(c)));
+  }
+
+  function boton(texto, clase, alHacerClic) {
+    const b = el('button', clase, texto);
+    b.type = 'button';
+    b.addEventListener('click', () => alHacerClic(b));
+    return b;
+  }
+
+  function tarjetaCodigo(c) {
+    const li = el('li', 'pedido codigo' + (c.activo ? '' : ' codigo--inactivo'));
+    const cabeza = el('div', 'pedido-cabeza');
+    cabeza.append(el('strong', 'codigo-nombre', c.codigo),
+      el('span', 'etiqueta ' + (c.activo ? 'etiqueta--completado' : 'etiqueta--reembolsado'), c.activo ? 'Activo' : 'Desactivado'));
+    const debe = Number(c.pendiente_usd) || 0;
+    li.append(cabeza,
+      el('span', '', c.creador ? `Creador: ${c.creador}` : `Promo de ${bs(c.descuento).replace(/,00$/, '')} % (sin creador)`),
+      el('span', '', `${Number(c.usos).toLocaleString('es-VE')} ventas · ${bs(c.ventas_bs)} Bs movidos con su código`));
+    if (c.creador) {
+      const plata = el('span', 'codigo-plata');
+      plata.append(el('span', '', `Ganado ${usd(c.comision_usd)}`), el('strong', debe > 0 ? 'codigo-debe' : '', debe > 0 ? `Le debes ${usd(debe)}` : 'No le debes nada'));
+      if (Number(c.pagado_usd) > 0) plata.append(el('span', '', `Pagado ${usd(c.pagado_usd)}${c.ultimo_pago ? ' (último ' + corta(c.ultimo_pago) + ')' : ''}`));
+      li.append(plata);
+      if (!c.tiene_pin) li.append(el('span', 'sin-telefono', 'Sin PIN: no puede ver su panel. Ponle uno en Editar.'));
+    }
+
+    const acciones = el('div', 'acciones-cuenta');
+    const tel = telefonoDe(c.creador);
+    if (tel) acciones.append(enlaceWhatsapp(tel, mensajeCreador(c.codigo)));
+    if (debe > 0) acciones.append(boton(`Ya le pagué ${usd(debe)}`, 'btn-ver btn-pagar', (b) => pagarCodigo(c, b)));
+    if (Number(c.usos) > 0) acciones.append(boton('Ver ventas', 'btn-ver', (b) => verVentasCodigo(c.codigo, li, b)));
+    acciones.append(boton('Editar', 'btn-ver', () => editarCodigo(c, li)));
+    acciones.append(boton(c.activo ? 'Desactivar' : 'Activar', 'btn-ver', (b) => cambiarActivo(c, b)));
+    if (Number(c.usos) === 0 && Number(c.comision_usd) === 0 && Number(c.pagado_usd) === 0) {
+      acciones.append(boton('Eliminar', 'btn-ver btn-ver--peligro', (b) => borrarCodigo(c, b)));
+    }
+    li.append(acciones);
+    return li;
+  }
+
+  async function guardarCodigo(c, cambios) {
+    return cliente.rpc('admin_codigo_guardar', {
+      p_codigo: c.codigo, p_creador: 'creador' in cambios ? cambios.creador : (c.creador || ''),
+      p_pin: cambios.pin || null, p_descuento: c.descuento === null ? null : Number(c.descuento),
+      p_activo: 'activo' in cambios ? cambios.activo : c.activo, p_nuevo: false,
+    });
+  }
+
+  async function cambiarActivo(c, b) {
+    if (c.activo && !confirm(`¿Desactivar ${c.codigo}?\n\nLos clientes ya no podrán usarlo. Lo que ganó el creador se queda guardado y puedes activarlo cuando quieras.`)) return;
+    b.disabled = true;
+    const { error } = await guardarCodigo(c, { activo: !c.activo });
+    if (error) { alert(textoError(error, 'No se pudo cambiar. Intenta de nuevo.')); b.disabled = false; return; }
+    cargarCodigos();
+  }
+
+  async function pagarCodigo(c, b) {
+    if (!confirm(`¿Ya le pagaste ${usd(c.pendiente_usd)} a ${c.creador} (${c.codigo})?\n\nLo que le debes vuelve a $0.00 y el pago queda anotado. Lo que ya ganó y sus ventas no cambian.`)) return;
+    b.disabled = true;
+    const { data, error } = await cliente.rpc('admin_codigo_pagar', { p_codigo: c.codigo });
+    if (error) { alert(textoError(error, 'No se pudo anotar el pago. Intenta de nuevo.')); b.disabled = false; return; }
+    alert(`✅ Pago de ${usd(data)} anotado a ${c.codigo}.`);
+    cargarCodigos();
+  }
+
+  async function borrarCodigo(c, b) {
+    if (!confirm(`¿Eliminar ${c.codigo}? Nunca se ha usado, así que no se pierde nada.`)) return;
+    b.disabled = true;
+    const { error } = await cliente.rpc('admin_codigo_borrar', { p_codigo: c.codigo });
+    if (error) { alert(textoError(error, 'No se pudo eliminar. Intenta de nuevo.')); b.disabled = false; return; }
+    cargarCodigos();
+  }
+
+  // Formulario para cambiar el creador o el PIN, debajo de la tarjeta
+  function editarCodigo(c, li) {
+    const abierto = li.querySelector('.editar-codigo');
+    if (abierto) { abierto.remove(); return; }
+    const form = el('form', 'formulario editar-codigo');
+    form.noValidate = true;
+    const campoCreador = el('label', 'campo', c.creador ? 'Creador (nombre o WhatsApp)' : 'Creador (vacío = promo)');
+    const inCreador = el('input'); inCreador.type = 'text'; inCreador.maxLength = 60; inCreador.value = c.creador || '';
+    campoCreador.append(inCreador);
+    const campoPin = el('label', 'campo', c.tiene_pin ? 'PIN nuevo (déjalo vacío para no cambiarlo)' : 'PIN (4 a 8 números)');
+    const inPin = el('input'); inPin.type = 'text'; inPin.inputMode = 'numeric'; inPin.maxLength = 8; inPin.autocomplete = 'off';
+    campoPin.append(inPin);
+    const mensaje = el('p', 'mensaje-form'); mensaje.setAttribute('role', 'status');
+    const guardar = el('button', 'btn btn--chico', 'Guardar cambios'); guardar.type = 'submit';
+    form.append(campoCreador, campoPin, guardar, mensaje);
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const pin = inPin.value.trim();
+      if (pin && !/^\d{4,8}$/.test(pin)) { mensaje.textContent = 'El PIN debe tener de 4 a 8 números.'; return; }
+      if (!inCreador.value.trim() && c.descuento === null) { mensaje.textContent = 'Escribe el creador (un código sin creador necesita un % de promo).'; return; }
+      guardar.disabled = true;
+      const { error } = await guardarCodigo(c, { creador: inCreador.value.trim(), pin });
+      guardar.disabled = false;
+      if (error) { mensaje.textContent = textoError(error, 'No se pudo guardar. Intenta de nuevo.'); return; }
+      mensaje.textContent = pin ? `✅ Guardado. Nuevo PIN: ${pin}` : '✅ Guardado.';
+      const tel = telefonoDe(inCreador.value);
+      if (pin && tel) form.append(enlaceWhatsapp(tel, mensajeCreador(c.codigo, pin)));
+      setTimeout(cargarCodigos, pin && tel ? 8000 : 1200);
+    });
+    li.append(form);
+    inCreador.focus();
+  }
+
+  // Últimas 20 ventas con este código (los pedidos guardan el código desde el 13/11/2026)
+  async function verVentasCodigo(codigo, li, b) {
+    const abierta = li.querySelector('.recargas-cuenta');
+    if (abierta) { abierta.remove(); b.textContent = 'Ver ventas'; return; }
+    b.disabled = true;
+    const { data, error } = await cliente.from('recargas')
+      .select('id_pedido,juego,cuenta,paquete,precio,referencia,estado,creado,usuario')
+      .eq('codigo_descuento', codigo).order('creado', { ascending: false }).limit(20);
+    b.disabled = false;
+    const sub = el('ul', 'pedidos recargas-cuenta');
+    if (error) sub.append(el('li', 'vacio', 'No se pudieron cargar.'));
+    else if (!data || !data.length) sub.append(el('li', 'vacio', 'Sus ventas anteriores al 13/11/2026 están en la hoja (movimientos_descuentos).'));
+    else data.forEach((p) => sub.append(tarjetaPedido(p, false)));
+    li.append(sub);
+    b.textContent = 'Ocultar ventas';
+  }
+
+  // Crear código
+  $('nuevoTipo').addEventListener('change', () => {
+    const promo = $('nuevoTipo').value === 'promo';
+    $('campoCreador').hidden = promo;
+    $('campoPin').hidden = promo;
+    $('campoDescuento').hidden = !promo;
+  });
+  $('nuevoCodigo').addEventListener('input', () => {
+    const limpio = $('nuevoCodigo').value.toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    if (limpio !== $('nuevoCodigo').value) $('nuevoCodigo').value = limpio;
+  });
+  $('generarPin').addEventListener('click', () => {
+    const n = new Uint32Array(1);
+    crypto.getRandomValues(n);
+    $('nuevoPin').value = String(1000 + (n[0] % 9000));
+  });
+  $('formCodigo').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const msg = $('mensajeCodigo');
+    const promo = $('nuevoTipo').value === 'promo';
+    const codigo = $('nuevoCodigo').value.trim().toUpperCase();
+    const creador = promo ? '' : $('nuevoCreador').value.trim();
+    const pin = promo ? '' : $('nuevoPin').value.trim();
+    const descuento = promo ? Number($('nuevoDescuento').value) : null;
+    msg.replaceChildren();
+    if (!/^[A-Z0-9_-]{2,30}$/.test(codigo)) { msg.textContent = 'Escribe el código: de 2 a 30 letras o números, sin espacios.'; return; }
+    if (!promo && !creador) { msg.textContent = 'Escribe el nombre o el WhatsApp del creador.'; return; }
+    if (!promo && !/^\d{4,8}$/.test(pin)) { msg.textContent = 'Escribe un PIN de 4 a 8 números (o toca "Inventar uno").'; return; }
+    if (promo && !(descuento > 0 && descuento < 100)) { msg.textContent = 'Escribe el % de descuento de la promo (por ejemplo 5).'; return; }
+    $('btnCrearCodigo').disabled = true;
+    const { error } = await cliente.rpc('admin_codigo_guardar', {
+      p_codigo: codigo, p_creador: creador, p_pin: pin || null, p_descuento: descuento, p_activo: true, p_nuevo: true,
+    });
+    $('btnCrearCodigo').disabled = false;
+    if (error) { msg.textContent = textoError(error, 'No se pudo crear. Intenta de nuevo.'); return; }
+    msg.textContent = promo ? `✅ ${codigo} creado: ya funciona en todas las tiendas.` : `✅ ${codigo} creado con el PIN ${pin}: ya funciona en todas las tiendas. Mándale sus datos al creador:`;
+    const tel = telefonoDe(creador);
+    if (tel) msg.append(' ', enlaceWhatsapp(tel, mensajeCreador(codigo, pin)));
+    else if (!promo) msg.append(el('span', 'texto-copiar', ' ' + mensajeCreador(codigo, pin)));
+    $('formCodigo').reset();
+    $('nuevoTipo').dispatchEvent(new Event('change'));
+    cargarCodigos();
+  });
+
+  $('formTasa').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const tasa = Number($('tasaCreadores').value);
+    if (!(tasa > 0)) { $('notaCreadores').textContent = 'Escribe la tasa: cuántos bolívares vale un dólar.'; return; }
+    const { error } = await cliente.rpc('admin_tasa_guardar', { p_tasa: tasa });
+    if (error) { $('notaCreadores').textContent = textoError(error, 'No se pudo guardar la tasa. Intenta de nuevo.'); return; }
+    $('tasaCreadores').blur();
+    cargarCodigos();
+  });
+  $('buscarCodigo').addEventListener('input', pintarCodigos);
+  $('filtroCodigos').addEventListener('change', pintarCodigos);
 
   // "Entrar con Google": si había otra cuenta (no administradora), primero se cierra
   $('btnEntrarAdmin').addEventListener('click', async (ev) => {

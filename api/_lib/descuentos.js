@@ -1,12 +1,20 @@
 // Códigos de descuento, compartidos por todas las tiendas.
-// La tabla vive en la pestaña "Descuentos" de la hoja de recargas de Free Fire (SCRIPT_RECARGAS_URL):
-// A: código | B: descuento en % ("10%" o "10") | C: usos | D: dinero total movido.
+// Desde 2026-11-13 viven en Supabase (tabla "codigos" de supabase/codigos.sql) y se crean, pagan y
+// borran desde admin.html (pestaña "Creadores"). Cada venta con código se cuenta sola en Supabase al
+// guardarse el pedido (api/_lib/historial.js anota el código; el disparador codigos_contar_venta suma).
+// Si Supabase no responde, se valida con la pestaña "Descuentos" de la hoja de Free Fire
+// (SCRIPT_RECARGAS_URL), que queda de respaldo: A: código | B: descuento en % | C: usos | D: dinero movido.
 // El descuento SIEMPRE se calcula aquí, en el servidor: el navegador solo envía el código.
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache } from './externo.js';
 import { obtenerIp, minutosBloqueado, registrarFallo } from './limitador.js';
 import { faltaConfiguracion } from './validacion.js';
 import { formatearVES, limpiarMontoVES } from './recarga-comun.js';
+import { supabaseActivo, leer } from './supabase.js';
+
+// % que da un código de creador al cliente (y que gana el creador). Igual en supabase/codigos.sql
+// (codigos_porcentaje_creador) y apps-script/recargas.gs (PORCENTAJE_CREADOR).
+export const PORCENTAJE_CREADOR = 1.5;
 
 // Letras, números, "_" y "-"; se comparan sin distinguir mayúsculas
 export const CODIGO_DESCUENTO_VALIDO = /^[A-Z0-9_-]{2,30}$/;
@@ -27,10 +35,28 @@ export const describirDescuento = (descuento) => descuento.tipo === 'porcentaje'
   ? `${formatearVES(descuento.valor).replace(/,00$/, '')}% de descuento`
   : `${formatearVES(descuento.valor)} Bs de descuento`;
 
-// Consulta un código (acción validar_descuento de recargas.gs).
+// Código en Supabase: null si no existe, está desactivado o es una promo sin % válido.
+async function descuentoDeSupabase(codigo) {
+  const filas = await leer('codigos', { codigo }, 'codigo,creador,descuento,activo');
+  const fila = Array.isArray(filas) ? filas[0] : null;
+  if (!fila || fila.activo !== true) return null;
+  if (fila.creador) return { codigo: String(fila.codigo), tipo: 'porcentaje', valor: PORCENTAJE_CREADOR };
+  const valor = Number(fila.descuento);
+  return valor > 0 && valor < 100 ? { codigo: String(fila.codigo), tipo: 'porcentaje', valor } : null;
+}
+
+// Consulta un código: Supabase primero (sin copia: un código que desactivas deja de valer al instante);
+// si Supabase falla, la hoja (acción validar_descuento de recargas.gs).
 // Devuelve { codigo, tipo, valor } o null si no existe o su descuento no es válido.
-// Copia de 60 s por código; sin respaldo viejo, porque decide lo que se cobra.
 export async function obtenerDescuento(codigo) {
+  if (supabaseActivo()) {
+    try {
+      return await descuentoDeSupabase(codigo);
+    } catch (error) {
+      console.error(`⚠️ códigos: Supabase no respondió, se valida ${codigo} con la hoja:`, error.message);
+    }
+  }
+  // Hoja: copia de 60 s por código; sin respaldo viejo, porque decide lo que se cobra.
   const { datos } = await conCache(`descuento:${codigo}`,
     () => llamarScript(urlTablaDescuentos(), { accion: "validar_descuento", codigo }, LECTURA_APPS_SCRIPT),
     { respaldoMs: 0, esValido: (d) => d?.status === 'success' });
