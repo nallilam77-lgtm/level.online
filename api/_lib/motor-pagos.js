@@ -8,7 +8,8 @@
 import { supabaseActivo, rpc } from './supabase.js';
 
 const ACCIONES = new Set(['verificar_pago', 'marcar_usado', 'bloquear_pedido', 'pago_por_completar', 'usar_complemento']);
-const MARGEN_BS = 0.50;
+// Se acepta hasta 1 Bs de menos (céntimos/redondeos del cliente) sin pedir completar (desde 2026-11-15; antes 0,50)
+export const MARGEN_BS = 1;
 
 // Los mismos mensajes que las hojas
 export const MENSAJES_PAGO = {

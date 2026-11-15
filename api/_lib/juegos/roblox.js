@@ -14,7 +14,7 @@ import { porcentajePremio, anotarRecarga, crearAccionFidelidad, conDestacados } 
 import { limpiarMontoVES, formatearVES } from '../recarga-comun.js';
 import { catalogo as catalogoCentralOne, datosParaPedido, crearPedidoCentralOne, esperarCodigo } from '../centralone.js';
 import { supabaseActivo, rpc } from '../supabase.js';
-import { motorPagos, tomarPago, cambiarPago, guardarPorCompletar, completarPago } from '../motor-pagos.js';
+import { MARGEN_BS, motorPagos, tomarPago, cambiarPago, guardarPorCompletar, completarPago } from '../motor-pagos.js';
 
 // Debe ser menor que maxDuration de api/recargar.js en vercel.json (180 s).
 // La compra no se reintenta: el Apps Script de Roblox no tiene idPedido y repetirla podría duplicarla.
@@ -466,7 +466,7 @@ async function completarCompra(req, res, inicio) {
 async function compraConSupabase({ idPedido, referencia, usuario, paquete, precio, claveHash, codigoDescuento, telefono }) {
   const pago = await tomarPago(referencia, idPedido, 'roblox');
   if (!pago.encontrado) return { status: 'error', message: pago.message };
-  if (pago.monto < precio - 0.5) {
+  if (pago.monto < precio - MARGEN_BS) {
     const g = await guardarPorCompletar({ idPedido, referencia: pago.referencia, claveHash, precio, pagado: pago.monto, juego: 'roblox',
       datos: { usuario, paquete, codigoDescuento, telefono } });
     const falta = Math.round((precio - pago.monto) * 100) / 100;

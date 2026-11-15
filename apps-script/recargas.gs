@@ -275,7 +275,7 @@ function verificarPago(datos) {
   return responder({
     status: "success", encontrado: true, fila: pago.fila, telefono: pago.telefono,
     referencia: pago.referencia, montoPagado: pago.montoPagado,
-    insuficiente: pago.montoPagado < (precioRequerido - 0.50), repetido: pago.repetido
+    insuficiente: pago.montoPagado < (precioRequerido - 1), repetido: pago.repetido
   });
 }
 
@@ -417,7 +417,7 @@ function completarConPago(fila, ultimos5, idPedido) {
   hoja.getRange(fila, 6, 1, 3).setValues([[pagado, falta, referencias.join(" + ")]]);
   hoja.getRange(fila, 13).setValue(ahora());
 
-  if (pagado < precio - 0.50) {
+  if (pagado < precio - 1) {
     // Tampoco alcanza: este pago también queda "Por completar" y el pedido sigue pendiente
     cambiarEstadoPago(pago.referencia, ESTADO_PAGO_POR_COMPLETAR, "en proceso");
     hoja.getRange(fila, 11).setValue("PENDIENTE: faltan " + formatoBs(falta) + " Bs");

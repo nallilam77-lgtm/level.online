@@ -78,7 +78,7 @@ const MENSAJE_AGOTADO = "⚠️ Ya no quedan códigos de este paquete. Tu pago N
 // Vercel espera la compra hasta 45 s: el candado no debe esperar más que eso
 const ESPERA_CANDADO_MS = 25000;
 // Diferencia que se tolera entre lo pagado y el precio (redondeos del banco), igual que Free Fire
-const TOLERANCIA_BS = 0.50;
+const TOLERANCIA_BS = 1;   // hasta 1 Bs de menos (desde 2026-11-15; antes 0,50)
 // Ningún descuento puede dejar el paquete por debajo de este % de su precio (freno ante abusos)
 const DESCUENTO_MAXIMO = 0.5;
 // Marca de los códigos ya entregados que todavía no se quitaron de la columna

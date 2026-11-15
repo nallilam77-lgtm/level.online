@@ -291,7 +291,7 @@ begin
   v_pagado := round(f.pagado + (t->>'monto')::numeric, 2);
   v_falta := round(greatest(0, f.precio - v_pagado), 2);
 
-  if v_pagado < f.precio - 0.50 then
+  if v_pagado < f.precio - 1.00 then   -- hasta 1 Bs de menos se acepta (desde 2026-11-15; antes 0,50)
     update pagos set estado = 'por_completar' where referencia = t->>'referencia' and estado = 'en_proceso';
     update pagos_por_completar set pagado = v_pagado, referencias = referencias || (t->>'referencia'), actualizado = now()
      where id_pedido = f.id_pedido;

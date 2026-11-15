@@ -66,7 +66,7 @@ const ESPERA_CANDADO_MS = 8000;
 const MENSAJE_ERROR_INTERNO = "Error interno en el sistema de recargas. Intenta de nuevo en unos segundos.";
 
 // Margen para pagos que llegan con céntimos de menos (igual que los otros juegos)
-const MARGEN_PAGO_BS = 0.50;
+const MARGEN_PAGO_BS = 1;   // hasta 1 Bs de menos se acepta (desde 2026-11-15; antes 0,50)
 // Un precio con descuento por debajo de esta fracción del precio de la hoja no se acepta (se cobra completo)
 const MINIMO_CON_DESCUENTO = 0.5;
 const CODIGO_DESCUENTO_VALIDO = /^[A-Z0-9_-]{2,30}$/;
