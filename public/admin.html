@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Pagos → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=32" defer></script>
+  <script src="/js/admin.js?v=33" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -45,6 +45,7 @@
         <button type="button" role="tab" data-seccion="creadores" aria-selected="false">Creadores</button>
         <button type="button" role="tab" data-seccion="precios" aria-selected="false">Precios</button>
         <button type="button" role="tab" data-seccion="roblox" aria-selected="false">Roblox</button>
+        <button type="button" role="tab" data-seccion="canjes" aria-selected="false">Canjes</button>
         <button type="button" role="tab" data-seccion="juego" aria-selected="false">Minijuego</button>
         <button type="button" role="tab" data-seccion="espacio" aria-selected="false">Supabase</button>
       </nav>
@@ -237,6 +238,41 @@
             <button type="submit" class="btn btn--chico" id="btnPagoManual">Agregar pago</button>
             <p class="mensaje-form" id="mensajePagoManual" role="status"></p>
           </form>
+        </div>
+      </section>
+
+      <!-- CANJES: códigos de regalo (supabase/canjes.sql; la página pública es canjear.html) -->
+      <section class="seccion" id="seccion-canjes" hidden>
+        <div class="tarjeta">
+          <h2>Crear códigos de regalo</h2>
+          <p class="nota">El <strong>primero</strong> que canjea cada código en <a class="enlace-wa" href="/canjear.html" target="_blank" rel="noopener">levelupstore.online/canjear.html</a> se lleva el paquete, directo a su cuenta de Free Fire por Central One. Si Central One lo rechaza, el código vuelve a quedar libre.</p>
+          <form class="formulario" id="formCanjes" novalidate>
+            <div class="dos-campos">
+              <label class="campo">Cuántos códigos<input type="number" id="canjesCantidad" min="1" max="50" value="5" inputmode="numeric"></label>
+              <label class="campo">Paquete de Free Fire<select id="canjesPaquete"><option value="110 Diamantes">110 Diamantes</option></select></label>
+            </div>
+            <label class="campo">Nota (solo la ves tú)<input type="text" id="canjesNota" maxlength="120" placeholder="Ej. sorteo del canal 15/11" autocomplete="off"></label>
+            <button type="submit" class="btn btn--chico" id="btnCanjes">Crear códigos</button>
+            <p class="mensaje-form" id="mensajeCanjes" role="status"></p>
+          </form>
+          <div id="canjesNuevos" hidden>
+            <p class="nota">Códigos nuevos (cópialos y publícalos):</p>
+            <textarea id="canjesTexto" rows="6" readonly></textarea>
+            <button type="button" class="btn-ver" id="btnCopiarCanjes">📋 Copiar todos</button>
+          </div>
+        </div>
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Códigos</h2>
+            <button type="button" class="btn-ver" id="actualizarCanjes">Actualizar</button>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><small>Libres</small><strong id="kpiCanjesLibres">–</strong></div>
+            <div class="kpi"><small>Canjeados</small><strong id="kpiCanjesUsados">–</strong></div>
+            <div class="kpi"><small>Entregados</small><strong id="kpiCanjesEntregados">–</strong></div>
+            <div class="kpi kpi--aviso"><small>Por revisar</small><strong id="kpiCanjesRevisar">–</strong></div>
+          </div>
+          <ul class="pedidos" id="listaCanjes"></ul>
         </div>
       </section>
 

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque, animaciones ni transiciones (css/ligero.css)
+    (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css?v=3'; document.head.appendChild(l); } })();
+  </script>
+  <meta name="description" content="Canjea tu código de regalo de Level Up y recibe diamantes de Free Fire directo en tu cuenta. El primero que lo canjea se lo lleva.">
+  <meta name="theme-color" content="#0f172a">
+  <title>Canjear código - Level Up</title>
+  <link rel="canonical" href="https://www.levelupstore.online/canjear.html">
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="apple-touch-icon" href="img/app/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/canjear.css?v=1">
+  <!-- Códigos de regalo: api/juego.js?accion=canjear / canjes (api/_lib/canjes.js, supabase/canjes.sql) -->
+  <script src="/js/canjear.js?v=1" defer></script>
+</head>
+<body>
+  <div class="barra">
+    <a href="index.html" class="volver">◄ Volver al inicio</a>
+    <span class="marca">Level <span>Up</span></span>
+  </div>
+
+  <main>
+    <header class="encabezado">
+      <p class="antetitulo">Códigos de regalo</p>
+      <h1>Canjea tu código 🎁</h1>
+      <p class="bajada">El <strong>primero</strong> que canjea cada código se lleva los diamantes, directo a su cuenta de Free Fire.</p>
+      <p class="quedan" id="quedan" hidden></p>
+    </header>
+
+    <section class="tarjeta" aria-labelledby="tituloCanje">
+      <h2 id="tituloCanje">Canjear</h2>
+      <form class="formulario" id="formCanje" novalidate>
+        <label class="campo">Código
+          <input type="text" id="codigo" placeholder="LU-ABCD-EFGH" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+        </label>
+        <label class="campo">Tu ID de Free Fire
+          <input type="text" id="idJugador" inputmode="numeric" placeholder="Ej: 123456789" maxlength="15" autocomplete="off" required>
+        </label>
+        <button type="submit" class="btn" id="btnCanjear">Canjear</button>
+        <p class="mensaje" id="mensaje" role="status" hidden></p>
+      </form>
+      <p class="nota">Revisa bien tu ID: los diamantes llegan a esa cuenta (servidor LATAM). Cada código sirve una sola vez.</p>
+    </section>
+
+    <section class="tarjeta" aria-labelledby="tituloLista">
+      <div class="fila-titulo">
+        <h2 id="tituloLista">Últimos canjes</h2>
+        <span class="punto-vivo" aria-hidden="true"></span>
+      </div>
+      <ol class="lista" id="lista"><li class="vacio">Cargando…</li></ol>
+      <p class="nota">Sigue nuestro canal de WhatsApp: ahí publicamos los códigos nuevos.</p>
+    </section>
+  </main>
+</body>
+</html>

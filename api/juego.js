@@ -16,6 +16,9 @@ export default async function handler(req, res) {
     if (req.query.accion === 'pagos_limpiar') return (await import('./_lib/pagos.js')).limpiarPagos(req, res);
     if (req.query.accion === 'pago_estado') return (await import('./_lib/pagos.js')).pagoEstado(req, res);
     if (req.query.accion === 'saldo_centralone') return (await import('./_lib/precios.js')).saldoCentralOne(req, res);
+    // Códigos de regalo (canjear.html; _lib/canjes.js): canjear (público, con límite de intentos) y la lista de canjes
+    if (req.query.accion === 'canjear') return (await import('./_lib/canjes.js')).canjear(req, res);
+    if (req.query.accion === 'canjes') return (await import('./_lib/canjes.js')).canjesPublicos(req, res);
     // Panel admin → Revisión: verificar en Central One y rehacer una recarga (solo administrador; _lib/revision.js)
     if (req.query.accion === 'revision_verificar') return (await import('./_lib/revision.js')).verificarRevision(req, res);
     if (req.query.accion === 'revision_rehacer') return (await import('./_lib/revision.js')).rehacerRevision(req, res);

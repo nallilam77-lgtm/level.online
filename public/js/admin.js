@@ -113,6 +113,7 @@
     if (b.dataset.seccion === 'creadores') cargarCodigos();
     if (b.dataset.seccion === 'precios') cargarPrecios();
     if (b.dataset.seccion === 'roblox') cargarRoblox();
+    if (b.dataset.seccion === 'canjes') cargarCanjes();
     if (b.dataset.seccion === 'revision') { cargarRevision(); cargarRuleta().catch(() => {}); }
     if (b.dataset.seccion === 'pagos') { cargarPagos(); cargarCuentasPm(); }
   }));
@@ -1458,6 +1459,86 @@
     }
     return acciones;
   }
+
+  // ---------------------------------------------------------------- canjes (supabase/canjes.sql)
+  // Códigos de regalo: crear (admin_canjes_crear), ver quién canjeó y borrar los libres (admin_canje_borrar)
+  const ESTADO_CANJE = { libre: ['Libre', 'etiqueta--en_proceso'], entregando: ['En camino', 'etiqueta--pendiente'],
+    entregado: ['Entregado', 'etiqueta--completado'], revisar: ['Por revisar', 'etiqueta--problema'] };
+  async function cargarCanjes() {
+    const lista = $('listaCanjes');
+    const [{ data, error }, paquetes] = await Promise.all([
+      cliente.from('codigos_regalo').select('codigo,paquete,nota,creado,canjeado,id_jugador,nombre,id_pedido,estado').order('creado', { ascending: false }).limit(300),
+      cliente.rpc('admin_precios', { p_juego: 'freefire' }),
+    ]);
+    // Paquetes de Free Fire para el selector (los que tienen producto de Central One)
+    const opciones = ((paquetes && paquetes.data && paquetes.data.paquetes) || []).filter((p) => p.producto && p.activo !== false).map((p) => p.paquete);
+    if (opciones.length) {
+      const sel = $('canjesPaquete');
+      const actual = sel.value;
+      sel.replaceChildren(...opciones.map((n) => { const o = el('option', '', n); o.value = n; return o; }));
+      sel.value = opciones.includes(actual) ? actual : (opciones.includes('110 Diamantes') ? '110 Diamantes' : opciones[0]);
+    }
+    if (error) {
+      console.error(error);
+      lista.replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/canjes.sql?'));
+      return;
+    }
+    $('kpiCanjesLibres').textContent = data.filter((c) => !c.canjeado).length;
+    $('kpiCanjesUsados').textContent = data.filter((c) => c.canjeado).length;
+    $('kpiCanjesEntregados').textContent = data.filter((c) => c.estado === 'entregado').length;
+    $('kpiCanjesRevisar').textContent = data.filter((c) => c.estado === 'revisar').length;
+    lista.replaceChildren();
+    if (!data.length) { lista.append(el('li', 'vacio', 'Todavía no has creado códigos.')); return; }
+    data.forEach((c) => {
+      const [texto, clase] = ESTADO_CANJE[c.estado] || [c.estado, ''];
+      const { li, cuerpo } = filaCompacta({ clave: 'canje:' + c.codigo, hora: horaCorta(c.canjeado || c.creado),
+        titulo: c.canjeado ? `${c.codigo} · ${c.nombre || 'sin nombre'}` : c.codigo, monto: c.paquete, etiqueta: texto, claseEtiqueta: clase });
+      cuerpo.append(el('span', '', `Creado ${fecha(c.creado)}${c.nota ? ` · ${c.nota}` : ''}`));
+      if (c.canjeado) {
+        cuerpo.append(el('span', '', `Canjeado ${fecha(c.canjeado)} por ${c.nombre || 'sin nombre'} (ID ${c.id_jugador})`));
+        if (c.id_pedido) cuerpo.append(el('span', 'precio-detalle', `Pedido ${c.id_pedido}${c.estado === 'revisar' ? ' · está en Revisión: usa Verificar estado / Hacer de nuevo' : ''}`));
+      }
+      const acciones = el('div', 'acciones-cuenta');
+      acciones.append(boton('📋 Copiar', 'btn-ver', async (b) => {
+        try { await navigator.clipboard.writeText(c.codigo); b.textContent = '¡Copiado!'; } catch (e) { b.textContent = c.codigo; }
+      }));
+      if (!c.canjeado) {
+        acciones.append(boton('🗑️ Borrar', 'btn-ver btn-ver--peligro', async (b) => {
+          if (!confirm(`¿Borrar el código ${c.codigo}? Ya nadie podrá canjearlo.`)) return;
+          b.disabled = true;
+          const { data: ok, error: e } = await cliente.rpc('admin_canje_borrar', { p_codigo: c.codigo });
+          if (e || !ok) { b.disabled = false; alert(e ? textoError(e, 'No se pudo borrar.') : 'Ya lo canjearon: no se puede borrar.'); }
+          cargarCanjes();
+        }));
+      }
+      cuerpo.append(acciones);
+      lista.append(li);
+    });
+  }
+  $('formCanjes').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const msg = $('mensajeCanjes');
+    const cantidad = Number($('canjesCantidad').value);
+    const paquete = $('canjesPaquete').value;
+    if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 50) { msg.textContent = 'Entre 1 y 50 códigos.'; return; }
+    if (!confirm(`¿Crear ${cantidad} ${cantidad === 1 ? 'código' : 'códigos'} de ${paquete}?\n\nCada uno lo canjea el primero que llegue. Cada canje gasta saldo de Central One.`)) return;
+    $('btnCanjes').disabled = true;
+    const { data, error } = await cliente.rpc('admin_canjes_crear', { p_cantidad: cantidad, p_paquete: paquete, p_nota: $('canjesNota').value || null });
+    $('btnCanjes').disabled = false;
+    if (error) { msg.textContent = textoError(error, 'No se pudieron crear.'); return; }
+    const codigos = (data || []).map((x) => (typeof x === 'string' ? x : Object.values(x)[0]));
+    msg.textContent = `✅ ${codigos.length} códigos de ${paquete} creados.`;
+    $('canjesTexto').value = codigos.join('\n');
+    $('canjesNuevos').hidden = false;
+    $('canjesNota').value = '';
+    cargarCanjes();
+  });
+  $('btnCopiarCanjes').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('canjesTexto').value); $('btnCopiarCanjes').textContent = '¡Copiados!'; }
+    catch (e) { $('canjesTexto').select(); }
+    setTimeout(() => { $('btnCopiarCanjes').textContent = '📋 Copiar todos'; }, 2000);
+  });
+  $('actualizarCanjes').addEventListener('click', cargarCanjes);
 
   // ---------------------------------------------------------------- ruleta (supabase/ruleta.sql)
   // Ganadores de los últimos 30 días: los que faltan por entregar arriba, con "Ya lo entregué"
