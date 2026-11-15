@@ -4,7 +4,10 @@
 //   { banco, telefono, cedula,            ← la cuenta predeterminada (lo que leían las páginas viejas)
 //     cuentas: [{ banco, telefono, cedula, aviso }], predeterminada: i }   ← las que se muestran
 // Con dos o más cuentas, DatosPago.selector() pinta "¿A qué banco pagas?" con la predeterminada marcada y
-// el aviso de cada una (p. ej. "Elige Venezuela solo si pagas desde Mercantil, UBI, Banco del Tesoro o Bancamiga").
+// el aviso de cada una. Con `condicion` (desde 2026-11-15, p. ej. "No aceptamos pagos desde UBI ni Mercantil…")
+// pinta el aviso y una casilla `casilla` que el cliente debe marcar: hasta entonces los datos de pago quedan
+// OCULTOS (no difuminados: css/ligero.css quita los filtros en celulares). Se recuerda en el equipo
+// (localStorage) mientras el texto de la condición no cambie.
 // Si Supabase no responde, se usa la copia vieja de Firestore (configuracion/pago_movil) para que la
 // página nunca quede sin datos de pago. Sin SDK: un fetch a la API REST (la página no espera librerías).
 (function () {
@@ -12,7 +15,8 @@
   const PROYECTO = 'levelupstore-87d4d';
   const CLAVE_WEB = 'AIzaSyBIdEh_HzzB8dnzG8qkPQYOIo2kSb_F6xQ'; // clave pública de la app web de Firebase
   const URL_FIRESTORE = `https://firestore.googleapis.com/v1/projects/${PROYECTO}/databases/(default)/documents/configuracion/pago_movil?key=${CLAVE_WEB}`;
-  const CSS = '/css/datos-pago.css?v=1';
+  const CSS = '/css/datos-pago.css?v=2';
+  const CLAVE_ACEPTA = 'levelup_acepta_pago';   // texto de la condición que el cliente ya aceptó en este equipo
 
   // Las tiendas pintan estos datos con innerHTML: solo letras, números, espacios y . - ( ) /
   const limpio = (v, max = 60) => String(v ?? '').replace(/[^\p{L}\p{N} .,\-()/]/gu, '').trim().slice(0, max);
@@ -28,7 +32,19 @@
     if (!cuentas.length) return null;
     if (!cuentas[predeterminada]) predeterminada = 0;
     const p = cuentas[predeterminada];
-    return { banco: p.banco, telefono: p.telefono, cedula: p.cedula, cuentas, predeterminada };
+    return {
+      banco: p.banco, telefono: p.telefono, cedula: p.cedula, cuentas, predeterminada,
+      // Se pintan con textContent: basta con quitar los caracteres de control y cortar el largo
+      condicion: String((valor && valor.condicion) || '').replace(/[\u0000-\u001f<>]/g, ' ').trim().slice(0, 300),
+      casilla: String((valor && valor.casilla) || '').replace(/[\u0000-\u001f<>]/g, ' ').trim().slice(0, 200),
+    };
+  }
+
+  function yaAcepto(texto) {
+    try { return localStorage.getItem(CLAVE_ACEPTA) === texto; } catch (e) { return false; }
+  }
+  function guardarAcepto(texto) {
+    try { localStorage.setItem(CLAVE_ACEPTA, texto); } catch (e) { /* sin almacenamiento: se pide cada vez */ }
   }
 
   async function configuracion() {
@@ -84,10 +100,46 @@
   // "Venezuela 0102" → "Venezuela"
   const nombreBanco = (banco) => banco.replace(/\s*\(?\d{4}\)?$/, '') || banco;
 
+  // Aviso + casilla "acepto": hasta marcarla, `contenedor` (los datos de pago) queda oculto
+  function cajaCondicion(condicion, casilla, contenedor) {
+    const caja = document.createElement('div');
+    caja.className = 'pm-condicion';
+    const aviso = document.createElement('p');
+    aviso.className = 'pm-condicion-texto';
+    aviso.textContent = condicion;
+    const etiqueta = document.createElement('label');
+    etiqueta.className = 'pm-acepto';
+    const marca = document.createElement('input');
+    marca.type = 'checkbox';
+    marca.checked = yaAcepto(condicion);
+    const texto = document.createElement('span');
+    texto.textContent = casilla || 'Entiendo y acepto';
+    etiqueta.append(marca, texto);
+    const bloqueo = document.createElement('p');
+    bloqueo.className = 'pm-bloqueo';
+    bloqueo.textContent = '🔒 Marca la casilla para ver los datos de pago.';
+    const aplicar = () => {
+      contenedor.classList.toggle('pm-oculto', !marca.checked);
+      // "📋 Copiar todos los datos" de las tiendas (mismo id en las 7): tampoco sin aceptar
+      const copiarTodo = document.getElementById('btnCopiarDatos');
+      if (copiarTodo) copiarTodo.classList.toggle('pm-oculto', !marca.checked);
+      bloqueo.hidden = marca.checked;
+      caja.classList.toggle('pm-condicion--ok', marca.checked);
+    };
+    marca.addEventListener('change', () => {
+      if (marca.checked) guardarAcepto(condicion);
+      else guardarAcepto('');
+      aplicar();
+    });
+    caja.append(aviso, etiqueta, bloqueo);
+    aplicar();
+    return caja;
+  }
+
   /**
-   * Pinta, justo antes de `contenedor`, los botones para elegir a qué banco pagar (solo si hay 2 o más
-   * cuentas) y llama a alElegir(cuenta) con la predeterminada y cada vez que el cliente cambia.
-   * Se puede volver a llamar: reemplaza los botones anteriores.
+   * Pinta, justo antes de `contenedor`: el aviso con su casilla (si hay `condicion`) y los botones para
+   * elegir a qué banco pagar (si hay 2 o más cuentas). Llama a alElegir(cuenta) con la predeterminada y
+   * cada vez que el cliente cambia. Se puede volver a llamar: reemplaza lo anterior.
    */
   function selector(contenedor, datos, alElegir) {
     if (!contenedor || !datos) return;
@@ -95,37 +147,42 @@
     if (anterior && anterior.classList.contains('pm-elegir')) anterior.remove();
     const cuentas = datos.cuentas && datos.cuentas.length ? datos.cuentas : [datos];
     const inicial = cuentas[datos.predeterminada] || cuentas[0];
-    if (cuentas.length > 1) {
+    const condicion = datos.condicion || '';
+    if (cuentas.length > 1 || condicion) {
       cargarCss();
       const caja = document.createElement('div');
       caja.className = 'pm-elegir';
-      const titulo = document.createElement('p');
-      titulo.className = 'pm-elegir-titulo';
-      titulo.textContent = '¿A qué banco nos vas a pagar?';
-      const opciones = document.createElement('div');
-      opciones.className = 'pm-opciones';
-      opciones.setAttribute('role', 'group');
-      opciones.setAttribute('aria-label', 'Banco al que vas a pagar');
-      const botones = cuentas.map((c) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'pm-opcion';
-        b.textContent = nombreBanco(c.banco);
-        b.setAttribute('aria-pressed', String(c === inicial));
-        b.addEventListener('click', () => {
-          botones.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-          alElegir(c);
+      if (condicion) caja.append(cajaCondicion(condicion, datos.casilla, contenedor));
+      else contenedor.classList.remove('pm-oculto');
+      if (cuentas.length > 1) {
+        const titulo = document.createElement('p');
+        titulo.className = 'pm-elegir-titulo';
+        titulo.textContent = '¿A qué banco nos vas a pagar?';
+        const opciones = document.createElement('div');
+        opciones.className = 'pm-opciones';
+        opciones.setAttribute('role', 'group');
+        opciones.setAttribute('aria-label', 'Banco al que vas a pagar');
+        const botones = cuentas.map((c) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'pm-opcion';
+          b.textContent = nombreBanco(c.banco);
+          b.setAttribute('aria-pressed', String(c === inicial));
+          b.addEventListener('click', () => {
+            botones.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+            alElegir(c);
+          });
+          return b;
         });
-        return b;
-      });
-      opciones.append(...botones);
-      caja.append(titulo, opciones);
-      cuentas.filter((c) => c.aviso).forEach((c) => {
-        const aviso = document.createElement('p');
-        aviso.className = 'pm-aviso';
-        aviso.textContent = c.aviso;
-        caja.append(aviso);
-      });
+        opciones.append(...botones);
+        caja.append(titulo, opciones);
+        cuentas.filter((c) => c.aviso).forEach((c) => {
+          const aviso = document.createElement('p');
+          aviso.className = 'pm-aviso';
+          aviso.textContent = c.aviso;
+          caja.append(aviso);
+        });
+      }
       contenedor.parentNode.insertBefore(caja, contenedor);
     }
     alElegir(inicial);

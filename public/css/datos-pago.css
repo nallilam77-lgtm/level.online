@@ -3,6 +3,7 @@
 .pm-elegir {
   --pm-acento: var(--game-accent, var(--accent-cyan));
   --pm-texto: var(--game-text, var(--accent-cyan));
+  --pm-alerta: var(--aviso, var(--estado-espera, var(--game-accent, var(--accent-cyan))));
   display: grid; gap: 10px; margin-bottom: 12px; font-family: 'Poppins', sans-serif;
 }
 .pm-elegir-titulo { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-main); }
@@ -20,3 +21,18 @@
   color: var(--text-main); background: var(--bg-deep); border-left: 3px solid var(--pm-acento);
 }
 .pm-aviso::before { content: 'ℹ️ '; }
+
+/* Condición antes de ver los datos de pago (p. ej. "No aceptamos pagos desde UBI ni Mercantil") + casilla */
+.pm-condicion {
+  display: grid; gap: 10px; padding: 12px; border-radius: 12px; background: var(--bg-deep);
+  border: 1px solid var(--pm-alerta); border-left-width: 3px;
+}
+.pm-condicion--ok { border-color: var(--border-glass); border-left-color: var(--pm-acento); }
+.pm-condicion-texto { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-main); }
+.pm-condicion-texto::before { content: '⚠️ '; }
+.pm-acepto { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; cursor: pointer; font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--text-main); }
+.pm-acepto input { flex: none; width: 22px; height: 22px; min-height: 0; padding: 0; margin: 1px 0 0; appearance: auto; -webkit-appearance: checkbox; accent-color: var(--pm-acento); cursor: pointer; }
+.pm-bloqueo { margin: 0; font-size: 12px; font-weight: 600; color: var(--pm-alerta); }
+.pm-bloqueo[hidden] { display: none; }
+/* Los datos de pago quedan ocultos hasta aceptar (ocultos, no difuminados: ligero.css quita los filtros) */
+.pm-oculto { display: none !important; }

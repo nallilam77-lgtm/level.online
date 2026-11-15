@@ -1669,9 +1669,12 @@
   // En la tienda el cliente elige a qué banco paga (la predeterminada viene marcada) y ve el aviso de cada
   // cuenta. Las dos se publican en UNA petición. Solo administradores escriben (RLS).
   const CUENTAS_PM = 2;
-  const AVISO_VENEZUELA = 'Elige Venezuela solo si vas a pagar desde Mercantil, UBI, Banco del Tesoro o Bancamiga.';
+  // Condición que el cliente acepta con una casilla antes de ver los datos de pago (js/datos-pago.js)
+  const CONDICION_EJEMPLO = 'Por fallas, NO aceptamos pagos desde UBI ni Mercantil en la página. Si solo tienes esos bancos, escríbenos por WhatsApp antes de pagar.';
+  const CASILLA_EJEMPLO = 'Acepto: no voy a pagar desde UBI ni Mercantil. Si lo hago, mi pago no se procesa en la página.';
   let cuentasPm = [];
   let predeterminadaPm = 0;
+  let condicionPm = { condicion: '', casilla: '' };
   async function cargarCuentasPm() {
     const { data, error } = await cliente.from('configuracion').select('clave,valor').in('clave', ['pago_movil', 'pago_movil_cuentas']);
     if (error) { console.error(error); $('cuentasPm').replaceChildren(el('p', 'nota', 'No se pudieron cargar los datos de Pago Móvil.')); return; }
@@ -1682,9 +1685,12 @@
       { nombre: 'BDV', banco: publico.banco || '', telefono: publico.telefono || '', cedula: publico.cedula || '' },
     ];
     while (cuentasPm.length < CUENTAS_PM) cuentasPm.push({ nombre: '', banco: '', telefono: '', cedula: '' });
-    // Cuentas guardadas antes de que existieran "mostrar" y "aviso" (2026-11-15): visibles y con el aviso de Venezuela
-    cuentasPm = cuentasPm.map((c) => ({ ...c, mostrar: c.mostrar !== false && !!c.banco,
-      aviso: c.aviso !== undefined ? c.aviso : (/venezuela/i.test(c.banco || '') ? AVISO_VENEZUELA : '') }));
+    // Cuentas guardadas antes de que existiera "mostrar" (2026-11-15): visibles
+    cuentasPm = cuentasPm.map((c) => ({ ...c, mostrar: c.mostrar !== false && !!c.banco, aviso: c.aviso || '' }));
+    condicionPm = {
+      condicion: String((guardadas && guardadas.condicion) ?? publico.condicion ?? ''),
+      casilla: String((guardadas && guardadas.casilla) ?? publico.casilla ?? ''),
+    };
     const igual = (c) => c.banco && c.banco === publico.banco && c.telefono === publico.telefono && c.cedula === publico.cedula;
     predeterminadaPm = Number.isInteger(guardadas && guardadas.predeterminada) ? guardadas.predeterminada : Math.max(0, cuentasPm.findIndex(igual));
     pintarCuentasPm(publico);
@@ -1722,16 +1728,22 @@
       const fila2 = el('div', 'dos-campos');
       fila2.append(campo('Teléfono', p + 'telefono', c.telefono, { inputMode: 'numeric', placeholder: 'Ej. 04141234567' }),
         campo('Cédula', p + 'cedula', c.cedula, { placeholder: 'Ej. 12345678' }));
-      const aviso = campo('Aviso para el cliente (opcional)', p + 'aviso', c.aviso, { maxLength: 160, placeholder: 'Ej. ' + AVISO_VENEZUELA });
+      const aviso = campo('Aviso de esta cuenta (opcional)', p + 'aviso', c.aviso, { maxLength: 160, placeholder: 'Sale debajo de los botones de banco' });
       const opciones = el('div', 'acciones-cuenta');
       opciones.append(opcion('Mostrar en la tienda', 'checkbox', p + 'mostrar', c.mostrar),
         opcion('Predeterminada (ya viene marcada)', 'radio', 'pm_predeterminada', i === predeterminadaPm));
       fila.append(fila1, fila2, aviso, opciones);
       lista.append(fila);
     });
+    // Condición + casilla: el cliente la marca para ver los datos de pago (vacía = no se pide nada)
+    const condicion = el('fieldset', 'cuenta-pm');
+    condicion.append(el('legend', '', 'Condición antes de pagar'),
+      campo('Aviso (vacío = sin condición)', 'pm_condicion', condicionPm.condicion, { maxLength: 300, placeholder: 'Ej. ' + CONDICION_EJEMPLO }),
+      campo('Texto de la casilla que marca el cliente', 'pm_casilla', condicionPm.casilla, { maxLength: 200, placeholder: 'Ej. ' + CASILLA_EJEMPLO }),
+      el('p', 'nota', 'Hasta que el cliente marque la casilla, los datos de pago quedan ocultos. En ese teléfono no se le vuelve a pedir, salvo que cambies el aviso.'));
     const guardar = el('button', 'btn btn--chico', 'Guardar y publicar');
     guardar.type = 'submit';
-    form.append(lista, guardar);
+    form.append(condicion, lista, guardar);
     form.addEventListener('submit', (ev) => { ev.preventDefault(); guardarCuentasPm(form, guardar); });
     caja.append(form);
   }
@@ -1758,14 +1770,18 @@
       if (radios[i] && radios[i].checked) predeterminada = i;
       cuentas.push(c);
     }
+    const limpiar = (n, max) => String(form.elements[n].value || '').trim().replace(/\s+/g, ' ').slice(0, max);
+    const condicion = limpiar('pm_condicion', 300);
+    const casilla = limpiar('pm_casilla', 200);
+    if (condicion && !casilla) return { problema: 'Escribe también el texto de la casilla que marca el cliente.' };
     if (!cuentas.some((c) => c.mostrar)) return { problema: 'Deja al menos una cuenta con "Mostrar en la tienda".' };
     if (predeterminada < 0 || !cuentas[predeterminada].mostrar) return { problema: 'La predeterminada también tiene que estar en "Mostrar en la tienda".' };
-    return { cuentas, predeterminada };
+    return { cuentas, predeterminada, condicion, casilla };
   }
 
   async function guardarCuentasPm(form, b) {
     const msg = $('mensajePm');
-    const { cuentas, predeterminada, problema } = cuentasDelForm(form);
+    const { cuentas, predeterminada, condicion, casilla, problema } = cuentasDelForm(form);
     if (problema) { msg.textContent = problema; return; }
     // En la tienda la predeterminada va primero
     const p = cuentas[predeterminada];
@@ -1775,8 +1791,8 @@
     if (!confirm(`¿Publicar en la tienda?\n\n${resumen}${visibles.length > 1 ? '\n\nEl cliente elige a cuál paga; la predeterminada ya viene marcada.' : ''}`)) return;
     const ahora = new Date().toISOString();
     const filas = [
-      { clave: 'pago_movil_cuentas', valor: { cuentas, predeterminada }, publico: false, actualizado: ahora },
-      { clave: 'pago_movil', valor: { banco: p.banco, telefono: p.telefono, cedula: p.cedula, cuentas: publicas, predeterminada: visibles.indexOf(p) }, publico: true, actualizado: ahora },
+      { clave: 'pago_movil_cuentas', valor: { cuentas, predeterminada, condicion, casilla }, publico: false, actualizado: ahora },
+      { clave: 'pago_movil', valor: { banco: p.banco, telefono: p.telefono, cedula: p.cedula, cuentas: publicas, predeterminada: visibles.indexOf(p), ...(condicion && { condicion, casilla }) }, publico: true, actualizado: ahora },
     ];
     b.disabled = true;
     try {
