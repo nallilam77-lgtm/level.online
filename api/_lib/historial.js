@@ -121,6 +121,10 @@ export async function conHistorial(req, res, juego, fn) {
     const tarea = ctx.pedido ? guardarFila({ usuario: ctx.usuario, juego, body, pedido: ctx.pedido, respuesta })
       : claveHash && respuesta.cuerpo ? completarFila({ claveHash, respuesta }) : null;
     if (tarea) waitUntil(tarea.catch((error) => console.error(`⚠️ historial: no se pudo guardar la recarga (${juego}):`, error.message)));
+    // De paso (después de responder, como mucho cada 3 min por instancia): las recargas que llevan rato
+    // "en proceso" se verifican solas en Central One (_lib/revision.js → revisarEnProceso)
+    waitUntil(import('./revision.js').then((m) => m.revisarEnProcesoSiToca())
+      .catch((error) => console.error('⚠️ historial: no se pudo revisar las en proceso:', error.message)));
   }
 }
 
