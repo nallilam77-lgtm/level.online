@@ -84,6 +84,12 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 - `firebase-admin` se importa de forma perezosa en `_lib/limitador.js` para no alargar el cold start: no moverlo a un `import` estático.
 - Variable nueva → documentarla en `.env.example`. Nunca leer ni editar `.env`.
 
+## 8a-bis. `obtener_codigo` responde "ocupado" y la recarga va a revisión (2026-11-15)
+
+**Síntoma**: muchas recargas de Free Fire "En revisión" con la incidencia "Apps Script no entregó códigos: ⚠️ Sistema ocupado procesando otra transacción" (7 en un día, 5 en 20 minutos con mucho movimiento). El pago queda usado y la recarga hay que hacerla a mano.
+**Causa**: dos recargas a la vez compiten por el candado de recargas.gs; la que pierde recibe `{ status: "error", ocupado: true }` SIN que se haya hecho nada, y freefire.js lo trataba como "no entregó códigos".
+**Regla**: con v2, `obtener_codigo` es idempotente (idPedido): si responde `ocupado`, freefire.js lo repite durante `TIEMPOS.ocupadoMs` (20 s) antes de bloquear. Las que ya quedaron en revisión: panel → Revisión → "🔁 Hacer de nuevo" (_lib/revision.js).
+
 ## 8a. `obtener_codigo` lento en modo API
 
 **Síntoma**: `[3. OBTENCIÓN DE CÓDIGOS] Tiempo agotado (15 s)` aunque el modo sea API (FazerCards). No es un choque: en modo API `obtener_codigo` no toca los pines, pero es quien lee el modo y anota la fila de "fazer_card", así que Vercel no puede saltárselo.

@@ -16,6 +16,9 @@ export default async function handler(req, res) {
     if (req.query.accion === 'pagos_limpiar') return (await import('./_lib/pagos.js')).limpiarPagos(req, res);
     if (req.query.accion === 'pago_estado') return (await import('./_lib/pagos.js')).pagoEstado(req, res);
     if (req.query.accion === 'saldo_centralone') return (await import('./_lib/precios.js')).saldoCentralOne(req, res);
+    // Panel admin → Revisión: verificar en Central One y rehacer una recarga (solo administrador; _lib/revision.js)
+    if (req.query.accion === 'revision_verificar') return (await import('./_lib/revision.js')).verificarRevision(req, res);
+    if (req.query.accion === 'revision_rehacer') return (await import('./_lib/revision.js')).rehacerRevision(req, res);
     const juego = await cargarJuego(req.query.juego);
     if (!juego) {
       return res.status(400).json({ status: "error", message: "Juego no válido." });

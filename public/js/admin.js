@@ -1326,7 +1326,66 @@
         const nota = prompt('Nota para ti (solo la ves tú):', p.nota_admin || '');
         if (nota !== null) resolver(p.id_pedido, 'nota', nota, null, null);
       }));
+    // Recargas de Central One: preguntarle qué pasó y volver a pedirla (api/_lib/revision.js)
+    if (RECARGA_CENTRAL_ONE.has(p.juego)) {
+      const salida = el('p', 'mensaje-form');
+      salida.setAttribute('role', 'status');
+      acciones.prepend(
+        boton('🔎 Verificar estado', 'btn-ver', (b) => verificarRecarga(p, b, salida)),
+        boton('🔁 Hacer de nuevo', 'btn-ver', (b) => rehacerRecarga(p, b, salida)));
+      li.append(salida);
+    }
     return acciones;
+  }
+
+  // ---------------------------------------------------------------- revisión: Central One
+  const RECARGA_CENTRAL_ONE = new Set(['freefire', 'bloodstrike', 'mobilelegends']);
+  const ESTADO_CO = { completed: 'entregado', delivered: 'entregado', failed: 'falló', cancelled: 'cancelado', canceled: 'cancelado',
+    refunded: 'reembolsado', confirmed: 'confirmado (en camino)', processing: 'procesando', pending: 'pendiente', partially_completed: 'entregado en parte', partially_delivered: 'entregado en parte' };
+  const lineaPedidoCO = (o) => `${o.referencia} · ${ESTADO_CO[o.estado] || o.estado}${o.fallo ? ` (${MOTIVO_ADMIN[o.fallo] || o.fallo})` : ''}`;
+
+  async function verificarRecarga(p, b, salida) {
+    b.disabled = true;
+    salida.textContent = 'Preguntando a Central One…';
+    try {
+      const r = await llamarAdmin('revision_verificar', { idPedido: p.id_pedido });
+      if (r.status !== 'success') { salida.textContent = r.message || 'No se pudo verificar.'; return; }
+      const detalle = r.pedidos.map(lineaPedidoCO).join(' · ');
+      if (r.resultado === 'sin_pedido') {
+        salida.textContent = '❌ Central One no tiene ningún pedido de esta recarga: nunca se pidió. Usa "Hacer de nuevo".';
+      } else if (r.resultado === 'en_camino') {
+        salida.textContent = `⏳ Central One la está entregando: ${detalle}. Verifica otra vez en unos minutos.`;
+      } else if (r.resultado === 'en_parte') {
+        salida.textContent = `⚠️ Central One entregó solo una parte (${r.partes} pedidos): ${detalle}. "Hacer de nuevo" pide solo la parte que falta.`;
+      } else if (r.resultado === 'fallida') {
+        salida.textContent = `❌ Central One no la entregó: ${detalle}. Si el ID está bien, usa "Hacer de nuevo".`;
+      } else {
+        salida.textContent = `✅ Central One la ENTREGÓ: ${detalle}.`;
+        if (confirm(`Central One entregó la recarga de ${p.paquete} (${p.cuenta || ''}).\n\n${detalle}\n\n¿Marcarla como ENTREGADA?`)) {
+          resolver(p.id_pedido, 'entregado', `Verificado en Central One: ${r.pedidos.map((o) => o.referencia).join(', ')}`, null, null);
+        }
+      }
+    } catch (e) {
+      salida.textContent = 'No se pudo conectar. Intenta de nuevo.';
+    } finally {
+      b.disabled = false;
+    }
+  }
+
+  async function rehacerRecarga(p, b, salida) {
+    if (!confirm(`¿Pedir OTRA VEZ a Central One la recarga de ${p.paquete} para ${p.cuenta || 'esta cuenta'}?\n\nAntes se revisa en Central One: si ya está entregada o en camino, no se pide de nuevo. Se gasta saldo de Central One.`)) return;
+    b.disabled = true;
+    salida.textContent = 'Pidiendo a Central One…';
+    try {
+      const r = await llamarAdmin('revision_rehacer', { idPedido: p.id_pedido });
+      const hechos = (r.hechos || []).filter((h) => h.referencia).map((h) => `${h.referencia}${h.estado ? ` (${ESTADO_CO[h.estado] || h.estado})` : ''}`).join(' · ');
+      salida.textContent = r.status === 'success' ? `✅ ${r.message}${hechos ? ` ${hechos}` : ''}` : `❌ ${r.message || 'No se pudo.'}`;
+      if (r.status === 'success') setTimeout(cargarRevision, 4000);
+    } catch (e) {
+      salida.textContent = 'No se pudo conectar. No sabemos si se pidió: usa "Verificar estado" antes de volver a intentar.';
+    } finally {
+      b.disabled = false;
+    }
   }
 
   function tarjetaRevision(p) {

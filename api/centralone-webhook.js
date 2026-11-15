@@ -147,11 +147,12 @@ const ESTADO_VALIDO = /^[a-z_]{1,30}$/;
 const PEDIDO_ROBLOX = /^rbx-[0-9a-f-]{36}$/;
 // Idempotency-Key de una recarga de Free Fire (api/_lib/juegos/freefire.js): "ff-<idPedido>" o, si el
 // paquete son varios pedidos (220 = dos de 110), "ff-<idPedido>-1", "-2"…
-const PEDIDO_FREEFIRE = /^ff-[0-9a-f-]{36}(-[1-9])?$/;
+// Un reintento desde el panel (api/_lib/revision.js) agrega "-r<N>" antes de la parte: "ff-<id>-r1-2".
+const PEDIDO_FREEFIRE = /^ff-[0-9a-f-]{36}(-r[1-9])?(-[1-9])?$/;
 // Idempotency-Key de una recarga de Mobile Legends (api/_lib/juegos/mobilelegends.js): "ml-<idPedido>"
-const PEDIDO_MLBB = /^ml-[0-9a-f-]{36}$/;
+const PEDIDO_MLBB = /^ml-[0-9a-f-]{36}(-r[1-9])?$/;
 // Idempotency-Key de una recarga de Blood Strike (api/_lib/juegos/bloodstrike.js): el idPedido tal cual
-const PEDIDO_BLOOD = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PEDIDO_BLOOD = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-r[1-9])?$/i;
 // Estados con los que un pedido ya terminó (para eventos de pedido con otro nombre, p. ej. order.completed)
 const ESTADOS_FINALES = new Set(['completed', 'delivered', 'failed', 'cancelled', 'partially_completed', 'partially_delivered', 'refunded']);
 const AL_SCRIPT = { tiempoMs: 8500, intentoMs: 8500 };
@@ -232,7 +233,8 @@ export default async function handler(req, res) {
 
   // Perfil del cliente con sesión (Supabase): el estado le llega en vivo. La fila usa el idPedido sin el
   // prefijo de la Idempotency-Key (ff-/ml-, y sin el -1/-2 de un paquete partido en dos pedidos)
-  const idDelPerfil = PEDIDO_ROBLOX.test(idPedido) ? idPedido : idPedido.replace(/^(ff|ml)-/, '').replace(/-[1-9]$/, '');
+  // (ni el "-r<N>" de un reintento hecho desde el panel de Revisión)
+  const idDelPerfil = PEDIDO_ROBLOX.test(idPedido) ? idPedido : idPedido.replace(/^(ff|ml)-/, '').replace(/-[1-9]$/, '').replace(/-r[1-9]$/, '');
   // Paquete partido en dos pedidos (Free Fire "ff-<id>-1" / "-2"): cada aviso es de UNA mitad. "Entregado"
   // no pisa una falla de la otra mitad, y el reembolso de una sola mitad queda "en revisión" (no
   // "reembolsado": la otra mitad sí llegó y el pedido entero no se devolvió).

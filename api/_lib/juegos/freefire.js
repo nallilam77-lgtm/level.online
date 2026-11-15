@@ -15,12 +15,15 @@ import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
 import { supabaseActivo, rpc } from '../supabase.js';
 import { iniciosVE } from '../semana.js';
 
-// Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con fallo del bot:
-// precios 8 + verificar 32 + códigos 32 + bot 45 + devolver pines 15 + registrar 12 + marcar 12 = 156 s
-// Peor caso con éxito: precios 12 + verificar 32 + códigos 32 + bot 45 + marcar 12 + finalizado 12 + aviso 12 = 157 s
-// Peor caso por Central One: precios 12 + verificar 32 + catálogo 17 + códigos 32 + pedidos 40 + respuesta = 133 s
+// Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). verificar_pago va a Supabase (rápido),
+// así que sus 32 s son holgura. Peor caso con fallo del bot:
+// precios 8 + verificar 32 + códigos 32 + ocupado 20 + bot 45 + devolver pines 15 + registrar 12 + marcar 12 = 176 s
+// Peor caso con éxito: precios 12 + verificar 32 + códigos 32 + ocupado 20 + bot 45 + marcar 12 + finalizado 12 = 165 s
+// Peor caso por Central One: precios 12 + verificar 32 + catálogo 17 + códigos 32 + ocupado 20 + pedidos 40 = 153 s
 // (el cierre sigue en segundo plano)
 const TIEMPOS = {
+  // obtener_codigo respondió "ocupado" (no hizo nada): se vuelve a pedir durante este tiempo
+  ocupadoMs: 20000,
   // verificar_pago y obtener_codigo: hasta 3 intentos de 15 s dentro de 32 s
   idempotente: { tiempoMs: 32000, intentoMs: 15000, reintentos: 2, reintentarTrasTimeout: true },
   // Apps Script anterior (sin idPedido): un solo intento largo, nunca se repite
@@ -330,7 +333,7 @@ async function entregarRecarga(res, {
   try {
     // manualSiNoHay: si no hay pines del paquete, recargas.gs anota el pedido en la pestaña
     // "sin_codigo" para hacerlo a mano y responde { manual: true } (al cliente: recarga exitosa)
-    dataCodigos = await llamarScript(URL_GOOGLE_SCRIPT, {
+    const pedirCodigos = () => llamarScript(URL_GOOGLE_SCRIPT, {
       accion: "obtener_codigo", diamantes: numeroDiamantes, idPedido, referencia: referenciaCompleta,
       manualSiNoHay: true, idJugador: String(id), paquete: textoParaHoja(String(paquete)), montoCobrado: precioReal, comprobante,
       // Modo API: qué producto se pediría a Central One (vacío = no se puede: va a "sin_codigo" con el motivo)
@@ -339,6 +342,16 @@ async function entregarRecarga(res, {
       ...(desc && { codigoDescuento: desc.codigo }),
       telefono,
     }, opcionesCriticas);
+    dataCodigos = await pedirCodigos();
+    // "Sistema ocupado" (otra recarga tenía el candado de la hoja): recargas.gs NO hizo nada. Con v2
+    // obtener_codigo es idempotente (idPedido), así que se vuelve a pedir durante OCUPADO_MS antes de
+    // mandar la recarga a revisión (2026-11-15: 7 recargas en revisión en un día por esto).
+    const hastaOcupado = Date.now() + TIEMPOS.ocupadoMs;
+    for (let intento = 1; scriptV2 && dataCodigos?.ocupado && Date.now() + 3000 < hastaOcupado; intento++) {
+      console.info(`⏳ [${FASES.codigos}] hoja ocupada, nuevo intento ${intento} | REF: ${referenciaCompleta}`);
+      await new Promise((r) => setTimeout(r, 2000 + 1000 * intento));
+      dataCodigos = await pedirCodigos();
+    }
   } catch (error) {
     console.error(`⚠️ [${FASES.codigos}] ${error.message} | REF: ${referenciaCompleta}`);
     // Con v2 sabemos exactamente qué pines se asignaron a este pedido: como el bot nunca los
