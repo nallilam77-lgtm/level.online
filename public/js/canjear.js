@@ -62,7 +62,7 @@
     ev.preventDefault();
     const codigo = $('codigo').value.trim();
     const id = $('idJugador').value.replace(/\D/g, '');
-    if (codigo.replace(/[^A-Za-z0-9]/g, '').length < 10) { mensaje('Escribe el código completo, por ejemplo LU-ABCD-EFGH.', 'error'); return; }
+    if (codigo.replace(/[^A-Za-z0-9]/g, '').length < 10) { mensaje('Escribe el código completo, por ejemplo LEVELUP-7KQM3XPA.', 'error'); return; }
     if (!/^\d{5,15}$/.test(id)) { mensaje('Escribe tu ID de Free Fire (solo números).', 'error'); return; }
     if (!confirm(`¿Canjear el código ${codigo.toUpperCase()} para el ID ${id}?\n\nLos diamantes llegan a ESA cuenta y el código no se puede usar otra vez.`)) return;
     const b = $('btnCanjear');
@@ -89,13 +89,13 @@
     }
   });
 
-  // Último ID de Free Fire de este equipo (js/ultimo-id.js) y código desde el enlace (?codigo=LU-ABCD-EFGH)
+  // Último ID de Free Fire de este equipo (js/ultimo-id.js) y código desde el enlace (?codigo=LEVELUP-7KQM3XPA)
   try {
     const g = JSON.parse(localStorage.getItem(CLAVE_ID) || '{}');
     if (g.freefire && g.freefire.id) $('idJugador').value = g.freefire.id;
   } catch (e) { /* sin almacenamiento */ }
   const delEnlace = new URLSearchParams(location.search).get('codigo');
-  if (delEnlace) $('codigo').value = delEnlace.slice(0, 20);
+  if (delEnlace) $('codigo').value = delEnlace.slice(0, 24);
 
   cargarLista();
   setInterval(() => { if (document.visibilityState === 'visible') cargarLista(); }, 20000);

@@ -23,11 +23,14 @@ import { anotarIncidencia } from './incidencias.js';
 const PRODUCTO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NO_DISPONIBLE = 'Los canjes no están disponibles en este momento. Tu código sigue libre: intenta más tarde.';
 
-// "lu abcd efgh", "LUABCDEFGH" o "LU-ABCD-EFGH" → "LU-ABCD-EFGH" (o '' si no tiene la forma)
+// "levelup 7kqm3xpa", "LEVELUP7KQM3XPA" o "LEVELUP-7KQM3XPA" → "LEVELUP-7KQM3XPA". Los primeros códigos
+// ("LU-ABCD-EFGH") siguen valiendo. '' si no tiene ninguna de las dos formas.
 function normalizarCodigo(texto) {
   const t = String(texto || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const m = t.match(/^LU([A-Z0-9]{4})([A-Z0-9]{4})$/);
-  return m ? `LU-${m[1]}-${m[2]}` : '';
+  const nuevo = t.match(/^LEVELUP([A-Z0-9]{8})$/);
+  if (nuevo) return `LEVELUP-${nuevo[1]}`;
+  const viejo = t.match(/^LU([A-Z0-9]{4})([A-Z0-9]{4})$/);
+  return viejo ? `LU-${viejo[1]}-${viejo[2]}` : '';
 }
 
 // Producto(s) de Central One del paquete (220 = dos de 110), como lo vende hoy la tienda
@@ -43,7 +46,7 @@ export async function canjear(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
   const codigo = normalizarCodigo(req.body?.codigo);
   const id = String(req.body?.id ?? '').trim();
-  if (!codigo) return res.status(400).json({ status: 'error', message: 'Escribe el código completo, por ejemplo LU-ABCD-EFGH.' });
+  if (!codigo) return res.status(400).json({ status: 'error', message: 'Escribe el código completo, por ejemplo LEVELUP-7KQM3XPA.' });
   if (!/^\d{5,15}$/.test(id)) return res.status(400).json({ status: 'error', message: 'Escribe tu ID de Free Fire (solo números).' });
 
   const apiKey = String(process.env.freefire_nuevo || '').trim();

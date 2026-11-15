@@ -12,7 +12,7 @@
 -- =====================================================================
 
 create table if not exists public.codigos_regalo (
-  codigo      text primary key,                         -- "LU-XXXX-XXXX" (letras y números sin O/0/I/1)
+  codigo      text primary key,                         -- "LEVELUP-XXXXXXXX" (letras y números sin O/0/I/1); los primeros, "LU-XXXX-XXXX"
   juego       text not null default 'freefire',
   paquete     text not null default '110 Diamantes',    -- nombre exacto del paquete en Precios
   nota        text,                                     -- para el administrador (p. ej. "sorteo del canal")
@@ -52,11 +52,11 @@ begin
   if not exists (select 1 from precios where juego = 'freefire' and paquete = p_paquete and producto is not null) then
     raise exception 'El paquete "%" no existe en Precios de Free Fire.', p_paquete using errcode = '22023';
   end if;
+  -- "LEVELUP-" + 8 letras/números al azar (desde 2026-11-15; los primeros eran "LU-XXXX-XXXX" y siguen valiendo)
   while v_creados < p_cantidad loop
-    v_codigo := 'LU-';
+    v_codigo := 'LEVELUP-';
     for i in 1..8 loop
       v_codigo := v_codigo || substr(v_letras, 1 + (get_byte(extensions.gen_random_bytes(1), 0) % length(v_letras)), 1);
-      if i = 4 then v_codigo := v_codigo || '-'; end if;
     end loop;
     insert into codigos_regalo (codigo, paquete, nota) values (v_codigo, p_paquete, nullif(left(trim(coalesce(p_nota, '')), 120), ''))
       on conflict (codigo) do nothing;
@@ -167,7 +167,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select left(c.codigo, 5) || '••-••••', c.paquete, coalesce(nullif(c.nombre, ''), 'Jugador'),
+  select case when c.codigo like 'LEVELUP-%' then left(c.codigo, 10) || '••••••' else left(c.codigo, 5) || '••-••••' end, c.paquete, coalesce(nullif(c.nombre, ''), 'Jugador'),
          left(c.id_jugador, 3) || repeat('•', greatest(length(c.id_jugador) - 5, 2)) || right(c.id_jugador, 2),
          c.canjeado, c.estado = 'entregado'
     from codigos_regalo c
