@@ -161,6 +161,24 @@
   // Central One al webhook (configuracion "centralone_saldo": balance.low, deposit.approved…).
   const dolares = (n) => (n === null || n === undefined ? '–' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
+  // Libro diario en Google Sheets (configuracion "hojas_ventas"; api/_lib/libro.js). Sin valor = encendido.
+  async function cargarHojas() {
+    const { data } = await cliente.from('configuracion').select('valor').eq('clave', 'hojas_ventas').maybeSingle();
+    const encendido = !(data && data.valor === false);
+    $('hojasVentas').checked = encendido;
+    $('mensajeHojas').textContent = encendido ? 'Encendido: las ventas se anotan en Supabase y en las hojas.' : 'Apagado: las ventas se anotan solo en Supabase.';
+  }
+  $('hojasVentas').addEventListener('change', async (ev) => {
+    const encender = ev.target.checked;
+    const texto = encender
+      ? '¿Volver a anotar las ventas en Google Sheets?'
+      : '¿Dejar de anotar las ventas en Google Sheets?\n\nTodo sigue guardado en Supabase (Pedidos, Revisión, Creadores) y puedes descargar las ventas en Excel desde Pedidos. Se aplica en menos de 1 minuto.';
+    if (!confirm(texto)) { cargarHojas(); return; }
+    const { error } = await cliente.from('configuracion').upsert({ clave: 'hojas_ventas', valor: encender, publico: false, actualizado: new Date().toISOString() }, { onConflict: 'clave' });
+    if (error) { console.error(error); alert('No se pudo guardar. Intenta de nuevo.'); }
+    cargarHojas();
+  });
+
   // Free Fire: directo a Central One o como antes (configuracion "ff_modo"; Vercel lo lee cada 30 s)
   const TEXTO_MODO_FF = { central_one: 'Directo a Central One (sin la hoja)', hoja: 'Como antes (la hoja decide)' };
   async function cargarModoFF() {
@@ -1270,6 +1288,92 @@
     cargarRoblox();
   });
 
+  // ---------------------------------------------------------------- descargar ventas en Excel
+  // Tabla "recargas" (todas las tiendas) entre dos fechas de Venezuela. Reemplaza la pestaña "finalizados"
+  // de las hojas. .xlsx con SheetJS (se descarga solo al tocar el botón); si no carga, .csv para Excel.
+  const XLSX_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  const diaVE = (ms) => new Date(ms - 4 * 36e5).toISOString().slice(0, 10);
+  $('excelHasta').value = diaVE(Date.now());
+  $('excelDesde').value = diaVE(Date.now() - 6 * 864e5);
+  // "2026-11-15 12:19" en hora de Venezuela (Excel lo reconoce como fecha)
+  const fechaExcel = (iso) => new Date(new Date(iso).getTime() - 4 * 36e5).toISOString().slice(0, 16).replace('T', ' ');
+  function cargarXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    return new Promise((ok, falla) => {
+      const s = document.createElement('script');
+      s.src = XLSX_CDN; s.async = true; s.crossOrigin = 'anonymous';
+      s.onload = () => (window.XLSX ? ok(window.XLSX) : falla(new Error('sin XLSX')));
+      s.onerror = () => falla(new Error('no cargó SheetJS'));
+      document.head.appendChild(s);
+    });
+  }
+  function descargar(contenido, nombre, tipo) {
+    const a = el('a');
+    a.href = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+    a.download = nombre;
+    document.body.append(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  // Respaldo: CSV con ";" y coma decimal, como lo abre Excel en español
+  function csvParaExcel(datos) {
+    const columnas = Object.keys(datos[0]);
+    const celda = (v) => {
+      const t = typeof v === 'number' ? v.toFixed(2).replace('.', ',') : String(v ?? '');
+      // Que Excel no lo tome como fórmula
+      const seguro = /^[=+\-@]/.test(t) ? `'${t}` : t;
+      return /[;"\n]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
+    };
+    return '﻿' + [columnas.join(';'), ...datos.map((f) => columnas.map((c) => celda(f[c])).join(';'))].join('\r\n');
+  }
+  $('formExcel').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const msg = $('mensajeExcel');
+    const d = $('excelDesde').value;
+    const h = $('excelHasta').value;
+    if (!d || !h || d > h) { msg.textContent = 'Elige las fechas ("Desde" no puede ser después de "Hasta").'; return; }
+    const desde = new Date(`${d}T00:00:00-04:00`);
+    const hasta = new Date(new Date(`${h}T00:00:00-04:00`).getTime() + 864e5);
+    const soloEstado = $('excelEstado').value;
+    $('btnExcel').disabled = true;
+    msg.textContent = 'Preparando…';
+    try {
+      const filas = await leerTodo(() => {
+        let q = cliente.from('recargas')
+          .select('creado,juego,paquete,cuenta,id_jugador,zona,precio,referencia,estado,codigo_descuento,id_pedido,nota_admin')
+          .gte('creado', desde.toISOString()).lt('creado', hasta.toISOString()).order('creado', { ascending: true });
+        if (soloEstado) q = q.eq('estado', soloEstado);
+        return q;
+      });
+      if (!filas.length) { msg.textContent = 'No hay pedidos en esas fechas.'; return; }
+      const datos = filas.map((r) => ({
+        'Fecha (Venezuela)': fechaExcel(r.creado), 'Juego': JUEGOS[r.juego] || r.juego, 'Paquete': r.paquete || '',
+        'Cuenta': r.cuenta || '', 'ID jugador': r.id_jugador || '', 'Zona': r.zona || '', 'Precio (Bs)': Number(r.precio || 0),
+        'Referencia (últimos dígitos)': r.referencia || '', 'Estado': ESTADOS[r.estado] || r.estado,
+        'Código de creador': r.codigo_descuento || '', 'Pedido': r.id_pedido, 'Nota': r.nota_admin || '',
+      }));
+      const nombre = `ventas-levelup-${d}-a-${h}`;
+      try {
+        const X = await cargarXlsx();
+        const hoja = X.utils.json_to_sheet(datos);
+        hoja['!cols'] = [18, 14, 26, 22, 14, 6, 12, 14, 14, 16, 38, 40].map((wch) => ({ wch }));
+        const libro = X.utils.book_new();
+        X.utils.book_append_sheet(libro, hoja, 'Ventas');
+        X.writeFile(libro, `${nombre}.xlsx`);
+      } catch (e) {
+        console.error(e);
+        descargar(csvParaExcel(datos), `${nombre}.csv`, 'text/csv;charset=utf-8');
+      }
+      const total = datos.reduce((s, f) => s + f['Precio (Bs)'], 0);
+      msg.textContent = `✅ Descargado: ${datos.length} pedidos · ${bs(total)} Bs.`;
+    } catch (error) {
+      console.error(error);
+      msg.textContent = 'No se pudo leer las ventas. Intenta de nuevo.';
+    } finally {
+      $('btnExcel').disabled = false;
+    }
+  });
+
   // ---------------------------------------------------------------- revisión (supabase/revision.sql)
   // Pedidos con problema de todas las tiendas y sus incidencias (lo que antes había que buscar en la
   // pestaña "errores" de cada hoja). Resolver cambia el estado del pedido (admin_revision_resolver).
@@ -1790,7 +1894,7 @@
     if (error || esAdmin !== true) return estado('Esta cuenta no es administradora. Entra con la cuenta correcta.', true);
     $('panelEstado').hidden = true;
     $('panel').hidden = false;
-    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarAlarma().catch(() => {}), cargarModoFF().catch(() => {})]);
+    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarAlarma().catch(() => {}), cargarModoFF().catch(() => {}), cargarHojas().catch(() => {})]);
     escuchar();
   })();
 })();

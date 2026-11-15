@@ -4,6 +4,7 @@ import { firmaCentralOneValida, primerCodigo, leerCodigos } from './_lib/central
 import { registrarUsoDescuento } from './_lib/descuentos.js';
 import { limpiarMontoVES } from './_lib/recarga-comun.js';
 import { actualizarEstado } from './_lib/historial.js';
+import { anotarEnHojas } from './_lib/libro.js';
 import { supabaseActivo, guardar, leerDonde, actualizar } from './_lib/supabase.js';
 
 // ---------------------------------------------------------------------------------------------------
@@ -247,6 +248,12 @@ export default async function handler(req, res) {
   else if (estadoPerfil) actualizarEstado(idDelPerfil, 'en_revision', { noPisar: ['problema', 'reembolsado'] });
 
   if (PEDIDO_ROBLOX.test(idPedido)) return avisoRoblox(res, { aviso, evento, ordenCentralOne, idPedido });
+
+  // Libro diario apagado en el panel (_lib/libro.js): el estado ya quedó en Supabase (actualizarEstado)
+  if (!(await anotarEnHojas())) {
+    console.info(`✅ centralone-webhook: pedido ${ordenCentralOne} (${estado}) anotado solo en Supabase (libro de las hojas apagado)`);
+    return res.status(200).json({ ok: true });
+  }
 
   // Free Fire, Blood Strike o Mobile Legends: las hojas anotan el estado igual (acción estado_fazer) y
   // solo la que tiene el pedido lo aplica. Con idempotency_key se sabe a cuál va; sin ella (o con una que

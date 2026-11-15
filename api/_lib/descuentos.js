@@ -11,6 +11,7 @@ import { obtenerIp, minutosBloqueado, registrarFallo } from './limitador.js';
 import { faltaConfiguracion } from './validacion.js';
 import { formatearVES, limpiarMontoVES } from './recarga-comun.js';
 import { supabaseActivo, leer } from './supabase.js';
+import { anotarEnHojas } from './libro.js';
 
 // % que da un código de creador al cliente (y que gana el creador). Igual en supabase/codigos.sql
 // (codigos_porcentaje_creador) y apps-script/recargas.gs (PORCENTAJE_CREADOR).
@@ -68,7 +69,10 @@ export async function obtenerDescuento(codigo) {
 // Anota +1 uso y el monto cobrado de un código (acción registrar_uso_descuento de recargas.gs).
 // Para los juegos cuya recarga se registra en OTRA hoja (Blood Strike); Free Fire lo hace dentro
 // de registrar_finalizado. Es una escritura: sin reintento tras timeout para no contar dos veces.
-export function registrarUsoDescuento({ codigo, montoCobrado, idPedido, idJugador, juego }) {
+// Con el libro diario apagado (_lib/libro.js) no se anota: el uso y la comisión los cuenta Supabase
+// (disparador codigos_contar_venta) al quedar la recarga entregada.
+export async function registrarUsoDescuento({ codigo, montoCobrado, idPedido, idJugador, juego }) {
+  if (!(await anotarEnHojas())) return true;
   return llamarScript(urlTablaDescuentos(), { accion: "registrar_uso_descuento", codigo, montoCobrado, idPedido, idJugador, juego }, { tiempoMs: 12000, reintentos: 1 })
     .then((r) => r?.status === 'success')
     .catch((e) => { console.error(`❌ registrar_uso_descuento falló (${juego}, código ${codigo}, pedido ${idPedido}):`, e.message); return false; });

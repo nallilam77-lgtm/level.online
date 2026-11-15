@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Pagos → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=30" defer></script>
+  <script src="/js/admin.js?v=31" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -74,6 +74,15 @@
           </form>
           <p class="nota"><strong>Directo</strong>: la recarga va del pago a Central One sin esperar turno en la hoja (se acaba el "Sistema ocupado"). La hoja sigue anotando cada venta en "finalizados" después; la pestaña "fazer_card" ya no se llena. Si un paquete no se puede pedir, la recarga va a <strong>Revisión</strong>. <strong>Como antes</strong>: lo que diga el menú de la hoja (🔀 Modo de recarga).</p>
           <p class="mensaje-form" id="mensajeModoFF" role="status"></p>
+        </div>
+        <!-- Libro diario en Google Sheets (configuracion "hojas_ventas"; api/_lib/libro.js) -->
+        <div class="tarjeta">
+          <h2>Google Sheets</h2>
+          <form class="formulario" id="formHojas" novalidate>
+            <label class="opcion-pm"><input type="checkbox" id="hojasVentas"> Anotar las ventas también en Google Sheets</label>
+          </form>
+          <p class="nota"><strong>Apagado</strong>: Free Fire, Blood Strike y Mobile Legends ya no escriben en sus hojas ("finalizados", "errores", "Descuentos", "fazer_card"). Todo sigue guardado en Supabase: ventas en <strong>Pedidos</strong> (con <strong>Descargar Excel</strong>), problemas en <strong>Revisión</strong> y códigos en <strong>Creadores</strong>. Roblox, las tiendas manuales y la ruleta siguen con su hoja.</p>
+          <p class="mensaje-form" id="mensajeHojas" role="status"></p>
         </div>
         <div class="tarjeta">
           <div class="fila-titulo">
@@ -134,6 +143,26 @@
           <input type="search" id="buscar" class="buscar" placeholder="Buscar ID, referencia, paquete…" aria-label="Buscar pedidos" autocomplete="off">
           <p class="nota">Toca un pedido para ver todo su detalle.</p>
           <ul class="pedidos" id="listaPedidos"></ul>
+        </div>
+
+        <!-- Descargar las ventas (tabla recargas) para Excel: reemplaza la pestaña "finalizados" de las hojas -->
+        <div class="tarjeta">
+          <h2>Descargar ventas en Excel</h2>
+          <form class="formulario" id="formExcel" novalidate>
+            <div class="dos-campos">
+              <label class="campo">Desde<input type="date" id="excelDesde" required></label>
+              <label class="campo">Hasta (incluido)<input type="date" id="excelHasta" required></label>
+            </div>
+            <label class="campo">Qué pedidos
+              <select id="excelEstado">
+                <option value="completado">Solo entregadas (ventas)</option>
+                <option value="">Todos (también en revisión, incompletos…)</option>
+              </select>
+            </label>
+            <button type="submit" class="btn btn--chico" id="btnExcel">⬇️ Descargar Excel</button>
+            <p class="mensaje-form" id="mensajeExcel" role="status"></p>
+          </form>
+          <p class="nota">Fechas en hora de Venezuela. Se abre con Excel o Google Sheets; trae fecha, juego, paquete, cuenta, precio, referencia, estado, código de creador y número de pedido.</p>
         </div>
       </section>
 

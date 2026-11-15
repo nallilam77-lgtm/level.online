@@ -4,8 +4,11 @@ import { anotarIncidencia } from './incidencias.js';
 import { waitUntil } from '@vercel/functions';
 import { llamarScript } from './externo.js';
 import { informeError, FASES } from './reporte.js';
+import { anotarEnHojas } from './libro.js';
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+// Lo que es solo libro diario (se puede apagar en el panel): la recarga ya está en Supabase
+const LIBRO = new Set(['registrar_finalizado', 'registrar_error']);
 
 // Cierre en segundo plano (cerrarEnSegundoPlano): esperas antes de cada ronda de reintentos y
 // tiempo máximo desde que empezó la petición (maxDuration de api/recargar.js = 180 s, con margen).
@@ -82,6 +85,8 @@ export function crearUtilidadesPedido({ urlScript, idPedido, tiempoIncidenteMs, 
   const registrarEnHoja = async (cuerpo) => {
     // Un problema ("errores" de la hoja) también va a Supabase: admin.html → Revisión (_lib/incidencias.js)
     anotarIncidencia(urlScript, cuerpo);
+    // Libro diario apagado en el panel (_lib/libro.js): "finalizados" y "errores" solo en Supabase
+    if (LIBRO.has(cuerpo.accion) && !(await anotarEnHojas())) return true;
     const { ok, motivo } = await llamarSinOcupado(cuerpo, { reintentos: 1 });
     if (!ok) console.error(`❌ ${cuerpo.accion} falló para el pedido ${idPedido}:`, motivo, '| Informe:', cuerpo.urlImagen);
     return ok;
