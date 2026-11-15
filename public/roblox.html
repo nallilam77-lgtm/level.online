@@ -1602,13 +1602,17 @@
                 return;
              }
 
+             // El pago insuficiente NO cuenta como intento fallido: el pago existe y solo falta completarlo
+             const pagoInsuficiente = resultado.insuficiente === true || /insuficiente/i.test(resultado.message || '');
              let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga_roblox') || '0');
-             intentosFallidos++;
+             if (!pagoInsuficiente) intentosFallidos++;
              localStorage.setItem('intentos_recarga_roblox', intentosFallidos);
              // Aviso de cuántos intentos quedan antes del bloqueo de 5 minutos (va al final de la ventana de error)
              const intentosRestantes = 3 - intentosFallidos;
              let avisoIntentos;
-             if (intentosRestantes <= 0) {
+             if (pagoInsuficiente) {
+                 avisoIntentos = '';
+             } else if (intentosRestantes <= 0) {
                  localStorage.setItem('tiempo_bloqueo_roblox', Date.now() + (5 * 60 * 1000));
                  mostrarBurbuja("⚠️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
                  avisoIntentos = "🔒 <strong>Quedaste bloqueado por 5 minutos</strong> tras 3 intentos fallidos. Si ya pagaste, escríbenos a soporte por WhatsApp con tu referencia.";
@@ -1617,7 +1621,7 @@
              } else {
                  avisoIntentos = `⚠️ <strong>Te quedan ${intentosRestantes} intentos.</strong> Si fallas los 3, serás bloqueado por 5 minutos. Si ya pagaste, escríbenos a soporte.`;
              }
-             const errorConAviso = (titulo, mensaje, extra) => mostrarErrorGeneral(titulo, mensaje, (extra ? extra + '<br><br>' : '') + avisoIntentos);
+             const errorConAviso = (titulo, mensaje, extra) => mostrarErrorGeneral(titulo, mensaje, [extra, avisoIntentos].filter(Boolean).join('<br><br>'));
 
              let msg = resultado.message || "";
              let msgLower = msg.toLowerCase();

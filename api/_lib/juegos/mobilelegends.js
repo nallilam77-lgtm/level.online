@@ -418,7 +418,7 @@ export async function recargar(req, res) {
     anotarRecarga({ juego: 'mobilelegends', cuenta: `${id}:${zona}`, paquete: paqueteGsheet.diamantes, idPedido, premio: fiel.porcentaje, precioLista, precio: precioReal });
 
     if (dataVerificacion.insuficiente) {
-      await registrarFallo(clavesLimite);
+      // No cuenta como intento fallido (desde 2026-11-15): el pago existe, solo falta completarlo
       const pagado = Number(dataVerificacion.montoPagado) || 0;
       const faltante = precioReal - pagado;
 

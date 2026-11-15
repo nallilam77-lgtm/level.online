@@ -362,9 +362,10 @@ export async function recargar(req, res) {
       anotarRecarga({ juego: 'roblox', cuenta: usuario.toLowerCase(), paquete: String(producto), idPedido, premio, precioLista, precio: montoACobrar ?? precioLista });
     }
 
-    // Una compra rechazada (pago no encontrado, ya usado, insuficiente...) cuenta como intento fallido.
-    // "Fallo técnico" no cuenta: el pago sí existía y quedó en proceso. Tampoco lo que falló en Central One.
-    if (data?.status !== 'success' && !data?.sinCulpa && !String(data?.message || '').toLowerCase().includes('fallo técnico')) {
+    // Una compra rechazada (pago no encontrado, ya usado...) cuenta como intento fallido.
+    // No cuentan: "fallo técnico" (el pago existía y quedó en proceso), lo que falló en Central One ni el
+    // pago insuficiente (desde 2026-11-15: el pago existe, solo falta completarlo).
+    if (data?.status !== 'success' && !data?.insuficiente && !data?.sinCulpa && !String(data?.message || '').toLowerCase().includes('fallo técnico')) {
       await registrarFallo(clavesLimite);
     }
 
