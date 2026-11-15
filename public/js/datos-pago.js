@@ -4,7 +4,7 @@
 //   { banco, telefono, cedula,            ← la cuenta predeterminada (lo que leían las páginas viejas)
 //     cuentas: [{ banco, telefono, cedula, aviso }], predeterminada: i }   ← las que se muestran
 // Con dos o más cuentas, DatosPago.selector() pinta "¿A qué banco pagas?" con la predeterminada marcada y
-// el aviso de cada una. Con `nota` (opcional, se escribe en el panel) pinta esa nota arriba de los bancos.
+// el aviso de la cuenta elegida. Con `nota` (opcional, se escribe en el panel) pinta esa nota arriba de los bancos.
 // (La "condición + casilla" que ocultaba los datos hasta aceptarla se quitó el 2026-11-15.)
 // Si Supabase no responde, se usa la copia vieja de Firestore (configuracion/pago_movil) para que la
 // página nunca quede sin datos de pago. Sin SDK: un fetch a la API REST (la página no espera librerías).
@@ -13,7 +13,7 @@
   const PROYECTO = 'levelupstore-87d4d';
   const CLAVE_WEB = 'AIzaSyBIdEh_HzzB8dnzG8qkPQYOIo2kSb_F6xQ'; // clave pública de la app web de Firebase
   const URL_FIRESTORE = `https://firestore.googleapis.com/v1/projects/${PROYECTO}/databases/(default)/documents/configuracion/pago_movil?key=${CLAVE_WEB}`;
-  const CSS = '/css/datos-pago.css?v=3';
+  const CSS = '/css/datos-pago.css?v=4';
 
   // Las tiendas pintan estos datos con innerHTML: solo letras, números, espacios y . - ( ) /
   const limpio = (v, max = 60) => String(v ?? '').replace(/[^\p{L}\p{N} .,\-()/]/gu, '').trim().slice(0, max);
@@ -118,6 +118,10 @@
         opciones.className = 'pm-opciones';
         opciones.setAttribute('role', 'group');
         opciones.setAttribute('aria-label', 'Banco al que vas a pagar');
+        // Aviso de la cuenta elegida (solo el de esa: el de BDT no sale con BDV marcado)
+        const aviso = document.createElement('p');
+        aviso.className = 'pm-aviso';
+        const mostrarAviso = (c) => { aviso.textContent = c.aviso || ''; aviso.hidden = !c.aviso; };
         const botones = cuentas.map((c) => {
           const b = document.createElement('button');
           b.type = 'button';
@@ -126,18 +130,14 @@
           b.setAttribute('aria-pressed', String(c === inicial));
           b.addEventListener('click', () => {
             botones.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+            mostrarAviso(c);
             alElegir(c);
           });
           return b;
         });
         opciones.append(...botones);
-        caja.append(titulo, opciones);
-        cuentas.filter((c) => c.aviso).forEach((c) => {
-          const aviso = document.createElement('p');
-          aviso.className = 'pm-aviso';
-          aviso.textContent = c.aviso;
-          caja.append(aviso);
-        });
+        mostrarAviso(inicial);
+        caja.append(titulo, opciones, aviso);
       }
       contenedor.parentNode.insertBefore(caja, contenedor);
     }

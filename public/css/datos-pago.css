@@ -20,6 +20,7 @@
   color: var(--text-main); background: var(--bg-deep); border-left: 3px solid var(--pm-acento);
 }
 .pm-aviso::before { content: 'ℹ️ '; }
+.pm-aviso[hidden] { display: none; }
 
 /* Nota para el cliente (panel → Pagos → "Nota para el cliente"), arriba de los bancos */
 .pm-nota {
