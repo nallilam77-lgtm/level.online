@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Pagos → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=29" defer></script>
+  <script src="/js/admin.js?v=30" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -64,6 +64,16 @@
           <div class="alerta-saldo" id="alertaSaldo" role="alert" hidden></div>
           <div id="cuentasSaldo"><p class="nota">Cargando…</p></div>
           <p class="nota">Con lo <strong>disponible</strong> se pagan los pedidos nuevos; lo <strong>retenido</strong> está en pedidos que se están entregando.</p>
+        </div>
+        <!-- Free Fire: pedir directo a Central One sin la hoja (configuracion "ff_modo"; api/_lib/juegos/freefire.js) -->
+        <div class="tarjeta">
+          <h2>Free Fire: cómo se piden las recargas</h2>
+          <form class="formulario" id="formModoFF" novalidate>
+            <label class="opcion-pm"><input type="radio" name="modoFF" value="central_one"> Directo a Central One (sin pasar por la hoja)</label>
+            <label class="opcion-pm"><input type="radio" name="modoFF" value="hoja"> Como antes: la hoja decide (Central One, pines o manual)</label>
+          </form>
+          <p class="nota"><strong>Directo</strong>: la recarga va del pago a Central One sin esperar turno en la hoja (se acaba el "Sistema ocupado"). La hoja sigue anotando cada venta en "finalizados" después; la pestaña "fazer_card" ya no se llena. Si un paquete no se puede pedir, la recarga va a <strong>Revisión</strong>. <strong>Como antes</strong>: lo que diga el menú de la hoja (🔀 Modo de recarga).</p>
+          <p class="mensaje-form" id="mensajeModoFF" role="status"></p>
         </div>
         <div class="tarjeta">
           <div class="fila-titulo">

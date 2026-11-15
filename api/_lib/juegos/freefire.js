@@ -12,7 +12,7 @@ import { preciosSoloSupabase } from '../precios.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
-import { supabaseActivo, rpc } from '../supabase.js';
+import { supabaseActivo, rpc, leer } from '../supabase.js';
 import { iniciosVE } from '../semana.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). verificar_pago va a Supabase (rápido),
@@ -283,6 +283,24 @@ async function prepararCentralOne({ apiKey, producto, id, paquete }) {
   }
 }
 
+// Interruptor del panel (admin.html → Resumen → "Free Fire: cómo se piden las recargas"), configuracion
+// "ff_modo" en Supabase: "central_one" = pedir DIRECTO a Central One sin pasar por la hoja (obtener_codigo);
+// "hoja" o sin valor = como antes (la hoja decide: pines, manual o API). Copia de 30 s; si Supabase no
+// responde, como antes.
+async function centralOneDirecto() {
+  if (!supabaseActivo()) return false;
+  try {
+    const { datos } = await conCache('ff:modo', async () => {
+      const filas = await leer('configuracion', { clave: 'ff_modo' }, 'valor');
+      return String((Array.isArray(filas) && filas[0]?.valor) || 'hoja');
+    }, { frescoMs: 30_000, respaldoMs: 10 * 60_000 });
+    return datos === 'central_one';
+  } catch (error) {
+    console.error('⚠️ Free Fire: no se pudo leer el modo de Supabase, se usa la hoja:', error.message);
+    return false;
+  }
+}
+
 // product_id del paquete al completar un pago (el paquete sale de "por_completar"). "" si no se puede leer.
 async function productoDelCatalogo(urlScript, clave) {
   try {
@@ -324,13 +342,25 @@ async function entregarRecarga(res, {
   // Modo API: qué se pediría a Central One. Se comprueba ANTES de obtener_codigo (catálogo, stock y
   // datos que pide el producto): si no se puede, en modo API el pedido va a "sin_codigo" con el motivo,
   // en vez de bloquear el pago por un pedido que Central One iba a rechazar. No se ha gastado nada.
-  const api = await prepararCentralOne({ apiKey: CENTRALONE_API_KEY, producto, id, paquete });
+  const [api, directo] = await Promise.all([prepararCentralOne({ apiKey: CENTRALONE_API_KEY, producto, id, paquete }), centralOneDirecto()]);
+
+  // Central One DIRECTO (interruptor del panel, desde 2026-11-15): la hoja no se toca hasta el cierre
+  // (sin candado ni "ocupado"). Si el paquete no se puede pedir, a revisión sin llamar a la API.
+  if (directo && !api.productos?.length) {
+    console.error(`❌ [${FASES.apiFreeFire}] no se puede pedir a Central One: ${api.motivo} | REF: ${referenciaCompleta}`);
+    await bloquear({
+      fase: FASES.apiFreeFire, noAplica: true,
+      motivo: `No se puede pedir a Central One (${api.motivo}). No se llamó a la API.`,
+      queHacer: 'no se cobró nada en Central One; hacer la recarga a mano o devolver el pago',
+    });
+    return res.status(202).json({ status: "error", message: "Fallo técnico momentáneo. Tu pago está verificado y la recarga quedó en revisión." });
+  }
 
   // ==========================================
-  // FASE 3: EXTRAER LOS CÓDIGOS DE LA HOJA
+  // FASE 3: EXTRAER LOS CÓDIGOS DE LA HOJA (no aplica con Central One directo)
   // ==========================================
-  let dataCodigos;
-  try {
+  let dataCodigos = directo ? { status: "success", pines: [], api: true } : null;
+  if (!directo) try {
     // manualSiNoHay: si no hay pines del paquete, recargas.gs anota el pedido en la pestaña
     // "sin_codigo" para hacerlo a mano y responde { manual: true } (al cliente: recarga exitosa)
     const pedirCodigos = () => llamarScript(URL_GOOGLE_SCRIPT, {

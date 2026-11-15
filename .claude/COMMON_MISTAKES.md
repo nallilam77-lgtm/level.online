@@ -89,6 +89,7 @@ Errores que ya ocurrieron (o casi) en Level Up. Revisar antes de tocar `api/` o 
 **Síntoma**: muchas recargas de Free Fire "En revisión" con la incidencia "Apps Script no entregó códigos: ⚠️ Sistema ocupado procesando otra transacción" (7 en un día, 5 en 20 minutos con mucho movimiento). El pago queda usado y la recarga hay que hacerla a mano.
 **Causa**: dos recargas a la vez compiten por el candado de recargas.gs; la que pierde recibe `{ status: "error", ocupado: true }` SIN que se haya hecho nada, y freefire.js lo trataba como "no entregó códigos".
 **Regla**: con v2, `obtener_codigo` es idempotente (idPedido): si responde `ocupado`, freefire.js lo repite durante `TIEMPOS.ocupadoMs` (20 s) antes de bloquear. Las que ya quedaron en revisión: panel → Revisión → "🔁 Hacer de nuevo" (_lib/revision.js).
+**Solución de fondo** (2026-11-15): panel → Resumen → "Free Fire: cómo se piden las recargas" = "Directo a Central One" (configuracion `ff_modo` = "central_one", `centralOneDirecto()` en freefire.js, copia de 30 s): la recarga NO llama a obtener_codigo (ni candado ni "ocupado"); solo registrar_finalizado toca la hoja, después de responder. En ese modo no hay fila en "fazer_card"/"asignaciones_pines" (anotarOrdenFazer no encuentra fila y no hace nada; el webhook manda estado_fazer igual y la hoja responde "no encontrado") y un paquete que no se puede pedir va a Revisión (bloquear) en vez de "sin_codigo". El menú 🔀 Modo de recarga de la hoja solo cuenta con "Como antes".
 
 ## 8a. `obtener_codigo` lento en modo API
 

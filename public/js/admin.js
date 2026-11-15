@@ -160,6 +160,23 @@
   // GET /api/juego?accion=saldo_centralone (Vercel tiene las llaves) y el último aviso de saldo que mandó
   // Central One al webhook (configuracion "centralone_saldo": balance.low, deposit.approved…).
   const dolares = (n) => (n === null || n === undefined ? '–' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+  // Free Fire: directo a Central One o como antes (configuracion "ff_modo"; Vercel lo lee cada 30 s)
+  const TEXTO_MODO_FF = { central_one: 'Directo a Central One (sin la hoja)', hoja: 'Como antes (la hoja decide)' };
+  async function cargarModoFF() {
+    const { data } = await cliente.from('configuracion').select('valor').eq('clave', 'ff_modo').maybeSingle();
+    const modo = (data && data.valor) === 'central_one' ? 'central_one' : 'hoja';
+    document.querySelectorAll('input[name="modoFF"]').forEach((r) => { r.checked = r.value === modo; });
+    $('mensajeModoFF').textContent = `En uso: ${TEXTO_MODO_FF[modo]}.`;
+  }
+  $('formModoFF').addEventListener('change', async (ev) => {
+    const modo = ev.target.value;
+    if (!TEXTO_MODO_FF[modo]) return;
+    if (!confirm(`¿Cambiar Free Fire a "${TEXTO_MODO_FF[modo]}"?\n\nSe aplica en menos de 1 minuto a las recargas nuevas.`)) { cargarModoFF(); return; }
+    const { error } = await cliente.from('configuracion').upsert({ clave: 'ff_modo', valor: modo, publico: false, actualizado: new Date().toISOString() }, { onConflict: 'clave' });
+    if (error) { console.error(error); alert('No se pudo guardar. Intenta de nuevo.'); }
+    cargarModoFF();
+  });
   async function cargarSaldo() {
     const caja = $('cuentasSaldo');
     try {
@@ -1773,7 +1790,7 @@
     if (error || esAdmin !== true) return estado('Esta cuenta no es administradora. Entra con la cuenta correcta.', true);
     $('panelEstado').hidden = true;
     $('panel').hidden = false;
-    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarAlarma().catch(() => {})]);
+    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarAlarma().catch(() => {}), cargarModoFF().catch(() => {})]);
     escuchar();
   })();
 })();
