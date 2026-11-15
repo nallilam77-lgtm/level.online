@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Pagos → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=31" defer></script>
+  <script src="/js/admin.js?v=32" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -175,6 +175,15 @@
           </div>
           <p class="nota">Recargas en revisión, con problema o en proceso hace más de 1 hora, de todas las tiendas. Cuando la resuelvas, el cliente lo ve en su perfil al instante. <strong>Ya no hace falta revisar la pestaña "errores" de cada hoja.</strong></p>
           <ul class="pedidos" id="listaRevision"></ul>
+        </div>
+        <!-- Premios de la ruleta (supabase/ruleta.sql, tabla ruleta_giros) -->
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Ruleta: premios por entregar</h2>
+            <button type="button" class="btn-ver" id="actualizarRuleta">Actualizar</button>
+          </div>
+          <ul class="pedidos" id="listaRuleta"></ul>
+          <p class="nota" id="notaRuleta"></p>
         </div>
         <div class="tarjeta">
           <h2>Resueltas hace poco</h2>

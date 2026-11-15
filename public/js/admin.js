@@ -113,7 +113,7 @@
     if (b.dataset.seccion === 'creadores') cargarCodigos();
     if (b.dataset.seccion === 'precios') cargarPrecios();
     if (b.dataset.seccion === 'roblox') cargarRoblox();
-    if (b.dataset.seccion === 'revision') cargarRevision();
+    if (b.dataset.seccion === 'revision') { cargarRevision(); cargarRuleta().catch(() => {}); }
     if (b.dataset.seccion === 'pagos') { cargarPagos(); cargarCuentasPm(); }
   }));
 
@@ -1459,6 +1459,46 @@
     return acciones;
   }
 
+  // ---------------------------------------------------------------- ruleta (supabase/ruleta.sql)
+  // Ganadores de los últimos 30 días: los que faltan por entregar arriba, con "Ya lo entregué"
+  async function cargarRuleta() {
+    const lista = $('listaRuleta');
+    const desde = new Date(Date.now() - 30 * 864e5).toISOString();
+    const [{ data, error }, { count }] = await Promise.all([
+      cliente.from('ruleta_giros').select('id_pedido,juego,id_jugador,referencia,premio,entregado,creado')
+        .eq('gano', true).gte('creado', desde).order('entregado', { ascending: false, nullsFirst: true }).order('creado', { ascending: false }).limit(50),
+      cliente.from('ruleta_giros').select('id_pedido', { count: 'exact', head: true }).gte('creado', iniciosVE().dia.toISOString()),
+    ]);
+    if (error) {
+      console.error(error);
+      lista.replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/ruleta.sql?'));
+      return;
+    }
+    $('notaRuleta').textContent = `Giros de hoy: ${count ?? 0}. Cada recarga completada gira una vez (1 % de ganar).`;
+    lista.replaceChildren();
+    if (!data.length) { lista.append(el('li', 'vacio', 'Nadie ha ganado en los últimos 30 días.')); return; }
+    data.forEach((g) => {
+      const li = el('li', 'pedido' + (g.entregado ? '' : ' revision'));
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', `${JUEGOS[g.juego] || g.juego} · ${g.premio}`),
+        el('span', 'etiqueta ' + (g.entregado ? 'etiqueta--completado' : 'etiqueta--incompleto'), g.entregado ? 'Entregado' : 'Por entregar'));
+      li.append(cabeza, el('span', '', `ID ${g.id_jugador} · ref. …${g.referencia} · ganó ${fecha(g.creado)}${g.entregado ? ` · entregado ${fecha(g.entregado)}` : ''}`));
+      if (!g.entregado) {
+        const acciones = el('div', 'acciones-cuenta');
+        acciones.append(boton('✅ Ya lo entregué', 'btn-ver btn-pagar', async (b) => {
+          if (!confirm(`¿Ya entregaste ${g.premio} al ID ${g.id_jugador} (${JUEGOS[g.juego] || g.juego})?`)) return;
+          b.disabled = true;
+          const { error: e } = await cliente.from('ruleta_giros').update({ entregado: new Date().toISOString() }).eq('id_pedido', g.id_pedido);
+          if (e) { b.disabled = false; alert('No se pudo guardar.'); return; }
+          cargarRuleta();
+        }));
+        li.append(acciones);
+      }
+      lista.append(li);
+    });
+  }
+  $('actualizarRuleta').addEventListener('click', cargarRuleta);
+
   // ---------------------------------------------------------------- revisión: Central One
   const RECARGA_CENTRAL_ONE = new Set(['freefire', 'bloodstrike', 'mobilelegends']);
   const ESTADO_CO = { completed: 'entregado', delivered: 'entregado', failed: 'falló', cancelled: 'cancelado', canceled: 'cancelado',
@@ -1548,7 +1588,7 @@
   // En la tienda el cliente elige a qué banco paga (la predeterminada viene marcada) y ve el aviso de cada
   // cuenta. Las dos se publican en UNA petición. Solo administradores escriben (RLS).
   const CUENTAS_PM = 2;
-  const AVISO_VENEZUELA = 'Elige Venezuela solo si vas a pagar desde Mercantil, UBI o Banco del Tesoro.';
+  const AVISO_VENEZUELA = 'Elige Venezuela solo si vas a pagar desde Mercantil, UBI, Banco del Tesoro o Bancamiga.';
   let cuentasPm = [];
   let predeterminadaPm = 0;
   async function cargarCuentasPm() {

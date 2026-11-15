@@ -1,27 +1,23 @@
-import { llamarScript, LECTURA_APPS_SCRIPT } from './_lib/externo.js';
+import { supabaseActivo, rpc } from './_lib/supabase.js';
 
-// La ruleta es un extra: si su Apps Script no está configurado o no responde,
-// se avisa al cliente con un 503 claro y la compra no se ve afectada (nunca 500).
-const JUEGOS_PERMITIDOS = ['Free Fire', 'Blood Strike', 'Roblox', 'Mobile Legends'];
+// RULETA (desde 2026-11-15 en Supabase: supabase/ruleta.sql, función ruleta_girar). Antes usaba el Apps
+// Script de la ruleta y la pestaña "pagos" de la hoja, que desde el 2026-11-14 ya no recibe pagos.
+// Cada recarga completada (o en camino) de los últimos 3 días gira UNA vez: el cliente manda su ID y los
+// 5 dígitos de la referencia, los mismos de la recarga. El premio se sortea aquí; Supabase lo anota en un
+// solo paso y, si el mismo jugador repite el giro, devuelve el premio ya anotado.
+// La ruleta es un extra: si algo falla se responde 503 claro y la compra no se ve afectada (nunca 500).
+const JUEGOS = { 'Free Fire': 'freefire', 'Blood Strike': 'bloodstrike', 'Roblox': 'roblox', 'Mobile Legends': 'mobilelegends' };
 const MENSAJE_NO_DISPONIBLE = "La ruleta no está disponible en este momento. Tu recarga no se ve afectada; intenta girar más tarde.";
 const PREMIO_GANADOR = "100 Diamantes 💎";
 const PREMIO_VACIO = "Vacío ❌";
 // Probabilidad de ganar en cada giro, en % (se sortea solo en el servidor)
 const PROBABILIDAD_GANAR = 1;
-
-// URL del Apps Script de la ruleta (trim: al pegarla en Vercel se cuelan espacios o saltos de línea)
-function obtenerUrlRuleta() {
-    const url = (process.env.SCRIPT_RULETA_URL || "").trim();
-    if (!url) {
-        console.error("❌ Falta la variable SCRIPT_RULETA_URL en Vercel (Settings > Environment Variables).");
-        return null;
-    }
-    if (!url.startsWith("https://")) {
-        console.error("❌ SCRIPT_RULETA_URL debe ser la URL https del Apps Script (https://script.google.com/macros/s/.../exec).");
-        return null;
-    }
-    return url;
-}
+const MENSAJES = {
+    sin_completar: "❌ Esa recarga todavía no se completó. Si quedó en revisión, escríbenos por WhatsApp.",
+    en_cierre: "⏳ Tu recarga se está terminando de registrar. Intenta girar de nuevo en unos segundos.",
+    no_existe: "❌ No encontramos una recarga completada con ese ID y esa referencia en los últimos 3 días.",
+};
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -29,98 +25,54 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { id, referencia, juego } = req.body || {};
+        const { id, referencia, juego = 'Free Fire' } = req.body || {};
 
         if (!referencia || !id) {
             return res.status(400).json({ status: "error", message: "Faltan datos de validación para la ruleta." });
         }
         // Mismos formatos que exigen los endpoints de recarga (ID numérico o usuario de Roblox)
-        if (!/^[A-Za-z0-9_]{2,30}$/.test(String(id)) || !/^\d{5}$/.test(String(referencia))
-            || (juego !== undefined && !JUEGOS_PERMITIDOS.includes(juego))) {
+        if (!/^[A-Za-z0-9_]{2,30}$/.test(String(id)) || !/^\d{5}$/.test(String(referencia)) || !Object.hasOwn(JUEGOS, juego)) {
             return res.status(400).json({ status: "error", message: "Datos con formato inválido para la ruleta." });
         }
-
-        // 1. Primero consultamos/enviamos a Google Apps Script para que valide
-        // si la referencia ya usó su giro de ruleta (esto lo programamos en tu GAS).
-        const URL_GOOGLE_SCRIPT = obtenerUrlRuleta();
-        if (!URL_GOOGLE_SCRIPT) {
+        if (!supabaseActivo()) {
+            console.error("❌ ruleta: Supabase no está configurado en Vercel");
             return res.status(503).json({ status: "error", message: MENSAJE_NO_DISPONIBLE });
         }
 
         // El premio se sortea en el servidor: Math.random() * 100 va de 0 a 99,99…, así que "< 1" es el 1 %
-        let ganoPremio = Math.random() * 100 < PROBABILIDAD_GANAR;
-        let premioStr = ganoPremio ? PREMIO_GANADOR : PREMIO_VACIO;
-
-        // apps-script/ruleta.gs es idempotente: si la misma referencia y el mismo jugador repiten
-        // el giro, devuelve el premio ya anotado. Por eso se puede reintentar cuando Google falla o
-        // tarda al despertar (antes, un solo fallo dejaba al cliente sin su giro).
-        // llamarScript añade el token (SCRIPT_RECARGAS_TOKEN), que ruleta.gs exige
-        const cuerpo = {
-            accion: "girar_ruleta",
-            referencia: String(referencia),
-            id_jugador: String(id),
-            juego: juego || "Free Fire",
-            premio: premioStr
-        };
-        const inicio = Date.now();
-        let resultadoGAS = await llamarScript(URL_GOOGLE_SCRIPT, cuerpo, LECTURA_APPS_SCRIPT);
-
-        // El pago sigue "En proceso": la recarga se cierra en segundo plano justo después de responder
-        // al cliente (cerrarEnSegundoPlano). Se repite una vez, solo si cabe en maxDuration (30 s):
-        // como mucho 8 s de la primera llamada + 5 s de espera + 12 s del reintento.
-        if (resultadoGAS?.enCierre && Date.now() - inicio < 8000) {
-            await new Promise((r) => setTimeout(r, 5000));
-            resultadoGAS = await llamarScript(URL_GOOGLE_SCRIPT, cuerpo, { tiempoMs: 12000 });
+        const gano = Math.random() * 100 < PROBABILIDAD_GANAR;
+        const girar = () => rpc('ruleta_girar', {
+            p_juego: JUEGOS[juego], p_id_jugador: String(id), p_ultimos5: String(referencia),
+            p_premio: gano ? PREMIO_GANADOR : PREMIO_VACIO, p_gano: gano,
+        });
+        let r = await girar();
+        // La fila de la recarga se guarda justo después de responder al cliente: se espera y se repite
+        // (caben en los 30 s de maxDuration)
+        for (const espera of [3000, 5000]) {
+            if (r?.motivo !== 'en_cierre') break;
+            await esperar(espera);
+            r = await girar();
         }
 
-        if (resultadoGAS?.enCierre) {
-            return res.status(503).json({ status: "error", message: resultadoGAS.message || "Tu recarga se está terminando de registrar. Intenta girar de nuevo en unos segundos." });
+        if (!r?.ok) {
+            const codigo = r?.motivo === 'en_cierre' ? 503 : 403;
+            return res.status(codigo).json({ status: "error", message: MENSAJES[r?.motivo] || MENSAJES.no_existe });
         }
 
-        if (resultadoGAS?.ocupado) {
-            return res.status(503).json({ status: "error", message: "La ruleta está ocupada. Espera unos segundos e intenta de nuevo." });
-        }
-
-        // Si Google Script detecta que la referencia ya jugó o hubo un error de BD
-        if (resultadoGAS?.status === "error") {
-            return res.status(403).json({ 
-                status: "error", 
-                message: resultadoGAS.message || "Esta referencia ya participó en la ruleta o no es válida." 
-            });
-        }
-
-        // Si el Google Script determinó que ya había girado previamente (por seguridad extra)
-        if (resultadoGAS?.yaGiro) {
-            return res.status(400).json({
-                status: "error",
-                message: "Esta referencia de pago ya consumió su intento en la ruleta."
-            });
-        }
-
-        // Reintento de un giro ya hecho: manda el premio que quedó anotado, no el recién sorteado
-        if (resultadoGAS?.repetido && resultadoGAS.premio) {
-            premioStr = String(resultadoGAS.premio);
-            ganoPremio = premioStr === PREMIO_GANADOR;
-        }
-
-        // 2. Calcular grados para la animación de la ruleta visual en el cliente
-        // Suponiendo que 180deg es el premio y 0deg es vacío (según tu diseño conic-gradient)
+        const premio = String(r.premio);
+        const ganador = premio === PREMIO_GANADOR;
+        if (ganador && !r.repetido) console.info(`🎉 ruleta: ganó ${premio} · ${juego} · ID ${id}`);
+        // Grados para la animación (180° = premio, 0° = vacío, según el conic-gradient de las tiendas)
         const vueltasBase = 1440; // 4 vueltas completas
-        const gradosDestino = ganoPremio ? (vueltasBase + 180) : (vueltasBase + 0);
-
         return res.status(200).json({
             status: "success",
-            ganador: ganoPremio,
-            premio: premioStr,
-            gradosDestino: gradosDestino
+            ganador,
+            premio,
+            gradosDestino: vueltasBase + (ganador ? 180 : 0),
         });
-
     } catch (error) {
-        // Apps Script lento (más de 20 s con reintento), caído o devolviendo HTML, u otro fallo inesperado
+        // Supabase caído, lento o sin la función (falta correr supabase/ruleta.sql)
         console.error("Error en ruleta.js:", error.message);
-        const mensaje = error.tiempoAgotado
-            ? "La ruleta está tardando en responder. Espera un minuto e intenta de nuevo; si te dice que ya giraste, escríbenos por WhatsApp."
-            : MENSAJE_NO_DISPONIBLE;
-        return res.status(503).json({ status: "error", message: mensaje });
+        return res.status(503).json({ status: "error", message: MENSAJE_NO_DISPONIBLE });
     }
 }

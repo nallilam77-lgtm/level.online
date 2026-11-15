@@ -4,7 +4,7 @@
 //   { banco, telefono, cedula,            ← la cuenta predeterminada (lo que leían las páginas viejas)
 //     cuentas: [{ banco, telefono, cedula, aviso }], predeterminada: i }   ← las que se muestran
 // Con dos o más cuentas, DatosPago.selector() pinta "¿A qué banco pagas?" con la predeterminada marcada y
-// el aviso de cada una (p. ej. "Elige Venezuela solo si pagas desde Mercantil, UBI o Banco del Tesoro").
+// el aviso de cada una (p. ej. "Elige Venezuela solo si pagas desde Mercantil, UBI, Banco del Tesoro o Bancamiga").
 // Si Supabase no responde, se usa la copia vieja de Firestore (configuracion/pago_movil) para que la
 // página nunca quede sin datos de pago. Sin SDK: un fetch a la API REST (la página no espera librerías).
 (function () {
