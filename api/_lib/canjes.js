@@ -17,7 +17,7 @@ import { randomUUID, randomInt, createHash, createHmac, timingSafeEqual } from '
 import { supabaseActivo, rpc, guardar } from './supabase.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache } from './externo.js';
 import { datosParaPedido, crearPedidoCentralOne } from './centralone.js';
-import { obtenerIp, minutosBloqueado, registrarFallo } from './limitador.js';
+import { obtenerIp, minutosBloqueado, registrarFallo, permitirUso } from './limitador.js';
 import { anotarIncidencia } from './incidencias.js';
 
 const PRODUCTO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -38,6 +38,9 @@ function normalizarCodigo(texto) {
 // (el tiempo sale en la lista) y frena a quien intente canjear con un programa sin mirar.
 // El reto va FIRMADO (HMAC con una llave derivada de SCRIPT_RECARGAS_TOKEN): la página no puede inventarlo
 // ni cambiar los números. El tiempo lo mide el servidor: desde que entregó el reto hasta que llega el canje.
+// Desde 2026-11-15 (tarde) el ID se comprueba AL PEDIR el reto (POST { id }) y va dentro de la firma con el
+// nombre del jugador: al terminar las sumas solo queda tomar el código (milisegundos), así gana de verdad
+// el que resolvió primero y no el que tuvo el validador más rápido.
 // -------------------------------------------------------------------------
 const SUMAS_POR_RETO = 3;
 const RETO_VENCE_MS = 2 * 60_000;
@@ -61,7 +64,8 @@ function leerReto(token) {
     const datos = JSON.parse(Buffer.from(cuerpo, 'base64url').toString('utf8'));
     if (!Array.isArray(datos.s) || datos.s.length !== SUMAS_POR_RETO || !Number.isFinite(datos.t)) return null;
     if (Date.now() - datos.t > RETO_VENCE_MS) return null;
-    return { sumas: datos.s, emitido: datos.t };
+    // i / p: ID ya comprobado y nombre del jugador (los retos pedidos por GET, de la página anterior, no los traen)
+    return { sumas: datos.s, emitido: datos.t, id: typeof datos.i === 'string' ? datos.i : '', nombre: typeof datos.p === 'string' ? datos.p : '' };
   } catch {
     return null;
   }
@@ -83,18 +87,48 @@ function opcionesDe(total) {
   return lista;
 }
 
-// GET /api/juego?accion=reto_canje → { reto (firmado), sumas: [{ a, b, opciones }] }
-export function retoCanje(req, res) {
+// ID de Free Fire → { valido, nombre } (el mismo validador de la tienda). Lanza si no responde.
+async function comprobarId(id) {
+  const v = await llamarScript(String(process.env.SCRIPT_VALIDADOR_URL || '').trim(), { id, juego: 'freefire' }, LECTURA_APPS_SCRIPT);
+  return { valido: v?.valid === true, nombre: String(v?.player_name || '').replace(/[<>]/g, '').trim().slice(0, 40) };
+}
+
+// POST /api/juego?accion=reto_canje { id } → comprueba el ID y da { reto (firmado con el ID y el nombre),
+// nombre, sumas: [{ a, b, opciones }] }. GET (la página anterior, en caché unos minutos): reto sin ID.
+export async function retoCanje(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  if (req.method !== 'GET') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
-  if (!llaveReto()) {
-    console.error('🚨 canjes: falta SCRIPT_RECARGAS_TOKEN en Vercel (firma del reto)');
+  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
+  if (!llaveReto() || !String(process.env.SCRIPT_VALIDADOR_URL || '').trim()) {
+    console.error('🚨 canjes: falta SCRIPT_RECARGAS_TOKEN o SCRIPT_VALIDADOR_URL en Vercel (reto)');
     return res.status(503).json({ status: 'error', message: NO_DISPONIBLE });
   }
+  const datos = { t: 0, n: randomUUID() };
+  let nombre = '';
+  if (req.method === 'POST') {
+    const id = String(req.body?.id ?? '').trim();
+    if (!/^\d{5,15}$/.test(id)) return res.status(400).json({ status: 'error', message: 'Escribe tu ID de Free Fire (solo números).' });
+    // Cada reto consulta el validador: tope por IP (no se gasta en quien pide retos sin parar)
+    const minutos = await permitirUso(`reto:${obtenerIp(req)}`);
+    if (minutos > 0) return res.status(429).json({ status: 'error', message: `Demasiados intentos. Espera ${minutos} minutos.` });
+    try {
+      const v = await comprobarId(id);
+      if (!v.valido) return res.status(400).json({ status: 'error', message: '❌ Ese ID no existe en Free Fire (servidor LATAM). Revísalo y vuelve a intentar.' });
+      nombre = v.nombre;
+    } catch (error) {
+      console.error('⚠️ canjes: el validador no respondió al pedir el reto:', error.message);
+      return res.status(503).json({ status: 'error', message: 'No pudimos comprobar tu ID ahora. Intenta en un minuto.' });
+    }
+    datos.i = id;
+    datos.p = nombre;
+  }
   const sumas = Array.from({ length: SUMAS_POR_RETO }, () => [randomInt(2, 10), randomInt(2, 10)]);
+  // El reloj empieza AHORA, con el ID ya comprobado
+  datos.s = sumas;
+  datos.t = Date.now();
   return res.status(200).json({
     status: 'success',
-    reto: firmarReto({ s: sumas, t: Date.now(), n: randomUUID() }),
+    reto: firmarReto(datos),
+    nombre,
     sumas: sumas.map(([a, b]) => ({ a, b, opciones: opcionesDe(a + b) })),
   });
 }
@@ -142,17 +176,20 @@ export async function canjear(req, res) {
     return res.status(400).json({ status: 'error', reto: true, message: '🤖 Demasiado rápido para ser humano. Inténtalo otra vez.' });
   }
 
-  // 2. El ID existe en Free Fire (y su nombre, que se muestra en la lista de canjes)
-  let nombre = '';
-  try {
-    const v = await llamarScript(urlValidador, { id, juego: 'freefire' }, LECTURA_APPS_SCRIPT);
-    if (v?.valid !== true) {
-      return res.status(400).json({ status: 'error', message: '❌ Ese ID no existe en Free Fire (servidor LATAM). Revísalo y vuelve a intentar.' });
+  // 2. El ID existe en Free Fire (y su nombre, que se muestra en la lista de canjes). Normalmente ya se
+  //    comprobó al pedir el reto y viene firmado dentro: aquí no se espera nada.
+  let nombre = reto.nombre;
+  if (reto.id) {
+    if (reto.id !== id) return res.status(400).json({ status: 'error', reto: true, message: 'El ID cambió después de empezar. Vuelve a tocar Canjear.' });
+  } else {
+    try {
+      const v = await comprobarId(id);
+      if (!v.valido) return res.status(400).json({ status: 'error', message: '❌ Ese ID no existe en Free Fire (servidor LATAM). Revísalo y vuelve a intentar.' });
+      nombre = v.nombre;
+    } catch (error) {
+      console.error('⚠️ canjes: el validador no respondió:', error.message);
+      return res.status(503).json({ status: 'error', message: 'No pudimos comprobar tu ID ahora. Tu código sigue libre: intenta en un minuto.' });
     }
-    nombre = String(v.player_name || '').replace(/[<>]/g, '').trim().slice(0, 40);
-  } catch (error) {
-    console.error('⚠️ canjes: el validador no respondió:', error.message);
-    return res.status(503).json({ status: 'error', message: 'No pudimos comprobar tu ID ahora. Tu código sigue libre: intenta en un minuto.' });
   }
 
   // 3. Tomar el código (solo uno gana)

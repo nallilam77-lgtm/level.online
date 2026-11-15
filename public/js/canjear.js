@@ -95,8 +95,8 @@
       boton.classList.add('mal');
       $('retoOpciones').querySelectorAll('button').forEach((x) => { x.disabled = true; });
       $('retoAyuda').textContent = `❌ ${a} + ${b} = ${a + b}. ¡Otra vez, rápido!`;
-      const fin = reto.alTerminar;
-      setTimeout(() => { if (reto) empezarReto(fin); }, 900);
+      const { alTerminar: fin, id: idReto } = reto;
+      setTimeout(() => { if (reto) empezarReto(idReto, fin); }, 900);
       return;
     }
     reto.respuestas.push(n);
@@ -110,25 +110,36 @@
     alTerminar(token, respuestas);
   }
 
-  async function empezarReto(alTerminar) {
+  // El ID se comprueba al pedir el reto (el servidor lo firma dentro): al terminar las sumas solo queda tomar
+  // el código, así gana el que resolvió primero. "turno" descarta un reto que llega después de Cancelar.
+  let turno = 0;
+  async function empezarReto(id, alTerminar) {
+    const miTurno = ++turno;
+    reto = null;
     $('reto').hidden = false;
     $('retoPregunta').textContent = '…';
     $('retoOpciones').replaceChildren();
-    $('retoAyuda').textContent = 'Resuelve las 3 sumas tocando la respuesta. El más rápido se lleva el código.';
+    $('retoAyuda').textContent = '🔎 Comprobando tu ID de Free Fire…';
+    [...$('retoPasos').children].forEach((s) => s.classList.remove('hecho'));
     $('retoReloj').textContent = '0,0 s';
     clearInterval(reloj);
     try {
-      const r = await (await fetch('/api/juego?accion=reto_canje', { cache: 'no-store' })).json();
+      const r = await (await fetch('/api/juego?accion=reto_canje', {
+        method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+      })).json();
+      if (miTurno !== turno || $('reto').hidden) return;   // canceló mientras se comprobaba
       if (r.status !== 'success') throw new Error(r.message);
-      reto = { token: r.reto, sumas: r.sumas, paso: 0, respuestas: [], inicio: performance.now(), alTerminar };
+      $('retoAyuda').textContent = `${r.nombre ? `¡Hola, ${r.nombre}! ` : ''}Resuelve las 3 sumas tocando la respuesta. El más rápido se lleva el código.`;
+      reto = { token: r.reto, sumas: r.sumas, paso: 0, respuestas: [], inicio: performance.now(), alTerminar, id };
       reloj = setInterval(() => { if (reto) $('retoReloj').textContent = segundos(performance.now() - reto.inicio); }, 100);
       pintarPaso();
     } catch (e) {
+      if (miTurno !== turno) return;
       cerrarReto();
       mensaje(e.message || 'No se pudo cargar el reto. Revisa tu internet e intenta de nuevo.', 'error');
     }
   }
-  $('retoCancelar').addEventListener('click', cerrarReto);
+  $('retoCancelar').addEventListener('click', () => { turno++; cerrarReto(); });
   document.addEventListener('keydown', (ev) => {
     if (!reto) return;
     if (ev.key === 'Escape') cerrarReto();
@@ -142,7 +153,7 @@
     if (!/^\d{5,15}$/.test(id)) { mensaje('Escribe tu ID de Free Fire (solo números).', 'error'); return; }
     $('mensaje').hidden = true;
     $('btnCanjear').disabled = true;
-    empezarReto((token, respuestas) => enviarCanje(codigo, id, token, respuestas));
+    empezarReto(id, (token, respuestas) => enviarCanje(codigo, id, token, respuestas));
   });
 
   async function enviarCanje(codigo, id, token, respuestas) {
