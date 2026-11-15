@@ -21,6 +21,7 @@
   --fondo-ok: rgba(57, 255, 20, 0.08);
   --fondo-error: rgba(251, 113, 133, 0.08);
   --fondo-aviso: rgba(251, 191, 36, 0.08);
+  --capa-reto: rgba(11, 17, 32, 0.92);
   --glass-blur: 12px;
   --radius-card: 16px;
 }
@@ -106,3 +107,33 @@ main { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; display: grid;
 @media (min-width: 640px) {
   main { gap: 32px; padding-top: 48px; }
 }
+
+/* Reto de 3 sumas antes de canjear */
+.reto { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: var(--capa-reto); }
+.reto[hidden] { display: none; }
+.reto-caja { width: min(100%, 420px); text-align: center; }
+.reto-cabeza { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.reto-cabeza h2 { font-size: 18px; color: var(--accent-neon); }
+.reto-reloj { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 20px; color: var(--text-main); font-variant-numeric: tabular-nums; }
+.reto-pasos { display: flex; justify-content: center; gap: 8px; }
+.reto-pasos span { width: 32px; height: 6px; border-radius: 999px; background: var(--border-glass); transition: background 0.2s; }
+.reto-pasos span.hecho { background: var(--accent-neon); }
+.reto-pregunta { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: clamp(36px, 12vw, 52px); letter-spacing: 1px; }
+.reto-opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.reto-opcion {
+  min-height: 64px; border-radius: 16px; cursor: pointer; border: 1px solid var(--border-glass); background: var(--bg-deep);
+  color: var(--text-main); font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 26px;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.1s;
+}
+.reto-opcion:hover, .reto-opcion:focus-visible { border-color: var(--accent-cyan); box-shadow: var(--shadow-glow-hover); }
+.reto-opcion:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+.reto-opcion:active { transform: scale(0.96); }
+.reto-opcion.mal { border-color: var(--peligro); background: var(--fondo-error); }
+.reto-opcion:disabled { cursor: default; }
+.btn-sec {
+  justify-self: center; min-height: 44px; padding: 0 20px; border-radius: 999px; cursor: pointer; background: transparent;
+  color: var(--text-muted); border: 1px solid var(--border-glass); font-weight: 800; font-size: 13px;
+}
+.btn-sec:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+/* Tiempo del reto en la lista de canjes */
+.canje-tiempo { color: var(--accent-cyan); font-weight: 800; }

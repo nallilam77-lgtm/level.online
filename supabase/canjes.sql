@@ -24,6 +24,8 @@ create table if not exists public.codigos_regalo (
   estado      text not null default 'libre' check (estado in ('libre', 'entregando', 'entregado', 'revisar'))
 );
 create index if not exists codigos_regalo_canjeados on public.codigos_regalo (canjeado desc) where canjeado is not null;
+-- Cuánto tardó en resolver el reto de sumas (desde 2026-11-15; lo mide el servidor): se muestra en la lista
+alter table public.codigos_regalo add column if not exists tiempo_ms integer;
 
 alter table public.codigos_regalo enable row level security;
 revoke all on public.codigos_regalo from anon, authenticated;
@@ -86,7 +88,9 @@ grant execute on function public.admin_canje_borrar(text) to authenticated;
 -- Canje (solo el servidor: api/_lib/canjes.js con la llave secreta)
 -- ---------------------------------------------------------------------
 -- Toma el código si está libre. { ok, paquete } · { ok: false, motivo: 'no_existe' | 'ya_canjeado' }
-create or replace function public.canje_tomar(p_codigo text, p_id_jugador text, p_nombre text, p_id_pedido text)
+-- p_tiempo_ms: lo que tardó en el reto de sumas (opcional: así el servidor viejo sigue funcionando)
+drop function if exists public.canje_tomar(text, text, text, text);
+create or replace function public.canje_tomar(p_codigo text, p_id_jugador text, p_nombre text, p_id_pedido text, p_tiempo_ms integer default null)
 returns jsonb
 language plpgsql
 security definer
@@ -97,7 +101,8 @@ declare
 begin
   update codigos_regalo
      set canjeado = now(), id_jugador = left(p_id_jugador, 20), nombre = left(coalesce(p_nombre, ''), 60),
-         id_pedido = left(p_id_pedido, 80), estado = 'entregando'
+         id_pedido = left(p_id_pedido, 80), estado = 'entregando',
+         tiempo_ms = case when p_tiempo_ms between 0 and 600000 then p_tiempo_ms end
    where codigo = upper(trim(p_codigo)) and canjeado is null
   returning paquete into v_paquete;
   if v_paquete is not null then return jsonb_build_object('ok', true, 'paquete', v_paquete); end if;
@@ -115,7 +120,7 @@ language sql
 security definer
 set search_path = public
 as $$
-  update codigos_regalo set canjeado = null, id_jugador = null, nombre = null, id_pedido = null, estado = 'libre'
+  update codigos_regalo set canjeado = null, id_jugador = null, nombre = null, id_pedido = null, estado = 'libre', tiempo_ms = null
    where codigo = upper(trim(p_codigo)) and id_pedido = p_id_pedido;
 $$;
 
@@ -130,10 +135,10 @@ as $$
    where codigo = upper(trim(p_codigo)) and id_pedido = p_id_pedido and p_estado in ('entregando', 'entregado', 'revisar');
 $$;
 
-revoke execute on function public.canje_tomar(text, text, text, text) from public, anon, authenticated;
+revoke execute on function public.canje_tomar(text, text, text, text, integer) from public, anon, authenticated;
 revoke execute on function public.canje_liberar(text, text) from public, anon, authenticated;
 revoke execute on function public.canje_estado(text, text, text) from public, anon, authenticated;
-grant execute on function public.canje_tomar(text, text, text, text) to service_role;
+grant execute on function public.canje_tomar(text, text, text, text, integer) to service_role;
 grant execute on function public.canje_liberar(text, text) to service_role;
 grant execute on function public.canje_estado(text, text, text) to service_role;
 
@@ -160,8 +165,9 @@ create trigger canje_recarga_entregada after update of estado on public.recargas
 -- ---------------------------------------------------------------------
 -- Lo que ve cualquiera en canjear.html: los últimos 30 canjes. El ID y el código van tapados.
 -- ---------------------------------------------------------------------
+drop function if exists public.canjes_publicos();
 create or replace function public.canjes_publicos()
-returns table (codigo text, paquete text, nombre text, id_jugador text, canjeado timestamptz, entregado boolean)
+returns table (codigo text, paquete text, nombre text, id_jugador text, canjeado timestamptz, entregado boolean, tiempo_ms integer)
 language sql
 stable
 security definer
@@ -169,7 +175,7 @@ set search_path = public
 as $$
   select case when c.codigo like 'LEVELUP-%' then left(c.codigo, 10) || '••••••' else left(c.codigo, 5) || '••-••••' end, c.paquete, coalesce(nullif(c.nombre, ''), 'Jugador'),
          left(c.id_jugador, 3) || repeat('•', greatest(length(c.id_jugador) - 5, 2)) || right(c.id_jugador, 2),
-         c.canjeado, c.estado = 'entregado'
+         c.canjeado, c.estado = 'entregado', c.tiempo_ms
     from codigos_regalo c
    where c.canjeado is not null
    order by c.canjeado desc

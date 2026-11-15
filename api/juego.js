@@ -19,6 +19,7 @@ export default async function handler(req, res) {
     // Códigos de regalo (canjear.html; _lib/canjes.js): canjear (público, con límite de intentos) y la lista de canjes
     if (req.query.accion === 'canjear') return (await import('./_lib/canjes.js')).canjear(req, res);
     if (req.query.accion === 'canjes') return (await import('./_lib/canjes.js')).canjesPublicos(req, res);
+    if (req.query.accion === 'reto_canje') return (await import('./_lib/canjes.js')).retoCanje(req, res);
     // Panel admin → Revisión: verificar en Central One y rehacer una recarga (solo administrador; _lib/revision.js)
     if (req.query.accion === 'revision_verificar') return (await import('./_lib/revision.js')).verificarRevision(req, res);
     if (req.query.accion === 'revision_rehacer') return (await import('./_lib/revision.js')).rehacerRevision(req, res);

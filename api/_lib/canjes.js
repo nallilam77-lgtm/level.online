@@ -13,7 +13,7 @@
 //   5. Rechazo de Central One (no cobró) → canje_liberar: el código vuelve a quedar libre.
 //      Incierto (pudo crearse) → el código queda "revisar" y la recarga en Revisión.
 // =========================================================================
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomInt, createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { supabaseActivo, rpc, guardar } from './supabase.js';
 import { llamarScript, LECTURA_APPS_SCRIPT, conCache } from './externo.js';
 import { datosParaPedido, crearPedidoCentralOne } from './centralone.js';
@@ -31,6 +31,72 @@ function normalizarCodigo(texto) {
   if (nuevo) return `LEVELUP-${nuevo[1]}`;
   const viejo = t.match(/^LU([A-Z0-9]{4})([A-Z0-9]{4})$/);
   return viejo ? `LU-${viejo[1]}-${viejo[2]}` : '';
+}
+
+// -------------------------------------------------------------------------
+// RETO DE SUMAS (desde 2026-11-15): antes de canjear, 3 sumas rápidas ("5 + 3"). Compiten por velocidad
+// (el tiempo sale en la lista) y frena a quien intente canjear con un programa sin mirar.
+// El reto va FIRMADO (HMAC con una llave derivada de SCRIPT_RECARGAS_TOKEN): la página no puede inventarlo
+// ni cambiar los números. El tiempo lo mide el servidor: desde que entregó el reto hasta que llega el canje.
+// -------------------------------------------------------------------------
+const SUMAS_POR_RETO = 3;
+const RETO_VENCE_MS = 2 * 60_000;
+const RETO_MINIMO_MS = 1200;   // 3 sumas en menos de 1,2 s no las resuelve una persona
+function llaveReto() {
+  const token = String(process.env.SCRIPT_RECARGAS_TOKEN || '').trim();
+  return token ? createHash('sha256').update(`levelup-reto-canje:${token}`).digest() : null;
+}
+function firmarReto(datos) {
+  const cuerpo = Buffer.from(JSON.stringify(datos)).toString('base64url');
+  return `${cuerpo}.${createHmac('sha256', llaveReto()).update(cuerpo).digest('base64url')}`;
+}
+// { sumas, emitido } si la firma vale y no venció; si no, null
+function leerReto(token) {
+  const [cuerpo, mac] = String(token || '').split('.');
+  if (!cuerpo || !mac || !llaveReto()) return null;
+  const esperado = Buffer.from(createHmac('sha256', llaveReto()).update(cuerpo).digest('base64url'));
+  const recibido = Buffer.from(mac);
+  if (recibido.length !== esperado.length || !timingSafeEqual(recibido, esperado)) return null;
+  try {
+    const datos = JSON.parse(Buffer.from(cuerpo, 'base64url').toString('utf8'));
+    if (!Array.isArray(datos.s) || datos.s.length !== SUMAS_POR_RETO || !Number.isFinite(datos.t)) return null;
+    if (Date.now() - datos.t > RETO_VENCE_MS) return null;
+    return { sumas: datos.s, emitido: datos.t };
+  } catch {
+    return null;
+  }
+}
+
+// Cuatro opciones por suma (la correcta y tres cercanas), mezcladas: se toca la respuesta, no se escribe
+function opcionesDe(total) {
+  const opciones = new Set([total]);
+  while (opciones.size < 4) {
+    const otra = total + randomInt(-4, 5);
+    if (otra > 0) opciones.add(otra);
+  }
+  // Mezcla justa (Fisher-Yates): la correcta puede quedar en cualquier lugar con la misma probabilidad
+  const lista = [...opciones];
+  for (let i = lista.length - 1; i > 0; i--) {
+    const j = randomInt(0, i + 1);
+    [lista[i], lista[j]] = [lista[j], lista[i]];
+  }
+  return lista;
+}
+
+// GET /api/juego?accion=reto_canje → { reto (firmado), sumas: [{ a, b, opciones }] }
+export function retoCanje(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'GET') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
+  if (!llaveReto()) {
+    console.error('🚨 canjes: falta SCRIPT_RECARGAS_TOKEN en Vercel (firma del reto)');
+    return res.status(503).json({ status: 'error', message: NO_DISPONIBLE });
+  }
+  const sumas = Array.from({ length: SUMAS_POR_RETO }, () => [randomInt(2, 10), randomInt(2, 10)]);
+  return res.status(200).json({
+    status: 'success',
+    reto: firmarReto({ s: sumas, t: Date.now(), n: randomUUID() }),
+    sumas: sumas.map(([a, b]) => ({ a, b, opciones: opcionesDe(a + b) })),
+  });
 }
 
 // Producto(s) de Central One del paquete (220 = dos de 110), como lo vende hoy la tienda
@@ -62,6 +128,20 @@ export async function canjear(req, res) {
   const minutos = await minutosBloqueado(claves);
   if (minutos > 0) return res.status(429).json({ status: 'error', message: `Demasiados intentos. Espera ${minutos} minutos.` });
 
+  // 1b. El reto de sumas: firmado, vigente, bien resuelto y no demasiado rápido para una persona
+  const reto = leerReto(req.body?.reto);
+  if (!reto) return res.status(400).json({ status: 'error', reto: true, message: '⏱️ El reto venció. Vuelve a tocar Canjear.' });
+  const respuestas = Array.isArray(req.body?.respuestas) ? req.body.respuestas.map(Number) : [];
+  const tiempoMs = Date.now() - reto.emitido;
+  if (respuestas.length !== SUMAS_POR_RETO || reto.sumas.some(([a, b], i) => respuestas[i] !== a + b)) {
+    await registrarFallo([`canje:${ip}`]).catch(() => {});
+    return res.status(400).json({ status: 'error', reto: true, message: '❌ Alguna suma estaba mal. Inténtalo otra vez.' });
+  }
+  if (tiempoMs < RETO_MINIMO_MS) {
+    await registrarFallo([`canje:${ip}`]).catch(() => {});
+    return res.status(400).json({ status: 'error', reto: true, message: '🤖 Demasiado rápido para ser humano. Inténtalo otra vez.' });
+  }
+
   // 2. El ID existe en Free Fire (y su nombre, que se muestra en la lista de canjes)
   let nombre = '';
   try {
@@ -79,7 +159,7 @@ export async function canjear(req, res) {
   const idPedido = randomUUID();
   let toma;
   try {
-    toma = await rpc('canje_tomar', { p_codigo: codigo, p_id_jugador: id, p_nombre: nombre, p_id_pedido: idPedido });
+    toma = await rpc('canje_tomar', { p_codigo: codigo, p_id_jugador: id, p_nombre: nombre, p_id_pedido: idPedido, p_tiempo_ms: tiempoMs });
   } catch (error) {
     console.error('⚠️ canjes: Supabase no respondió al tomar el código:', error.message);
     return res.status(503).json({ status: 'error', message: NO_DISPONIBLE });

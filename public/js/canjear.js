@@ -40,7 +40,9 @@
         const texto = el('div', 'canje-texto');
         texto.append(el('span', 'canje-nombre', c.nombre), el('span', 'canje-detalle', `ID ${c.id_jugador} · ${c.codigo}`));
         const tiempo = el('span', 'canje-cuando');
-        tiempo.append(el('strong', '', `${c.paquete} 💎`), cuando(c.canjeado));
+        tiempo.append(el('strong', '', `${c.paquete} 💎`));
+        if (c.tiempo_ms) tiempo.append(el('span', 'canje-tiempo', `⚡ ${segundos(c.tiempo_ms)} · `));
+        tiempo.append(cuando(c.canjeado));
         li.append(el('span', 'canje-icono', c.entregado ? '✅' : '⏳'), texto, tiempo);
         li.title = c.entregado ? 'Entregado' : 'En camino';
         lista.append(li);
@@ -58,20 +60,99 @@
     m.textContent = texto;
   }
 
-  $('formCanje').addEventListener('submit', async (ev) => {
+  // ---------- Reto: 3 sumas tocando la respuesta. Un error = reto nuevo (nunca se manda una respuesta mala) ----------
+  let reto = null;          // { token, sumas, paso, respuestas, inicio, alTerminar }
+  let reloj = 0;
+  const segundos = (ms) => `${(ms / 1000).toFixed(1).replace('.', ',')} s`;
+
+  function cerrarReto() {
+    clearInterval(reloj);
+    reto = null;
+    $('reto').hidden = true;
+    $('btnCanjear').disabled = false;
+  }
+
+  function pintarPaso() {
+    const { sumas, paso } = reto;
+    const { a, b, opciones } = sumas[paso];
+    $('retoPregunta').textContent = `${a} + ${b} = ?`;
+    [...$('retoPasos').children].forEach((s, i) => s.classList.toggle('hecho', i < paso));
+    const caja = $('retoOpciones');
+    caja.replaceChildren(...opciones.map((n) => {
+      const b2 = el('button', 'reto-opcion', String(n));
+      b2.type = 'button';
+      b2.addEventListener('click', () => elegir(n, b2));
+      return b2;
+    }));
+    caja.firstChild.focus({ preventScroll: true });
+  }
+
+  function elegir(n, boton) {
+    if (!reto) return;
+    const { a, b } = reto.sumas[reto.paso];
+    if (n !== a + b) {
+      // Error: se marca y empieza un reto nuevo (los números cambian)
+      boton.classList.add('mal');
+      $('retoOpciones').querySelectorAll('button').forEach((x) => { x.disabled = true; });
+      $('retoAyuda').textContent = `❌ ${a} + ${b} = ${a + b}. ¡Otra vez, rápido!`;
+      const fin = reto.alTerminar;
+      setTimeout(() => { if (reto) empezarReto(fin); }, 900);
+      return;
+    }
+    reto.respuestas.push(n);
+    reto.paso++;
+    if (reto.paso < reto.sumas.length) { pintarPaso(); return; }
+    const { token, respuestas, alTerminar, inicio } = reto;
+    [...$('retoPasos').children].forEach((s) => s.classList.add('hecho'));
+    clearInterval(reloj);
+    $('retoReloj').textContent = segundos(performance.now() - inicio);
+    cerrarReto();
+    alTerminar(token, respuestas);
+  }
+
+  async function empezarReto(alTerminar) {
+    $('reto').hidden = false;
+    $('retoPregunta').textContent = '…';
+    $('retoOpciones').replaceChildren();
+    $('retoAyuda').textContent = 'Resuelve las 3 sumas tocando la respuesta. El más rápido se lleva el código.';
+    $('retoReloj').textContent = '0,0 s';
+    clearInterval(reloj);
+    try {
+      const r = await (await fetch('/api/juego?accion=reto_canje', { cache: 'no-store' })).json();
+      if (r.status !== 'success') throw new Error(r.message);
+      reto = { token: r.reto, sumas: r.sumas, paso: 0, respuestas: [], inicio: performance.now(), alTerminar };
+      reloj = setInterval(() => { if (reto) $('retoReloj').textContent = segundos(performance.now() - reto.inicio); }, 100);
+      pintarPaso();
+    } catch (e) {
+      cerrarReto();
+      mensaje(e.message || 'No se pudo cargar el reto. Revisa tu internet e intenta de nuevo.', 'error');
+    }
+  }
+  $('retoCancelar').addEventListener('click', cerrarReto);
+  document.addEventListener('keydown', (ev) => {
+    if (!reto) return;
+    if (ev.key === 'Escape') cerrarReto();
+  });
+
+  $('formCanje').addEventListener('submit', (ev) => {
     ev.preventDefault();
     const codigo = $('codigo').value.trim();
     const id = $('idJugador').value.replace(/\D/g, '');
     if (codigo.replace(/[^A-Za-z0-9]/g, '').length < 10) { mensaje('Escribe el código completo, por ejemplo LEVELUP-7KQM3XPA.', 'error'); return; }
     if (!/^\d{5,15}$/.test(id)) { mensaje('Escribe tu ID de Free Fire (solo números).', 'error'); return; }
-    if (!confirm(`¿Canjear el código ${codigo.toUpperCase()} para el ID ${id}?\n\nLos diamantes llegan a ESA cuenta y el código no se puede usar otra vez.`)) return;
+    $('mensaje').hidden = true;
+    $('btnCanjear').disabled = true;
+    empezarReto((token, respuestas) => enviarCanje(codigo, id, token, respuestas));
+  });
+
+  async function enviarCanje(codigo, id, token, respuestas) {
     const b = $('btnCanjear');
     b.disabled = true;
     b.textContent = 'Canjeando…';
     mensaje('Comprobando tu ID y el código…', 'aviso');
     try {
       const res = await fetch('/api/juego?accion=canjear', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo, id }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo, id, reto: token, respuestas }),
       });
       const r = await res.json();
       mensaje(r.message || (r.status === 'success' ? '¡Listo!' : 'No se pudo canjear.'), r.status === 'success' ? 'ok' : res.status === 202 ? 'aviso' : 'error');
@@ -87,7 +168,7 @@
       b.disabled = false;
       b.textContent = 'Canjear';
     }
-  });
+  }
 
   // Último ID de Free Fire de este equipo (js/ultimo-id.js) y código desde el enlace (?codigo=LEVELUP-7KQM3XPA)
   try {
