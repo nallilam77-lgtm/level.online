@@ -15,6 +15,7 @@
   --aviso: #fbbf24;
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
   --shadow-glow: 0 10px 25px -5px rgba(6, 182, 212, 0.2);
+  --shadow-glow-neon: 0 10px 25px -5px rgba(57, 255, 20, 0.2);
   --glass-blur: 12px;
   --radius-card: 16px;
 }
@@ -159,6 +160,11 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .btn-pagar { color: var(--accent-neon); border-color: var(--accent-neon); }
 .btn-ver--peligro { color: var(--peligro); border-color: var(--peligro); }
 .codigo-acceso { color: var(--accent-cyan); }
+/* Pagos → Pago Móvil que ven los clientes (dos cuentas, una en uso) */
+.cuentas-pm { display: grid; gap: 16px; }
+@media (min-width: 900px) { .cuentas-pm { grid-template-columns: 1fr 1fr; } }
+.cuenta-pm { padding: 16px; border-radius: 12px; background: var(--bg-deep); border: 1px solid var(--border-glass); }
+.cuenta-pm--activa { border-color: var(--accent-neon); box-shadow: var(--shadow-lg), var(--shadow-glow-neon); }
 /* Precios */
 .dos-campos { display: grid; grid-template-columns: 1fr; gap: 12px; }
 @media (min-width: 560px) { .dos-campos { grid-template-columns: 1fr 1fr; } }

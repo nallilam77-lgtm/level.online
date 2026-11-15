@@ -1,6 +1,6 @@
 // =========================================================================
-// PANEL ADMIN (admin.html) sobre Supabase (desde 2026-11-13; el panel de Firebase se quitó). Pago Móvil sigue en
-// Firebase y se cambia en la consola de Firebase.
+// PANEL ADMIN (admin.html) sobre Supabase (desde 2026-11-13; el panel de Firebase se quitó). Pago Móvil que ven
+// los clientes: Pagos → dos cuentas guardadas, una en uso (desde 2026-11-15; ver cargarCuentasPm).
 // Entra con la sesión de Google de la tienda (js/sesion.js) y solo funciona si la cuenta está en la tabla
 // "administradores": la base lo comprueba en cada consulta (RLS y es_admin(), supabase/tienda.sql), así
 // que esta página no protege nada por sí sola. Secciones: resumen de ventas (admin_resumen), pedidos en
@@ -114,7 +114,7 @@
     if (b.dataset.seccion === 'precios') cargarPrecios();
     if (b.dataset.seccion === 'roblox') cargarRoblox();
     if (b.dataset.seccion === 'revision') cargarRevision();
-    if (b.dataset.seccion === 'pagos') cargarPagos();
+    if (b.dataset.seccion === 'pagos') { cargarPagos(); cargarCuentasPm(); }
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -1360,6 +1360,103 @@
     return li;
   }
   $('actualizarRevision').addEventListener('click', cargarRevision);
+
+  // ---------------------------------------------------------------- Pago Móvil que ven los clientes
+  // configuracion "pago_movil_cuentas" (privado): { cuentas: [{ nombre, banco, telefono, cedula }, …] }.
+  // configuracion "pago_movil" (publico): copia de la cuenta EN USO; es lo único que leen las tiendas
+  // (js/datos-pago.js). La cuenta en uso es la que coincide con lo publicado. Solo administradores escriben (RLS).
+  const CUENTAS_PM = 2;
+  let cuentasPm = [];
+  let enUsoPm = -1;
+  async function cargarCuentasPm() {
+    const { data, error } = await cliente.from('configuracion').select('clave,valor').in('clave', ['pago_movil', 'pago_movil_cuentas']);
+    if (error) { console.error(error); $('cuentasPm').replaceChildren(el('p', 'nota', 'No se pudieron cargar los datos de Pago Móvil.')); return; }
+    const de = (clave) => ((data || []).find((f) => f.clave === clave) || {}).valor;
+    const publico = de('pago_movil') || {};
+    const guardadas = de('pago_movil_cuentas');
+    // La primera vez: la cuenta que ya ven los clientes (BDV) y un espacio para la segunda (BDT)
+    cuentasPm = guardadas && Array.isArray(guardadas.cuentas) ? guardadas.cuentas.slice(0, CUENTAS_PM) : [
+      { nombre: 'BDV', banco: publico.banco || '', telefono: publico.telefono || '', cedula: publico.cedula || '' },
+      { nombre: 'BDT', banco: 'Digital de los Trabajadores 0175', telefono: '', cedula: '' },
+    ];
+    while (cuentasPm.length < CUENTAS_PM) cuentasPm.push({ nombre: '', banco: '', telefono: '', cedula: '' });
+    enUsoPm = cuentasPm.findIndex((c) => c.banco && c.banco === publico.banco && c.telefono === publico.telefono && c.cedula === publico.cedula);
+    pintarCuentasPm(publico);
+  }
+
+  function pintarCuentasPm(publico) {
+    const caja = $('cuentasPm');
+    caja.replaceChildren();
+    if (enUsoPm < 0 && publico.banco) {
+      caja.append(el('p', 'aviso-precios', `Los clientes ven ahora: ${publico.banco} · ${publico.telefono} · C.I. ${publico.cedula} (no es ninguna de las dos de abajo).`));
+    }
+    const campo = (texto, nombre, valor, extra) => {
+      const label = el('label', 'campo', texto);
+      const input = el('input');
+      Object.assign(input, { name: nombre, value: valor || '', maxLength: 40, autocomplete: 'off' }, extra);
+      label.append(input);
+      return label;
+    };
+    cuentasPm.forEach((c, i) => {
+      const enUso = i === enUsoPm;
+      const form = el('form', 'formulario cuenta-pm' + (enUso ? ' cuenta-pm--activa' : ''));
+      form.noValidate = true;
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', c.nombre || `Cuenta ${i + 1}`), el('span', 'etiqueta' + (enUso ? ' etiqueta--completado' : ''), enUso ? 'En uso' : 'Guardada'));
+      const fila1 = el('div', 'dos-campos');
+      fila1.append(campo('Nombre (solo lo ves tú)', 'nombre', c.nombre, { placeholder: 'Ej. BDV' }),
+        campo('Banco (como lo ve el cliente)', 'banco', c.banco, { placeholder: 'Ej. Venezuela 0102' }));
+      const fila2 = el('div', 'dos-campos');
+      fila2.append(campo('Teléfono', 'telefono', c.telefono, { inputMode: 'numeric', placeholder: 'Ej. 04141234567' }),
+        campo('Cédula', 'cedula', c.cedula, { placeholder: 'Ej. 12345678' }));
+      const acciones = el('div', 'acciones-cuenta');
+      const guardar = el('button', 'btn-ver', 'Guardar cambios');
+      guardar.type = 'submit';
+      acciones.append(guardar);
+      if (!enUso) acciones.append(boton('✅ Usar esta', 'btn-ver btn-pagar', (b) => guardarCuentaPm(i, form, b, true)));
+      form.append(cabeza, fila1, fila2, acciones);
+      form.addEventListener('submit', (ev) => { ev.preventDefault(); guardarCuentaPm(i, form, guardar, false); });
+      caja.append(form);
+    });
+  }
+
+  // { nombre, banco, telefono, cedula } del formulario, o el texto del problema
+  function cuentaDelForm(form) {
+    const v = (n) => form.elements[n].value.trim();
+    const c = { nombre: v('nombre').slice(0, 30), banco: v('banco').replace(/\s+/g, ' '), telefono: v('telefono').replace(/\D/g, ''), cedula: v('cedula').replace(/[^\dVEve]/g, '').toUpperCase() };
+    if (c.telefono.startsWith('58')) c.telefono = c.telefono.slice(2);
+    if (c.telefono && !c.telefono.startsWith('0')) c.telefono = '0' + c.telefono;
+    if (c.banco.length < 3) return { problema: 'Escribe el banco, por ejemplo "Venezuela 0102".' };
+    if (!/^04(12|14|16|22|24|26)\d{7}$/.test(c.telefono)) return { problema: 'El teléfono debe ser un celular, por ejemplo 04141234567.' };
+    if (!/^[VE]?\d{6,9}$/.test(c.cedula)) return { problema: 'La cédula: solo números, por ejemplo 12345678.' };
+    return { c };
+  }
+
+  // Guarda la cuenta i. "usar" (o si ya estaba en uso) también la publica para los clientes, en la misma petición.
+  async function guardarCuentaPm(i, form, b, usar) {
+    const msg = $('mensajePm');
+    const { c, problema } = cuentaDelForm(form);
+    if (!c) { msg.textContent = `${c?.nombre || cuentasPm[i].nombre || `Cuenta ${i + 1}`}: ${problema}`; return; }
+    const publicar = usar || i === enUsoPm;
+    const datos = `${c.banco}\nTeléfono ${c.telefono}\nC.I. ${c.cedula}`;
+    if (usar && !confirm(`¿Mostrar a los clientes esta cuenta (${c.nombre || `Cuenta ${i + 1}`})?\n\n${datos}\n\nQuien ya tiene la tienda abierta sigue viendo la anterior hasta recargar la página: deja encendidas las macros de las dos cuentas.`)) return;
+    if (!usar && publicar && !confirm(`Esta es la cuenta que ven los clientes. ¿Cambiarla a esto?\n\n${datos}`)) return;
+    const ahora = new Date().toISOString();
+    const filas = [{ clave: 'pago_movil_cuentas', valor: { cuentas: cuentasPm.map((x, j) => (j === i ? c : x)) }, publico: false, actualizado: ahora }];
+    if (publicar) filas.push({ clave: 'pago_movil', valor: { banco: c.banco, telefono: c.telefono, cedula: c.cedula }, publico: true, actualizado: ahora });
+    b.disabled = true;
+    try {
+      const { error } = await cliente.from('configuracion').upsert(filas, { onConflict: 'clave' });
+      if (error) throw error;
+      msg.textContent = publicar ? `✅ Listo: los clientes ya ven ${c.nombre || c.banco}.` : '✅ Cuenta guardada (los clientes no la ven hasta que toques "Usar esta").';
+      await cargarCuentasPm();
+    } catch (e) {
+      console.error(e);
+      msg.textContent = 'No se pudo guardar. Intenta de nuevo.';
+    } finally {
+      b.disabled = false;
+    }
+  }
 
   // ---------------------------------------------------------------- pagos (supabase/pagos.sql)
   const ORIGEN_PAGO = { pago_movil: 'Pago móvil', bdv: 'BDV a BDV', transferencia: 'Transferencia', manual: 'Agregado a mano', otro: 'Otro' };

@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=18">
+  <link rel="stylesheet" href="css/admin.css?v=19">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
-       Los datos de Pago Móvil siguen en Firebase y se cambian en la consola de Firebase (configuracion/pago_movil). -->
+       Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Pagos → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=26" defer></script>
+  <script src="/js/admin.js?v=27" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -145,6 +145,14 @@
 
       <!-- PAGOS (supabase/pagos.sql): lo que MacroDroid avisa. Las tiendas cobran SOLO con esto (la hoja ya no). -->
       <section class="seccion" id="seccion-pagos" hidden>
+        <!-- Cuenta de Pago Móvil que ven los clientes: configuracion "pago_movil" (la lee js/datos-pago.js) -->
+        <div class="tarjeta">
+          <h2>Pago Móvil que ven los clientes</h2>
+          <p class="nota">Guarda las dos cuentas y toca <strong>Usar esta</strong> en la que quieras: las 7 tiendas y el perfil la muestran al abrir o recargar la página. Deja <strong>encendidas las macros de las dos</strong>: quien tenía la página abierta o pagó a la otra cuenta igual queda registrado.</p>
+          <div class="cuentas-pm" id="cuentasPm"><p class="nota">Cargando…</p></div>
+          <p class="mensaje-form" id="mensajePm" role="status"></p>
+        </div>
+
         <div class="tarjeta">
           <div class="fila-titulo">
             <h2>Pagos recibidos</h2>
