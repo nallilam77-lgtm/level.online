@@ -1600,10 +1600,19 @@
              let intentosFallidos = parseInt(localStorage.getItem('intentos_recarga') || '0');
              intentosFallidos++;
              localStorage.setItem('intentos_recarga', intentosFallidos);
-             if (intentosFallidos >= 3) {
+             // Aviso de cuántos intentos quedan antes del bloqueo de 5 minutos (va al final de la ventana de error)
+             const intentosRestantes = 3 - intentosFallidos;
+             let avisoIntentos;
+             if (intentosRestantes <= 0) {
                  localStorage.setItem('tiempo_bloqueo', Date.now() + (5 * 60 * 1000));
                  mostrarBurbuja("⚠️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
+                 avisoIntentos = "🔒 <strong>Quedaste bloqueado por 5 minutos</strong> tras 3 intentos fallidos. Si ya pagaste, escríbenos a soporte por WhatsApp con tu referencia.";
+             } else if (intentosRestantes === 1) {
+                 avisoIntentos = "⚠️ <strong>Te queda 1 intento.</strong> Si fallas, serás bloqueado por 5 minutos. Revisa tu referencia e intenta de nuevo.";
+             } else {
+                 avisoIntentos = `⚠️ <strong>Te quedan ${intentosRestantes} intentos.</strong> Si fallas los 3, serás bloqueado por 5 minutos. Si ya pagaste, escríbenos a soporte.`;
              }
+             const errorConAviso = (titulo, mensaje, extra) => mostrarErrorGeneral(titulo, mensaje, (extra ? extra + '<br><br>' : '') + avisoIntentos);
 
              let msg = resultado.message || "";
              let msgLower = msg.toLowerCase();
@@ -1636,13 +1645,13 @@
                  document.getElementById('modalWhatsApp').style.display = 'flex';
              } 
              else if(msgLower.includes("gastado") || msgLower.includes("usado")) {
-                 mostrarErrorGeneral("❌ PAGO YA USADO", "El sistema detectó que esta referencia ya fue utilizada para completar otra recarga anterior.", "⚠️ <strong>Importante:</strong><br><br>No puedes reutilizar pagos antiguos. Si crees que esto es un error, contáctanos a soporte.");
+                 errorConAviso("❌ PAGO YA USADO", "El sistema detectó que esta referencia ya fue utilizada para completar otra recarga anterior.", "⚠️ <strong>Importante:</strong><br><br>No puedes reutilizar pagos antiguos. Si crees que esto es un error, contáctanos a soporte.");
              }
              else if(msgLower.includes("no encontrado")) {
-                 mostrarErrorGeneral("❌ PAGO NO ENCONTRADO", "No pudimos localizar la referencia que ingresaste en nuestro sistema bancario.", "⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea <strong>exacto</strong> al valor del paquete.<br><br>3. Que el pago fue enviado al banco correcto.");
+                 errorConAviso("❌ PAGO NO ENCONTRADO", "No pudimos localizar la referencia que ingresaste en nuestro sistema bancario.", "⚠️ <strong>Por favor, verifica lo siguiente:</strong><br><br>1. Que ingresaste correctamente los <strong>últimos 5 dígitos</strong> de tu referencia.<br><br>2. Que el monto transferido sea <strong>exacto</strong> al valor del paquete.<br><br>3. Que el pago fue enviado al banco correcto.");
              } 
              else {
-                 mostrarErrorGeneral("❌ ERROR", escaparHtml(msg), "");
+                 errorConAviso("❌ ERROR", escaparHtml(msg), "");
              }
 
              isProcessing = false; btnConfirmar.disabled = false;
