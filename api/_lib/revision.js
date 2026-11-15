@@ -23,7 +23,7 @@ import { datosParaPedido, crearPedidoCentralOne } from './centralone.js';
 const URL_ORDENES = 'https://portal.centraloneglobal.com/api/v1/orders';
 const ID_PEDIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRODUCTO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const PAGINAS = 5;
+const PAGINAS = 8;   // 8 × 50 = los 400 pedidos más recientes de la cuenta
 // Estados de Central One con los que esa parte ya NO se puede volver a pedir (entregada o todavía en camino)
 const FALLIDOS = new Set(['failed', 'cancelled', 'canceled', 'rejected', 'refunded']);
 const ENTREGADOS = new Set(['completed', 'delivered']);
@@ -44,7 +44,7 @@ async function comun(req, res) {
   if (!(await esAdminToken(tokenDe(req)))) { res.status(403).json({ status: 'error', message: 'Solo el administrador.' }); return null; }
   const idPedido = String(req.body?.idPedido || '').trim();
   if (!ID_PEDIDO.test(idPedido)) { res.status(400).json({ status: 'error', message: 'Pedido inválido.' }); return null; }
-  const filas = await leer('recargas', { id_pedido: idPedido }, 'id_pedido,juego,paquete,id_jugador,zona,estado,nota_admin');
+  const filas = await leer('recargas', { id_pedido: idPedido }, 'id_pedido,juego,paquete,id_jugador,zona,estado,nota_admin,creado');
   const recarga = Array.isArray(filas) ? filas[0] : null;
   if (!recarga) { res.status(404).json({ status: 'error', message: 'No existe ese pedido.' }); return null; }
   if (!Object.hasOwn(JUEGOS, recarga.juego)) {
@@ -57,15 +57,31 @@ async function comun(req, res) {
 }
 
 // Pedidos de Central One de esta recarga (por su Idempotency-Key o por la nota "Level Up <id>"), de los
-// más recientes de la cuenta. Lanza si Central One no responde (entonces no se rehace nada).
-async function pedidosDe(apiKey, idPedido) {
+// más recientes de la cuenta (la lista viene de la más nueva a la más vieja). Para de buscar al llegar a
+// pedidos de antes de la recarga (`desde`) o al pasar `hasta` (marca de tiempo: la función tiene 30 s).
+// Lanza si Central One no responde a la primera página (entonces no se rehace nada).
+async function pedidosDe(apiKey, idPedido, { desde = 0, hasta = Date.now() + 12000 } = {}) {
   const encontrados = [];
   let cursor = '';
   for (let pagina = 0; pagina < PAGINAS; pagina++) {
-    const url = `${URL_ORDENES}?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(8000) });
-    if (!r.ok) throw new Error(`Central One respondió ${r.status} al listar pedidos`);
-    const d = await r.json();
+    if (pagina > 0 && Date.now() > hasta) break;
+    // limit=50: el mismo tamaño que usa el webhook (con 100 Central One rechazaba la consulta)
+    const url = `${URL_ORDENES}?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+    let r;
+    try {
+      r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(pagina ? 6000 : 10000) });
+    } catch (error) {
+      if (pagina > 0) break;
+      throw new Error(error.name === 'TimeoutError' || error.name === 'AbortError' ? 'Central One no respondió en 10 s' : `error de red con Central One (${error.cause?.code || error.message})`);
+    }
+    const texto = await r.text();
+    let d = null;
+    try { d = JSON.parse(texto); } catch { /* sin JSON */ }
+    if (!r.ok) {
+      // Ya hay páginas leídas: se trabaja con lo que hay (la página siguiente no es imprescindible)
+      if (pagina > 0) break;
+      throw new Error(`Central One respondió HTTP ${r.status}${d?.error?.code ? ` (${d.error.code})` : ''} al listar pedidos${d?.error?.message ? `: ${String(d.error.message).slice(0, 120)}` : ''}`);
+    }
     const lista = Array.isArray(d?.orders) ? d.orders : Array.isArray(d?.data) ? d.data : [];
     for (const o of lista) {
       if (!JSON.stringify(o).includes(idPedido)) continue;
@@ -79,8 +95,11 @@ async function pedidosDe(apiKey, idPedido) {
         creado: String(o.created_at || ''),
       });
     }
-    cursor = d?.next_cursor || d?.pagination?.next_cursor || d?.meta?.next_cursor || '';
+    cursor = d?.next_cursor || d?.pagination?.next_cursor || d?.meta?.next_cursor || d?.next_page_token || '';
     if (!cursor || !lista.length) break;
+    // Lo último de esta página ya es de antes de la recarga (10 min de margen): no hay más que buscar
+    const masViejo = Date.parse(lista[lista.length - 1]?.created_at || '');
+    if (desde && Number.isFinite(masViejo) && masViejo < desde - 10 * 60_000) break;
   }
   return encontrados;
 }
@@ -110,10 +129,11 @@ export async function verificarRevision(req, res) {
   if (!c) return;
   let pedidos;
   try {
-    pedidos = await pedidosDe(c.apiKey, c.idPedido);
+    pedidos = await pedidosDe(c.apiKey, c.idPedido, { desde: Date.parse(c.recarga.creado) || 0, hasta: Date.now() + 18000 });
   } catch (error) {
     console.error('⚠️ revisión: no se pudo leer Central One:', error.message);
-    return res.status(503).json({ status: 'error', message: 'Central One no respondió. Intenta de nuevo en un minuto.' });
+    // Solo lo ve el administrador: el motivo exacto (sin llaves) para saber qué pasó
+    return res.status(503).json({ status: 'error', message: `No se pudo consultar Central One: ${error.message}. Intenta de nuevo en un minuto.` });
   }
   const partes = Math.max(1, (await productosDelPaquete(c.recarga.juego, c.recarga.paquete).catch(() => [])).length);
   const entregados = pedidos.filter((p) => ENTREGADOS.has(p.estado)).length;
@@ -129,6 +149,9 @@ export async function rehacerRevision(req, res) {
   const c = await comun(req, res);
   if (!c) return;
   const { idPedido, recarga, apiKey } = c;
+  // Vercel corta api/juego.js a los 30 s: lista hasta los 9 s y los pedidos se reparten lo que quede hasta los 26 s
+  const inicio = Date.now();
+  const limite = inicio + 26000;
   if (!['en_revision', 'problema'].includes(recarga.estado)) {
     return res.status(409).json({ status: 'error', message: `La recarga está "${recarga.estado}": solo se rehace una en revisión o con problema.` });
   }
@@ -137,10 +160,10 @@ export async function rehacerRevision(req, res) {
   let productos;
   let pedidos;
   try {
-    [productos, pedidos] = await Promise.all([productosDelPaquete(recarga.juego, recarga.paquete), pedidosDe(apiKey, idPedido)]);
+    [productos, pedidos] = await Promise.all([productosDelPaquete(recarga.juego, recarga.paquete), pedidosDe(apiKey, idPedido, { desde: Date.parse(recarga.creado) || 0, hasta: inicio + 9000 })]);
   } catch (error) {
     console.error('⚠️ revisión: no se pudo preparar el rehacer:', error.message);
-    return res.status(503).json({ status: 'error', message: 'Central One o Supabase no respondieron. No se pidió nada; intenta de nuevo.' });
+    return res.status(503).json({ status: 'error', message: `No se pidió nada (${error.message}). Intenta de nuevo en un minuto.` });
   }
   if (!productos.length) return res.status(409).json({ status: 'error', message: `"${recarga.paquete}" ya no tiene producto de Central One en Precios: hazla a mano.` });
   const n = productos.length;
@@ -172,9 +195,15 @@ export async function rehacerRevision(req, res) {
   if (datos.error) return res.status(409).json({ status: 'error', message: `No se pidió nada: ${datos.error}` });
 
   const hechos = [];
-  for (const p of pendientes) {
+  for (const [k, p] of pendientes.entries()) {
+    // Lo que queda hasta `limite`, repartido entre los pedidos que faltan (nunca más allá de los 30 s)
+    const tiempoMs = Math.floor((limite - Date.now()) / (pendientes.length - k));
+    if (tiempoMs < 6000) {
+      hechos.push({ parte: p.i + 1, tipo: 'sin_tiempo', referencia: '', estado: '', motivo: 'no alcanzó el tiempo para pedirla: toca "Hacer de nuevo" otra vez (no se repite lo ya pedido)' });
+      break;
+    }
     const r = await crearPedidoCentralOne({
-      apiKey, productId: productos[p.i], payload: datos.payload, idempotencia: p.llave, tiempoMs: 25000,
+      apiKey, productId: productos[p.i], payload: datos.payload, idempotencia: p.llave, tiempoMs,
       nota: `Level Up ${idPedido}${n > 1 ? ` (${p.i + 1} de ${n})` : ''}${p.intento ? ` (reintento ${p.intento})` : ''}`,
     });
     hechos.push({ parte: p.i + 1, tipo: r.tipo, referencia: r.orden?.referencia || '', estado: r.orden?.status || '', motivo: r.tipo === 'ok' ? '' : r.motivo });
