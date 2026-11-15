@@ -163,7 +163,10 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 /* Pagos → Pago Móvil que ven los clientes (dos cuentas, una en uso) */
 .cuentas-pm { display: grid; gap: 16px; }
 @media (min-width: 900px) { .cuentas-pm { grid-template-columns: 1fr 1fr; } }
-.cuenta-pm { padding: 16px; border-radius: 12px; background: var(--bg-deep); border: 1px solid var(--border-glass); }
+.cuenta-pm { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 16px; border-radius: 12px; background: var(--bg-deep); border: 1px solid var(--border-glass); }
+.cuenta-pm legend { padding: 0 8px; font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--text-main); }
+.opcion-pm { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 13px; color: var(--text-main); cursor: pointer; }
+.formulario .opcion-pm input { width: 20px; height: 20px; min-height: 0; padding: 0; accent-color: var(--accent-neon); cursor: pointer; }
 .cuenta-pm--activa { border-color: var(--accent-neon); box-shadow: var(--shadow-lg), var(--shadow-glow-neon); }
 /* Precios */
 .dos-campos { display: grid; grid-template-columns: 1fr; gap: 12px; }

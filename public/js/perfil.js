@@ -87,24 +87,28 @@
     let montoValor = null;
     if (datosPago) {
       const datos = el('div', 'completar-datos');
-      [['Banco', datosPago.banco], ['Teléfono', datosPago.telefono], ['Cédula', datosPago.cedula], ['Monto', bs(p.falta)]].forEach(([nombre, valor]) => {
-        if (!valor) return;
-        const fila = el('div', 'completar-dato');
-        const fuerte = el('strong', '', valor);
-        if (nombre === 'Monto') montoValor = fuerte;
-        const copiar = el('button', 'btn-copiar-codigo', 'Copiar');
-        copiar.type = 'button';
-        copiar.setAttribute('aria-label', `Copiar ${nombre.toLowerCase()}`);
-        copiar.addEventListener('click', async () => {
-          try {
-            await navigator.clipboard.writeText(nombre === 'Monto' ? montoParaCopiar(p.falta) : valor);
-            copiar.textContent = '¡Copiado!';
-          } catch (e) { copiar.textContent = 'Mantén presionado'; }
-        });
-        fila.append(el('span', '', nombre), fuerte, copiar);
-        datos.append(fila);
-      });
       caja.append(datos);
+      // Con dos cuentas, el cliente elige a qué banco paga (js/datos-pago.js): la predeterminada ya viene marcada
+      window.DatosPago.selector(datos, datosPago, (cuenta) => {
+        datos.replaceChildren();
+        [['Banco', cuenta.banco], ['Teléfono', cuenta.telefono], ['Cédula', cuenta.cedula], ['Monto', bs(p.falta)]].forEach(([nombre, valor]) => {
+          if (!valor) return;
+          const fila = el('div', 'completar-dato');
+          const fuerte = el('strong', '', valor);
+          if (nombre === 'Monto') montoValor = fuerte;
+          const copiar = el('button', 'btn-copiar-codigo', 'Copiar');
+          copiar.type = 'button';
+          copiar.setAttribute('aria-label', `Copiar ${nombre.toLowerCase()}`);
+          copiar.addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(nombre === 'Monto' ? montoParaCopiar(p.falta) : valor);
+              copiar.textContent = '¡Copiado!';
+            } catch (e) { copiar.textContent = 'Mantén presionado'; }
+          });
+          fila.append(el('span', '', nombre), fuerte, copiar);
+          datos.append(fila);
+        });
+      });
     }
     const formulario = el('form', 'completar-form');
     const entrada = el('input');

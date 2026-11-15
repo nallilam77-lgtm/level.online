@@ -74,23 +74,26 @@
   async function cargarDatosBanco() {
     const datos = await window.DatosPago?.leer();
     if (!datos) return;
-    datosBanco = datos;
     const contenedor = $('bankInfoContainer');
-    contenedor.replaceChildren();
-    [['banco', 'Banco'], ['telefono', 'Teléfono'], ['cedula', 'Cédula']].forEach(([campo, etiqueta]) => {
-      const fila = document.createElement('div');
-      fila.className = 'bank-row';
-      const valor = document.createElement('span');
-      valor.className = 'bank-value';
-      valor.textContent = datos[campo];
-      const boton = document.createElement('button');
-      boton.type = 'button';
-      boton.className = 'btn-mini-copy';
-      boton.setAttribute('aria-label', `Copiar ${etiqueta.toLowerCase()}`);
-      boton.textContent = '📋';
-      boton.addEventListener('click', () => copiar(datos[campo], etiqueta, boton));
-      fila.append(`${etiqueta}:`, valor, boton);
-      contenedor.appendChild(fila);
+    // Con dos cuentas, el cliente elige a qué banco paga (js/datos-pago.js): la predeterminada ya viene marcada
+    window.DatosPago.selector(contenedor, datos, (cuenta) => {
+      datosBanco = cuenta;
+      contenedor.replaceChildren();
+      [['banco', 'Banco'], ['telefono', 'Teléfono'], ['cedula', 'Cédula']].forEach(([campo, etiqueta]) => {
+        const fila = document.createElement('div');
+        fila.className = 'bank-row';
+        const valor = document.createElement('span');
+        valor.className = 'bank-value';
+        valor.textContent = cuenta[campo];
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.className = 'btn-mini-copy';
+        boton.setAttribute('aria-label', `Copiar ${etiqueta.toLowerCase()}`);
+        boton.textContent = '📋';
+        boton.addEventListener('click', () => copiar(cuenta[campo], etiqueta, boton));
+        fila.append(`${etiqueta}:`, valor, boton);
+        contenedor.appendChild(fila);
+      });
     });
   }
 

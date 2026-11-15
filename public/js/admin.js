@@ -1362,34 +1362,41 @@
   $('actualizarRevision').addEventListener('click', cargarRevision);
 
   // ---------------------------------------------------------------- Pago Móvil que ven los clientes
-  // configuracion "pago_movil_cuentas" (privado): { cuentas: [{ nombre, banco, telefono, cedula }, …] }.
-  // configuracion "pago_movil" (publico): copia de la cuenta EN USO; es lo único que leen las tiendas
-  // (js/datos-pago.js). La cuenta en uso es la que coincide con lo publicado. Solo administradores escriben (RLS).
+  // configuracion "pago_movil_cuentas" (privado): { cuentas: [{ nombre, banco, telefono, cedula, aviso, mostrar }], predeterminada }.
+  // configuracion "pago_movil" (publico, lo único que leen las tiendas con js/datos-pago.js):
+  //   { banco, telefono, cedula (la predeterminada), cuentas: [las que se muestran], predeterminada }.
+  // En la tienda el cliente elige a qué banco paga (la predeterminada viene marcada) y ve el aviso de cada
+  // cuenta. Las dos se publican en UNA petición. Solo administradores escriben (RLS).
   const CUENTAS_PM = 2;
+  const AVISO_VENEZUELA = 'Elige Venezuela solo si vas a pagar desde Mercantil, UBI o Banco del Tesoro.';
   let cuentasPm = [];
-  let enUsoPm = -1;
+  let predeterminadaPm = 0;
   async function cargarCuentasPm() {
     const { data, error } = await cliente.from('configuracion').select('clave,valor').in('clave', ['pago_movil', 'pago_movil_cuentas']);
     if (error) { console.error(error); $('cuentasPm').replaceChildren(el('p', 'nota', 'No se pudieron cargar los datos de Pago Móvil.')); return; }
     const de = (clave) => ((data || []).find((f) => f.clave === clave) || {}).valor;
     const publico = de('pago_movil') || {};
     const guardadas = de('pago_movil_cuentas');
-    // La primera vez: la cuenta que ya ven los clientes (BDV) y un espacio para la segunda (BDT)
     cuentasPm = guardadas && Array.isArray(guardadas.cuentas) ? guardadas.cuentas.slice(0, CUENTAS_PM) : [
       { nombre: 'BDV', banco: publico.banco || '', telefono: publico.telefono || '', cedula: publico.cedula || '' },
-      { nombre: 'BDT', banco: 'Digital de los Trabajadores 0175', telefono: '', cedula: '' },
     ];
     while (cuentasPm.length < CUENTAS_PM) cuentasPm.push({ nombre: '', banco: '', telefono: '', cedula: '' });
-    enUsoPm = cuentasPm.findIndex((c) => c.banco && c.banco === publico.banco && c.telefono === publico.telefono && c.cedula === publico.cedula);
+    // Cuentas guardadas antes de que existieran "mostrar" y "aviso" (2026-11-15): visibles y con el aviso de Venezuela
+    cuentasPm = cuentasPm.map((c) => ({ ...c, mostrar: c.mostrar !== false && !!c.banco,
+      aviso: c.aviso !== undefined ? c.aviso : (/venezuela/i.test(c.banco || '') ? AVISO_VENEZUELA : '') }));
+    const igual = (c) => c.banco && c.banco === publico.banco && c.telefono === publico.telefono && c.cedula === publico.cedula;
+    predeterminadaPm = Number.isInteger(guardadas && guardadas.predeterminada) ? guardadas.predeterminada : Math.max(0, cuentasPm.findIndex(igual));
     pintarCuentasPm(publico);
   }
 
   function pintarCuentasPm(publico) {
     const caja = $('cuentasPm');
     caja.replaceChildren();
-    if (enUsoPm < 0 && publico.banco) {
-      caja.append(el('p', 'aviso-precios', `Los clientes ven ahora: ${publico.banco} · ${publico.telefono} · C.I. ${publico.cedula} (no es ninguna de las dos de abajo).`));
-    }
+    const enTienda = Array.isArray(publico.cuentas) ? publico.cuentas.map((c) => c.banco).join(' y ') : publico.banco;
+    if (enTienda) caja.append(el('p', 'nota', `Ahora la tienda muestra: ${enTienda}.`));
+    const form = el('form', 'formulario');
+    form.noValidate = true;
+    const lista = el('div', 'cuentas-pm');
     const campo = (texto, nombre, valor, extra) => {
       const label = el('label', 'campo', texto);
       const input = el('input');
@@ -1397,58 +1404,84 @@
       label.append(input);
       return label;
     };
+    const opcion = (texto, tipo, nombre, marcado) => {
+      const label = el('label', 'opcion-pm');
+      const input = el('input');
+      Object.assign(input, { type: tipo, name: nombre, checked: marcado });
+      label.append(input, texto);
+      return label;
+    };
     cuentasPm.forEach((c, i) => {
-      const enUso = i === enUsoPm;
-      const form = el('form', 'formulario cuenta-pm' + (enUso ? ' cuenta-pm--activa' : ''));
-      form.noValidate = true;
-      const cabeza = el('div', 'pedido-cabeza');
-      cabeza.append(el('strong', '', c.nombre || `Cuenta ${i + 1}`), el('span', 'etiqueta' + (enUso ? ' etiqueta--completado' : ''), enUso ? 'En uso' : 'Guardada'));
+      const p = `pm${i}_`;
+      const fila = el('fieldset', 'cuenta-pm' + (i === predeterminadaPm && c.mostrar ? ' cuenta-pm--activa' : ''));
+      fila.append(el('legend', '', c.nombre || `Cuenta ${i + 1}`));
       const fila1 = el('div', 'dos-campos');
-      fila1.append(campo('Nombre (solo lo ves tú)', 'nombre', c.nombre, { placeholder: 'Ej. BDV' }),
-        campo('Banco (como lo ve el cliente)', 'banco', c.banco, { placeholder: 'Ej. Venezuela 0102' }));
+      fila1.append(campo('Nombre (solo lo ves tú)', p + 'nombre', c.nombre, { placeholder: 'Ej. BDV' }),
+        campo('Banco (como lo ve el cliente)', p + 'banco', c.banco, { placeholder: 'Ej. Venezuela 0102' }));
       const fila2 = el('div', 'dos-campos');
-      fila2.append(campo('Teléfono', 'telefono', c.telefono, { inputMode: 'numeric', placeholder: 'Ej. 04141234567' }),
-        campo('Cédula', 'cedula', c.cedula, { placeholder: 'Ej. 12345678' }));
-      const acciones = el('div', 'acciones-cuenta');
-      const guardar = el('button', 'btn-ver', 'Guardar cambios');
-      guardar.type = 'submit';
-      acciones.append(guardar);
-      if (!enUso) acciones.append(boton('✅ Usar esta', 'btn-ver btn-pagar', (b) => guardarCuentaPm(i, form, b, true)));
-      form.append(cabeza, fila1, fila2, acciones);
-      form.addEventListener('submit', (ev) => { ev.preventDefault(); guardarCuentaPm(i, form, guardar, false); });
-      caja.append(form);
+      fila2.append(campo('Teléfono', p + 'telefono', c.telefono, { inputMode: 'numeric', placeholder: 'Ej. 04141234567' }),
+        campo('Cédula', p + 'cedula', c.cedula, { placeholder: 'Ej. 12345678' }));
+      const aviso = campo('Aviso para el cliente (opcional)', p + 'aviso', c.aviso, { maxLength: 160, placeholder: 'Ej. ' + AVISO_VENEZUELA });
+      const opciones = el('div', 'acciones-cuenta');
+      opciones.append(opcion('Mostrar en la tienda', 'checkbox', p + 'mostrar', c.mostrar),
+        opcion('Predeterminada (ya viene marcada)', 'radio', 'pm_predeterminada', i === predeterminadaPm));
+      fila.append(fila1, fila2, aviso, opciones);
+      lista.append(fila);
     });
+    const guardar = el('button', 'btn btn--chico', 'Guardar y publicar');
+    guardar.type = 'submit';
+    form.append(lista, guardar);
+    form.addEventListener('submit', (ev) => { ev.preventDefault(); guardarCuentasPm(form, guardar); });
+    caja.append(form);
   }
 
-  // { nombre, banco, telefono, cedula } del formulario, o el texto del problema
-  function cuentaDelForm(form) {
-    const v = (n) => form.elements[n].value.trim();
-    const c = { nombre: v('nombre').slice(0, 30), banco: v('banco').replace(/\s+/g, ' '), telefono: v('telefono').replace(/\D/g, ''), cedula: v('cedula').replace(/[^\dVEve]/g, '').toUpperCase() };
-    if (c.telefono.startsWith('58')) c.telefono = c.telefono.slice(2);
-    if (c.telefono && !c.telefono.startsWith('0')) c.telefono = '0' + c.telefono;
-    if (c.banco.length < 3) return { problema: 'Escribe el banco, por ejemplo "Venezuela 0102".' };
-    if (!/^04(12|14|16|22|24|26)\d{7}$/.test(c.telefono)) return { problema: 'El teléfono debe ser un celular, por ejemplo 04141234567.' };
-    if (!/^[VE]?\d{6,9}$/.test(c.cedula)) return { problema: 'La cédula: solo números, por ejemplo 12345678.' };
-    return { c };
+  // Lee y revisa las cuentas del formulario: { cuentas, predeterminada } o { problema }
+  function cuentasDelForm(form) {
+    const cuentas = [];
+    const radios = form.querySelectorAll('input[name="pm_predeterminada"]');
+    let predeterminada = -1;
+    for (let i = 0; i < cuentasPm.length; i++) {
+      const v = (n) => form.elements[`pm${i}_${n}`];
+      const c = { nombre: v('nombre').value.trim().slice(0, 30), banco: v('banco').value.trim().replace(/\s+/g, ' '),
+        telefono: v('telefono').value.replace(/\D/g, ''), cedula: v('cedula').value.replace(/[^\dVEve]/g, '').toUpperCase(),
+        aviso: v('aviso').value.trim().replace(/\s+/g, ' ').slice(0, 160), mostrar: v('mostrar').checked };
+      if (c.telefono.startsWith('58')) c.telefono = c.telefono.slice(2);
+      if (c.telefono && !c.telefono.startsWith('0')) c.telefono = '0' + c.telefono;
+      const quien = c.nombre || `Cuenta ${i + 1}`;
+      const vacia = !c.banco && !c.telefono && !c.cedula;
+      if (c.mostrar || !vacia) {
+        if (c.banco.length < 3) return { problema: `${quien}: escribe el banco, por ejemplo "Venezuela 0102".` };
+        if (!/^04(12|14|16|22|24|26)\d{7}$/.test(c.telefono)) return { problema: `${quien}: el teléfono debe ser un celular, por ejemplo 04141234567.` };
+        if (!/^[VE]?\d{6,9}$/.test(c.cedula)) return { problema: `${quien}: la cédula, solo números (por ejemplo 12345678).` };
+      }
+      if (radios[i] && radios[i].checked) predeterminada = i;
+      cuentas.push(c);
+    }
+    if (!cuentas.some((c) => c.mostrar)) return { problema: 'Deja al menos una cuenta con "Mostrar en la tienda".' };
+    if (predeterminada < 0 || !cuentas[predeterminada].mostrar) return { problema: 'La predeterminada también tiene que estar en "Mostrar en la tienda".' };
+    return { cuentas, predeterminada };
   }
 
-  // Guarda la cuenta i. "usar" (o si ya estaba en uso) también la publica para los clientes, en la misma petición.
-  async function guardarCuentaPm(i, form, b, usar) {
+  async function guardarCuentasPm(form, b) {
     const msg = $('mensajePm');
-    const { c, problema } = cuentaDelForm(form);
-    if (!c) { msg.textContent = `${c?.nombre || cuentasPm[i].nombre || `Cuenta ${i + 1}`}: ${problema}`; return; }
-    const publicar = usar || i === enUsoPm;
-    const datos = `${c.banco}\nTeléfono ${c.telefono}\nC.I. ${c.cedula}`;
-    if (usar && !confirm(`¿Mostrar a los clientes esta cuenta (${c.nombre || `Cuenta ${i + 1}`})?\n\n${datos}\n\nQuien ya tiene la tienda abierta sigue viendo la anterior hasta recargar la página: deja encendidas las macros de las dos cuentas.`)) return;
-    if (!usar && publicar && !confirm(`Esta es la cuenta que ven los clientes. ¿Cambiarla a esto?\n\n${datos}`)) return;
+    const { cuentas, predeterminada, problema } = cuentasDelForm(form);
+    if (problema) { msg.textContent = problema; return; }
+    // En la tienda la predeterminada va primero
+    const p = cuentas[predeterminada];
+    const visibles = [p, ...cuentas.filter((c) => c.mostrar && c !== p)];
+    const publicas = visibles.map(({ banco, telefono, cedula, aviso }) => ({ banco, telefono, cedula, ...(aviso && { aviso }) }));
+    const resumen = visibles.map((c) => `• ${c.banco} · ${c.telefono} · C.I. ${c.cedula}${c === p ? '  ← predeterminada' : ''}`).join('\n');
+    if (!confirm(`¿Publicar en la tienda?\n\n${resumen}${visibles.length > 1 ? '\n\nEl cliente elige a cuál paga; la predeterminada ya viene marcada.' : ''}`)) return;
     const ahora = new Date().toISOString();
-    const filas = [{ clave: 'pago_movil_cuentas', valor: { cuentas: cuentasPm.map((x, j) => (j === i ? c : x)) }, publico: false, actualizado: ahora }];
-    if (publicar) filas.push({ clave: 'pago_movil', valor: { banco: c.banco, telefono: c.telefono, cedula: c.cedula }, publico: true, actualizado: ahora });
+    const filas = [
+      { clave: 'pago_movil_cuentas', valor: { cuentas, predeterminada }, publico: false, actualizado: ahora },
+      { clave: 'pago_movil', valor: { banco: p.banco, telefono: p.telefono, cedula: p.cedula, cuentas: publicas, predeterminada: visibles.indexOf(p) }, publico: true, actualizado: ahora },
+    ];
     b.disabled = true;
     try {
       const { error } = await cliente.from('configuracion').upsert(filas, { onConflict: 'clave' });
       if (error) throw error;
-      msg.textContent = publicar ? `✅ Listo: los clientes ya ven ${c.nombre || c.banco}.` : '✅ Cuenta guardada (los clientes no la ven hasta que toques "Usar esta").';
+      msg.textContent = '✅ Publicado: los clientes lo ven al abrir o recargar la tienda.';
       await cargarCuentasPm();
     } catch (e) {
       console.error(e);

@@ -1,6 +1,10 @@
 // Datos de Pago Móvil que ven los clientes (las 7 tiendas y el perfil).
-// Desde 2026-11-15 salen de Supabase: configuracion "pago_movil" (publico), que es la cuenta ACTIVA que se
-// elige en admin.html → Pagos → "Pago Móvil que ven los clientes" (hay dos guardadas y se usa una).
+// Desde 2026-11-15 salen de Supabase: configuracion "pago_movil" (publico), que se arma en
+// admin.html → Pagos → "Pago Móvil que ven los clientes":
+//   { banco, telefono, cedula,            ← la cuenta predeterminada (lo que leían las páginas viejas)
+//     cuentas: [{ banco, telefono, cedula, aviso }], predeterminada: i }   ← las que se muestran
+// Con dos o más cuentas, DatosPago.selector() pinta "¿A qué banco pagas?" con la predeterminada marcada y
+// el aviso de cada una (p. ej. "Elige Venezuela solo si pagas desde Mercantil, UBI o Banco del Tesoro").
 // Si Supabase no responde, se usa la copia vieja de Firestore (configuracion/pago_movil) para que la
 // página nunca quede sin datos de pago. Sin SDK: un fetch a la API REST (la página no espera librerías).
 (function () {
@@ -8,10 +12,24 @@
   const PROYECTO = 'levelupstore-87d4d';
   const CLAVE_WEB = 'AIzaSyBIdEh_HzzB8dnzG8qkPQYOIo2kSb_F6xQ'; // clave pública de la app web de Firebase
   const URL_FIRESTORE = `https://firestore.googleapis.com/v1/projects/${PROYECTO}/databases/(default)/documents/configuracion/pago_movil?key=${CLAVE_WEB}`;
+  const CSS = '/css/datos-pago.css?v=1';
 
   // Las tiendas pintan estos datos con innerHTML: solo letras, números, espacios y . - ( ) /
-  const limpio = (v) => String(v ?? '').replace(/[^\p{L}\p{N} .\-()/]/gu, '').trim().slice(0, 60);
-  const completo = (d) => (d && d.banco && d.telefono && d.cedula ? d : null);
+  const limpio = (v, max = 60) => String(v ?? '').replace(/[^\p{L}\p{N} .,\-()/]/gu, '').trim().slice(0, max);
+  const cuenta = (d) => ({ banco: limpio(d && d.banco), telefono: limpio(d && d.telefono), cedula: limpio(d && d.cedula), aviso: limpio(d && d.aviso, 160) });
+  const completa = (c) => !!(c.banco && c.telefono && c.cedula);
+
+  // { banco, telefono, cedula, cuentas, predeterminada } con la predeterminada arriba, o null
+  function armar(valor) {
+    const unica = cuenta(valor);
+    let cuentas = Array.isArray(valor && valor.cuentas) ? valor.cuentas.slice(0, 4).map(cuenta).filter(completa) : [];
+    let predeterminada = Number(valor && valor.predeterminada) || 0;
+    if (!cuentas.length) { cuentas = completa(unica) ? [unica] : []; predeterminada = 0; }
+    if (!cuentas.length) return null;
+    if (!cuentas[predeterminada]) predeterminada = 0;
+    const p = cuentas[predeterminada];
+    return { banco: p.banco, telefono: p.telefono, cedula: p.cedula, cuentas, predeterminada };
+  }
 
   async function configuracion() {
     try {
@@ -30,19 +48,18 @@
       headers: { apikey: c.supabaseKey, Accept: 'application/json' },
     });
     if (!res.ok) return null;
-    const v = ((await res.json())[0] || {}).valor || {};
-    return completo({ banco: limpio(v.banco), telefono: limpio(v.telefono), cedula: limpio(v.cedula) });
+    return armar(((await res.json())[0] || {}).valor);
   }
 
   async function deFirestore() {
     const res = await fetch(URL_FIRESTORE);
     if (!res.ok) return null;
     const campos = (await res.json()).fields || {};
-    const texto = (nombre) => limpio(campos[nombre] ? (campos[nombre].stringValue ?? campos[nombre].integerValue ?? '') : '');
-    return completo({ banco: texto('banco'), telefono: texto('telefono'), cedula: texto('cedula') });
+    const texto = (nombre) => (campos[nombre] ? (campos[nombre].stringValue ?? campos[nombre].integerValue ?? '') : '');
+    return armar({ banco: texto('banco'), telefono: texto('telefono'), cedula: texto('cedula') });
   }
 
-  // Devuelve { banco, telefono, cedula } o null si no hay forma de leerlos
+  // Devuelve { banco, telefono, cedula, cuentas, predeterminada } o null si no hay forma de leerlos
   async function leer() {
     try {
       const d = await deSupabase();
@@ -55,5 +72,64 @@
     }
   }
 
-  window.DatosPago = { leer };
+  function cargarCss() {
+    if (document.querySelector('link[data-datos-pago]')) return;
+    const l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = CSS;
+    l.dataset.datosPago = '';
+    document.head.appendChild(l);
+  }
+
+  // "Venezuela 0102" → "Venezuela"
+  const nombreBanco = (banco) => banco.replace(/\s*\(?\d{4}\)?$/, '') || banco;
+
+  /**
+   * Pinta, justo antes de `contenedor`, los botones para elegir a qué banco pagar (solo si hay 2 o más
+   * cuentas) y llama a alElegir(cuenta) con la predeterminada y cada vez que el cliente cambia.
+   * Se puede volver a llamar: reemplaza los botones anteriores.
+   */
+  function selector(contenedor, datos, alElegir) {
+    if (!contenedor || !datos) return;
+    const anterior = contenedor.previousElementSibling;
+    if (anterior && anterior.classList.contains('pm-elegir')) anterior.remove();
+    const cuentas = datos.cuentas && datos.cuentas.length ? datos.cuentas : [datos];
+    const inicial = cuentas[datos.predeterminada] || cuentas[0];
+    if (cuentas.length > 1) {
+      cargarCss();
+      const caja = document.createElement('div');
+      caja.className = 'pm-elegir';
+      const titulo = document.createElement('p');
+      titulo.className = 'pm-elegir-titulo';
+      titulo.textContent = '¿A qué banco nos vas a pagar?';
+      const opciones = document.createElement('div');
+      opciones.className = 'pm-opciones';
+      opciones.setAttribute('role', 'group');
+      opciones.setAttribute('aria-label', 'Banco al que vas a pagar');
+      const botones = cuentas.map((c) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pm-opcion';
+        b.textContent = nombreBanco(c.banco);
+        b.setAttribute('aria-pressed', String(c === inicial));
+        b.addEventListener('click', () => {
+          botones.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+          alElegir(c);
+        });
+        return b;
+      });
+      opciones.append(...botones);
+      caja.append(titulo, opciones);
+      cuentas.filter((c) => c.aviso).forEach((c) => {
+        const aviso = document.createElement('p');
+        aviso.className = 'pm-aviso';
+        aviso.textContent = c.aviso;
+        caja.append(aviso);
+      });
+      contenedor.parentNode.insertBefore(caja, contenedor);
+    }
+    alElegir(inicial);
+  }
+
+  window.DatosPago = { leer, selector };
 })();

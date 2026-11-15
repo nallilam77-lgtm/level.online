@@ -1,0 +1,22 @@
+/* Elegir a qué banco pagar (js/datos-pago.js → DatosPago.selector), en las 7 tiendas y el perfil.
+   Usa el acento de cada tienda (--game-accent / --game-text) y, fuera de ellas, el cian de Level Up. */
+.pm-elegir {
+  --pm-acento: var(--game-accent, var(--accent-cyan));
+  --pm-texto: var(--game-text, var(--accent-cyan));
+  display: grid; gap: 10px; margin-bottom: 12px; font-family: 'Poppins', sans-serif;
+}
+.pm-elegir-titulo { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-main); }
+.pm-opciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.pm-opcion {
+  min-height: 44px; padding: 8px 12px; border-radius: 12px; cursor: pointer; line-height: 1.2;
+  background: var(--bg-deep); color: var(--text-muted); border: 1px solid var(--border-glass);
+  font-family: 'Montserrat', sans-serif; font-size: 12px; font-weight: 800; transition: border-color 0.2s, color 0.2s;
+}
+.pm-opcion[aria-pressed="true"] { color: var(--pm-texto); border-color: var(--pm-acento); box-shadow: var(--shadow-glow); }
+.pm-opcion[aria-pressed="true"]::before { content: '✓ '; }
+.pm-opcion:focus-visible { outline: 2px solid var(--pm-acento); outline-offset: 2px; }
+.pm-aviso {
+  margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 12px; line-height: 1.5;
+  color: var(--text-main); background: var(--bg-deep); border-left: 3px solid var(--pm-acento);
+}
+.pm-aviso::before { content: 'ℹ️ '; }

@@ -43,7 +43,7 @@
   <script src="/js/fichas-tienda.js?v=2" defer></script>
   <script src="/js/descuento.js" defer></script>
   <script src="/js/ultimo-id.js" defer></script>
-  <script src="/js/datos-pago.js?v=2" defer></script>
+  <script src="/js/datos-pago.js?v=3" defer></script>
   <script src="/js/aviso-codigo.js?v=3" defer></script>
   <script src="/js/whatsapp-cliente.js?v=2" defer></script>
   <script src="/js/canal.js?v=1" defer></script>
@@ -460,7 +460,7 @@
     .catalog-message { text-align: center; grid-column: span 2; color: var(--text-muted); padding: 20px 0; font-size: 13px; }
     .catalog-message.error { color: var(--danger); }
 
-    .bank-row .bank-value { margin-left: auto; text-align: right; word-break: break-all; }
+    .bank-row .bank-value { margin-left: auto; text-align: right; overflow-wrap: anywhere; }
     .btn-mini-copy { flex-shrink: 0; min-width: 44px; min-height: 36px; background: var(--price-bg); border: 1px solid var(--card-border); border-radius: 10px; color: #fff; font-size: 14px; cursor: pointer; transition: all 0.2s ease; }
     .btn-mini-copy:hover { border-color: var(--accent); }
     .btn-mini-copy.copied { background: var(--game-text); border-color: var(--game-text); color: #000; }
@@ -1033,12 +1033,15 @@
       try {
         const data = await DatosPago.leer();
         if (data) {
-          datosBancoGlobal = { banco: data.banco, telefono: data.telefono, cedula: data.cedula };
-          document.getElementById('bankInfoContainer').innerHTML = `
-            <div class="bank-row">Banco: <span class="bank-value">${datosBancoGlobal.banco}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('banco', this)" aria-label="Copiar banco">📋</button></div>
-            <div class="bank-row">Teléfono: <span class="bank-value">${datosBancoGlobal.telefono}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('telefono', this)" aria-label="Copiar teléfono">📋</button></div>
-            <div class="bank-row">Cédula: <span class="bank-value">${datosBancoGlobal.cedula}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('cedula', this)" aria-label="Copiar cédula">📋</button></div>
+          // Con dos cuentas, el cliente elige a qué banco paga (js/datos-pago.js): la predeterminada ya viene marcada
+          DatosPago.selector(document.getElementById('bankInfoContainer'), data, (c) => {
+            datosBancoGlobal = { banco: c.banco, telefono: c.telefono, cedula: c.cedula };
+            document.getElementById('bankInfoContainer').innerHTML = `
+              <div class="bank-row">Banco: <span class="bank-value">${datosBancoGlobal.banco}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('banco', this)" aria-label="Copiar banco">📋</button></div>
+              <div class="bank-row">Teléfono: <span class="bank-value">${datosBancoGlobal.telefono}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('telefono', this)" aria-label="Copiar teléfono">📋</button></div>
+              <div class="bank-row">Cédula: <span class="bank-value">${datosBancoGlobal.cedula}</span><button type="button" class="btn-mini-copy" onclick="copiarCampo('cedula', this)" aria-label="Copiar cédula">📋</button></div>
           `;
+          });
         }
       } catch (error) {}
     }
