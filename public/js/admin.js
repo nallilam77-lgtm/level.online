@@ -119,7 +119,8 @@
     if (b.dataset.seccion === 'canjes') cargarCanjes();
     if (b.dataset.seccion === 'manuales') cargarManuales();
     if (b.dataset.seccion === 'revision') { cargarRevision(); cargarRuleta().catch(() => {}); }
-    if (b.dataset.seccion === 'pagos') { cargarPagos(); cargarPorAprobar().catch(() => {}); }
+    if (b.dataset.seccion === 'pagos') cargarPagos();
+    if (b.dataset.seccion === 'revisarpagos') cargarPorAprobar().catch(() => {});
     // Ajustes: cuentas de Pago Móvil, modo de Free Fire y Google Sheets (tabla configuracion)
     if (b.dataset.seccion === 'ajustes') { cargarMantenimiento().catch(() => {}); cargarPagosManual().catch(() => {}); cargarAvisos().catch(() => {}); cargarCuentasPm(); cargarModoFF().catch(() => {}); cargarHojas().catch(() => {}); }
   }));
@@ -2054,13 +2055,13 @@
     const activo = !(data && data.valor === false);
     $('pagosManualActivo').checked = activo;
     $('mensajePagosManual').textContent = activo
-      ? '🖐️ Encendido: las referencias que no lleguen van a Pagos → Revisar pagos.'
+      ? '🖐️ Encendido: las referencias que no lleguen van a la pestaña Revisar pagos.'
       : 'Apagado: una referencia que no llegó se rechaza como siempre ("Referencia no encontrada").';
   }
   $('pagosManualActivo').addEventListener('change', async (ev) => {
     const activar = ev.target.checked;
     const texto = activar
-      ? '¿Encender "Revisar pagos"?\n\nSi un cliente escribe una referencia que no llegó, verá "Estamos verificando tu pago" y el pedido va a Pagos → Revisar pagos. Tú sueltas los diamantes o lo rechazas con el motivo.'
+      ? '¿Encender "Revisar pagos"?\n\nSi un cliente escribe una referencia que no llegó, verá "Estamos verificando tu pago" y el pedido va a la pestaña Revisar pagos. Tú sueltas los diamantes o lo rechazas con el motivo.'
       : '¿Apagar "Revisar pagos"?\n\nLas referencias que no lleguen se rechazan otra vez como "no encontrada". Las que ya están en la lista siguen ahí.';
     if (!confirm(texto)) { cargarPagosManual(); return; }
     ev.target.disabled = true;

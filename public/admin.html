@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=50" defer></script>
+  <script src="/js/admin.js?v=51" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -49,7 +49,8 @@
             <button type="button" role="tab" data-seccion="pedidos" aria-selected="false">Pedidos</button>
             <button type="button" role="tab" data-seccion="revision" aria-selected="false">Revisión <span class="contador-pestana" id="contadorRevision" hidden></span></button>
             <button type="button" role="tab" data-seccion="manuales" aria-selected="false">Manuales <span class="contador-pestana" id="contadorManuales" hidden></span></button>
-            <button type="button" role="tab" data-seccion="pagos" aria-selected="false">Pagos <span class="contador-pestana" id="contadorPagos" hidden></span></button>
+            <button type="button" role="tab" data-seccion="revisarpagos" aria-selected="false">Revisar pagos <span class="contador-pestana" id="contadorPagos" hidden></span></button>
+            <button type="button" role="tab" data-seccion="pagos" aria-selected="false">Pagos recibidos</button>
           </div>
         </div>
         <div class="grupo-pestanas" role="group" aria-label="Tienda">
@@ -225,23 +226,29 @@
         </div>
       </section>
 
-      <!-- PAGOS (supabase/pagos.sql): lo que avisa MacroDroid. Las cuentas que ven los clientes están en Ajustes. -->
-      <section class="seccion" id="seccion-pagos" hidden>
-        <!-- Revisar pagos: los que no llegaron (supabase/pagos-manual.sql; api/_lib/pagos-manual.js). Encendido salvo que se apague en Ajustes. -->
+      <!-- REVISAR PAGOS: los que el cliente pagó y cuya notificación no llegó (supabase/pagos-manual.sql; api/_lib/pagos-manual.js).
+           Encendido salvo que se apague en Ajustes. -->
+      <section class="seccion" id="seccion-revisarpagos" hidden>
         <div class="tarjeta" id="tarjetaPorAprobar">
           <div class="fila-titulo">
             <h2>Revisar pagos</h2>
             <button type="button" class="btn-ver" id="actualizarPorAprobar">Actualizar</button>
           </div>
-          <p class="nota" id="notaPorAprobar">Pagos que el cliente hizo y cuya notificación no llegó (el cliente ve "Verificando pago"). Búscalo en tu banco: si está, revisa el <strong>monto que llegó</strong> y toca <strong>Soltar diamantes</strong> (la referencia completa es opcional). Si no está, <strong>Rechazar</strong> y escribe el motivo: el cliente lo ve.</p>
+          <p class="nota" id="notaPorAprobar">Pagos que el cliente hizo y cuya notificación no llegó (el cliente ve su recarga "Pendiente"). Búscalo en tu banco: si está, revisa el <strong>monto que llegó</strong> y toca <strong>Soltar diamantes</strong> (la referencia completa es opcional). Si no está, <strong>Rechazar</strong> y escribe el motivo: el cliente lo ve.</p>
           <ul class="pedidos" id="listaPorAprobar"></ul>
-          <h3 class="subtitulo-form">Rechazados (últimos 7 días)</h3>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Rechazados (últimos 7 días)</h2>
           <p class="nota">Estas referencias ya no se pueden volver a mandar: al cliente le sale que su pago fue rechazado, con tu motivo. Si rechazaste uno por error, toca <strong>↩️ Me equivoqué</strong>.</p>
           <input type="search" id="buscarRechazado" class="buscar" placeholder="Buscar referencia (últimos 5 o completa), ID o paquete…" aria-label="Buscar rechazados" autocomplete="off" inputmode="search">
           <p class="nota" id="cuentaRechazados" role="status"></p>
           <ul class="pedidos" id="listaRechazados"></ul>
         </div>
+      </section>
 
+      <!-- PAGOS (supabase/pagos.sql): lo que avisa MacroDroid. Las cuentas que ven los clientes están en Ajustes. -->
+      <section class="seccion" id="seccion-pagos" hidden>
         <div class="tarjeta">
           <div class="fila-titulo">
             <h2>Pagos recibidos</h2>
@@ -590,7 +597,7 @@
           <h2>Revisar pagos</h2>
           <label class="interruptor">
             <input type="checkbox" id="pagosManualActivo">
-            <span><strong>Mandar a "Revisar pagos" las referencias que no lleguen</strong><small>Para cuando el banco no manda la notificación (p. ej. Venezuela). Los pagos que sí llegan siguen automáticos. El cliente ve "Estamos verificando tu pago" y tú sueltas los diamantes o lo rechazas con el motivo en <strong>Pagos → Revisar pagos</strong>.</small></span>
+            <span><strong>Mandar a "Revisar pagos" las referencias que no lleguen</strong><small>Para cuando el banco no manda la notificación (p. ej. Venezuela). Los pagos que sí llegan siguen automáticos. El cliente ve "Estamos verificando tu pago" y tú sueltas los diamantes o lo rechazas con el motivo en la pestaña <strong>Revisar pagos</strong>.</small></span>
           </label>
           <p class="mensaje-form" id="mensajePagosManual" role="status"></p>
         </div>
