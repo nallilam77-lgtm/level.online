@@ -229,3 +229,9 @@ Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creado
 ## 10. Contraseñas de las tiendas manuales (desde 2026-11-16)
 
 **Regla**: la contraseña del cliente (FC Mobile, COD Mobile) se cifra en Vercel (`_lib/cifrado.js`) ANTES de tomar el pago y solo se guarda cifrada en `pedidos_manuales.clave_cifrada`; el panel no puede leer esa columna (permiso por columnas) y la pide a `accion=clave`. Nunca escribirla en logs, en `nota` ni en `recargas`. Cambiar `CLAVE_MANUALES` en Vercel deja ilegibles las ya guardadas con la anterior ("m1:"); las "t1:" dependen de `SCRIPT_RECARGAS_TOKEN`.
+
+## Pago completado: el aviso de Central One no encontraba el pedido (corregido 2026-11-16)
+
+**Síntoma**: un pago insuficiente que el cliente completaba quedaba "completado" en `recargas` aunque Central One fallara después, y en Roblox el código que llegaba por el aviso se perdía.
+**Causa**: completar crea un idPedido NUEVO (el que va a Central One como Idempotency-Key), pero la fila de `recargas` conserva el del primer pago; `actualizarEstado` del webhook buscaba el nuevo y no existía.
+**Regla**: toda tienda que complete un pago llama a `pedidoDeEntrega(idPedido)` (_lib/historial.js) en cuanto `usar_complemento`/`pagos_completar` confirma el pago completo; `completarFila` renombra la fila a ese id (solo si sigue "incompleto") y usa "en_proceso" si Central One aún no confirmó. Una tienda nueva con pago por completar debe hacer lo mismo.

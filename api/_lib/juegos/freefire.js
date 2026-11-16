@@ -15,6 +15,7 @@ import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados }
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
 import { supabaseActivo, rpc, leer } from '../supabase.js';
 import { iniciosVE } from '../semana.js';
+import { pedidoDeEntrega } from '../historial.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). verificar_pago va a Supabase (rápido),
 // así que sus 32 s son holgura. Peor caso con fallo del bot:
@@ -874,6 +875,8 @@ async function completarPago(req, res) {
     });
     pedido = { utilidades, referencias };
     console.info(`🧩 Pago completado (${referencias.join(' + ')}) para el pedido ${datos.idPedidoOriginal} -> ${idPedido} (ID ${id})`);
+    // La fila del pedido original toma este id (el de Central One): así la encuentra el webhook
+    pedidoDeEntrega(idPedido);
 
     return await entregarRecarga(res, {
       URL_GOOGLE_SCRIPT, RAILWAY_SECRET, CENTRALONE_API_KEY, idPedido, id, paquete, numeroDiamantes, precioReal,

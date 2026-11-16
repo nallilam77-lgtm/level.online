@@ -14,6 +14,7 @@ import { validarJugador } from '../validador.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
+import { pedidoDeEntrega } from '../historial.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). Peor caso con respuesta incierta:
 // precios 12 + verificar 32 + catálogo Central One 8 + pedido 40 + registrar 12 + marcar 12 = 116 s
@@ -583,6 +584,8 @@ async function completarPago(req, res) {
     });
     pedido = { utilidades, referencias };
     console.info(`🧩 Pago de Mobile Legends completado (${referencias.join(' + ')}) para el pedido ${datos.idPedidoOriginal} -> ${idPedido} (ID ${id} (${zona}))`);
+    // La fila del pedido original toma este id (el de Central One): así la encuentra el webhook
+    pedidoDeEntrega(idPedido);
 
     // Producto de Central One del paquete (pestaña de precios). Si no se puede leer o ya no está,
     // entregarRecarga bloquea los pagos y lo deja en "errores" sin crear el pedido.

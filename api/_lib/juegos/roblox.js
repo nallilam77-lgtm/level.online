@@ -15,7 +15,7 @@ import { porcentajePremio, anotarRecarga, crearAccionFidelidad, conDestacados } 
 import { formatearVES } from '../recarga-comun.js';
 import { datosParaPedido, crearPedidoCentralOne, esperarCodigo } from '../centralone.js';
 import { supabaseActivo, rpc } from '../supabase.js';
-import { notaParaHistorial } from '../historial.js';
+import { notaParaHistorial, pedidoDeEntrega } from '../historial.js';
 import { MARGEN_BS, motorPagos, tomarPago, cambiarPago, guardarPorCompletar, completarPago } from '../motor-pagos.js';
 
 const MENSAJE_SIN_CONFIGURAR = 'La tienda de Roblox no está disponible en este momento. Intenta más tarde.';
@@ -299,8 +299,14 @@ async function compraConSupabase({ idPedido, referencia, usuario, paquete, preci
   const pago = await tomarPago(referencia, idPedido, 'roblox');
   if (!pago.encontrado) return { status: 'error', message: pago.message };
   if (pago.monto < precio - MARGEN_BS) {
-    const g = await guardarPorCompletar({ idPedido, referencia: pago.referencia, claveHash, precio, pagado: pago.monto, juego: 'roblox',
-      datos: { usuario, paquete, codigoDescuento, telefono } });
+    let g;
+    try {
+      g = await guardarPorCompletar({ idPedido, referencia: pago.referencia, claveHash, precio, pagado: pago.monto, juego: 'roblox',
+        datos: { usuario, paquete, codigoDescuento, telefono } });
+    } catch (error) {
+      // Sin esto el pago quedaba "en proceso" para siempre ("Otro cliente está procesando esta referencia")
+      return noEntregado({ idPedido, motivo: `no se pudo guardar el pago por completar (${error.message.slice(0, 120)})`, liberar: pago.referencia, falloTecnico: true });
+    }
     const falta = Math.round((precio - pago.monto) * 100) / 100;
     return {
       status: 'error', insuficiente: true, montoPagado: pago.monto, precioOficial: precio,
@@ -321,6 +327,8 @@ async function completarConSupabase({ idPedido, claveHash, referencia, telefono,
     return { status: 'error', insuficiente: true, porCompletar: true, montoPagado: Number(r.pagadoTotal) || 0, precioOficial: Number(r.precio) || 0,
       falta, horas: 48, message: `Pago insuficiente: con este pago llevas ${formatearVES(Number(r.pagadoTotal) || 0)} Bs y faltan ${formatearVES(falta)} Bs. Paga la diferencia y escribe la nueva referencia.` };
   }
+  // La fila del pedido original toma este id (código guardado o pedido de Central One): así la encuentra el webhook
+  pedidoDeEntrega(idPedido);
   const paquete = String(r.paquete || '');
   let respaldo = null;
   try {

@@ -51,6 +51,16 @@ export function notaParaHistorial(texto) {
   if (ctx) ctx.nota = String(texto || '').slice(0, 500);
 }
 
+/**
+ * Completar un pago insuficiente crea un idPedido NUEVO (es el que va a Central One y al aviso del webhook).
+ * La tienda lo deja aquí y completarFila le pone ese id a la fila del pedido original: si no, el aviso de
+ * Central One (entregado, fallido, el código de Roblox) buscaba un pedido que no existía y se perdía.
+ */
+export function pedidoDeEntrega(idPedido) {
+  const ctx = contexto.getStore();
+  if (ctx && /^[A-Za-z0-9-]{8,80}$/.test(String(idPedido || ''))) ctx.idEntrega = String(idPedido);
+}
+
 // Estado según lo que se le respondió al cliente
 function estadoDeRespuesta(juego, cuerpo) {
   if (cuerpo?.insuficiente) return 'incompleto';
@@ -98,13 +108,18 @@ async function guardarFila({ usuario: promesaUsuario, juego, body, pedido, respu
 }
 
 // Pago completado con la clave del pago insuficiente (o desde el perfil, con su huella): misma fila, estado nuevo
-async function completarFila({ claveHash, respuesta, nota }) {
+async function completarFila({ claveHash, respuesta, nota, idEntrega }) {
   const cuerpo = respuesta.cuerpo || {};
-  const estado = cuerpo.status === 'success' ? 'completado' : respuesta.codigo === 202 ? 'en_revision' : null;
+  // Igual que una compra normal: Central One aceptó pero no confirmó → "en proceso" hasta el aviso
+  const estado = cuerpo.status === 'success' ? (cuerpo.entrega === 'en_camino' ? 'en_proceso' : 'completado')
+    // 202 = quedó en revisión; agotado = Roblox sin código para un pago ya completado (se entrega por WhatsApp)
+    : respuesta.codigo === 202 || cuerpo.agotado ? 'en_revision' : null;
   if (!estado) return; // clave o referencia rechazada: el pedido sigue "incompleto"
-  await actualizar('recargas', `clave_hash=eq.${claveHash}`, {
+  await actualizar('recargas', `clave_hash=eq.${claveHash}&estado=eq.incompleto`, {
     estado, actualizado: new Date().toISOString(), ...(cuerpo.code && { codigo: corto(cuerpo.code, 80) }),
     ...(nota && { nota_admin: nota }),
+    // El pedido pasa a llamarse como la entrega (pedidoDeEntrega): así lo encuentra el webhook de Central One
+    ...(idEntrega && { id_pedido: idEntrega }),
   });
 }
 
@@ -127,7 +142,7 @@ export async function conHistorial(req, res, juego, fn) {
     const clave = typeof body.tokenComplemento === 'string' ? body.tokenComplemento : '';
     const claveHash = req.claveHashPerfil || (clave ? huella(clave) : '');
     const tarea = ctx.pedido ? guardarFila({ usuario: ctx.usuario, juego, body, pedido: ctx.pedido, respuesta, nota: ctx.nota })
-      : claveHash && respuesta.cuerpo ? completarFila({ claveHash, respuesta, nota: ctx.nota }) : null;
+      : claveHash && respuesta.cuerpo ? completarFila({ claveHash, respuesta, nota: ctx.nota, idEntrega: ctx.idEntrega }) : null;
     if (tarea) waitUntil(tarea.catch((error) => console.error(`⚠️ historial: no se pudo guardar la recarga (${juego}):`, error.message)));
     // De paso (después de responder, como mucho cada 3 min por instancia): las recargas que llevan rato
     // "en proceso" se verifican solas en Central One (_lib/revision.js → revisarEnProceso)
