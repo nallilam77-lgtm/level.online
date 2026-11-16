@@ -1515,7 +1515,9 @@
       lista.replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/revision.sql?'));
       return;
     }
-    const abiertos = data.abiertos || [];
+    // Los pagos rechazados en "Revisar pagos" quedan "problema" para que el cliente vea el motivo, pero ya
+    // están resueltos: no se cuentan aquí (api/_lib/pagos-manual.js, motivo_fallo "pago_rechazado")
+    const abiertos = (data.abiertos || []).filter((p) => p.motivo_fallo !== 'pago_rechazado');
     const sueltas = data.sueltas || [];
     const total = abiertos.length + sueltas.length;
     ultimaRevision = { abiertos, sueltas };

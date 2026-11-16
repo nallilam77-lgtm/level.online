@@ -179,8 +179,12 @@
 
     li.append(fila, filaEstado);
     if (r.motivo_fallo && ['en_revision', 'problema'].includes(r.estado)) {
-      // "rechazo:<motivo>": pago rechazado desde "Revisar pagos" del panel, con el motivo que escribió el administrador
-      const rechazo = String(r.motivo_fallo).startsWith('rechazo:') ? `Pago rechazado: ${String(r.motivo_fallo).slice(8)}` : '';
+      // Pago rechazado desde "Revisar pagos" del panel: el motivo que escribió el administrador va en nota_admin
+      // tras "❌ Pago rechazado: " (api/_lib/pagos-manual.js, PREFIJO_RECHAZO)
+      const prefijo = '❌ Pago rechazado: ';
+      const nota = String(r.nota_admin || '');
+      const rechazo = r.motivo_fallo === 'pago_rechazado'
+        ? `Pago rechazado: ${nota.startsWith(prefijo) ? nota.slice(prefijo.length, prefijo.length + 200) : 'no pudimos confirmar tu pago.'}` : '';
       li.append(el('p', 'recarga-motivo', rechazo || MOTIVOS[r.motivo_fallo] || MOTIVO_GENERAL));
     }
 
@@ -237,7 +241,7 @@
     // Siempre filtrar por la cuenta: un administrador puede LEER todas las recargas (RLS de admin.html)
     // y sin este filtro vería en su perfil las de otros clientes
     const { data, error } = await cliente.from('recargas')
-      .select('id_pedido,juego,cuenta,id_jugador,zona,paquete,precio,referencia,estado,codigo,creado,motivo_fallo')
+      .select('id_pedido,juego,cuenta,id_jugador,zona,paquete,precio,referencia,estado,codigo,creado,motivo_fallo,nota_admin')
       .eq('usuario', usuario.id)
       .order('creado', { ascending: false }).limit(MAX_RECARGAS);
     if (error) throw error;

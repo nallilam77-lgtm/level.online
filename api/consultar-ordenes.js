@@ -19,8 +19,11 @@ async function recargasEnSupabase(playerId) {
         // Pago que no llegó y está en "Revisar pagos" del panel (_lib/pagos-manual.js). La nota no sale de aquí.
         if (f.estado === 'pendiente' && String(f.nota_admin || '').startsWith('🖐️ Pago por verificar')) estado = 'Verificando pago';
         // Rechazado desde "Revisar pagos": el motivo lo escribió el administrador para el cliente
-        const motivo = f.estado === 'problema' && String(f.motivo_fallo || '').startsWith('rechazo:')
-            ? String(f.motivo_fallo).slice(8, 208) : '';
+        // (motivo_fallo "pago_rechazado"; el texto va en nota_admin tras PREFIJO_RECHAZO de _lib/pagos-manual.js)
+        const PREFIJO = '❌ Pago rechazado: ';
+        const nota = String(f.nota_admin || '');
+        const motivo = f.estado === 'problema' && f.motivo_fallo === 'pago_rechazado'
+            ? (nota.startsWith(PREFIJO) ? nota.slice(PREFIJO.length, PREFIJO.length + 200) : 'No pudimos confirmar tu pago.') : '';
         if (motivo) estado = 'Pago rechazado';
         return { paquete: f.paquete, fecha: f.creado, estado, clase, ...(motivo && { motivo }) };
     });

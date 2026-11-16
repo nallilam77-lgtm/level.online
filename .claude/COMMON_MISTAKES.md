@@ -241,3 +241,9 @@ Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creado
 **Síntoma**: con "Revisar pagos", el cliente se quedaba para siempre en "Verificando pago y bloqueando referencia": la ventana "Estamos verificando tu pago" (js/pago-manual.js) sí se abría, pero debajo.
 **Causa**: las tiendas usan z-index 10000-30000 (#pantallaProcesando, modales) y la ventana tenía 1100. La prueba con capturas no lo vio porque se llamó a fetch sin abrir antes la pantalla de "procesando".
 **Regla**: toda ventana que se abra encima de una tienda (css/pago-manual.css, css/aviso-juego.css) va con z-index ≥ 2147482000. Al probarla, abrir antes #pantallaProcesando como lo hace la tienda.
+
+## 14. Escribir texto libre en `recargas.motivo_fallo` (2026-11-16)
+
+**Síntoma**: al rechazar en "Revisar pagos", el pedido del cliente se quedaba en "Verificando pago" (pendiente) en vez de "Pago rechazado"; sin error visible.
+**Causa**: `recargas.motivo_fallo` y `motivo_accion` tienen la regla de la base `^[a-z_]{1,40}$` (solo códigos). El PATCH con "rechazo:<texto>" fallaba ENTERO (tampoco cambiaba el estado) y el `.catch` solo lo anotaba en el log.
+**Regla**: en motivo_fallo solo códigos (`pago_rechazado`, `pago_no_tomado`, `invalid_player`…); el texto para el cliente va en `nota_admin` (≤ 500) con un prefijo conocido (`❌ Pago rechazado: `, PREFIJO_RECHAZO de _lib/pagos-manual.js), que leen consultar-ordenes.js y perfil.js. Antes de escribir una columna nueva, mirar sus CHECK (`pg_constraint`).

@@ -25,6 +25,9 @@ import { cifrar, descifrar } from './cifrado.js';
 
 // Si la página del cliente es vieja (sin js/pago-manual.js), esto es lo que ve en la ventana de error
 export const MENSAJE_SOLICITUD = '⏳ Estamos verificando tu pago. Puedes ver el estado de tu pedido en levelupstore.online → "Consulta tus últimas recargas" con tu ID (o en tu perfil). No hace falta pagar de nuevo.';
+// Pedido rechazado en "Revisar pagos": nota_admin = PREFIJO_RECHAZO + motivo (lo ve el cliente). Igual en
+// api/consultar-ordenes.js y public/js/perfil.js.
+export const PREFIJO_RECHAZO = '❌ Pago rechazado: ';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const corto = (v, max) => String(v ?? '').trim().slice(0, max) || null;
 
@@ -194,9 +197,10 @@ export async function solicitudResolver(req, res) {
       if (!cambiadas?.length) return res.status(409).json({ status: 'error', message: 'Esa solicitud ya no está pendiente.' });
       // El pedido que veía el cliente como "Recibido" pasa a "Con problema" (le dice que escriba)
       if (pedido) {
-        // "rechazo:<motivo>": perfil.js y consultar-ordenes.js se lo muestran al cliente tal cual
-        await actualizar('recargas', pedido, { estado: 'problema', motivo_fallo: `rechazo:${motivo}`, revisado: ahora, actualizado: ahora,
-          nota_admin: `❌ Pago …${fila.ultimos5} rechazado a mano` }).catch((error) => console.error('⚠️ pagos a mano: no se pudo marcar el pedido:', error.message));
+        // motivo_fallo solo acepta códigos (^[a-z_]{1,40}$, regla de la base): el texto va en nota_admin con el
+        // prefijo PREFIJO_RECHAZO; perfil.js y consultar-ordenes.js se lo muestran al cliente
+        await actualizar('recargas', pedido, { estado: 'problema', motivo_fallo: 'pago_rechazado', revisado: ahora, actualizado: ahora,
+          nota_admin: `${PREFIJO_RECHAZO}${motivo}` }).catch((error) => console.error('⚠️ pagos a mano: no se pudo marcar el pedido:', error.message));
       }
       console.info(`🖐️ Pago …${fila.ultimos5} (${fila.juego}) rechazado a mano`);
       return res.status(200).json({ status: 'success' });
@@ -269,8 +273,9 @@ export async function solicitudResolver(req, res) {
   // "Recibido" va a Revisión. Si lo tomó, la tienda ya anotó el pedido como siempre (bloquear, incompleto…).
   const pagoLibre = !exito && (await leer('pagos', { referencia }, 'estado').catch(() => []))?.[0]?.estado === 'verificado';
   if (pagoLibre && pedido) {
-    await actualizar('recargas', pedido, { estado: 'en_revision', motivo_fallo: corto(resultado.error || cuerpo.message, 200), actualizado: new Date().toISOString(),
-      nota_admin: `🖐️ Pago …${fila.ultimos5} aprobado, pero la recarga no se hizo: el pago quedó libre` }).catch(() => {});
+    await actualizar('recargas', pedido, { estado: 'en_revision', motivo_fallo: 'pago_no_tomado', actualizado: new Date().toISOString(),
+      nota_admin: corto(`🖐️ Pago …${fila.ultimos5} soltado, pero la recarga no se hizo (el pago quedó libre): ${resultado.error || cuerpo.message || 'sin detalle'}`, 500) })
+      .catch((error) => console.error('⚠️ pagos a mano: no se pudo pasar el pedido a revisión:', error.message));
   }
   const recarga = resultado.error ? `⚠️ ${resultado.error} El pago quedó guardado${pagoLibre ? ' y libre' : ''}: revisa el pedido en Revisión.`
     : exito ? (cuerpo.entrega === 'en_camino' ? '✅ Recarga pedida: va en camino (Central One la confirma en unos minutos).' : '✅ Recarga hecha.')
