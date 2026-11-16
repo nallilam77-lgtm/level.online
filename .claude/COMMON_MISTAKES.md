@@ -225,3 +225,7 @@ Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creado
 - `motorPagos()` (_lib/motor-pagos.js) falla si una instancia nueva no puede leer `pagos_motor`: si adivinara "hoja", cobraría con la hoja pagos que en Supabase ya están usados (la hoja no se entera: guarda la referencia como número y pierde el cero inicial; el espejo marca las dos variantes).
 - La limpieza diaria borra los pagos usados, pero su referencia queda en `pagos_usados` (60 días): un aviso repetido de MacroDroid no la vuelve a crear libre (`pagos_no_repetir_usado`).
 - Manuales: si la hoja responde "ocupado" el pago se libera; cualquier otro error lo deja usado (no se sabe si el pedido se anotó). Roblox con el motor en Supabase y sin paquetes de Supabase: 503, nunca la hoja.
+
+## 10. Contraseñas de las tiendas manuales (desde 2026-11-16)
+
+**Regla**: la contraseña del cliente (FC Mobile, COD Mobile) se cifra en Vercel (`_lib/cifrado.js`) ANTES de tomar el pago y solo se guarda cifrada en `pedidos_manuales.clave_cifrada`; el panel no puede leer esa columna (permiso por columnas) y la pide a `accion=clave`. Nunca escribirla en logs, en `nota` ni en `recargas`. Cambiar `CLAVE_MANUALES` en Vercel deja ilegibles las ya guardadas con la anterior ("m1:"); las "t1:" dependen de `SCRIPT_RECARGAS_TOKEN`.

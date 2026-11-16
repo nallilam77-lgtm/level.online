@@ -7,6 +7,7 @@ import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } fr
 import { FASES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
 import { preciosSoloSupabase } from '../precios.js';
+import { validarJugador } from '../validador.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga, registrarUsoDescuento } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
@@ -85,7 +86,7 @@ async function precios(req, res) {
   }
 }
 
-// Verificar el ID: POST { id } -> el Apps Script validador (SCRIPT_VALIDADOR_URL, apps-script/validador.gs)
+// Verificar el ID: POST { id } -> _lib/validador.js (Central One directo desde Vercel; antes validador.gs)
 // pregunta a Central One si la cuenta existe (no compra nada). Respuesta para la página:
 //   { valid: true, verificado: true, player_name } existe · { valid: false, verificado: true } no existe ·
 //   { valid: true, verificado: false } no se pudo comprobar (la página deja seguir, como antes).
@@ -102,11 +103,6 @@ async function verificar(req, res) {
     return res.status(400).json({ valid: false, message: "ID con formato inválido. Debe tener entre 5 y 15 números." });
   }
 
-  const URL_VALIDADOR = process.env.SCRIPT_VALIDADOR_URL;
-  if (!URL_VALIDADOR) {
-    return faltaConfiguracion(res, ["SCRIPT_VALIDADOR_URL"], { valid: true, verificado: false });
-  }
-
   // Central One permite 30 validaciones por minuto para toda la cuenta: por IP, como mucho 10
   const ip = obtenerIp(req);
   const ahora = Date.now();
@@ -118,7 +114,8 @@ async function verificar(req, res) {
   if (verificacionesPorIp.size > 5000) verificacionesPorIp.delete(verificacionesPorIp.keys().next().value);
 
   try {
-    const data = await llamarScript(URL_VALIDADOR, { id, juego: 'bloodstrike' }, LECTURA_APPS_SCRIPT);
+    // Central One directo desde Vercel (_lib/validador.js); antes, el Apps Script validador.gs
+    const data = await validarJugador('bloodstrike', id);
     const verificado = data?.verificado === true;
     // Solo un "no existe" confirmado bloquea; cualquier otra cosa deja seguir sin nombre
     if (verificado && data.valid === false) {

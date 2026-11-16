@@ -23,6 +23,10 @@ function limpiarSiToca() {
   waitUntil(rpc('pagos_limpiar', {})
     .then((r) => console.info('🧹 pagos: limpieza del día', JSON.stringify(r)))
     .catch((error) => { ultimaLimpieza = ''; console.error('⚠️ pagos: no se pudo limpiar:', error.message); }));
+  // De paso: las contraseñas de las tiendas manuales de más de 7 días se borran (supabase/manuales.sql)
+  waitUntil(rpc('manuales_borrar_claves_viejas', {})
+    .then((n) => { if (n) console.info(`🧹 manuales: ${n} contraseña(s) de más de 7 días borradas`); })
+    .catch((error) => console.error('⚠️ manuales: no se pudieron borrar las contraseñas viejas:', error.message)));
 }
 
 const ORIGENES = new Set(['pago_movil', 'bdv', 'transferencia']);

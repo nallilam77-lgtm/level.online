@@ -16,7 +16,8 @@
 // =========================================================================
 import { randomUUID, randomInt, createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { supabaseActivo, rpc, guardar } from './supabase.js';
-import { llamarScript, LECTURA_APPS_SCRIPT, conCache } from './externo.js';
+import { conCache } from './externo.js';
+import { validarJugador } from './validador.js';
 import { datosParaPedido, crearPedidoCentralOne } from './centralone.js';
 import { obtenerIp, minutosBloqueado, registrarFallo, permitirUso } from './limitador.js';
 import { anotarIncidencia } from './incidencias.js';
@@ -99,9 +100,9 @@ async function ganoHoy(id) {
   }
 }
 
-// ID de Free Fire → { valido, nombre } (el mismo validador de la tienda). Lanza si no responde.
+// ID de Free Fire → { valido, nombre } (el mismo validador de la tienda, _lib/validador.js). Lanza si no responde.
 async function comprobarId(id) {
-  const v = await llamarScript(String(process.env.SCRIPT_VALIDADOR_URL || '').trim(), { id, juego: 'freefire' }, LECTURA_APPS_SCRIPT);
+  const v = await validarJugador('freefire', id);
   return { valido: v?.valid === true, nombre: String(v?.player_name || '').replace(/[<>]/g, '').trim().slice(0, 40) };
 }
 
@@ -110,8 +111,8 @@ async function comprobarId(id) {
 export async function retoCanje(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
-  if (!llaveReto() || !String(process.env.SCRIPT_VALIDADOR_URL || '').trim()) {
-    console.error('🚨 canjes: falta SCRIPT_RECARGAS_TOKEN o SCRIPT_VALIDADOR_URL en Vercel (reto)');
+  if (!llaveReto()) {
+    console.error('🚨 canjes: falta SCRIPT_RECARGAS_TOKEN en Vercel (reto)');
     return res.status(503).json({ status: 'error', message: NO_DISPONIBLE });
   }
   const datos = { t: 0, n: randomUUID() };
@@ -164,9 +165,8 @@ export async function canjear(req, res) {
   if (!/^\d{5,15}$/.test(id)) return res.status(400).json({ status: 'error', message: 'Escribe tu ID de Free Fire (solo números).' });
 
   const apiKey = String(process.env.freefire_nuevo || '').trim();
-  const urlValidador = String(process.env.SCRIPT_VALIDADOR_URL || '').trim();
-  if (!supabaseActivo() || !apiKey || !urlValidador) {
-    console.error('🚨 canjes: falta Supabase, freefire_nuevo o SCRIPT_VALIDADOR_URL en Vercel');
+  if (!supabaseActivo() || !apiKey) {
+    console.error('🚨 canjes: falta Supabase o freefire_nuevo en Vercel');
     return res.status(503).json({ status: 'error', message: NO_DISPONIBLE });
   }
 

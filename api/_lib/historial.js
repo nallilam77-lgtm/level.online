@@ -11,7 +11,7 @@
 //   3. Con la respuesta ya enviada, se guarda la fila con su estado (waitUntil: nunca frena la recarga).
 //   Completar un pago insuficiente (tokenComplemento) actualiza la fila de ese pedido por la huella de la clave.
 // Después el estado cambia solo: el webhook de Central One (actualizarEstado) y, en las tiendas manuales,
-// la acción "estado" que consulta la hoja. El perfil lo recibe en vivo (Realtime).
+// el panel (admin_manual_estado de supabase/manuales.sql). El perfil lo recibe en vivo (Realtime).
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
@@ -45,6 +45,12 @@ export function anotarEnHistorial(datos) {
   if (ctx) ctx.pedido = datos;
 }
 
+/** Nota para el administrador en la fila del pedido (nota_admin; p. ej. "enviar el código por WhatsApp"). */
+export function notaParaHistorial(texto) {
+  const ctx = contexto.getStore();
+  if (ctx) ctx.nota = String(texto || '').slice(0, 500);
+}
+
 // Estado según lo que se le respondió al cliente
 function estadoDeRespuesta(juego, cuerpo) {
   if (cuerpo?.insuficiente) return 'incompleto';
@@ -68,7 +74,7 @@ function cuentaVisible(juego, cuenta, body) {
   return { cuenta: `ID ${corto(cuenta, 30)}`, id_jugador: corto(cuenta, 30) };
 }
 
-async function guardarFila({ usuario: promesaUsuario, juego, body, pedido, respuesta }) {
+async function guardarFila({ usuario: promesaUsuario, juego, body, pedido, respuesta, nota }) {
   const usuario = await promesaUsuario;   // null sin sesión: el pedido se guarda igual, sin dueño
   const cuerpo = respuesta.cuerpo || {};
   const referencia = String(body?.referencia ?? '').replace(/\D/g, '');
@@ -86,17 +92,19 @@ async function guardarFila({ usuario: promesaUsuario, juego, body, pedido, respu
     codigo: juego === 'roblox' && cuerpo.code ? corto(cuerpo.code, 80) : null,
     clave_hash: cuerpo.tokenComplemento ? huella(cuerpo.tokenComplemento) : null,
     codigo_descuento: CODIGO_DESCUENTO_VALIDO.test(codigoDescuento) ? codigoDescuento : null,
+    ...(nota && { nota_admin: nota }),
     actualizado: new Date().toISOString(),
   }, 'id_pedido');
 }
 
 // Pago completado con la clave del pago insuficiente (o desde el perfil, con su huella): misma fila, estado nuevo
-async function completarFila({ claveHash, respuesta }) {
+async function completarFila({ claveHash, respuesta, nota }) {
   const cuerpo = respuesta.cuerpo || {};
   const estado = cuerpo.status === 'success' ? 'completado' : respuesta.codigo === 202 ? 'en_revision' : null;
   if (!estado) return; // clave o referencia rechazada: el pedido sigue "incompleto"
   await actualizar('recargas', `clave_hash=eq.${claveHash}`, {
     estado, actualizado: new Date().toISOString(), ...(cuerpo.code && { codigo: corto(cuerpo.code, 80) }),
+    ...(nota && { nota_admin: nota }),
   });
 }
 
@@ -118,8 +126,8 @@ export async function conHistorial(req, res, juego, fn) {
     const body = req.body || {};
     const clave = typeof body.tokenComplemento === 'string' ? body.tokenComplemento : '';
     const claveHash = req.claveHashPerfil || (clave ? huella(clave) : '');
-    const tarea = ctx.pedido ? guardarFila({ usuario: ctx.usuario, juego, body, pedido: ctx.pedido, respuesta })
-      : claveHash && respuesta.cuerpo ? completarFila({ claveHash, respuesta }) : null;
+    const tarea = ctx.pedido ? guardarFila({ usuario: ctx.usuario, juego, body, pedido: ctx.pedido, respuesta, nota: ctx.nota })
+      : claveHash && respuesta.cuerpo ? completarFila({ claveHash, respuesta, nota: ctx.nota }) : null;
     if (tarea) waitUntil(tarea.catch((error) => console.error(`⚠️ historial: no se pudo guardar la recarga (${juego}):`, error.message)));
     // De paso (después de responder, como mucho cada 3 min por instancia): las recargas que llevan rato
     // "en proceso" se verifican solas en Central One (_lib/revision.js → revisarEnProceso)
@@ -164,7 +172,8 @@ export async function prepararCompletarDesdePerfil(req, juego) {
 }
 
 /**
- * Estado nuevo de un pedido (webhook de Central One, hoja de las manuales). Sin fila, no hace nada.
+ * Estado nuevo de un pedido (webhook de Central One). Sin fila, no hace nada. extra: otras columnas que
+ * cambian con el estado (p. ej. el código de Roblox que llegó por el aviso).
  * noPisar: estados que este aviso NO puede cambiar (un paquete partido en dos pedidos: que una mitad se
  * entregue no tapa que la otra falló).
  */
@@ -173,7 +182,7 @@ export async function prepararCompletarDesdePerfil(req, juego) {
 const ESPERAS_FILA_MS = [3000, 6000, 9000];
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function actualizarEstado(idPedido, estado, { noPisar = [] } = {}) {
+export function actualizarEstado(idPedido, estado, { noPisar = [], extra = {} } = {}) {
   if (!supabaseActivo() || !ESTADOS.includes(estado) || !/^[A-Za-z0-9-]{8,80}$/.test(String(idPedido || ''))) return;
   const intactos = [estado, ...noPisar.filter((e) => ESTADOS.includes(e))];
   const id = encodeURIComponent(idPedido);
@@ -184,7 +193,7 @@ export function actualizarEstado(idPedido, estado, { noPisar = [] } = {}) {
     for (let intento = 0; intento <= ESPERAS_FILA_MS.length; intento++) {
       if (intento) await esperar(ESPERAS_FILA_MS[intento - 1]);
       const cambiadas = await actualizar('recargas', `id_pedido=eq.${id}&estado=not.in.(${intactos.join(',')})`,
-        { estado, actualizado: new Date().toISOString() }, 'id_pedido');
+        { estado, ...extra, actualizado: new Date().toISOString() }, 'id_pedido');
       if (Array.isArray(cambiadas) && cambiadas.length) return;
       // No cambió nada: o ya tenía ese estado (listo) o la fila todavía no existe (se espera)
       const existe = await leer('recargas', { id_pedido: idPedido }, 'id_pedido');

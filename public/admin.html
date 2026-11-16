@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Pagos → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=35" defer></script>
+  <script src="/js/admin.js?v=36" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -40,6 +40,7 @@
         <button type="button" role="tab" data-seccion="resumen" aria-selected="true">Resumen</button>
         <button type="button" role="tab" data-seccion="pedidos" aria-selected="false">Pedidos</button>
         <button type="button" role="tab" data-seccion="revision" aria-selected="false">Revisión <span class="contador-pestana" id="contadorRevision" hidden></span></button>
+        <button type="button" role="tab" data-seccion="manuales" aria-selected="false">Manuales <span class="contador-pestana" id="contadorManuales" hidden></span></button>
         <button type="button" role="tab" data-seccion="pagos" aria-selected="false">Pagos</button>
         <button type="button" role="tab" data-seccion="cuentas" aria-selected="false">Cuentas</button>
         <button type="button" role="tab" data-seccion="creadores" aria-selected="false">Creadores</button>
@@ -189,6 +190,23 @@
         <div class="tarjeta">
           <h2>Resueltas hace poco</h2>
           <ul class="pedidos" id="listaResueltas"></ul>
+        </div>
+      </section>
+
+      <!-- MANUALES: pedidos de FC Mobile, COD Mobile y Clash Royale (supabase/manuales.sql). Reemplaza las pestañas
+           de pedidos de la hoja de manuales.gs. La contraseña la descifra Vercel (api/_lib/juegos/manuales.js, acción clave). -->
+      <section class="seccion" id="seccion-manuales" hidden>
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Recargas manuales por hacer</h2>
+            <button type="button" class="btn-ver" id="actualizarManuales">Actualizar</button>
+          </div>
+          <p class="nota">FC Mobile, COD Mobile y Clash Royale. Toca <strong>Ver contraseña</strong> para entrar a la cuenta del cliente. Al marcarla <strong>Hecha</strong>, la contraseña se borra y el cliente la ve entregada al instante. Las que no marques se borran solas a los 7 días.</p>
+          <ul class="pedidos" id="listaManuales"></ul>
+        </div>
+        <div class="tarjeta">
+          <h2>Hechas hace poco</h2>
+          <ul class="pedidos" id="listaManualesHechas"></ul>
         </div>
       </section>
 
@@ -355,9 +373,12 @@
               <option value="bloodstrike">Blood Strike</option>
               <option value="mobilelegends">Mobile Legends</option>
               <option value="roblox">Roblox</option>
+              <option value="fcmobile">FC Mobile</option>
+              <option value="codmobile">COD Mobile</option>
+              <option value="clashroyale">Clash Royale</option>
             </select>
           </div>
-          <div class="fila-campos">
+          <div class="fila-campos" id="filaTraerProductos">
             <button type="button" class="btn btn--chico" id="btnTraerProductos">🔄 Traer productos de Central One</button>
           </div>
           <p class="nota" id="estadoCatalogo" role="status"></p>
@@ -378,7 +399,7 @@
 
         <div class="tarjeta">
           <h2>Paquete sin Central One</h2>
-          <p class="nota">Para paquetes que entregas tú (como los códigos de Roblox): nombre y precio a mano.</p>
+          <p class="nota">Para paquetes que entregas tú (los códigos de Roblox y las tiendas manuales: FC Mobile, COD Mobile y Clash Royale): nombre y precio a mano en Bs.</p>
           <form class="formulario" id="formPaqueteManual" novalidate>
             <div class="dos-campos">
               <label class="campo">Nombre<input type="text" id="manualNombre" maxlength="80" placeholder="Ej. 800 Robux" autocomplete="off"></label>

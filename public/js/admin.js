@@ -19,6 +19,8 @@
     en_revision: 'En revisión', problema: 'Con problema', reembolsado: 'Reembolsada',
   };
   const CLAVE_TASA = 'levelup_admin_tasa';
+  // Tiendas manuales (supabase/manuales.sql): sin Central One, la recarga la hace el equipo
+  const MANUALES = new Set(['fcmobile', 'codmobile', 'clashroyale']);
   let cliente = null;
   let pedidos = [];
   let canal = null;
@@ -114,6 +116,7 @@
     if (b.dataset.seccion === 'precios') cargarPrecios();
     if (b.dataset.seccion === 'roblox') cargarRoblox();
     if (b.dataset.seccion === 'canjes') cargarCanjes();
+    if (b.dataset.seccion === 'manuales') cargarManuales();
     if (b.dataset.seccion === 'revision') { cargarRevision(); cargarRuleta().catch(() => {}); }
     if (b.dataset.seccion === 'pagos') { cargarPagos(); cargarCuentasPm(); }
   }));
@@ -332,6 +335,8 @@
         if (i >= 0) pedidos[i] = Object.assign({}, pedidos[i], n); else pedidos.unshift(n);
         pintarPedidos(n.id_pedido);
         cargarResumen();
+        // Pedido nuevo de una tienda manual: la pestaña Manuales (y su contador) se pone al día
+        if (MANUALES.has(n.juego)) cargarManuales().catch(() => {});
       })
       .subscribe();
   }
@@ -797,6 +802,8 @@
 
   async function cargarPrecios() {
     const juego = $('juegoPrecios').value;
+    // Las tiendas manuales no usan Central One: solo paquetes con precio a mano
+    $('filaTraerProductos').hidden = MANUALES.has(juego);
     const { data, error } = await cliente.rpc('admin_precios', { p_juego: juego });
     if (error || !data) {
       console.error(error);
@@ -1460,6 +1467,112 @@
     return acciones;
   }
 
+  // ---------------------------------------------------------------- manuales (supabase/manuales.sql)
+  // Pedidos de FC Mobile, COD Mobile y Clash Royale: la lista sale de "pedidos_manuales" (sin la contraseña);
+  // la contraseña la descifra Vercel solo para el administrador (accion=clave). El estado lo cambia
+  // admin_manual_estado (también la fila de "recargas" que ve el cliente; "completado" borra la contraseña).
+  const ABIERTOS_MANUALES = ['pendiente', 'en_proceso', 'incompleto', 'problema'];
+  async function cargarManuales() {
+    const lista = $('listaManuales');
+    const [{ data, error }, conClave, hechas] = await Promise.all([
+      cliente.from('pedidos_manuales').select('id_pedido,juego,paquete,precio,pagado,referencia,metodo,usuario,telefono,estado,nota,comprobante,codigo_descuento,creado')
+        .in('estado', ABIERTOS_MANUALES).order('creado', { ascending: true }).limit(200),
+      cliente.rpc('admin_manuales_con_clave'),
+      cliente.from('pedidos_manuales').select('id_pedido,juego,paquete,precio,usuario,estado,actualizado')
+        .in('estado', ['completado', 'reembolsado']).order('actualizado', { ascending: false }).limit(15),
+    ]);
+    if (error || !data) {
+      console.error(error);
+      lista.replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/manuales.sql?'));
+      return;
+    }
+    const guardadas = new Set(conClave.data || []);
+    $('contadorManuales').hidden = !data.length;
+    $('contadorManuales').textContent = data.length;
+    lista.replaceChildren();
+    if (!data.length) lista.append(el('li', 'vacio', '✅ No hay recargas manuales por hacer.'));
+    data.forEach((p) => lista.append(tarjetaManual(p, guardadas.has(p.id_pedido))));
+
+    const otras = $('listaManualesHechas');
+    otras.replaceChildren();
+    if (!(hechas.data || []).length) otras.append(el('li', 'vacio', 'Todavía no hay recargas manuales hechas.'));
+    (hechas.data || []).forEach((p) => {
+      const li = el('li', 'pedido');
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', `${JUEGOS[p.juego] || p.juego} · ${p.paquete}`), el('span', 'etiqueta etiqueta--' + p.estado, ESTADOS[p.estado] || p.estado));
+      li.append(cabeza, el('span', '', `${p.usuario} · ${bs(p.precio)} Bs · ${fecha(p.actualizado)}`));
+      otras.append(li);
+    });
+  }
+
+  function tarjetaManual(p, tieneClave) {
+    const li = el('li', 'pedido');
+    const cabeza = el('div', 'pedido-cabeza');
+    cabeza.append(el('strong', '', `${JUEGOS[p.juego] || p.juego} · ${p.paquete}`), el('span', 'etiqueta etiqueta--' + p.estado, ESTADOS[p.estado] || p.estado));
+    li.append(cabeza,
+      el('span', '', `${horaCorta(p.creado)} · ${bs(p.precio)} Bs (pagó ${bs(p.pagado)}) · ref …${String(p.referencia).slice(-5)}${p.codigo_descuento ? ` · código ${p.codigo_descuento}` : ''}`),
+      el('span', '', `${p.metodo}: ${p.usuario}`));
+    if (p.nota) li.append(el('span', 'precio-detalle', `📝 ${p.nota}`));
+    if (p.comprobante && /^https:\/\//.test(p.comprobante)) {
+      const a = el('a', 'enlace-comprobante', 'Ver comprobante');
+      a.href = p.comprobante; a.target = '_blank'; a.rel = 'noopener';
+      li.append(a);
+    }
+    const salida = el('p', 'mensaje-form');
+    salida.setAttribute('role', 'status');
+    const acciones = el('div', 'acciones-cuenta');
+    if (p.telefono) {
+      acciones.append(enlaceWhatsapp(p.telefono, `Hola, te escribimos de Level Up por tu recarga de ${JUEGOS[p.juego] || p.juego} (${p.paquete}).`));
+    }
+    if (tieneClave) acciones.append(boton('🔑 Ver contraseña', 'btn-ver', (b) => verClaveManual(p, b, salida)));
+    if (p.estado !== 'en_proceso') acciones.append(boton('🔄 La estoy haciendo', 'btn-ver', (b) => estadoManual(p, 'en_proceso', b)));
+    acciones.append(
+      boton('✅ Hecha', 'btn-ver btn-pagar', (b) => {
+        if (confirm(`¿Marcar como HECHA la recarga de ${p.paquete} (${p.usuario})?\n\nSe borra la contraseña y el cliente la ve entregada.`)) estadoManual(p, 'completado', b);
+      }),
+      boton('❌ Problema', 'btn-ver', (b) => {
+        const nota = prompt('¿Qué pasó? (solo lo ves tú)', p.nota || '');
+        if (nota !== null) estadoManual(p, 'problema', b, nota);
+      }),
+      boton('↩️ Devolví el pago', 'btn-ver', (b) => {
+        if (confirm(`¿Marcar como REEMBOLSADA la recarga de ${p.paquete} (${p.usuario})?`)) estadoManual(p, 'reembolsado', b);
+      }));
+    li.append(acciones, salida);
+    return li;
+  }
+
+  async function estadoManual(p, estadoNuevo, b, nota) {
+    if (b) b.disabled = true;
+    const { error } = await cliente.rpc('admin_manual_estado', { p_id_pedido: p.id_pedido, p_estado: estadoNuevo, p_nota: nota === undefined ? null : nota });
+    if (error) { if (b) b.disabled = false; alert(textoError(error, 'No se pudo guardar.')); return; }
+    cargarManuales();
+    cargarPedidos();
+  }
+
+  async function verClaveManual(p, b, salida) {
+    b.disabled = true;
+    salida.textContent = 'Descifrando…';
+    try {
+      const { data: s } = await cliente.auth.getSession();
+      const res = await fetch(`/api/juego?juego=${encodeURIComponent(p.juego)}&accion=clave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ((s && s.session && s.session.access_token) || '') },
+        body: JSON.stringify({ idPedido: p.id_pedido }),
+      });
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok || r.status !== 'success') { salida.textContent = r.message || 'No se pudo leer la contraseña.'; b.disabled = false; return; }
+      salida.replaceChildren(el('span', '', 'Usuario: '), el('strong', '', r.usuario), el('br'),
+        el('span', '', 'Contraseña: '), el('strong', '', r.clave || '(sin contraseña)'));
+      // Que no quede a la vista si se deja el panel abierto
+      setTimeout(() => { salida.textContent = ''; b.disabled = false; }, 60000);
+    } catch (e) {
+      console.error(e);
+      salida.textContent = 'No se pudo conectar. Intenta de nuevo.';
+      b.disabled = false;
+    }
+  }
+  $('actualizarManuales').addEventListener('click', cargarManuales);
+
   // ---------------------------------------------------------------- canjes (supabase/canjes.sql)
   // Códigos de regalo: crear (admin_canjes_crear), ver quién canjeó y borrar los libres (admin_canje_borrar)
   const ESTADO_CANJE = { libre: ['Libre', 'etiqueta--en_proceso'], entregando: ['En camino', 'etiqueta--pendiente'],
@@ -2023,7 +2136,7 @@
     if (error || esAdmin !== true) return estado('Esta cuenta no es administradora. Entra con la cuenta correcta.', true);
     $('panelEstado').hidden = true;
     $('panel').hidden = false;
-    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarAlarma().catch(() => {}), cargarModoFF().catch(() => {}), cargarHojas().catch(() => {})]);
+    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarManuales().catch(() => {}), cargarAlarma().catch(() => {}), cargarModoFF().catch(() => {}), cargarHojas().catch(() => {})]);
     escuchar();
   })();
 })();

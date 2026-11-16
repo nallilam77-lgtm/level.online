@@ -9,6 +9,7 @@ import { PAQUETE_VALIDO, textoParaHoja, faltaConfiguracion, telefonoCliente } fr
 import { FASES, ESTADO_PINES } from '../reporte.js';
 import { formatearVES, limpiarMontoVES, crearUtilidadesPedido, responderErrorInesperado } from '../recarga-comun.js';
 import { preciosSoloSupabase } from '../precios.js';
+import { validarJugador } from '../validador.js';
 import { crearAccionDescuento, aplicarDescuentoARecarga } from '../descuentos.js';
 import { premioParaRecarga, anotarRecarga, crearAccionFidelidad, conDestacados } from '../fidelidad.js';
 import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
@@ -116,25 +117,21 @@ async function verificar(req, res) {
     return res.status(400).json({ valid: false, message: "ID con formato inválido. Debe tener entre 5 y 15 números." });
   }
 
-  const URL_VALIDADOR = process.env.SCRIPT_VALIDADOR_URL;
-  if (!URL_VALIDADOR) {
-    return faltaConfiguracion(res, ["SCRIPT_VALIDADOR_URL"], { valid: false, message: "El validador de IDs no está disponible. Intenta de nuevo en unos minutos." });
-  }
-
   const guardado = validados.get(String(id));
   if (guardado && Date.now() - guardado.momento < VALIDOS_MS) {
     return res.status(200).json({ valid: true, player_name: guardado.player_name });
   }
 
   try {
-    const data = await llamarScript(URL_VALIDADOR, { id: String(id), juego: 'freefire' }, LECTURA_APPS_SCRIPT);
+    // Central One directo desde Vercel (_lib/validador.js); antes, el Apps Script validador.gs
+    const data = await validarJugador('freefire', String(id));
     if (data?.valid === true) {
       validados.delete(String(id));
       validados.set(String(id), { player_name: data.player_name ? String(data.player_name).slice(0, 60) : undefined, momento: Date.now() });
       if (validados.size > MAX_VALIDOS) validados.delete(validados.keys().next().value);
     }
 
-    // Solo se devuelven los campos que usa la página, nunca la respuesta cruda de Apps Script
+    // Solo se devuelven los campos que usa la página, nunca la respuesta cruda de Central One
     return res.status(200).json({
       valid: data?.valid === true,
       player_name: data?.valid === true && data.player_name ? String(data.player_name).slice(0, 60) : undefined

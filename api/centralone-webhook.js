@@ -1,8 +1,6 @@
 import { waitUntil } from '@vercel/functions';
 import { llamarScript, leerCuerpoCrudo } from './_lib/externo.js';
 import { firmaCentralOneValida, primerCodigo, leerCodigos } from './_lib/centralone.js';
-import { registrarUsoDescuento } from './_lib/descuentos.js';
-import { limpiarMontoVES } from './_lib/recarga-comun.js';
 import { actualizarEstado } from './_lib/historial.js';
 import { anotarEnHojas } from './_lib/libro.js';
 import { supabaseActivo, guardar, leerDonde, actualizar } from './_lib/supabase.js';
@@ -122,9 +120,10 @@ async function avisoDeSaldo(aviso, evento) {
 //    (estado_fazer de recargas.gs, SCRIPT_RECARGAS_URL).
 //  - Mobile Legends (idempotency_key "ml-…"): igual, en la pestaña "pedidos" de la hoja de Mobile Legends
 //    (estado_fazer de mobilelegends.gs, SCRIPT_MLBB). Solo va a esa hoja.
-//  - Roblox (idempotency_key "rbx-…"): roblox.gs (GAS_URL) anota el código que la compra no alcanzó a
-//    esperar (entregar_api: "pedidos_api" dice que hay que enviarlo por WhatsApp) o libera el pago si
-//    falló (liberar_api). Las dos miran el estado de la fila: un aviso repetido no cambia nada.
+//  - Roblox (idempotency_key "rbx-…", desde 2026-11-16 sin hoja): el código que la compra no alcanzó a
+//    esperar se guarda en el pedido de Supabase (recargas.codigo, "completado") con la nota "ENVIAR POR
+//    WHATSAPP"; si falló, el pedido pasa a "problema" (su pago ya está usado: se resuelve por WhatsApp).
+//    Un pedido ya "completado" no cambia: un aviso repetido o tardío no hace nada.
 //
 // Central One espera un 2xx en menos de 10 s; si no, reintenta (5 y 25 min, 2 h, 10 h…) y abandona a
 // los 6 intentos. Por eso: firma mala -> 401; la hoja no respondió -> 503 (se puede repetir sin
@@ -243,11 +242,11 @@ export default async function handler(req, res) {
   const estadoPerfil = ESTADO_EN_PERFIL[estado] || '';
   // Falló (entero o en parte): por qué, según Central One
   if (estadoPerfil === 'en_revision') anotarMotivo(aviso, idPedido, idDelPerfil);
+  // Roblox: el código y la nota van junto con el estado (avisoRoblox)
+  if (PEDIDO_ROBLOX.test(idPedido)) return avisoRoblox(res, { aviso, evento, ordenCentralOne, idPedido });
   if (!partido) actualizarEstado(idDelPerfil, estadoPerfil);
   else if (estadoPerfil === 'completado') actualizarEstado(idDelPerfil, 'completado', { noPisar: ['en_revision', 'problema', 'reembolsado'] });
   else if (estadoPerfil) actualizarEstado(idDelPerfil, 'en_revision', { noPisar: ['problema', 'reembolsado'] });
-
-  if (PEDIDO_ROBLOX.test(idPedido)) return avisoRoblox(res, { aviso, evento, ordenCentralOne, idPedido });
 
   // Libro diario apagado en el panel (_lib/libro.js): el estado ya quedó en Supabase (actualizarEstado)
   if (!(await anotarEnHojas())) {
@@ -296,45 +295,29 @@ export default async function handler(req, res) {
   return res.status(200).json({ ok: true });
 }
 
-// Pedido de un código de Roblox. El código nunca se escribe en los logs.
+// Pedido de un código de Roblox (Supabase). El código nunca se escribe en los logs.
 async function avisoRoblox(res, { aviso, evento, ordenCentralOne, idPedido }) {
-  const URL_ROBLOX = (process.env.GAS_URL || '').trim();
-  if (!URL_ROBLOX) {
-    console.error('🚨 centralone-webhook: falta GAS_URL en Vercel (aviso de un pedido de Roblox)');
+  if (!supabaseActivo()) {
+    console.error('🚨 centralone-webhook: falta Supabase en Vercel (aviso de un pedido de Roblox)');
     return res.status(503).json({ ok: false });
   }
-  // llamarScript añade el token (SCRIPT_RECARGAS_TOKEN), que roblox.gs exige
-  const enviar = (cuerpo) => llamarScript(URL_ROBLOX, { ...cuerpo, idPedido, aviso: true }, AL_SCRIPT);
-
-  try {
-    let r;
-    let codigo = '';
-    if (evento === 'order.delivered' || evento === 'order.partially_delivered') {
-      // El aviso trae los códigos (si no se apagó esa opción en el portal); si no, se piden a la API
-      codigo = primerCodigo(aviso.order?.codes);
-      const apiKey = (process.env.roblox_nuevo || '').trim();
-      if (!codigo && apiKey) codigo = (await leerCodigos(apiKey, ordenCentralOne).catch(() => ({}))).codigo || '';
-      r = codigo
-        ? await enviar({ tipo: 'entregar_api', codigo, ordenCentralOne, enPagina: false })
-        : await enviar({ tipo: 'nota_api', siempre: true, texto: `⚠️ Central One avisó ${evento} (pedido ${ordenCentralOne}) sin código: buscarlo en el portal y enviarlo por WhatsApp` });
-    } else if (evento === 'order.refunded') {
-      r = await enviar({ tipo: 'nota_api', siempre: true, texto: `⚠️ Central One REEMBOLSÓ el pedido ${ordenCentralOne}: revisar si el código funcionó` });
+  const nota = (texto) => `${texto} (Central One ${ordenCentralOne})`.slice(0, 500);
+  if (evento === 'order.delivered' || evento === 'order.partially_delivered') {
+    // El aviso trae los códigos (si no se apagó esa opción en el portal); si no, se piden a la API
+    let codigo = primerCodigo(aviso.order?.codes);
+    const apiKey = (process.env.roblox_nuevo || '').trim();
+    if (!codigo && apiKey) codigo = (await leerCodigos(apiKey, ordenCentralOne).catch(() => ({}))).codigo || '';
+    if (codigo) {
+      // Un pedido ya entregado en la página (completado) no cambia; si no, el código queda en el pedido
+      actualizarEstado(idPedido, 'completado', { extra: { codigo: codigo.slice(0, 80), nota_admin: nota('📲 El código llegó por el aviso: ENVIARLO POR WHATSAPP (está en el pedido)') } });
     } else {
-      // failed / cancelled: no se cobró. roblox.gs no toca un pedido ya entregado (un aviso viejo que llega tarde)
-      r = await enviar({ tipo: 'liberar_api', motivo: `Central One avisó ${evento} (pedido ${ordenCentralOne})` });
+      actualizarEstado(idPedido, 'en_revision', { noPisar: ['completado'], extra: { nota_admin: nota(`⚠️ Central One avisó ${evento} sin código: buscarlo en el portal y enviarlo por WhatsApp`) } });
     }
-    if (r?.ocupado) throw new Error('ocupado');
-    if (r?.status !== 'success') console.error(`⚠️ centralone-webhook: Roblox respondió "${r?.message || 'respuesta inválida'}" (pedido ${ordenCentralOne}, ${evento})`);
-
-    // Primera entrega de un pedido con código de descuento: +1 uso y la comisión del creador (después de responder)
-    if (r?.status === 'success' && codigo && !r.yaEntregado && r.codigoDescuento) {
-      waitUntil(registrarUsoDescuento({
-        codigo: String(r.codigoDescuento), montoCobrado: limpiarMontoVES(r.precio), idPedido, idJugador: String(r.usuario || ''), juego: 'Roblox',
-      }));
-    }
-    return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error(`❌ centralone-webhook: no se pudo anotar el pedido de Roblox ${ordenCentralOne} (${evento}): ${error.message}. Central One lo reintentará.`);
-    return res.status(503).json({ ok: false });
+  } else if (evento === 'order.refunded') {
+    actualizarEstado(idPedido, 'en_revision', { extra: { nota_admin: nota('⚠️ Central One REEMBOLSÓ el pedido: revisar si el código funcionó') } });
+  } else {
+    // failed / cancelled: Central One no cobró, pero el pago del cliente ya está usado
+    actualizarEstado(idPedido, 'problema', { noPisar: ['completado'], extra: { nota_admin: nota(`❌ Central One avisó ${evento}: no se compró el código. Entregar a mano o devolver el pago`) } });
   }
+  return res.status(200).json({ ok: true });
 }
