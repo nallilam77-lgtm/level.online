@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=41" defer></script>
+  <script src="/js/admin.js?v=42" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -227,13 +227,13 @@
 
       <!-- PAGOS (supabase/pagos.sql): lo que avisa MacroDroid. Las cuentas que ven los clientes están en Ajustes. -->
       <section class="seccion" id="seccion-pagos" hidden>
-        <!-- Pagos por aprobar a mano (supabase/pagos-manual.sql; api/_lib/pagos-manual.js). Solo con el interruptor de Ajustes. -->
+        <!-- Revisar pagos: los que no llegaron (supabase/pagos-manual.sql; api/_lib/pagos-manual.js). Encendido salvo que se apague en Ajustes. -->
         <div class="tarjeta" id="tarjetaPorAprobar">
           <div class="fila-titulo">
-            <h2>Pagos por aprobar</h2>
+            <h2>Revisar pagos</h2>
             <button type="button" class="btn-ver" id="actualizarPorAprobar">Actualizar</button>
           </div>
-          <p class="nota" id="notaPorAprobar">Referencias que el cliente escribió y cuya notificación no llegó (el cliente ya ve su pedido como "Recibido"). Búscala en el banco: si está, escribe la <strong>referencia completa</strong> y el <strong>monto que llegó</strong> y toca <strong>Aprobar</strong>: la recarga se hace en ese momento. Si no está, <strong>Rechazar</strong> (el pedido queda "Con problema").</p>
+          <p class="nota" id="notaPorAprobar">Pagos que el cliente hizo y cuya notificación no llegó (el cliente ve "Verificando pago"). Búscalo en tu banco: si está, revisa el <strong>monto que llegó</strong> y toca <strong>Soltar diamantes</strong> (la referencia completa es opcional). Si no está, <strong>Rechazar</strong> y escribe el motivo: el cliente lo ve.</p>
           <ul class="pedidos" id="listaPorAprobar"></ul>
         </div>
 
@@ -580,15 +580,14 @@
 
       <!-- AJUSTES: lo que cambia cómo funciona la tienda (tabla configuracion) -->
       <section class="seccion" id="seccion-ajustes" hidden>
-        <!-- Pagos verificados a mano: configuracion "pagos_manual" (privado; Vercel lo lee cada 15 s) -->
+        <!-- Revisar pagos: configuracion "pagos_manual" (privado; sin valor = encendido; Vercel lo lee cada 15 s) -->
         <div class="tarjeta">
-          <h2>Verificar pagos a mano</h2>
+          <h2>Revisar pagos</h2>
           <label class="interruptor">
             <input type="checkbox" id="pagosManualActivo">
-            <span><strong>Verificar a mano los pagos que no lleguen</strong><small>Para cuando un banco no manda la notificación (p. ej. Venezuela). Los pagos que sí llegan siguen automáticos. Si una referencia no aparece, el cliente ve "Estamos verificando tu pago" y su pedido como "Recibido"; tú lo apruebas (la recarga se hace sola) o lo rechazas en <strong>Pagos → Pagos por aprobar</strong>.</small></span>
+            <span><strong>Mandar a "Revisar pagos" las referencias que no lleguen</strong><small>Para cuando el banco no manda la notificación (p. ej. Venezuela). Los pagos que sí llegan siguen automáticos. El cliente ve "Estamos verificando tu pago" y tú sueltas los diamantes o lo rechazas con el motivo en <strong>Pagos → Revisar pagos</strong>.</small></span>
           </label>
           <p class="mensaje-form" id="mensajePagosManual" role="status"></p>
-          <p class="nota">Antes de encenderlo, corre <strong>supabase/pagos-manual.sql</strong> una vez en Supabase. Se aplica en menos de 15 segundos.</p>
         </div>
 
         <!-- Tienda en mantenimiento: configuracion "mantenimiento" (publico; la lee js/mantenimiento.js) -->

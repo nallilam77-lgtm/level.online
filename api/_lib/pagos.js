@@ -8,7 +8,7 @@
 // Responde siempre rápido y con "success" en el texto cuando quedó guardado (MacroDroid puede reintentar si no).
 import { timingSafeEqual } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
-import { supabaseActivo, guardar, leer, rpc, esAdminToken } from './supabase.js';
+import { supabaseActivo, guardar, leer, leerDonde, actualizar, rpc, esAdminToken } from './supabase.js';
 import { limpiarMontoVES } from './recarga-comun.js';
 import { tokenDe } from './historial.js';
 import { cambiarPago } from './motor-pagos.js';
@@ -31,6 +31,24 @@ function limpiarSiToca() {
 }
 
 const ORIGENES = new Set(['pago_movil', 'bdv', 'transferencia']);
+
+/**
+ * Solicitud de "Revisar pagos" soltada SIN referencia completa (nota "sin_ref") en los últimos 3 días, con
+ * los mismos últimos 5 dígitos y un monto parecido (±1 Bs del que se soltó o del precio del paquete).
+ * Es la que este pago cubre. null si no hay.
+ */
+async function pagoYaSoltado(referencia, monto) {
+  const desde = new Date(Date.now() - 3 * 864e5).toISOString();
+  const filas = await leerDonde('pagos_solicitudes',
+    `ultimos5=eq.${referencia.slice(-5)}&estado=eq.aprobado&nota=eq.sin_ref&resuelto=gt.${desde}&order=resuelto.asc`,
+    'id,id_pedido,juego,monto,referencia');
+  for (const s of Array.isArray(filas) ? filas : []) {
+    const [soltado] = (await leer('pagos', { referencia: s.referencia }, 'monto')) || [];
+    const montos = [Number(soltado?.monto), Number(s.monto)].filter((m) => m > 0);
+    if (montos.some((m) => Math.abs(m - monto) <= 1)) return s;
+  }
+  return null;
+}
 
 function mismaClave(a, b) {
   const x = Buffer.from(String(a || ''));
@@ -77,12 +95,25 @@ export async function pagoRecibido(req, res) {
     // (si esa consulta falla, igual protege la regla de la base al guardar: pagos_no_repetir_usado)
     const usada = await leer('pagos_usados', { referencia }, 'referencia').catch(() => null);
     if (Array.isArray(usada) && usada.length) return responder(200, { status: 'success', duplicado: true, message: 'Pago ya usado' });
+    // ¿Este pago ya se soltó a mano SIN la referencia completa (Revisar pagos, _lib/pagos-manual.js)? Entonces
+    // llega ya usado: si quedara libre, el cliente podría recargar dos veces con el mismo pago.
+    const cubierta = await pagoYaSoltado(referencia, monto).catch((error) => {
+      console.error('⚠️ pago_recibido: no se pudo revisar los pagos soltados a mano:', error.message);
+      return null;
+    });
     // Sin "on_conflict": si dos avisos iguales llegan a la vez, el segundo choca con la regla de la base
     // (referencia única) y se toma como duplicado. Nunca se pisa un pago que ya existe.
     await guardar('pagos', {
       referencia, monto: Math.round(monto * 100) / 100, monto_texto: montoTexto || null,
       remitente: String(b.telefono ?? '').trim().slice(0, 80) || null, origen,
+      ...(cubierta && { estado: 'usado', usado: new Date().toISOString(), id_pedido: cubierta.id_pedido, juego: cubierta.juego }),
     });
+    if (cubierta) {
+      await actualizar('pagos_solicitudes', `id=eq.${cubierta.id}&nota=eq.sin_ref`, { nota: 'sin_ref_llego' })
+        .catch((error) => console.error('⚠️ pago_recibido: no se pudo marcar la solicitud:', error.message));
+      console.info(`💵 Pago …${referencia.slice(-5)} llegó después de soltarlo a mano: queda usado`);
+      return responder(200, { status: 'success', message: 'Pago guardado (ya se había soltado a mano: queda usado)' });
+    }
     console.info(`💵 Pago recibido en Supabase: …${referencia.slice(-5)} · ${monto} Bs · ${origen}`);
     limpiarSiToca();
     return responder(200, { status: 'success', message: 'Pago guardado en Supabase' });

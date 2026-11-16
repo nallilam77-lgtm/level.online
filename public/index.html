@@ -1055,6 +1055,7 @@
             <div class="orden-card">
               <p><b>📦 Paquete:</b> ${escaparHtml(recarga.paquete)}</p>
               <p><b>Estado:</b> <span class="estado-badge ${estadoClase}">${escaparHtml(recarga.estado)}</span></p>
+              ${recarga.motivo ? `<p><b>Motivo:</b> ${escaparHtml(recarga.motivo)}</p>` : ''}
               <p><b>📅 Fecha:</b> ${escaparHtml(fechaFormateada)}</p>
               <button class="btn-actualizar" onclick="actualizarEstado('${playerId}')">🔄 Actualizar Estado</button>
             </div>

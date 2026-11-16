@@ -2048,17 +2048,18 @@
   // (supabase/pagos-manual.sql). Aprobar y rechazar pasan por Vercel (api/_lib/pagos-manual.js).
   async function cargarPagosManual() {
     const { data } = await cliente.from('configuracion').select('valor').eq('clave', 'pagos_manual').maybeSingle();
-    const activo = !!(data && data.valor === true);
+    // Encendido siempre, salvo que se apague aquí (valor false)
+    const activo = !(data && data.valor === false);
     $('pagosManualActivo').checked = activo;
     $('mensajePagosManual').textContent = activo
-      ? '🖐️ Encendido: las referencias que no lleguen esperan tu aprobación en Pagos.'
+      ? '🖐️ Encendido: las referencias que no lleguen van a Pagos → Revisar pagos.'
       : 'Apagado: una referencia que no llegó se rechaza como siempre ("Referencia no encontrada").';
   }
   $('pagosManualActivo').addEventListener('change', async (ev) => {
     const activar = ev.target.checked;
     const texto = activar
-      ? '¿Verificar a mano los pagos que no lleguen?\n\nSi un cliente escribe una referencia que no llegó, verá "Estamos verificando tu pago" y su pedido como "Recibido". Tú lo apruebas (la recarga se hace sola) o lo rechazas en Pagos → Pagos por aprobar.'
-      : '¿Apagar la verificación a mano?\n\nLas referencias que no lleguen se rechazan otra vez como "no encontrada". Las que ya están por aprobar siguen en la lista.';
+      ? '¿Encender "Revisar pagos"?\n\nSi un cliente escribe una referencia que no llegó, verá "Estamos verificando tu pago" y el pedido va a Pagos → Revisar pagos. Tú sueltas los diamantes o lo rechazas con el motivo.'
+      : '¿Apagar "Revisar pagos"?\n\nLas referencias que no lleguen se rechazan otra vez como "no encontrada". Las que ya están en la lista siguen ahí.';
     if (!confirm(texto)) { cargarPagosManual(); return; }
     ev.target.disabled = true;
     const { error } = await cliente.from('configuracion').upsert({ clave: 'pagos_manual', valor: activar, publico: false, actualizado: new Date().toISOString() }, { onConflict: 'clave' });
@@ -2085,7 +2086,7 @@
     // Si el administrador está escribiendo en una fila, no se repinta la lista (perdería lo escrito)
     if (lista.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
     lista.replaceChildren();
-    if (!n) { lista.append(el('li', 'vacio', '✅ No hay pagos por aprobar.')); return; }
+    if (!n) { lista.append(el('li', 'vacio', '✅ No hay pagos por revisar.')); return; }
     data.forEach((s) => lista.append(filaPorAprobar(s)));
   }
 
@@ -2100,8 +2101,8 @@
     const campos = el('div', 'aprobar-campos');
     const ref = el('input');
     ref.type = 'text'; ref.inputMode = 'numeric'; ref.maxLength = 30; ref.autocomplete = 'off';
-    ref.placeholder = `Referencia completa (termina en ${s.ultimos5})`;
-    ref.setAttribute('aria-label', `Referencia completa del pago que termina en ${s.ultimos5}`);
+    ref.placeholder = `Referencia completa (opcional, …${s.ultimos5})`;
+    ref.setAttribute('aria-label', `Referencia completa del pago que termina en ${s.ultimos5} (opcional)`);
     const monto = el('input');
     monto.type = 'text'; monto.inputMode = 'decimal'; monto.maxLength = 20; monto.autocomplete = 'off';
     monto.placeholder = 'Monto que llegó (Bs)';
@@ -2112,28 +2113,37 @@
     salida.setAttribute('role', 'status');
     const acciones = el('div', 'acciones-cuenta');
     if (s.telefono) acciones.append(enlaceWhatsapp(s.telefono, `Hola, te escribimos de Level Up por tu pago con referencia terminada en ${s.ultimos5}.`));
+    // Free Fire y Mobile Legends dan diamantes; los demás juegos, su recarga
+    const soltar = ['freefire', 'mobilelegends'].includes(s.juego) ? '✅ Soltar diamantes' : '✅ Soltar recarga';
     acciones.append(
-      boton('✅ Aprobar', 'btn-ver btn-pagar', (b) => resolverSolicitud(s, 'aprobar', b, salida, ref.value, monto.value)),
+      boton(soltar, 'btn-ver btn-pagar', (b) => resolverSolicitud(s, 'aprobar', b, salida, ref.value, monto.value)),
       boton('❌ Rechazar', 'btn-ver btn-ver--peligro', (b) => resolverSolicitud(s, 'rechazar', b, salida)));
     li.append(campos, acciones, salida);
     return li;
   }
 
+  const MOTIVO_RECHAZO = 'No encontramos tu pago en nuestro banco. Revisa la referencia y el monto, o escríbenos por WhatsApp con tu comprobante.';
   async function resolverSolicitud(s, accion, b, salida, referencia, monto) {
+    let nota = '';
     if (accion === 'aprobar') {
       const ref = String(referencia || '').replace(/\D/g, '');
-      if (ref.length < 6) { salida.textContent = 'Escribe la referencia completa que sale en el banco.'; return; }
-      if (!ref.endsWith(s.ultimos5)) { salida.textContent = `La referencia debe terminar en ${s.ultimos5} (lo que escribió el cliente).`; return; }
+      if (ref && ref.length < 6) { salida.textContent = 'La referencia completa debe tener al menos 6 números (o déjala vacía).'; return; }
+      if (ref && !ref.endsWith(s.ultimos5)) { salida.textContent = `La referencia debe terminar en ${s.ultimos5} (lo que escribió el cliente).`; return; }
       if (!String(monto || '').trim()) { salida.textContent = 'Escribe el monto que llegó.'; return; }
-      if (!confirm(`¿APROBAR el pago ${ref} por ${monto} Bs?\n\nSe hace YA la recarga del cliente (${JUEGOS[s.juego] || s.juego}${s.paquete ? ', ' + s.paquete : ''}${s.id_jugador ? ', ID ' + s.id_jugador : ''}). La ve en "Consulta tus últimas recargas" y en su perfil.`)) return;
-    } else if (!confirm(`¿RECHAZAR el pago que termina en ${s.ultimos5}?\n\nSu pedido quedará "Con problema" y le diremos que escriba por WhatsApp.`)) return;
+      if (!confirm(`¿SOLTAR la recarga del pago …${s.ultimos5} por ${monto} Bs?\n\n${JUEGOS[s.juego] || s.juego}${s.paquete ? ', ' + s.paquete : ''}${s.id_jugador ? ', ID ' + s.id_jugador : ''}. Se hace en este momento.${ref ? '' : '\n\nSin la referencia completa: si después llega la notificación de ese pago, queda anotado como ya usado.'}`)) return;
+    } else {
+      const escrito = prompt(`Motivo del rechazo del pago …${s.ultimos5} (lo verá el cliente):`, MOTIVO_RECHAZO);
+      if (escrito === null) return;
+      nota = escrito.trim();
+      if (nota.length < 5) { salida.textContent = 'Escribe el motivo del rechazo (lo verá el cliente).'; return; }
+    }
     b.disabled = true;
-    if (accion === 'aprobar') salida.textContent = '⏳ Aprobando y haciendo la recarga… (puede tardar hasta un minuto)';
+    if (accion === 'aprobar') salida.textContent = '⏳ Soltando la recarga… (puede tardar hasta un minuto)';
     try {
-      // Va por /api/recargar: al aprobar se hace la recarga, que necesita su tiempo (api/_lib/pagos-manual.js)
-      const r = await llamarAdmin('solicitud_resolver', accion === 'aprobar' ? { id: s.id, accion, referencia, monto } : { id: s.id, accion }, '/api/recargar');
+      // Va por /api/recargar: al soltar se hace la recarga, que necesita su tiempo (api/_lib/pagos-manual.js)
+      const r = await llamarAdmin('solicitud_resolver', accion === 'aprobar' ? { id: s.id, accion, referencia, monto } : { id: s.id, accion, nota }, '/api/recargar');
       if (r.status !== 'success') { salida.textContent = '❌ ' + (r.message || 'No se pudo guardar.'); b.disabled = false; return; }
-      if (accion === 'aprobar') alert(`Pago aprobado.\n\n${r.recarga || ''}${r.aviso ? '\n\n' + r.aviso : ''}`);
+      if (accion === 'aprobar') alert(`Recarga soltada.\n\n${r.recarga || ''}${r.aviso ? '\n\n' + r.aviso : ''}`);
       if (document.activeElement) document.activeElement.blur();
       cargarPorAprobar();
       cargarPedidos();

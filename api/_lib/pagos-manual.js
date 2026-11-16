@@ -34,7 +34,8 @@ export async function pagosManualActivo() {
   try {
     const { datos } = await conCache('pagos:manual', async () => {
       const filas = await leer('configuracion', { clave: 'pagos_manual' }, 'valor');
-      return Array.isArray(filas) && filas[0]?.valor === true;
+      // Encendido siempre, salvo que el administrador lo apague en Ajustes (valor false)
+      return !(Array.isArray(filas) && filas[0]?.valor === false);
     }, { frescoMs: 15_000, respaldoMs: 10 * 60_000 });
     return datos === true;
   } catch (error) {
@@ -89,9 +90,10 @@ export async function solicitudEstado(req, res) {
   const id = String(req.query.id || '');
   if (!UUID.test(id)) return res.status(400).json({ status: 'error', message: 'Solicitud inválida.' });
   try {
-    const [fila] = (await leer('pagos_solicitudes', { id }, 'estado')) || [];
+    const [fila] = (await leer('pagos_solicitudes', { id }, 'estado,nota')) || [];
     if (!fila) return res.status(404).json({ status: 'error', estado: 'no_existe' });
-    return res.status(200).json({ status: 'success', estado: fila.estado });
+    // Rechazada: el motivo que escribió el administrador (es para el cliente)
+    return res.status(200).json({ status: 'success', estado: fila.estado, ...(fila.estado === 'rechazado' && fila.nota && { motivo: fila.nota }) });
   } catch (error) {
     console.error('⚠️ pagos a mano: no se pudo leer el estado:', error.message);
     return res.status(503).json({ status: 'error', message: 'Intenta de nuevo.' });
@@ -177,12 +179,16 @@ export async function solicitudResolver(req, res) {
   const pedido = fila.id_pedido ? `id_pedido=eq.${encodeURIComponent(fila.id_pedido)}&estado=eq.pendiente` : '';
 
   if (accion === 'rechazar') {
+    // El motivo lo ve el cliente (ventana de la tienda, "Consulta tus últimas recargas" y su perfil)
+    const motivo = String(b.nota ?? '').replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (motivo.length < 5) return res.status(400).json({ status: 'error', message: 'Escribe el motivo del rechazo (lo verá el cliente).' });
     try {
-      const cambiadas = await actualizar('pagos_solicitudes', soloPendiente, { estado: 'rechazado', resuelto: ahora, nota: corto(b.nota, 200), datos: null }, 'id');
+      const cambiadas = await actualizar('pagos_solicitudes', soloPendiente, { estado: 'rechazado', resuelto: ahora, nota: motivo, datos: null }, 'id');
       if (!cambiadas?.length) return res.status(409).json({ status: 'error', message: 'Esa solicitud ya no está pendiente.' });
       // El pedido que veía el cliente como "Recibido" pasa a "Con problema" (le dice que escriba)
       if (pedido) {
-        await actualizar('recargas', pedido, { estado: 'problema', motivo_fallo: 'Pago no confirmado', revisado: ahora, actualizado: ahora,
+        // "rechazo:<motivo>": perfil.js y consultar-ordenes.js se lo muestran al cliente tal cual
+        await actualizar('recargas', pedido, { estado: 'problema', motivo_fallo: `rechazo:${motivo}`, revisado: ahora, actualizado: ahora,
           nota_admin: `❌ Pago …${fila.ultimos5} rechazado a mano` }).catch((error) => console.error('⚠️ pagos a mano: no se pudo marcar el pedido:', error.message));
       }
       console.info(`🖐️ Pago …${fila.ultimos5} (${fila.juego}) rechazado a mano`);
@@ -193,26 +199,30 @@ export async function solicitudResolver(req, res) {
     }
   }
 
-  // Aprobar: la referencia completa del banco, que termine en los mismos 5 dígitos que escribió el cliente
-  const referencia = String(b.referencia ?? '').replace(/\D/g, '');
+  // Soltar: la referencia completa del banco es OPCIONAL. Si viene, debe terminar en los 5 dígitos del cliente.
+  // Sin ella se guarda una referencia interna ("000" + hora + los 5 dígitos) y la solicitud queda marcada
+  // "sin_ref": si la notificación real llega después, pagos.js la anota ya usada (no da otra recarga).
+  const escrita = String(b.referencia ?? '').replace(/\D/g, '');
   const monto = limpiarMontoVES(String(b.monto ?? ''));
-  if (!/^\d{6,30}$/.test(referencia)) return res.status(400).json({ status: 'error', message: 'Escribe la referencia completa del banco (solo números).' });
-  if (!referencia.endsWith(fila.ultimos5)) return res.status(400).json({ status: 'error', message: `La referencia debe terminar en ${fila.ultimos5} (lo que escribió el cliente).` });
+  if (escrita && !/^\d{6,30}$/.test(escrita)) return res.status(400).json({ status: 'error', message: 'La referencia completa debe tener al menos 6 números (o déjala vacía).' });
+  if (escrita && !escrita.endsWith(fila.ultimos5)) return res.status(400).json({ status: 'error', message: `La referencia debe terminar en ${fila.ultimos5} (lo que escribió el cliente).` });
+  const sinReferencia = !escrita;
+  const referencia = escrita || `000${Date.now()}${fila.ultimos5}`;
   if (!(monto > 0)) return res.status(400).json({ status: 'error', message: 'Escribe el monto que llegó, en Bs.' });
 
   // Primero se "toma" la solicitud (solo si sigue pendiente: dos clics no aprueban dos veces); después el pago
   let tomada;
   try {
-    tomada = await actualizar('pagos_solicitudes', soloPendiente, { estado: 'aprobado', resuelto: ahora, referencia }, 'id');
+    tomada = await actualizar('pagos_solicitudes', soloPendiente, { estado: 'aprobado', resuelto: ahora, referencia, nota: sinReferencia ? 'sin_ref' : null }, 'id');
   } catch (error) {
     console.error('⚠️ pagos a mano: no se pudo aprobar:', error.message);
     return res.status(503).json({ status: 'error', message: 'No se pudo guardar. Intenta de nuevo.' });
   }
   if (!tomada?.length) return res.status(409).json({ status: 'error', message: 'Esa solicitud ya no está pendiente.' });
-  const r = await guardarPagoManual({ referencia, monto, nota: `Aprobado a mano (${fila.juego})` });
+  const r = await guardarPagoManual({ referencia, monto, nota: sinReferencia ? `Soltado a mano sin referencia completa (${fila.juego})` : `Soltado a mano (${fila.juego})` });
   if (!r.ok) {
     // El pago no quedó: la solicitud vuelve a pendiente para corregir la referencia
-    await actualizar('pagos_solicitudes', `id=eq.${id}&estado=eq.aprobado`, { estado: 'pendiente', resuelto: null, referencia: null })
+    await actualizar('pagos_solicitudes', `id=eq.${id}&estado=eq.aprobado`, { estado: 'pendiente', resuelto: null, referencia: null, nota: null })
       .catch((error) => console.error('⚠️ pagos a mano: no se pudo devolver a pendiente:', error.message));
     return res.status(r.codigo).json({ status: 'error', message: r.message });
   }

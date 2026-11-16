@@ -179,7 +179,9 @@
 
     li.append(fila, filaEstado);
     if (r.motivo_fallo && ['en_revision', 'problema'].includes(r.estado)) {
-      li.append(el('p', 'recarga-motivo', MOTIVOS[r.motivo_fallo] || MOTIVO_GENERAL));
+      // "rechazo:<motivo>": pago rechazado desde "Revisar pagos" del panel, con el motivo que escribió el administrador
+      const rechazo = String(r.motivo_fallo).startsWith('rechazo:') ? `Pago rechazado: ${String(r.motivo_fallo).slice(8)}` : '';
+      li.append(el('p', 'recarga-motivo', rechazo || MOTIVOS[r.motivo_fallo] || MOTIVO_GENERAL));
     }
 
     if (r.estado === 'incompleto' && porCompletar[r.id_pedido]) li.append(cajaCompletar(r, porCompletar[r.id_pedido]));

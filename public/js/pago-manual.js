@@ -101,8 +101,9 @@
         } else if (d.estado === 'rechazado') {
           clearInterval(reloj);
           icono.className = 'pago-manual-error';
-          titulo.textContent = 'No pudimos confirmar tu pago';
-          estado.textContent = '❌ Revisa la referencia o escríbenos por WhatsApp con tu comprobante.';
+          titulo.textContent = 'Pago rechazado';
+          // El motivo lo escribe el administrador en "Revisar pagos" del panel
+          estado.textContent = d.motivo ? `❌ Motivo: ${String(d.motivo).slice(0, 200)}` : '❌ Revisa la referencia o escríbenos por WhatsApp con tu comprobante.';
         }
       } catch (e) { /* sin conexión: se vuelve a preguntar */ }
     }, CADA_MS);

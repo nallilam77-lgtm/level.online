@@ -13,10 +13,16 @@ const ESTADOS = {
 // La hoja (SCRIPT_RECARGAS_VERIFICACION) ya no se consulta: los pedidos anteriores al 13-nov no salen.
 // Los IDs de Roblox se guardan en minúsculas; los demás son números.
 async function recargasEnSupabase(playerId) {
-    const filas = await leer('recargas', { id_jugador: String(playerId).toLowerCase() }, 'paquete,estado,creado&order=creado.desc&limit=5');
+    const filas = await leer('recargas', { id_jugador: String(playerId).toLowerCase() }, 'paquete,estado,creado,motivo_fallo,nota_admin&order=creado.desc&limit=5');
     return (Array.isArray(filas) ? filas : []).map((f) => {
-        const [estado, clase] = ESTADOS[f.estado] || ['En revisión', 'pending'];
-        return { paquete: f.paquete, fecha: f.creado, estado, clase };
+        let [estado, clase] = ESTADOS[f.estado] || ['En revisión', 'pending'];
+        // Pago que no llegó y está en "Revisar pagos" del panel (_lib/pagos-manual.js). La nota no sale de aquí.
+        if (f.estado === 'pendiente' && String(f.nota_admin || '').startsWith('🖐️ Pago por verificar')) estado = 'Verificando pago';
+        // Rechazado desde "Revisar pagos": el motivo lo escribió el administrador para el cliente
+        const motivo = f.estado === 'problema' && String(f.motivo_fallo || '').startsWith('rechazo:')
+            ? String(f.motivo_fallo).slice(8, 208) : '';
+        if (motivo) estado = 'Pago rechazado';
+        return { paquete: f.paquete, fecha: f.creado, estado, clase, ...(motivo && { motivo }) };
     });
 }
 
