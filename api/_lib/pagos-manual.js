@@ -184,16 +184,17 @@ export async function solicitudResolver(req, res) {
   const b = req.body && typeof req.body === 'object' ? req.body : {};
   const id = String(b.id || '');
   const accion = String(b.accion || '');
-  if (!UUID.test(id) || !['aprobar', 'rechazar'].includes(accion)) return res.status(400).json({ status: 'error', message: 'Datos inválidos.' });
+  if (!UUID.test(id) || !['aprobar', 'rechazar', 'deshacer'].includes(accion)) return res.status(400).json({ status: 'error', message: 'Datos inválidos.' });
 
   let fila;
   try {
-    [fila] = (await leer('pagos_solicitudes', { id }, 'id,ultimos5,juego,monto,estado,id_pedido')) || [];
+    [fila] = (await leer('pagos_solicitudes', { id }, 'id,ultimos5,juego,monto,estado,id_pedido,datos')) || [];
   } catch (error) {
     console.error('⚠️ pagos a mano: no se pudo leer la solicitud:', error.message);
     return res.status(503).json({ status: 'error', message: 'No se pudo leer. Intenta de nuevo.' });
   }
   if (!fila) return res.status(404).json({ status: 'error', message: 'Esa solicitud ya no existe.' });
+  if (accion === 'deshacer') return deshacerRechazo(req, res, fila, b);
   if (fila.estado !== 'pendiente') return res.status(409).json({ status: 'error', message: `Esa solicitud ya está ${fila.estado}.` });
   const ahora = new Date().toISOString();
   const soloPendiente = `id=eq.${id}&estado=eq.pendiente`;
@@ -204,7 +205,8 @@ export async function solicitudResolver(req, res) {
     const motivo = String(b.nota ?? '').replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
     if (motivo.length < 5) return res.status(400).json({ status: 'error', message: 'Escribe el motivo del rechazo (lo verá el cliente).' });
     try {
-      const cambiadas = await actualizar('pagos_solicitudes', soloPendiente, { estado: 'rechazado', resuelto: ahora, nota: motivo, datos: null }, 'id');
+      // La petición cifrada se queda (se borra con las resueltas, a los 7 días): "↩️ Me equivoqué" la devuelve a pendiente
+      const cambiadas = await actualizar('pagos_solicitudes', soloPendiente, { estado: 'rechazado', resuelto: ahora, nota: motivo }, 'id');
       if (!cambiadas?.length) return res.status(409).json({ status: 'error', message: 'Esa solicitud ya no está pendiente.' });
       // El pedido que veía el cliente como "Recibido" pasa a "Con problema" (le dice que escriba)
       if (pedido) {
@@ -294,4 +296,91 @@ export async function solicitudResolver(req, res) {
     : `⚠️ La recarga no se hizo: ${String(cuerpo.message || 'sin detalle').slice(0, 200)}`;
   return res.status(200).json({ status: 'success', recarga, aviso: Number(fila.monto) > 0 && monto < Number(fila.monto) - 1
     ? `Llegó menos de lo que cuesta el paquete (${formatearVES(Number(fila.monto))} Bs).` : '' });
+}
+
+/**
+ * Panel → Revisar pagos → Rechazados → "↩️ Me equivoqué" ({ id, accion: "deshacer", referencia?, monto? }).
+ *   - Con la petición guardada (rechazos desde 2026-11-16 noche): la solicitud y el pedido vuelven a "pendiente"
+ *     y aparece otra vez en Revisar pagos, para soltarla como siempre.
+ *   - Sin ella (los rechazos de antes la borraban): solo Free Fire, Blood Strike y Mobile Legends. Se guarda el
+ *     pago como USADO de ese pedido (la notificación real que llegue después no da otra recarga) y la recarga se
+ *     pide a Central One con el ID y el paquete del pedido (revision.js → rehacerRevision, como "Hacer de nuevo").
+ */
+async function deshacerRechazo(req, res, fila, b) {
+  if (fila.estado !== 'rechazado') return res.status(409).json({ status: 'error', message: `Esa solicitud está ${fila.estado}: solo se deshace un rechazo.` });
+  const ahora = new Date().toISOString();
+  const idPedido = fila.id_pedido ? encodeURIComponent(fila.id_pedido) : '';
+
+  if (fila.datos) {
+    let vuelta;
+    try {
+      vuelta = await actualizar('pagos_solicitudes', `id=eq.${fila.id}&estado=eq.rechazado`, { estado: 'pendiente', resuelto: null, nota: null }, 'id');
+    } catch (error) {
+      // El mismo cliente ya tiene otra pendiente con esa referencia (una sola por cliente)
+      if (/Supabase 409/.test(error.message)) return res.status(409).json({ status: 'error', message: 'Ese cliente ya tiene otra solicitud pendiente con esa referencia en Revisar pagos: suelta esa.' });
+      console.error('⚠️ pagos a mano: no se pudo deshacer:', error.message);
+      return res.status(503).json({ status: 'error', message: 'No se pudo guardar. Intenta de nuevo.' });
+    }
+    if (!vuelta?.length) return res.status(409).json({ status: 'error', message: 'Esa solicitud ya no está rechazada.' });
+    if (idPedido) {
+      await actualizar('recargas', `id_pedido=eq.${idPedido}&estado=eq.problema`, { estado: 'pendiente', motivo_fallo: null, revisado: null, actualizado: ahora,
+        nota_admin: `🖐️ Pago por verificar a mano (…${fila.ultimos5})` }).catch((error) => console.error('⚠️ pagos a mano: no se pudo reabrir el pedido:', error.message));
+    }
+    console.info(`🖐️ Rechazo de …${fila.ultimos5} deshecho: vuelve a Revisar pagos`);
+    return res.status(200).json({ status: 'success', recarga: 'Volvió a "Revisar pagos": suéltala desde ahí.' });
+  }
+
+  // Sin la petición: recarga directa en Central One con el pedido guardado
+  if (!['freefire', 'bloodstrike', 'mobilelegends'].includes(fila.juego) || !idPedido) {
+    return res.status(409).json({ status: 'error', message: 'Este rechazo no guardó los datos del pedido: hazle la recarga a mano y márcala entregada en Pedidos.' });
+  }
+  const escrita = String(b.referencia ?? '').replace(/\D/g, '');
+  const monto = limpiarMontoVES(String(b.monto ?? ''));
+  if (escrita && (!/^\d{6,30}$/.test(escrita) || !escrita.endsWith(fila.ultimos5))) return res.status(400).json({ status: 'error', message: `La referencia completa debe terminar en ${fila.ultimos5} (o déjala vacía).` });
+  // pide: "monto" → el panel pregunta el monto (y la referencia) y vuelve a llamar
+  if (!(monto > 0)) return res.status(400).json({ status: 'error', pide: 'monto', monto: Number(fila.monto) || 0, message: 'Escribe el monto que llegó, en Bs.' });
+  const desde = new Date(Date.now() - 3 * 864e5).toISOString();
+  if (!escrita) {
+    const [soltada] = (await leerDonde('pagos_solicitudes', `ultimos5=eq.${fila.ultimos5}&estado=eq.aprobado&id=neq.${fila.id}&resuelto=gt.${desde}`, 'id').catch(() => [])) || [];
+    if (soltada) return res.status(409).json({ status: 'error', message: `Ya soltaste otro pago que termina en ${fila.ultimos5}. Para este, escribe su referencia completa del banco.` });
+    const [llego] = (await leerDonde('pagos', `referencia=like.*${fila.ultimos5}&recibido=gt.${desde}`, 'estado').catch(() => [])) || [];
+    if (llego) return res.status(409).json({ status: 'error', message: `Ya llegó un pago que termina en ${fila.ultimos5} (está "${llego.estado}"). Si es el mismo, escribe su referencia completa; si es otro, la de este.` });
+  }
+  const referencia = escrita || `000${Date.now()}${fila.ultimos5}`;
+
+  // 1. La solicitud pasa a soltada (solo si sigue rechazada: dos clics no lo hacen dos veces)
+  const tomada = await actualizar('pagos_solicitudes', `id=eq.${fila.id}&estado=eq.rechazado`,
+    { estado: 'aprobado', resuelto: ahora, referencia, nota: escrita ? null : 'sin_ref', recargada: ahora }, 'id').catch(() => null);
+  if (!tomada?.length) return res.status(409).json({ status: 'error', message: 'Esa solicitud ya no está rechazada.' });
+  // 2. El pago queda USADO por este pedido (si ya llegó libre con esa referencia, se usa ese)
+  const [existente] = escrita ? ((await leer('pagos', { referencia }, 'estado').catch(() => [])) || []) : [];
+  try {
+    if (existente?.estado === 'verificado') {
+      await actualizar('pagos', `referencia=eq.${referencia}&estado=eq.verificado`, { estado: 'usado', usado: ahora, id_pedido: fila.id_pedido, juego: fila.juego });
+    } else if (!existente) {
+      await guardar('pagos', { referencia, monto: Math.round(monto * 100) / 100, monto_texto: formatearVES(monto), origen: 'manual',
+        nota: `Soltado a mano tras deshacer un rechazo (${fila.juego})`, estado: 'usado', usado: ahora, id_pedido: fila.id_pedido, juego: fila.juego });
+    } else {
+      throw new Error(`esa referencia ya está registrada (${existente.estado})`);
+    }
+  } catch (error) {
+    await actualizar('pagos_solicitudes', `id=eq.${fila.id}&estado=eq.aprobado`, { estado: 'rechazado', referencia: null, recargada: null }).catch(() => {});
+    console.error('⚠️ pagos a mano: no se pudo guardar el pago al deshacer:', error.message);
+    return res.status(409).json({ status: 'error', message: `No se pudo guardar el pago: ${/registrada/.test(error.message) ? error.message : 'intenta de nuevo'}.` });
+  }
+  // 3. El pedido a Revisión (para que "Hacer de nuevo" lo acepte) y se pide a Central One
+  await actualizar('recargas', `id_pedido=eq.${idPedido}`, { estado: 'en_revision', motivo_fallo: null, revisado: null, actualizado: ahora,
+    nota_admin: `🖐️ Pago …${fila.ultimos5} soltado (se había rechazado por error)` }).catch(() => {});
+  const { rehacerRevision } = await import('./revision.js');
+  const r = respuestaFalsa();
+  try {
+    await rehacerRevision({ method: 'POST', headers: req.headers, body: { idPedido: fila.id_pedido } }, r);
+  } catch (error) {
+    console.error('🚨 pagos a mano: falló la recarga al deshacer:', error.message);
+    r.cuerpo = { status: 'error', message: 'La recarga dio un error inesperado.' };
+  }
+  console.info(`🖐️ Rechazo de …${fila.ultimos5} deshecho: recarga directa (${r.cuerpo?.status})`);
+  const ok = r.cuerpo?.status === 'success';
+  return res.status(200).json({ status: 'success', recarga: ok ? '✅ Recarga pedida a Central One: pasa sola a "Entregada".'
+    : `⚠️ El pago quedó guardado, pero la recarga no salió: ${String(r.cuerpo?.message || 'sin detalle').slice(0, 200)} Está en Revisión: usa "Hacer de nuevo".` });
 }

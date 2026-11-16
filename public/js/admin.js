@@ -2086,8 +2086,46 @@
       cabeza.append(el('strong', '', `…${s.ultimos5} · ${JUEGOS[s.juego] || s.juego}${s.paquete ? ' · ' + s.paquete : ''}`), el('span', 'etiqueta etiqueta--problema', 'Rechazado'));
       li.append(cabeza, el('span', '', `${s.id_jugador ? 'ID ' + s.id_jugador + ' · ' : ''}${fecha(s.resuelto)}`));
       if (s.nota) li.append(el('span', 'precio-detalle', `Motivo: ${s.nota}`));
+      const salida = el('p', 'mensaje-form');
+      salida.setAttribute('role', 'status');
+      const acciones = el('div', 'acciones-cuenta');
+      acciones.append(boton('↩️ Me equivoqué', 'btn-ver btn-pagar', (b) => deshacerRechazo(s, b, salida)));
+      li.append(acciones, salida);
       lista.append(li);
     });
+  }
+
+  // "Me equivoqué": con los datos guardados vuelve a Revisar pagos; sin ellos (rechazos viejos) suelta la
+  // recarga directo en Central One y pide antes el monto (api/_lib/pagos-manual.js → deshacerRechazo)
+  async function deshacerRechazo(s, b, salida, extra) {
+    if (!extra && !confirm(`¿Deshacer el rechazo del pago …${s.ultimos5} (${JUEGOS[s.juego] || s.juego}${s.paquete ? ', ' + s.paquete : ''}${s.id_jugador ? ', ID ' + s.id_jugador : ''})?
+
+Hazlo solo si el pago SÍ está en tu banco.`)) return;
+    b.disabled = true;
+    salida.textContent = extra ? '⏳ Soltando la recarga…' : '⏳ Revisando…';
+    try {
+      const r = await llamarAdmin('solicitud_resolver', { id: s.id, accion: 'deshacer', ...(extra || {}) }, '/api/recargar');
+      if (r.status === 'success') {
+        alert(r.recarga || 'Listo.');
+        cargarPorAprobar().catch(() => {});
+        cargarPedidos();
+        return;
+      }
+      if (r.pide === 'monto' && !extra) {
+        const monto = prompt(`Este rechazo es de antes y la recarga se suelta directo.
+
+Monto que llegó (Bs) del pago …${s.ultimos5}:`, r.monto ? bs(r.monto) : '');
+        if (monto === null || !monto.trim()) { salida.textContent = ''; b.disabled = false; return; }
+        const referencia = prompt(`Referencia completa del banco (opcional, termina en ${s.ultimos5}). Déjala vacía si no la tienes:`, '') || '';
+        b.disabled = false;
+        return deshacerRechazo(s, b, salida, { monto, referencia });
+      }
+      salida.textContent = '❌ ' + (r.message || 'No se pudo.');
+      b.disabled = false;
+    } catch (e) {
+      salida.textContent = 'No se pudo conectar. Intenta de nuevo.';
+      b.disabled = false;
+    }
   }
 
   async function cargarPorAprobar() {
