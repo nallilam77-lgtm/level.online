@@ -87,7 +87,26 @@ grant execute on function public.admin_canje_borrar(text) to authenticated;
 -- ---------------------------------------------------------------------
 -- Canje (solo el servidor: api/_lib/canjes.js con la llave secreta)
 -- ---------------------------------------------------------------------
--- Toma el código si está libre. { ok, paquete } · { ok: false, motivo: 'no_existe' | 'ya_canjeado' }
+-- ¿Este ID ya ganó un código hoy (hora de Venezuela)? Lo usan canje_tomar y el reto (aviso antes de las sumas)
+create or replace function public.canje_gano_hoy(p_id_jugador text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from codigos_regalo
+     where id_jugador = left(p_id_jugador, 20)
+       and canjeado >= (date_trunc('day', now() at time zone 'America/Caracas') at time zone 'America/Caracas')
+  );
+$$;
+revoke execute on function public.canje_gano_hoy(text) from public, anon, authenticated;
+grant execute on function public.canje_gano_hoy(text) to service_role;
+
+-- Toma el código si está libre. { ok, paquete } · { ok: false, motivo: 'no_existe' | 'ya_canjeado' | 'ya_gano_hoy' }
+-- Un mismo ID solo gana UN premio por día (hora de Venezuela; desde 2026-11-15). Un candado por ID hace
+-- que dos canjes del mismo ID a la vez no ganen los dos.
 -- p_tiempo_ms: lo que tardó en el reto de sumas (opcional: así el servidor viejo sigue funcionando)
 drop function if exists public.canje_tomar(text, text, text, text);
 create or replace function public.canje_tomar(p_codigo text, p_id_jugador text, p_nombre text, p_id_pedido text, p_tiempo_ms integer default null)
@@ -99,6 +118,13 @@ as $$
 declare
   v_paquete text;
 begin
+  if not exists (select 1 from codigos_regalo where codigo = upper(trim(p_codigo))) then
+    return jsonb_build_object('ok', false, 'motivo', 'no_existe');
+  end if;
+  perform pg_advisory_xact_lock(hashtext('canje:' || p_id_jugador));
+  if canje_gano_hoy(p_id_jugador) then
+    return jsonb_build_object('ok', false, 'motivo', 'ya_gano_hoy');
+  end if;
   update codigos_regalo
      set canjeado = now(), id_jugador = left(p_id_jugador, 20), nombre = left(coalesce(p_nombre, ''), 60),
          id_pedido = left(p_id_pedido, 80), estado = 'entregando',

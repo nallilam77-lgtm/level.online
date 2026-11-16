@@ -8,6 +8,7 @@
 //   1. Formato y límite de intentos por IP (adivinar códigos bloquea la IP como con las referencias).
 //   2. Se valida el ID en Free Fire (el mismo validador de la tienda) y se toma el nombre del jugador.
 //   3. canje_tomar: el código se marca en UN paso; si dos personas lo canjean a la vez, solo una lo toma.
+//      Un mismo ID gana solo UN código por día (hora de Venezuela): 'ya_gano_hoy'.
 //   4. Se pide la recarga a Central One con Idempotency-Key "ff-<idPedido>" (el webhook la reconoce como
 //      Free Fire y actualiza la recarga) y se guarda en "recargas" (Panel → Pedidos/Revisión, precio vacío).
 //   5. Rechazo de Central One (no cobró) → canje_liberar: el código vuelve a quedar libre.
@@ -21,6 +22,7 @@ import { obtenerIp, minutosBloqueado, registrarFallo, permitirUso } from './limi
 import { anotarIncidencia } from './incidencias.js';
 
 const PRODUCTO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const YA_GANO_HOY = '🎁 Ese ID ya ganó un premio hoy. Solo se puede ganar uno por día: vuelve mañana.';
 const NO_DISPONIBLE = 'Los canjes no están disponibles en este momento. Tu código sigue libre: intenta más tarde.';
 
 // "levelup 7kqm3xpa", "LEVELUP7KQM3XPA" o "LEVELUP-7KQM3XPA" → "LEVELUP-7KQM3XPA". Los primeros códigos
@@ -87,6 +89,16 @@ function opcionesDe(total) {
   return lista;
 }
 
+// ¿El ID ya ganó un premio hoy? (supabase/canjes.sql). Si Supabase no responde, false: canje_tomar lo vuelve a mirar.
+async function ganoHoy(id) {
+  try {
+    return (await rpc('canje_gano_hoy', { p_id_jugador: id })) === true;
+  } catch (error) {
+    console.error('⚠️ canjes: no se pudo ver si el ID ya ganó hoy:', error.message);
+    return false;
+  }
+}
+
 // ID de Free Fire → { valido, nombre } (el mismo validador de la tienda). Lanza si no responde.
 async function comprobarId(id) {
   const v = await llamarScript(String(process.env.SCRIPT_VALIDADOR_URL || '').trim(), { id, juego: 'freefire' }, LECTURA_APPS_SCRIPT);
@@ -110,6 +122,8 @@ export async function retoCanje(req, res) {
     // Cada reto consulta el validador: tope por IP (no se gasta en quien pide retos sin parar)
     const minutos = await permitirUso(`reto:${obtenerIp(req)}`);
     if (minutos > 0) return res.status(429).json({ status: 'error', message: `Demasiados intentos. Espera ${minutos} minutos.` });
+    // Un premio por ID al día: se avisa antes de las sumas
+    if (await ganoHoy(id)) return res.status(409).json({ status: 'error', message: YA_GANO_HOY });
     try {
       const v = await comprobarId(id);
       if (!v.valido) return res.status(400).json({ status: 'error', message: '❌ Ese ID no existe en Free Fire (servidor LATAM). Revísalo y vuelve a intentar.' });
@@ -206,6 +220,7 @@ export async function canjear(req, res) {
       await registrarFallo(claves).catch(() => {});
       return res.status(404).json({ status: 'error', message: '❌ Ese código no existe. Revisa que esté bien escrito.' });
     }
+    if (toma?.motivo === 'ya_gano_hoy') return res.status(409).json({ status: 'error', message: YA_GANO_HOY });
     return res.status(409).json({ status: 'error', message: '😕 Llegaste tarde: ese código ya lo canjeó otra persona.' });
   }
   const paquete = String(toma.paquete || '110 Diamantes');

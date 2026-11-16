@@ -5,11 +5,15 @@
 //   - página sin datos → se recarga sola (trae la versión nueva al instante)
 //   - a mitad de compra (ID, referencia, comprobante, una ventana o el chat abiertos) → barra
 //     "Hay una versión nueva · Actualizar"; nunca se le borra lo que escribió sin preguntar.
+// Desde 2026-11-15 también revisa cada 2 minutos MIENTRAS la página está a la vista (antes solo al volver
+// a la pestaña: quien la dejaba abierta seguía con la versión vieja) y al volver a enfocar la ventana.
 // Si /api/version falla o no responde, no pasa nada: la tienda sigue igual.
 (function () {
   const RUTA = '/api/version';
   // No preguntar más de una vez por minuto (volver y salir de la pestaña varias veces seguidas)
   const ESPERA_ENTRE_REVISIONES_MS = 60 * 1000;
+  // Con la página a la vista: una revisión cada 2 minutos (/api/version está 30 s en la CDN: casi no cuesta)
+  const REVISION_PERIODICA_MS = 2 * 60 * 1000;
   const CLAVE_RECARGA = 'levelup_recargada_para';
 
   let versionDeLaPagina = '';
@@ -34,6 +38,9 @@
       return !!(el && ((el.files && el.files.length) || String(el.value || '').trim()));
     };
     if (['inputPlayerId', 'inputZona', 'inputReferencia', 'inputComprobante'].some(conValor)) return true;
+    // Cualquier otra página (perfil, canjes): un campo con algo escrito o un archivo elegido
+    const campos = document.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea');
+    if ([...campos].some((el) => (el.files && el.files.length) || (el.type !== 'file' && String(el.value || '').trim()))) return true;
     if (window.chatFileOverride) return true;
     const chat = document.getElementById('chatModalWindow');
     if (chat && chat.classList.contains('active')) return true;
@@ -87,6 +94,8 @@
     setTimeout(async () => { versionDeLaPagina = await versionActual(); }, 3000);
   });
   document.addEventListener('visibilitychange', revisar);
+  window.addEventListener('focus', revisar);
+  setInterval(revisar, REVISION_PERIODICA_MS);
   // Pestaña restaurada desde la memoria (botón atrás o al volver a la app del navegador)
   window.addEventListener('pageshow', (e) => { if (e.persisted) revisar(); });
 })();

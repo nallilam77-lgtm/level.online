@@ -47,7 +47,7 @@
   <script src="/js/aviso-codigo.js?v=3" defer></script>
   <script src="/js/whatsapp-cliente.js?v=2" defer></script>
   <script src="/js/canal.js?v=2" defer></script>
-  <script src="/js/version-nueva.js?v=1" defer></script>
+  <script src="/js/version-nueva.js?v=2" defer></script>
   <style>
     :root {
       /* Acento del juego (Free Fire: naranja con detalles amarillos): bordes, botones, sombras y glows */
@@ -1603,18 +1603,18 @@
              if (!pagoInsuficiente) intentosFallidos++;
              localStorage.setItem('intentos_recarga', intentosFallidos);
              // Aviso de cuántos intentos quedan antes del bloqueo de 5 minutos (va al final de la ventana de error)
-             const intentosRestantes = 3 - intentosFallidos;
+             const intentosRestantes = 5 - intentosFallidos;
              let avisoIntentos;
              if (pagoInsuficiente) {
                  avisoIntentos = '';
              } else if (intentosRestantes <= 0) {
                  localStorage.setItem('tiempo_bloqueo', Date.now() + (5 * 60 * 1000));
-                 mostrarBurbuja("⚠️ Has sido bloqueado por 5 minutos tras 3 intentos fallidos.", "var(--danger)");
-                 avisoIntentos = "🔒 <strong>Quedaste bloqueado por 5 minutos</strong> tras 3 intentos fallidos. Si ya pagaste, escríbenos a soporte por WhatsApp con tu referencia.";
+                 mostrarBurbuja("⚠️ Has sido bloqueado por 5 minutos tras 5 intentos fallidos.", "var(--danger)");
+                 avisoIntentos = "🔒 <strong>Quedaste bloqueado por 5 minutos</strong> tras 5 intentos fallidos. Si ya pagaste, escríbenos a soporte por WhatsApp con tu referencia.";
              } else if (intentosRestantes === 1) {
                  avisoIntentos = "⚠️ <strong>Te queda 1 intento.</strong> Si fallas, serás bloqueado por 5 minutos. Revisa tu referencia e intenta de nuevo.";
              } else {
-                 avisoIntentos = `⚠️ <strong>Te quedan ${intentosRestantes} intentos.</strong> Si fallas los 3, serás bloqueado por 5 minutos. Si ya pagaste, escríbenos a soporte.`;
+                 avisoIntentos = `⚠️ <strong>Te quedan ${intentosRestantes} intentos.</strong> Si fallas los 5, serás bloqueado por 5 minutos. Si ya pagaste, escríbenos a soporte.`;
              }
              const errorConAviso = (titulo, mensaje, extra) => mostrarErrorGeneral(titulo, mensaje, [extra, avisoIntentos].filter(Boolean).join('<br><br>'));
 
