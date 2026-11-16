@@ -1,7 +1,7 @@
 /* Espera del pago verificado a mano (js/pago-manual.js). Usa las variables del :root de cada tienda
    (--game-*, --surface…): sale con el acento de su juego. Reglas: .claude/UI_RULES.md */
 .pago-manual-fondo {
-  position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 16px;
+  position: fixed; inset: 0; z-index: 2147483000;   /* encima de TODO: las tiendas usan hasta 30000 (pantallaProcesando, modales) */ display: grid; place-items: center; padding: 16px;
   background: var(--bg-deep);
   background: linear-gradient(rgba(var(--game-accent-rgb), 0.06), rgba(var(--game-accent-rgb), 0.06)), color-mix(in srgb, var(--bg-deep) 88%, transparent);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);

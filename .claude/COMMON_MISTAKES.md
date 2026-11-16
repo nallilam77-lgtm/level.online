@@ -235,3 +235,9 @@ Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creado
 **Síntoma**: un pago insuficiente que el cliente completaba quedaba "completado" en `recargas` aunque Central One fallara después, y en Roblox el código que llegaba por el aviso se perdía.
 **Causa**: completar crea un idPedido NUEVO (el que va a Central One como Idempotency-Key), pero la fila de `recargas` conserva el del primer pago; `actualizarEstado` del webhook buscaba el nuevo y no existía.
 **Regla**: toda tienda que complete un pago llama a `pedidoDeEntrega(idPedido)` (_lib/historial.js) en cuanto `usar_complemento`/`pagos_completar` confirma el pago completo; `completarFila` renombra la fila a ese id (solo si sigue "incompleto") y usa "en_proceso" si Central One aún no confirmó. Una tienda nueva con pago por completar debe hacer lo mismo.
+
+## 13. Ventana nueva que queda DETRÁS de la pantalla de la tienda (2026-11-16)
+
+**Síntoma**: con "Revisar pagos", el cliente se quedaba para siempre en "Verificando pago y bloqueando referencia": la ventana "Estamos verificando tu pago" (js/pago-manual.js) sí se abría, pero debajo.
+**Causa**: las tiendas usan z-index 10000-30000 (#pantallaProcesando, modales) y la ventana tenía 1100. La prueba con capturas no lo vio porque se llamó a fetch sin abrir antes la pantalla de "procesando".
+**Regla**: toda ventana que se abra encima de una tienda (css/pago-manual.css, css/aviso-juego.css) va con z-index ≥ 2147482000. Al probarla, abrir antes #pantallaProcesando como lo hace la tienda.

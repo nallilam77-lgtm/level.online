@@ -12,7 +12,7 @@
 // =========================================================================
 (function () {
   const fetchOriginal = window.fetch.bind(window);
-  const CSS = '/css/pago-manual.css?v=2';
+  const CSS = '/css/pago-manual.css?v=3';
   const CADA_MS = 8000;
   const WHATSAPP = 'https://wa.me/584141916377?text=';
 

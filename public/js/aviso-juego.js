@@ -12,7 +12,7 @@
   const JUEGO = script && script.dataset.juego;
   const CLAVE_CONFIG = 'levelup_sesion_config';   // la misma que js/sesion.js y js/datos-pago.js
   const CLAVE_VISTO = 'levelup_aviso_juego_visto';
-  const CSS = '/css/aviso-juego.css?v=1';
+  const CSS = '/css/aviso-juego.css?v=2';
   if (!JUEGO) return;
 
   // Se pinta con textContent: basta con quitar caracteres de control y cortar el largo

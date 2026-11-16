@@ -1,7 +1,7 @@
 /* Aviso de la tienda (js/aviso-juego.js). Usa las variables del :root de cada tienda (--game-*,
    --surface, --border-glass…): sale con el acento de su juego. Reglas: .claude/UI_RULES.md */
 .aviso-juego-fondo {
-  position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px;
+  position: fixed; inset: 0; z-index: 2147482000;   /* encima de las ventanas de la tienda (hasta 30000) */ display: grid; place-items: center; padding: 16px;
   background: var(--bg-deep);   /* navegadores viejos sin color-mix: fondo sólido */
   background: linear-gradient(rgba(var(--game-accent-rgb), 0.06), rgba(var(--game-accent-rgb), 0.06)), color-mix(in srgb, var(--bg-deep) 82%, transparent);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
