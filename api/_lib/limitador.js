@@ -69,6 +69,8 @@ function esDeCloudflare(ip) {
 }
 
 export function obtenerIp(req) {
+  // Recarga repetida por Vercel al aprobar un pago a mano: cuenta como la IP del cliente (_lib/pagos-manual.js)
+  if (req.ipForzada) return String(req.ipForzada);
   const reenviada = req.headers['x-forwarded-for'];
   const ipConexion = String(req.headers['x-real-ip']
     || (reenviada ? String(reenviada).split(',')[0].trim() : '')

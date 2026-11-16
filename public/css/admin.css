@@ -225,3 +225,8 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .ligero .tarjeta { box-shadow: none !important; }
 /* Ajustes → Tienda en mantenimiento: enlaces con forma de botón */
 .enlace-boton { display: inline-flex; align-items: center; text-decoration: none; }
+/* Pagos → Pagos por aprobar: referencia y monto en una fila; botones debajo */
+.aprobar-campos { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 4px; }
+@media (min-width: 560px) { .aprobar-campos { grid-template-columns: 2fr 1fr; } }
+.aprobar-campos input { width: 100%; }
+.por-aprobar-monto { font-family: 'Montserrat', sans-serif; font-size: 16px; font-weight: 900; color: var(--accent-neon); }

@@ -119,9 +119,9 @@
     if (b.dataset.seccion === 'canjes') cargarCanjes();
     if (b.dataset.seccion === 'manuales') cargarManuales();
     if (b.dataset.seccion === 'revision') { cargarRevision(); cargarRuleta().catch(() => {}); }
-    if (b.dataset.seccion === 'pagos') cargarPagos();
+    if (b.dataset.seccion === 'pagos') { cargarPagos(); cargarPorAprobar().catch(() => {}); }
     // Ajustes: cuentas de Pago Móvil, modo de Free Fire y Google Sheets (tabla configuracion)
-    if (b.dataset.seccion === 'ajustes') { cargarMantenimiento().catch(() => {}); cargarAvisos().catch(() => {}); cargarCuentasPm(); cargarModoFF().catch(() => {}); cargarHojas().catch(() => {}); }
+    if (b.dataset.seccion === 'ajustes') { cargarMantenimiento().catch(() => {}); cargarPagosManual().catch(() => {}); cargarAvisos().catch(() => {}); cargarCuentasPm(); cargarModoFF().catch(() => {}); cargarHojas().catch(() => {}); }
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -2043,6 +2043,110 @@
   let pagos = [];
   let pedidosDePagos = {};   // id_pedido -> { juego, paquete, cuenta, estado }
   const COLUMNAS_PAGO = 'referencia,monto,monto_texto,remitente,origen,recibido,estado,id_pedido,juego,tomado,usado,nota';
+  // ---------------------------------------------------------------- pagos verificados a mano
+  // Interruptor (configuracion "pagos_manual", privado) y la lista de pagos_solicitudes pendientes
+  // (supabase/pagos-manual.sql). Aprobar y rechazar pasan por Vercel (api/_lib/pagos-manual.js).
+  async function cargarPagosManual() {
+    const { data } = await cliente.from('configuracion').select('valor').eq('clave', 'pagos_manual').maybeSingle();
+    const activo = !!(data && data.valor === true);
+    $('pagosManualActivo').checked = activo;
+    $('mensajePagosManual').textContent = activo
+      ? '🖐️ Encendido: las referencias que no lleguen esperan tu aprobación en Pagos.'
+      : 'Apagado: una referencia que no llegó se rechaza como siempre ("Referencia no encontrada").';
+  }
+  $('pagosManualActivo').addEventListener('change', async (ev) => {
+    const activar = ev.target.checked;
+    const texto = activar
+      ? '¿Verificar a mano los pagos que no lleguen?\n\nSi un cliente escribe una referencia que no llegó, verá "Estamos verificando tu pago" y su pedido como "Recibido". Tú lo apruebas (la recarga se hace sola) o lo rechazas en Pagos → Pagos por aprobar.'
+      : '¿Apagar la verificación a mano?\n\nLas referencias que no lleguen se rechazan otra vez como "no encontrada". Las que ya están por aprobar siguen en la lista.';
+    if (!confirm(texto)) { cargarPagosManual(); return; }
+    ev.target.disabled = true;
+    const { error } = await cliente.from('configuracion').upsert({ clave: 'pagos_manual', valor: activar, publico: false, actualizado: new Date().toISOString() }, { onConflict: 'clave' });
+    ev.target.disabled = false;
+    if (error) { console.error(error); alert('No se pudo guardar. Intenta de nuevo.'); }
+    cargarPagosManual();
+  });
+
+  const TITULO_PANEL = document.title;
+  async function cargarPorAprobar() {
+    const lista = $('listaPorAprobar');
+    const { data, error } = await cliente.from('pagos_solicitudes').select('id,ultimos5,juego,monto,id_jugador,paquete,telefono,creado')
+      .eq('estado', 'pendiente').order('creado', { ascending: true }).limit(100);
+    if (error) {
+      // Sin la tabla (falta correr supabase/pagos-manual.sql) no se molesta en ninguna otra parte
+      lista.replaceChildren(el('li', 'vacio', 'Todavía no está instalado: corre supabase/pagos-manual.sql en Supabase.'));
+      $('contadorPagos').hidden = true;
+      return;
+    }
+    const n = (data || []).length;
+    $('contadorPagos').hidden = n === 0;
+    $('contadorPagos').textContent = n;
+    document.title = n ? `(${n}) ${TITULO_PANEL}` : TITULO_PANEL;
+    // Si el administrador está escribiendo en una fila, no se repinta la lista (perdería lo escrito)
+    if (lista.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
+    lista.replaceChildren();
+    if (!n) { lista.append(el('li', 'vacio', '✅ No hay pagos por aprobar.')); return; }
+    data.forEach((s) => lista.append(filaPorAprobar(s)));
+  }
+
+  function filaPorAprobar(s) {
+    const li = el('li', 'pedido');
+    const cabeza = el('div', 'pedido-cabeza');
+    cabeza.append(el('strong', '', `${JUEGOS[s.juego] || s.juego}${s.paquete ? ' · ' + s.paquete : ''}`), el('span', 'etiqueta etiqueta--en_revision', hace(s.creado)));
+    const datos = el('span', '');
+    datos.append('Termina en ', el('strong', 'codigo-nombre', s.ultimos5), s.id_jugador ? ` · ID ${s.id_jugador}` : '');
+    li.append(cabeza, datos);
+    if (Number(s.monto) > 0) li.append(el('span', 'por-aprobar-monto', `Debe llegar: ${bs(s.monto)} Bs`));
+    const campos = el('div', 'aprobar-campos');
+    const ref = el('input');
+    ref.type = 'text'; ref.inputMode = 'numeric'; ref.maxLength = 30; ref.autocomplete = 'off';
+    ref.placeholder = `Referencia completa (termina en ${s.ultimos5})`;
+    ref.setAttribute('aria-label', `Referencia completa del pago que termina en ${s.ultimos5}`);
+    const monto = el('input');
+    monto.type = 'text'; monto.inputMode = 'decimal'; monto.maxLength = 20; monto.autocomplete = 'off';
+    monto.placeholder = 'Monto que llegó (Bs)';
+    monto.setAttribute('aria-label', 'Monto que llegó en Bs');
+    if (Number(s.monto) > 0) monto.value = bs(s.monto);
+    campos.append(ref, monto);
+    const salida = el('p', 'mensaje-form');
+    salida.setAttribute('role', 'status');
+    const acciones = el('div', 'acciones-cuenta');
+    if (s.telefono) acciones.append(enlaceWhatsapp(s.telefono, `Hola, te escribimos de Level Up por tu pago con referencia terminada en ${s.ultimos5}.`));
+    acciones.append(
+      boton('✅ Aprobar', 'btn-ver btn-pagar', (b) => resolverSolicitud(s, 'aprobar', b, salida, ref.value, monto.value)),
+      boton('❌ Rechazar', 'btn-ver btn-ver--peligro', (b) => resolverSolicitud(s, 'rechazar', b, salida)));
+    li.append(campos, acciones, salida);
+    return li;
+  }
+
+  async function resolverSolicitud(s, accion, b, salida, referencia, monto) {
+    if (accion === 'aprobar') {
+      const ref = String(referencia || '').replace(/\D/g, '');
+      if (ref.length < 6) { salida.textContent = 'Escribe la referencia completa que sale en el banco.'; return; }
+      if (!ref.endsWith(s.ultimos5)) { salida.textContent = `La referencia debe terminar en ${s.ultimos5} (lo que escribió el cliente).`; return; }
+      if (!String(monto || '').trim()) { salida.textContent = 'Escribe el monto que llegó.'; return; }
+      if (!confirm(`¿APROBAR el pago ${ref} por ${monto} Bs?\n\nSe hace YA la recarga del cliente (${JUEGOS[s.juego] || s.juego}${s.paquete ? ', ' + s.paquete : ''}${s.id_jugador ? ', ID ' + s.id_jugador : ''}). La ve en "Consulta tus últimas recargas" y en su perfil.`)) return;
+    } else if (!confirm(`¿RECHAZAR el pago que termina en ${s.ultimos5}?\n\nSu pedido quedará "Con problema" y le diremos que escriba por WhatsApp.`)) return;
+    b.disabled = true;
+    if (accion === 'aprobar') salida.textContent = '⏳ Aprobando y haciendo la recarga… (puede tardar hasta un minuto)';
+    try {
+      // Va por /api/recargar: al aprobar se hace la recarga, que necesita su tiempo (api/_lib/pagos-manual.js)
+      const r = await llamarAdmin('solicitud_resolver', accion === 'aprobar' ? { id: s.id, accion, referencia, monto } : { id: s.id, accion }, '/api/recargar');
+      if (r.status !== 'success') { salida.textContent = '❌ ' + (r.message || 'No se pudo guardar.'); b.disabled = false; return; }
+      if (accion === 'aprobar') alert(`Pago aprobado.\n\n${r.recarga || ''}${r.aviso ? '\n\n' + r.aviso : ''}`);
+      if (document.activeElement) document.activeElement.blur();
+      cargarPorAprobar();
+      cargarPedidos();
+      if (accion === 'aprobar') cargarPagos();
+    } catch (e) {
+      salida.textContent = 'No se pudo conectar. Intenta de nuevo.';
+      b.disabled = false;
+    }
+  }
+  $('actualizarPorAprobar').addEventListener('click', () => cargarPorAprobar().catch(() => {}));
+  // Cada 10 s con la página visible (también con otra pestaña del panel abierta: el contador avisa)
+  setInterval(() => { if (cliente && !$('panel').hidden && document.visibilityState === 'visible') cargarPorAprobar().catch(() => {}); }, 10000);
+
   async function cargarPagos() {
     const desde = desdePeriodo($('periodoPagos').value);
     let data;
@@ -2177,9 +2281,9 @@
     esperaBusqueda = setTimeout(() => buscarPagosServidor($('buscarPago').value), 400);
   });
 
-  async function llamarAdmin(accion, cuerpo) {
+  async function llamarAdmin(accion, cuerpo, ruta = '/api/juego') {
     const { data: s } = await cliente.auth.getSession();
-    const res = await fetch(`/api/juego?accion=${accion}`, {
+    const res = await fetch(`${ruta}?accion=${accion}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ((s && s.session && s.session.access_token) || '') },
       body: JSON.stringify(cuerpo || {}),
@@ -2259,7 +2363,7 @@
     if (error || esAdmin !== true) return estado('Esta cuenta no es administradora. Entra con la cuenta correcta.', true);
     $('panelEstado').hidden = true;
     $('panel').hidden = false;
-    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarManuales().catch(() => {}), cargarAlarma().catch(() => {}), cargarModoFF().catch(() => {}), cargarHojas().catch(() => {}), cargarMantenimiento().catch(() => {})]);
+    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarManuales().catch(() => {}), cargarAlarma().catch(() => {}), cargarModoFF().catch(() => {}), cargarHojas().catch(() => {}), cargarMantenimiento().catch(() => {}), cargarPorAprobar().catch(() => {})]);
     escuchar();
   })();
 })();

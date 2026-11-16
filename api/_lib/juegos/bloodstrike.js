@@ -302,7 +302,7 @@ export async function recargar(req, res) {
         { status: "error", message: "Las recargas automáticas no están disponibles en este momento. No realices el pago todavía; escríbenos por WhatsApp." });
     }
 
-    const idPedido = randomUUID();
+    const idPedido = req.idPedidoForzado || randomUUID();   // forzado: recarga repetida al aprobar un pago a mano
     const comprobante = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
 
     const { marcarReferencia, registrarEnHoja, informe, bloquearPago, bloquearPorError, cerrarEnSegundoPlano } = crearUtilidadesPedido({

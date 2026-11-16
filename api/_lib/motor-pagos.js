@@ -45,10 +45,19 @@ async function llamar(funcion, args) {
   }
 }
 
-/** Aparta un pago (últimos 5) para un pedido. { encontrado, referencia, monto, repetido } o { encontrado: false, message } */
-export async function tomarPago(ultimos5, idPedido, juego) {
+/**
+ * Aparta un pago (últimos 5) para un pedido. { encontrado, referencia, monto, repetido } o { encontrado: false, message }.
+ * precio: lo que cuesta el paquete (solo para la solicitud de pago a mano).
+ */
+export async function tomarPago(ultimos5, idPedido, juego, precio = 0) {
   const r = await llamar('pagos_tomar', { p_ultimos5: String(ultimos5), p_id_pedido: String(idPedido), p_juego: juego });
   if (r?.encontrado) return { encontrado: true, referencia: String(r.referencia), monto: Number(r.monto) || 0, repetido: r.repetido === true };
+  // No llegó la notificación: con "Verificar a mano" encendido queda por aprobar en el panel (_lib/pagos-manual.js;
+  // import dinámico: pagos-manual usa externo.js, que importa este archivo)
+  if (r?.motivo === 'no_existe') {
+    const { crearSolicitud, MENSAJE_SOLICITUD } = await import('./pagos-manual.js');
+    if (await crearSolicitud(String(ultimos5), juego, precio, idPedido)) return { encontrado: false, motivo: 'por_aprobar', message: MENSAJE_SOLICITUD };
+  }
   return { encontrado: false, motivo: r?.motivo, message: MENSAJES_PAGO[r?.motivo] || MENSAJES_PAGO.no_existe };
 }
 
@@ -80,7 +89,7 @@ export async function pagoEnSupabase(url, cuerpo) {
     case 'verificar_pago': {
       const ultimos5 = String(cuerpo.referencia || '').replace(/\s+/g, '');
       if (!/^\d{5}$/.test(ultimos5)) return { status: 'success', encontrado: false, message: MENSAJES_PAGO.formato };
-      const p = await tomarPago(ultimos5, idPedido, juego);
+      const p = await tomarPago(ultimos5, idPedido, juego, Number(cuerpo.monto) || 0);
       if (!p.encontrado) return { status: 'success', encontrado: false, message: p.message };
       const precio = Number(cuerpo.monto) || 0;
       return { status: 'success', encontrado: true, referencia: p.referencia, montoPagado: p.monto, telefono: '',

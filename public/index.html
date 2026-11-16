@@ -707,7 +707,7 @@
     <div data-instalar-app hidden></div>
 
     <!-- SECCIÓN: CONSULTAR ESTADO DE ÓRDENES -->
-    <section class="consulta-section animate-up delay-1">
+    <section class="consulta-section animate-up delay-1" id="consulta">
       <div class="consulta-box">
         <h3>🔍 Consulta tus Últimas Recargas</h3>
         <p class="consulta-subtitulo">Escribe el ID o usuario con el que recargaste</p>
@@ -1101,5 +1101,18 @@
     })();
   </script>
 
+  <script>
+    // "Ver el estado de mi pedido" (js/pago-manual.js): /?consulta=<ID>#consulta busca ese ID sola
+    (function () {
+      var id = new URLSearchParams(location.search).get('consulta');
+      if (!id) return;
+      window.addEventListener('load', function () {
+        var campo = document.getElementById('inputPlayerId');
+        if (!campo || typeof validarYConsultar !== 'function') return;
+        campo.value = id.trim().slice(0, 40);
+        validarYConsultar();
+      });
+    })();
+  </script>
 </body>
 </html>

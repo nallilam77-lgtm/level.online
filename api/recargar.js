@@ -8,6 +8,8 @@ import { conHistorial, prepararCompletarDesdePerfil } from './_lib/historial.js'
 // después de responder (_lib/historial.js); sin sesión no hace nada.
 export default async function handler(req, res) {
   try {
+    // Panel admin → Pagos por aprobar: aprobar un pago a mano HACE la recarga del cliente aquí (180 s); solo administrador
+    if (req.query.accion === 'solicitud_resolver') return (await import('./_lib/pagos-manual.js')).solicitudResolver(req, res);
     // COMPATIBILIDAD TEMPORAL: la página anterior de Free Fire llamaba a /api/recargar sin ?juego.
     // Quitar este valor por defecto junto con las redirecciones de vercel.json.
     const juego = await cargarJuego(req.query.juego ?? 'freefire');

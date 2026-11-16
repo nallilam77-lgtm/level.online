@@ -217,7 +217,7 @@ export async function recargar(req, res) {
       ({ desc, precio: montoACobrar } = descuento);
     }
 
-    const idPedido = `rbx-${randomUUID()}`;
+    const idPedido = req.idPedidoForzado || `rbx-${randomUUID()}`;   // forzado: recarga repetida al aprobar un pago a mano
     // Si el pago no alcanza, el pedido queda "por completar" con la huella de esta clave (la clave solo la
     // recibe el cliente, y solo si se guardó)
     const clave = randomBytes(24).toString('base64url');
@@ -296,7 +296,7 @@ async function completarCompra(req, res, inicio) {
 // códigos, Central One → pago usado.
 // =========================================================================
 async function compraConSupabase({ idPedido, referencia, usuario, paquete, precio, claveHash, codigoDescuento, telefono, respaldo, inicio }) {
-  const pago = await tomarPago(referencia, idPedido, 'roblox');
+  const pago = await tomarPago(referencia, idPedido, 'roblox', precio);
   if (!pago.encontrado) return { status: 'error', message: pago.message };
   if (pago.monto < precio - MARGEN_BS) {
     let g;

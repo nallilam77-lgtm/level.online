@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=22">
+  <link rel="stylesheet" href="css/admin.css?v=23">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=40" defer></script>
+  <script src="/js/admin.js?v=41" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -49,7 +49,7 @@
             <button type="button" role="tab" data-seccion="pedidos" aria-selected="false">Pedidos</button>
             <button type="button" role="tab" data-seccion="revision" aria-selected="false">Revisión <span class="contador-pestana" id="contadorRevision" hidden></span></button>
             <button type="button" role="tab" data-seccion="manuales" aria-selected="false">Manuales <span class="contador-pestana" id="contadorManuales" hidden></span></button>
-            <button type="button" role="tab" data-seccion="pagos" aria-selected="false">Pagos</button>
+            <button type="button" role="tab" data-seccion="pagos" aria-selected="false">Pagos <span class="contador-pestana" id="contadorPagos" hidden></span></button>
           </div>
         </div>
         <div class="grupo-pestanas" role="group" aria-label="Tienda">
@@ -227,6 +227,16 @@
 
       <!-- PAGOS (supabase/pagos.sql): lo que avisa MacroDroid. Las cuentas que ven los clientes están en Ajustes. -->
       <section class="seccion" id="seccion-pagos" hidden>
+        <!-- Pagos por aprobar a mano (supabase/pagos-manual.sql; api/_lib/pagos-manual.js). Solo con el interruptor de Ajustes. -->
+        <div class="tarjeta" id="tarjetaPorAprobar">
+          <div class="fila-titulo">
+            <h2>Pagos por aprobar</h2>
+            <button type="button" class="btn-ver" id="actualizarPorAprobar">Actualizar</button>
+          </div>
+          <p class="nota" id="notaPorAprobar">Referencias que el cliente escribió y cuya notificación no llegó (el cliente ya ve su pedido como "Recibido"). Búscala en el banco: si está, escribe la <strong>referencia completa</strong> y el <strong>monto que llegó</strong> y toca <strong>Aprobar</strong>: la recarga se hace en ese momento. Si no está, <strong>Rechazar</strong> (el pedido queda "Con problema").</p>
+          <ul class="pedidos" id="listaPorAprobar"></ul>
+        </div>
+
         <div class="tarjeta">
           <div class="fila-titulo">
             <h2>Pagos recibidos</h2>
@@ -570,6 +580,17 @@
 
       <!-- AJUSTES: lo que cambia cómo funciona la tienda (tabla configuracion) -->
       <section class="seccion" id="seccion-ajustes" hidden>
+        <!-- Pagos verificados a mano: configuracion "pagos_manual" (privado; Vercel lo lee cada 15 s) -->
+        <div class="tarjeta">
+          <h2>Verificar pagos a mano</h2>
+          <label class="interruptor">
+            <input type="checkbox" id="pagosManualActivo">
+            <span><strong>Verificar a mano los pagos que no lleguen</strong><small>Para cuando un banco no manda la notificación (p. ej. Venezuela). Los pagos que sí llegan siguen automáticos. Si una referencia no aparece, el cliente ve "Estamos verificando tu pago" y su pedido como "Recibido"; tú lo apruebas (la recarga se hace sola) o lo rechazas en <strong>Pagos → Pagos por aprobar</strong>.</small></span>
+          </label>
+          <p class="mensaje-form" id="mensajePagosManual" role="status"></p>
+          <p class="nota">Antes de encenderlo, corre <strong>supabase/pagos-manual.sql</strong> una vez en Supabase. Se aplica en menos de 15 segundos.</p>
+        </div>
+
         <!-- Tienda en mantenimiento: configuracion "mantenimiento" (publico; la lee js/mantenimiento.js) -->
         <div class="tarjeta">
           <h2>Tienda en mantenimiento</h2>

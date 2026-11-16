@@ -9,9 +9,10 @@
 import { timingSafeEqual } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { supabaseActivo, guardar, leer, rpc, esAdminToken } from './supabase.js';
-import { limpiarMontoVES, formatearVES } from './recarga-comun.js';
+import { limpiarMontoVES } from './recarga-comun.js';
 import { tokenDe } from './historial.js';
 import { cambiarPago } from './motor-pagos.js';
+import { guardarPagoManual } from './pagos-manual.js';
 
 // Limpieza diaria (pagos_limpiar de supabase/pagos.sql): la primera vez que llega un pago cada día
 // (hora de Venezuela) en esta instancia, después de responder.
@@ -109,15 +110,8 @@ export async function pagoManual(req, res) {
   const nota = String(b.nota ?? '').trim().slice(0, 200) || null;
 
   // La regla de la base no deja repetir la referencia (ni una que ya se usó: pagos_usados)
-  try {
-    const ya = await leer('pagos', { referencia }, 'id,estado');
-    if (Array.isArray(ya) && ya.length) return res.status(409).json({ status: 'error', message: `Esa referencia ya está registrada (${ya[0].estado}).` });
-    await guardar('pagos', { referencia, monto: Math.round(monto * 100) / 100, monto_texto: formatearVES(monto), remitente, origen: 'manual', nota });
-  } catch (error) {
-    if (/Supabase 409/.test(error.message)) return res.status(409).json({ status: 'error', message: 'Esa referencia ya está registrada o ya se usó.' });
-    console.error('⚠️ pago_manual: no se pudo guardar en Supabase:', error.message);
-    return res.status(503).json({ status: 'error', message: 'No se pudo guardar. Intenta de nuevo.' });
-  }
+  const r = await guardarPagoManual({ referencia, monto, remitente, nota });
+  if (!r.ok) return res.status(r.codigo).json({ status: 'error', message: r.message });
   console.info(`💵 Pago agregado a mano: …${referencia.slice(-5)} · ${monto} Bs`);
   return res.status(200).json({ status: 'success' });
 }

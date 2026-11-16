@@ -606,7 +606,7 @@ export async function recargar(req, res) {
     // Identificador único del pedido: con recargas.gs v2 hace idempotentes verificar_pago y
     // obtener_codigo (repetir la petición devuelve el mismo pago y los MISMOS pines) y enlaza
     // el pedido con la pestaña "asignaciones_pines".
-    const idPedido = randomUUID();
+    const idPedido = req.idPedidoForzado || randomUUID();   // forzado: recarga repetida al aprobar un pago a mano
     const comprobante = urlImagen && urlImagen.trim() !== "" ? urlImagen : "Sin comprobante";
 
     const { marcarReferencia, registrarEnHoja, informe, bloquearPago, bloquearPorError, cerrarEnSegundoPlano } = crearUtilidadesPedido({

@@ -15,6 +15,9 @@ export default async function handler(req, res) {
     if (req.query.accion === 'pago_manual') return (await import('./_lib/pagos.js')).pagoManual(req, res);
     if (req.query.accion === 'pagos_limpiar') return (await import('./_lib/pagos.js')).limpiarPagos(req, res);
     if (req.query.accion === 'pago_estado') return (await import('./_lib/pagos.js')).pagoEstado(req, res);
+    // Pagos verificados a mano (_lib/pagos-manual.js): la tienda pregunta cómo va (público, por id). Aprobar o
+    // rechazar va por /api/recargar?accion=solicitud_resolver (al aprobar se hace la recarga: necesita sus 180 s)
+    if (req.query.accion === 'solicitud_estado') return (await import('./_lib/pagos-manual.js')).solicitudEstado(req, res);
     if (req.query.accion === 'saldo_centralone') return (await import('./_lib/precios.js')).saldoCentralOne(req, res);
     // Códigos de regalo (canjear.html; _lib/canjes.js): canjear (público, con límite de intentos) y la lista de canjes
     if (req.query.accion === 'canjear') return (await import('./_lib/canjes.js')).canjear(req, res);

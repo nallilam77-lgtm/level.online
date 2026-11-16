@@ -278,8 +278,8 @@ export async function recargar(req, res) {
     }
 
     await motorPagos();
-    const idPedido = `man-${randomUUID()}`;
-    const pago = await tomarPago(String(referencia), idPedido, juego);
+    const idPedido = req.idPedidoForzado || `man-${randomUUID()}`;   // forzado: recarga repetida al aprobar un pago a mano
+    const pago = await tomarPago(String(referencia), idPedido, juego, precio);
     if (!pago.encontrado) {
       await registrarFallo(clavesLimite);
       return res.status(200).json({ status: 'error', message: pago.message });

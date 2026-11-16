@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { supabaseActivo, guardar, actualizar, leer, usuarioDelToken } from './supabase.js';
 import { limpiarMontoVES } from './recarga-comun.js';
+import { obtenerIp } from './limitador.js';
 import { CODIGO_DESCUENTO_VALIDO, normalizarCodigoDescuento } from './descuentos.js';
 
 const MANUALES = new Set(['fcmobile', 'codmobile', 'clashroyale']);
@@ -49,6 +50,47 @@ export function anotarEnHistorial(datos) {
 export function notaParaHistorial(texto) {
   const ctx = contexto.getStore();
   if (ctx) ctx.nota = String(texto || '').slice(0, 500);
+}
+
+/**
+ * Datos de ESTA recarga para una solicitud de pago a mano (_lib/pagos-manual.js): solo el ID, el paquete y el
+ * WhatsApp, nunca otros campos (las tiendas manuales mandan la contraseña de la cuenta).
+ */
+export function datosDeLaRecarga() {
+  const ctx = contexto.getStore() || {};
+  const b = ctx.body || {};
+  const id = b.id ?? b.user ?? b.idJugador ?? '';
+  return {
+    idJugador: corto(b.zona ? `${id} (${b.zona})` : id, 60), paquete: corto(b.paquete ?? b.producto, 80), telefono: corto(b.telefono, 30),
+    body: b, ip: ctx.ip || '', usuario: ctx.usuario || Promise.resolve(null),
+  };
+}
+
+/**
+ * Pago por verificar a mano: el pedido se guarda YA como "pendiente" (Recibido) para que el cliente lo vea en
+ * "Consulta tus últimas recargas" y en su perfil. Al aprobarlo, la recarga se repite con este mismo idPedido
+ * y la fila se pone al día sola (guardarFila); al rechazarlo queda "problema".
+ */
+export async function guardarPorVerificar({ idPedido, juego, precio, ultimos5 }) {
+  const ctx = contexto.getStore();
+  if (!ctx) return;
+  const b = ctx.body || {};
+  const cuenta = juego === 'mobilelegends' ? `${b.id ?? ''}:${b.zona ?? ''}` : juego === 'roblox' ? b.user : b.id;
+  const usuario = await ctx.usuario;
+  await guardar('recargas', {
+    id_pedido: corto(idPedido, 80), usuario, juego, ...cuentaVisible(juego, cuenta ?? '', b),
+    paquete: corto(b.paquete ?? b.producto, 80),
+    precio: Number(precio) > 0 ? Math.round(Number(precio) * 100) / 100 : null,
+    referencia: String(ultimos5 || '').slice(-6) || null, estado: 'pendiente',
+    codigo_descuento: CODIGO_DESCUENTO_VALIDO.test(normalizarCodigoDescuento(b.codigoDescuento)) ? normalizarCodigoDescuento(b.codigoDescuento) : null,
+    nota_admin: `🖐️ Pago por verificar a mano (…${ultimos5})`, actualizado: new Date().toISOString(),
+  }, 'id_pedido');
+}
+
+/** La referencia no existe y quedó por aprobar a mano: la respuesta de error lleva { solicitudPago } y su mensaje. */
+export function marcarSolicitudPago({ id, message }) {
+  const ctx = contexto.getStore();
+  if (ctx) ctx.solicitudPago = { id: String(id), message: String(message || '') };
 }
 
 /**
@@ -131,10 +173,18 @@ export async function conHistorial(req, res, juego, fn) {
   if (!supabaseActivo()) return fn();
   const token = tokenDe(req);
   // El usuario se averigua en paralelo con la recarga (no la frena); fidelidad.js lo espera solo si hace falta
-  const ctx = { pedido: null, usuario: token ? usuarioDelToken(token) : Promise.resolve(null) };
+  // Recarga repetida al aprobar un pago a mano (_lib/pagos-manual.js): la cuenta es la del cliente, no un token
+  const usuario = req.usuarioForzado !== undefined ? Promise.resolve(req.usuarioForzado) : token ? usuarioDelToken(token) : Promise.resolve(null);
+  const ctx = { pedido: null, usuario, body: req.body && typeof req.body === 'object' ? req.body : {}, ip: obtenerIp(req) };
   const respuesta = { codigo: 0, cuerpo: null };
   const jsonOriginal = res.json.bind(res);
-  res.json = (cuerpo) => { respuesta.codigo = res.statusCode; respuesta.cuerpo = cuerpo; return jsonOriginal(cuerpo); };
+  res.json = (cuerpo) => {
+    // Pago por aprobar a mano (_lib/pagos-manual.js): la página espera la decisión (public/js/pago-manual.js)
+    if (ctx.solicitudPago && cuerpo && typeof cuerpo === 'object' && cuerpo.status !== 'success') {
+      cuerpo = { ...cuerpo, solicitudPago: ctx.solicitudPago.id, message: ctx.solicitudPago.message };
+    }
+    respuesta.codigo = res.statusCode; respuesta.cuerpo = cuerpo; return jsonOriginal(cuerpo);
+  };
   try {
     return await contexto.run(ctx, fn);
   } finally {
