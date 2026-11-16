@@ -1,4 +1,3 @@
-import { pedirJSON, LECTURA_APPS_SCRIPT } from './_lib/externo.js';
 import { faltaConfiguracion } from './_lib/validacion.js';
 import { obtenerIp, permitirUso } from './_lib/limitador.js';
 import { supabaseActivo, leer } from './_lib/supabase.js';
@@ -10,10 +9,10 @@ const ESTADOS = {
     reembolsado: ['Reembolsada', 'pending'],
 };
 
-// Desde 2026-11-13 todos los pedidos están en Supabase (_lib/historial.js): se buscan ahí primero (rápido y
-// con el estado real). Los IDs de Roblox se guardan en minúsculas; los demás son números.
+// SOLO Supabase (desde 2026-11-16): todos los pedidos están ahí desde el 2026-11-13 (_lib/historial.js).
+// La hoja (SCRIPT_RECARGAS_VERIFICACION) ya no se consulta: los pedidos anteriores al 13-nov no salen.
+// Los IDs de Roblox se guardan en minúsculas; los demás son números.
 async function recargasEnSupabase(playerId) {
-    if (!supabaseActivo()) return [];
     const filas = await leer('recargas', { id_jugador: String(playerId).toLowerCase() }, 'paquete,estado,creado&order=creado.desc&limit=5');
     return (Array.isArray(filas) ? filas : []).map((f) => {
         const [estado, clase] = ESTADOS[f.estado] || ['En revisión', 'pending'];
@@ -48,52 +47,21 @@ export default async function handler(req, res) {
             return res.status(400).json({ success: false, message: "ID de jugador con formato inválido." });
         }
 
+        if (!supabaseActivo()) {
+            return faltaConfiguracion(res, ["SUPABASE_URL", "SUPABASE_SECRET_KEY"], { success: false, message: "La consulta de recargas no está disponible en este momento." });
+        }
+
         // Frena que alguien pruebe IDs uno tras otro para ver las recargas de otros
         const minutosEspera = await permitirUso(`consulta:${obtenerIp(req)}`);
         if (minutosEspera > 0) {
             return res.status(429).json({ success: false, message: `Hiciste demasiadas consultas. Espera ${minutosEspera} minutos e intenta de nuevo.` });
         }
 
-        try {
-            const recargas = await recargasEnSupabase(playerId);
-            if (recargas.length) return res.status(200).json({ success: true, recargas });
-        } catch (error) {
-            console.error("⚠️ consultar-ordenes: Supabase no respondió, se consulta la hoja:", error.message);
-        }
-
-        // Pedidos de antes de Supabase (o Supabase caído): la hoja de cálculo, como siempre
-        const scriptUrl = process.env.SCRIPT_RECARGAS_VERIFICACION;
-        
-        if (!scriptUrl) {
-            return faltaConfiguracion(res, ["SCRIPT_RECARGAS_VERIFICACION"], { success: false, message: "La consulta de recargas no está disponible en este momento." });
-        }
-
-        // Hacemos la petición a la nueva hoja de cálculo de Google
-        // Consulta sin efectos secundarios: presupuesto de lectura (20 s con 1 reintento)
-        const data = await pedirJSON(`${scriptUrl}?id=${encodeURIComponent(playerId)}`, { metodo: 'GET', ...LECTURA_APPS_SCRIPT });
-
-        // Si la hoja no devuelve nada o el ID no tiene recargas exitosas
-        if (!Array.isArray(data) || data.length === 0) {
-            return res.status(200).json({ success: true, recargas: [] });
-        }
-
-        // Formateamos los datos para que el index.html los lea y muestre correctamente
-        const recargasFormateadas = data.map(fila => {
-            return {
-                paquete: fila.paquete,   // Ejemplo: "572 Diamantes" 
-                fecha: fila.fecha,       // Ejemplo: "29/09/2026 19:20"
-                estado: "Completed"      // Siempre completado porque lee de la pestaña "exitoso"
-            };
-        });
-
-        // Enviamos la respuesta exitosa al cliente
-        return res.status(200).json({
-            success: true,
-            recargas: recargasFormateadas
-        });
+        const recargas = await recargasEnSupabase(playerId);
+        return res.status(200).json({ success: true, recargas });
 
     } catch (error) {
-        console.error("Error consultando la hoja de cálculo:", error.message);
-        return res.status(error.name === 'ErrorExterno' ? 503 : 500).json({ success: false, message: "Error de conexión con la base de datos." });
+        console.error("⚠️ consultar-ordenes: Supabase no respondió:", error.message);
+        return res.status(503).json({ success: false, message: "Error de conexión con la base de datos. Intenta de nuevo en un momento." });
     }
 }
