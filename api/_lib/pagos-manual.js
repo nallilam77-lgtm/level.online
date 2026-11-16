@@ -24,10 +24,15 @@ import { tokenDe, datosDeLaRecarga, marcarSolicitudPago, guardarPorVerificar, co
 import { cifrar, descifrar } from './cifrado.js';
 
 // Si la página del cliente es vieja (sin js/pago-manual.js), esto es lo que ve en la ventana de error
-export const MENSAJE_SOLICITUD = '⏳ Estamos verificando tu pago. Puedes ver el estado de tu pedido en levelupstore.online → "Consulta tus últimas recargas" con tu ID (o en tu perfil). No hace falta pagar de nuevo.';
+// (el cliente no sabe que el pago se revisa a mano: solo que su recarga está pendiente)
+export const MENSAJE_SOLICITUD = '⏳ Tu recarga está pendiente. Puedes ver cómo va en levelupstore.online → "Consulta tus últimas recargas" con tu ID (o en tu perfil). No hace falta pagar de nuevo.';
 // Pedido rechazado en "Revisar pagos": nota_admin = PREFIJO_RECHAZO + motivo (lo ve el cliente). Igual en
 // api/consultar-ordenes.js y public/js/perfil.js.
 export const PREFIJO_RECHAZO = '❌ Pago rechazado: ';
+// Una referencia rechazada no se puede volver a mandar a "Revisar pagos" durante estos días (las resueltas
+// se borran a los 7: no subir de 7)
+const DIAS_RECHAZO = 7;
+export const mensajeRechazada = (motivo) => `❌ Este pago fue rechazado${motivo ? `: ${motivo}` : '.'} Si crees que es un error, escríbenos por WhatsApp con tu comprobante.`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const corto = (v, max) => String(v ?? '').trim().slice(0, max) || null;
 
@@ -51,10 +56,16 @@ export async function pagosManualActivo() {
  * La referencia no existe y el interruptor está encendido: deja (o reutiliza) la solicitud pendiente de esa
  * referencia y ese juego, guarda el pedido como "pendiente" y marca la respuesta. Devuelve el id o null si no
  * se pudo (la tienda responde entonces "referencia no encontrada", como siempre).
+ * Una referencia RECHAZADA en los últimos DIAS_RECHAZO días (cualquier juego o ID) no se vuelve a anotar:
+ * devuelve { rechazada: true, motivo } y la tienda le dice al cliente que ese pago fue rechazado.
  */
 export async function crearSolicitud(ultimos5, juego, monto, idPedido) {
   try {
     if (!/^\d{5}$/.test(String(ultimos5)) || !(await pagosManualActivo())) return null;
+    const desde = new Date(Date.now() - DIAS_RECHAZO * 864e5).toISOString();
+    const [rechazada] = (await leerDonde('pagos_solicitudes',
+      `ultimos5=eq.${ultimos5}&estado=eq.rechazado&resuelto=gt.${desde}&order=resuelto.desc&limit=1`, 'nota')) || [];
+    if (rechazada) return { rechazada: true, motivo: String(rechazada.nota || '').slice(0, 200) };
     // Una pendiente por referencia + juego + CLIENTE (ID en minúsculas): el mismo cliente que reintenta espera
     // la misma; otro cliente con una referencia que termina igual tiene la suya (índice único de pagos-manual.sql)
     const d = datosDeLaRecarga();

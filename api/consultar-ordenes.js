@@ -17,7 +17,7 @@ async function recargasEnSupabase(playerId) {
     return (Array.isArray(filas) ? filas : []).map((f) => {
         let [estado, clase] = ESTADOS[f.estado] || ['En revisión', 'pending'];
         // Pago que no llegó y está en "Revisar pagos" del panel (_lib/pagos-manual.js). La nota no sale de aquí.
-        if (f.estado === 'pendiente' && String(f.nota_admin || '').startsWith('🖐️ Pago por verificar')) estado = 'Verificando pago';
+        if (f.estado === 'pendiente' && String(f.nota_admin || '').startsWith('🖐️ Pago por verificar')) estado = 'Pendiente';   // el cliente no sabe que se revisa a mano
         // Rechazado desde "Revisar pagos": el motivo lo escribió el administrador para el cliente
         // (motivo_fallo "pago_rechazado"; el texto va en nota_admin tras PREFIJO_RECHAZO de _lib/pagos-manual.js)
         const PREFIJO = '❌ Pago rechazado: ';

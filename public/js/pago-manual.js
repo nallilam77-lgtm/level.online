@@ -3,8 +3,9 @@
 // api/_lib/pagos-manual.js), /api/recargar responde con { solicitudPago: <id> } en vez de "referencia no
 // encontrada": el pedido ya quedó guardado ("Verificando pago") y, cuando el administrador suelte el pago,
 // la recarga la hace el servidor solo.
-// Este archivo envuelve fetch SOLO para /api/recargar y, en ese caso, muestra una ventana con el resumen del
-// pedido y tres pasos (Pedido recibido → Verificando pago → Recarga en camino) que avanzan solos mientras
+// Este archivo envuelve fetch SOLO para /api/recargar y, en ese caso, muestra "Tu recarga está pendiente" (el
+// cliente NO sabe que el pago se revisa a mano: pedido del dueño) con el resumen del pedido y tres pasos
+// (Pedido recibido → Pendiente → Recarga en camino) que avanzan solos mientras
 // está abierta (cada 8 s, /api/juego?accion=solicitud_estado; rechazado → el motivo que escribió el
 // administrador). El cliente puede cerrarla: "Ver el estado de mi pedido" lleva a la consulta del inicio
 // con su ID y "Entendido" recarga la página (la tienda queda limpia).
@@ -78,9 +79,9 @@
     const sello = crear('div', 'vp-sello');
     sello.append(icono('reloj', 'vp-sello-icono'));
     const etiqueta = crear('p', 'vp-etiqueta', 'Pedido recibido');
-    const titulo = crear('h2', 'vp-titulo', 'Estamos verificando tu pago');
+    const titulo = crear('h2', 'vp-titulo', 'Tu recarga está pendiente');
     titulo.id = 'vpTitulo';
-    const texto = crear('p', 'vp-texto', 'Tu banco no nos envió el aviso del pago, así que lo revisamos a mano. Apenas lo confirmemos, tu recarga sale sola.');
+    const texto = crear('p', 'vp-texto', 'Recibimos tu pedido y lo estamos procesando. Tu recarga sale sola: puedes ver cómo va cuando quieras.');
     texto.id = 'vpTexto';
 
     // Resumen del pedido
@@ -108,7 +109,7 @@
     };
     const p1 = paso('Pedido recibido', 'listo');
     p1.punto.append(icono('listo'));
-    const p2 = paso('Verificando pago', 'activo');
+    const p2 = paso('Pendiente', 'activo');
     const p3 = paso('Recarga en camino', 'espera');
 
     const aviso = crear('p', 'vp-aviso');
@@ -122,7 +123,7 @@
     const segundarias = crear('div', 'vp-secundarias');
     const wa = crear('a', 'vp-boton vp-boton--borde');
     wa.append(icono('whatsapp', 'vp-boton-icono'), crear('span', '', 'WhatsApp'));
-    wa.href = WHATSAPP + encodeURIComponent(`Hola Level Up, hice un pago${ultimos5 ? ` con referencia terminada en ${ultimos5}` : ''}${id ? ` para el ID ${id}` : ''} y está en verificación.`);
+    wa.href = WHATSAPP + encodeURIComponent(`Hola Level Up, hice un pago${ultimos5 ? ` con referencia terminada en ${ultimos5}` : ''}${id ? ` para el ID ${id}` : ''} y mi recarga está pendiente.`);
     wa.target = '_blank'; wa.rel = 'noopener';
     const listo = crear('button', 'vp-boton vp-boton--borde', 'Entendido');
     listo.type = 'button';
@@ -148,9 +149,9 @@
           clearInterval(reloj);
           caja.dataset.estado = 'aprobado';
           sello.replaceChildren(icono('listo', 'vp-sello-icono'));
-          etiqueta.textContent = 'Pago confirmado';
+          etiqueta.textContent = 'Pedido en camino';
           titulo.textContent = '¡Tu recarga va en camino!';
-          texto.textContent = 'Confirmamos tu pago y ya estamos haciendo tu recarga. Mira el estado de tu pedido para ver cuándo se entrega.';
+          texto.textContent = 'Ya estamos haciendo tu recarga. Mira el estado de tu pedido para ver cuándo se entrega.';
           p2.li.dataset.paso = 'listo'; p2.punto.replaceChildren(icono('listo'));
           p3.li.dataset.paso = 'activo';
           cambiarAviso('rayo', 'Normalmente llega en pocos minutos.');

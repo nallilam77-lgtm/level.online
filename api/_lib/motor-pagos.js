@@ -55,8 +55,11 @@ export async function tomarPago(ultimos5, idPedido, juego, precio = 0) {
   // No llegó la notificación: con "Verificar a mano" encendido queda por aprobar en el panel (_lib/pagos-manual.js;
   // import dinámico: pagos-manual usa externo.js, que importa este archivo)
   if (r?.motivo === 'no_existe') {
-    const { crearSolicitud, MENSAJE_SOLICITUD } = await import('./pagos-manual.js');
-    if (await crearSolicitud(String(ultimos5), juego, precio, idPedido)) return { encontrado: false, motivo: 'por_aprobar', message: MENSAJE_SOLICITUD };
+    const { crearSolicitud, MENSAJE_SOLICITUD, mensajeRechazada } = await import('./pagos-manual.js');
+    const solicitud = await crearSolicitud(String(ultimos5), juego, precio, idPedido);
+    // Ya se rechazó en "Revisar pagos": no se vuelve a anotar, el cliente ve el motivo
+    if (solicitud?.rechazada) return { encontrado: false, motivo: 'rechazado', message: mensajeRechazada(solicitud.motivo) };
+    if (solicitud) return { encontrado: false, motivo: 'por_aprobar', message: MENSAJE_SOLICITUD };
   }
   return { encontrado: false, motivo: r?.motivo, message: MENSAJES_PAGO[r?.motivo] || MENSAJES_PAGO.no_existe };
 }
