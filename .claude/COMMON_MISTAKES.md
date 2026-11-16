@@ -247,3 +247,9 @@ Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creado
 **Síntoma**: al rechazar en "Revisar pagos", el pedido del cliente se quedaba en "Verificando pago" (pendiente) en vez de "Pago rechazado"; sin error visible.
 **Causa**: `recargas.motivo_fallo` y `motivo_accion` tienen la regla de la base `^[a-z_]{1,40}$` (solo códigos). El PATCH con "rechazo:<texto>" fallaba ENTERO (tampoco cambiaba el estado) y el `.catch` solo lo anotaba en el log.
 **Regla**: en motivo_fallo solo códigos (`pago_rechazado`, `pago_no_tomado`, `invalid_player`…); el texto para el cliente va en `nota_admin` (≤ 500) con un prefijo conocido (`❌ Pago rechazado: `, PREFIJO_RECHAZO de _lib/pagos-manual.js), que leen consultar-ordenes.js y perfil.js. Antes de escribir una columna nueva, mirar sus CHECK (`pg_constraint`).
+
+## 15. Cloudflare guarda el JS VIEJO con el `?v=` nuevo (2026-11-16)
+
+**Síntoma**: tras subir admin.js?v=46, Cloudflare servía con ese `?v=` el archivo anterior (HIT, otro tamaño): el panel no tenía el botón nuevo.
+**Causa**: se pidió la URL nueva mientras Vercel todavía publicaba (el HTML ya era el nuevo, el JS salió de la versión anterior) y Cloudflare la guardó 4 h.
+**Regla**: después de desplegar, comprobar el JS con `?v=N&x=<algo>` (sin caché) y compararlo con `?v=N`; si difieren, subir otra vez el `?v=`. No pedir la URL nueva hasta que el despliegue termine (igual que los 404 de la regla 12).

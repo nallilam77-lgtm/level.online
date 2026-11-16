@@ -2072,19 +2072,36 @@
 
   const TITULO_PANEL = document.title;
   // Rechazados de los últimos 7 días (esas referencias ya no se pueden volver a mandar: _lib/pagos-manual.js)
+  // Rechazados de los últimos 7 días (esas referencias ya no se pueden volver a mandar: _lib/pagos-manual.js).
+  // Buscador (#buscarRechazado): últimos dígitos de la referencia, ID, paquete o juego; filtra al escribir.
+  let rechazados = [];
   async function cargarRechazados() {
-    const lista = $('listaRechazados');
     const desde = new Date(Date.now() - 7 * 864e5).toISOString();
-    const { data, error } = await cliente.from('pagos_solicitudes').select('id,ultimos5,juego,paquete,id_jugador,nota,resuelto')
-      .eq('estado', 'rechazado').gt('resuelto', desde).order('resuelto', { ascending: false }).limit(30);
-    if (error) { lista.replaceChildren(el('li', 'vacio', 'No se pudieron cargar los rechazados.')); return; }
+    const { data, error } = await cliente.from('pagos_solicitudes').select('id,ultimos5,juego,paquete,id_jugador,telefono,monto,nota,resuelto')
+      .eq('estado', 'rechazado').gt('resuelto', desde).order('resuelto', { ascending: false }).limit(300);
+    if (error) { $('listaRechazados').replaceChildren(el('li', 'vacio', 'No se pudieron cargar los rechazados.')); return; }
+    rechazados = data || [];
+    // Si se está deshaciendo uno (botón apagado o pidiendo datos), no se repinta la lista
+    if ($('listaRechazados').querySelector('button:disabled')) return;
+    pintarRechazados();
+  }
+  function pintarRechazados() {
+    const lista = $('listaRechazados');
+    const texto = $('buscarRechazado').value.trim().toLowerCase();
+    const digitos = texto.replace(/\D/g, '');
+    const filas = !texto ? rechazados : rechazados.filter((s) => {
+      const todo = [s.ultimos5, s.id_jugador, s.paquete, JUEGOS[s.juego] || s.juego, s.telefono].join(' ').toLowerCase();
+      // Con números: también vale escribir la referencia completa (se compara por sus últimos 5)
+      return todo.includes(texto) || (digitos.length >= 5 && s.ultimos5 === digitos.slice(-5));
+    });
+    $('cuentaRechazados').textContent = texto ? `${filas.length} de ${rechazados.length}` : `${rechazados.length} rechazados`;
     lista.replaceChildren();
-    if (!(data || []).length) { lista.append(el('li', 'vacio', 'No has rechazado ninguno estos días.')); return; }
-    data.forEach((s) => {
+    if (!filas.length) { lista.append(el('li', 'vacio', texto ? 'Ninguno coincide con la búsqueda.' : 'No has rechazado ninguno estos días.')); return; }
+    filas.forEach((s) => {
       const li = el('li', 'pedido');
       const cabeza = el('div', 'pedido-cabeza');
       cabeza.append(el('strong', '', `…${s.ultimos5} · ${JUEGOS[s.juego] || s.juego}${s.paquete ? ' · ' + s.paquete : ''}`), el('span', 'etiqueta etiqueta--problema', 'Rechazado'));
-      li.append(cabeza, el('span', '', `${s.id_jugador ? 'ID ' + s.id_jugador + ' · ' : ''}${fecha(s.resuelto)}`));
+      li.append(cabeza, el('span', '', `${s.id_jugador ? 'ID ' + s.id_jugador + ' · ' : ''}${Number(s.monto) > 0 ? bs(s.monto) + ' Bs · ' : ''}${fecha(s.resuelto)}`));
       if (s.nota) li.append(el('span', 'precio-detalle', `Motivo: ${s.nota}`));
       const salida = el('p', 'mensaje-form');
       salida.setAttribute('role', 'status');
@@ -2094,6 +2111,8 @@
       lista.append(li);
     });
   }
+  $('buscarRechazado').addEventListener('input', pintarRechazados);
+
 
   // "Me equivoqué": con los datos guardados vuelve a Revisar pagos; sin ellos (rechazos viejos) suelta la
   // recarga directo en Central One y pide antes el monto (api/_lib/pagos-manual.js → deshacerRechazo)

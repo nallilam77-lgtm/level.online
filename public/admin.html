@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=47" defer></script>
+  <script src="/js/admin.js?v=48" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -237,6 +237,8 @@
           <ul class="pedidos" id="listaPorAprobar"></ul>
           <h3 class="subtitulo-form">Rechazados (últimos 7 días)</h3>
           <p class="nota">Estas referencias ya no se pueden volver a mandar: al cliente le sale que su pago fue rechazado, con tu motivo. Si rechazaste uno por error, toca <strong>↩️ Me equivoqué</strong>.</p>
+          <input type="search" id="buscarRechazado" class="buscar" placeholder="Buscar referencia (últimos 5 o completa), ID o paquete…" aria-label="Buscar rechazados" autocomplete="off" inputmode="search">
+          <p class="nota" id="cuentaRechazados" role="status"></p>
           <ul class="pedidos" id="listaRechazados"></ul>
         </div>
 

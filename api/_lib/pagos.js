@@ -33,16 +33,19 @@ function limpiarSiToca() {
 const ORIGENES = new Set(['pago_movil', 'bdv', 'transferencia']);
 
 /**
- * Solicitud de "Revisar pagos" soltada SIN referencia completa (nota "sin_ref") en los últimos 3 días, con
+ * Solicitud de "Revisar pagos" soltada (con o sin referencia completa) en los últimos 3 días, con
  * los mismos últimos 5 dígitos y un monto parecido (±1 Bs del que se soltó o del precio del paquete).
  * Es la que este pago cubre. null si no hay.
  */
 async function pagoYaSoltado(referencia, monto) {
   const desde = new Date(Date.now() - 3 * 864e5).toISOString();
+  // Sin referencia completa (nota "sin_ref") o CON ella (nota vacía): la notificación del banco puede traer la
+  // referencia con otro formato (más o menos dígitos) que la que escribió el administrador, y no chocaría
   const filas = await leerDonde('pagos_solicitudes',
-    `ultimos5=eq.${referencia.slice(-5)}&estado=eq.aprobado&nota=eq.sin_ref&resuelto=gt.${desde}&order=resuelto.asc`,
-    'id,id_pedido,juego,monto,referencia');
+    `ultimos5=eq.${referencia.slice(-5)}&estado=eq.aprobado&or=(nota.eq.sin_ref,nota.is.null)&resuelto=gt.${desde}&order=resuelto.asc`,
+    'id,id_pedido,juego,monto,referencia,nota');
   for (const s of Array.isArray(filas) ? filas : []) {
+    if (s.referencia === referencia) continue;   // la misma referencia: ya la frena la regla de la base
     const [soltado] = (await leer('pagos', { referencia: s.referencia }, 'monto')) || [];
     const montos = [Number(soltado?.monto), Number(s.monto)].filter((m) => m > 0);
     if (montos.some((m) => Math.abs(m - monto) <= 1)) return s;
@@ -109,7 +112,7 @@ export async function pagoRecibido(req, res) {
       ...(cubierta && { estado: 'usado', usado: new Date().toISOString(), id_pedido: cubierta.id_pedido, juego: cubierta.juego }),
     });
     if (cubierta) {
-      await actualizar('pagos_solicitudes', `id=eq.${cubierta.id}&nota=eq.sin_ref`, { nota: 'sin_ref_llego' })
+      await actualizar('pagos_solicitudes', `id=eq.${cubierta.id}`, { nota: 'llego_despues' })
         .catch((error) => console.error('⚠️ pago_recibido: no se pudo marcar la solicitud:', error.message));
       console.info(`💵 Pago …${referencia.slice(-5)} llegó después de soltarlo a mano: queda usado`);
       return responder(200, { status: 'success', message: 'Pago guardado (ya se había soltado a mano: queda usado)' });

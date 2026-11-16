@@ -168,7 +168,9 @@ async function repetirRecarga(id) {
     idPedidoForzado: s.id_pedido, usuarioForzado: s.usuario || null, ipForzada: s.ip || 'panel',
   };
   const res = respuestaFalsa();
-  await conHistorial(req, res, s.juego, () => juego.recargar(req, res));
+  // Sin límite de intentos: el administrador ya aprobó el pago (limitador.js → sinLimites)
+  const { sinLimites } = await import('./limitador.js');
+  await sinLimites.run(true, () => conHistorial(req, res, s.juego, () => juego.recargar(req, res)));
   return { codigo: res.statusCode, cuerpo: res.cuerpo || {} };
 }
 

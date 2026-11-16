@@ -7,6 +7,7 @@
 // por separado. Nunca frena una recarga: cada llamada tiene tiempo límite (_lib/supabase.js).
 // (Los archivos con "_" dentro de /api no se publican como endpoints en Vercel.)
 import { createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { BlockList, isIP } from 'node:net';
 import { waitUntil } from '@vercel/functions';
 import { supabaseActivo, rpc } from './supabase.js';
@@ -97,8 +98,14 @@ function minutosEnMemoria(claves, ahora) {
   return hasta > ahora ? Math.ceil((hasta - ahora) / 60000) : 0;
 }
 
+// Recarga que repite el SERVIDOR porque el administrador soltó el pago en "Revisar pagos"
+// (_lib/pagos-manual.js → repetirRecarga corre dentro de sinLimites.run): ni se bloquea ni cuenta fallos. Si no,
+// los reintentos del cliente mientras su pago estaba pendiente podían bloquear la recarga ya aprobada.
+export const sinLimites = new AsyncLocalStorage();
+
 // Devuelve los minutos que faltan del bloqueo más largo entre las claves, o 0 si no hay bloqueo
 export async function minutosBloqueado(claves) {
+  if (sinLimites.getStore()) return 0;
   const ahora = Date.now();
   // La memoria cuenta también: si Supabase falló al anotar, el bloqueo quedó aquí
   const enMemoria = minutosEnMemoria(claves, ahora);
@@ -113,6 +120,7 @@ export async function minutosBloqueado(claves) {
 }
 
 export async function registrarFallo(claves) {
+  if (sinLimites.getStore()) return;
   if (usarSupabase()) {
     try {
       await rpc('limite_fallo', {
