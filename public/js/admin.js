@@ -109,7 +109,8 @@
   document.querySelectorAll('[data-seccion]').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('[data-seccion]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
     document.querySelectorAll('.seccion').forEach((s) => { s.hidden = s.id !== 'seccion-' + b.dataset.seccion; });
-    if (b.dataset.seccion === 'juego') cargarJuego();
+    // Minijuego: el ranking y las fichas por partida / Bs por ficha (vienen con admin_precios)
+    if (b.dataset.seccion === 'juego') { cargarJuego(); cargarPrecios().catch(() => {}); }
     if (b.dataset.seccion === 'espacio') cargarEspacio();
     if (b.dataset.seccion === 'cuentas') cargarCuentas();
     if (b.dataset.seccion === 'creadores') cargarCodigos();
@@ -118,7 +119,9 @@
     if (b.dataset.seccion === 'canjes') cargarCanjes();
     if (b.dataset.seccion === 'manuales') cargarManuales();
     if (b.dataset.seccion === 'revision') { cargarRevision(); cargarRuleta().catch(() => {}); }
-    if (b.dataset.seccion === 'pagos') { cargarPagos(); cargarCuentasPm(); }
+    if (b.dataset.seccion === 'pagos') cargarPagos();
+    // Ajustes: cuentas de Pago Móvil, modo de Free Fire y Google Sheets (tabla configuracion)
+    if (b.dataset.seccion === 'ajustes') { cargarMantenimiento().catch(() => {}); cargarAvisos().catch(() => {}); cargarCuentasPm(); cargarModoFF().catch(() => {}); cargarHojas().catch(() => {}); }
   }));
 
   // ---------------------------------------------------------------- resumen
@@ -199,6 +202,93 @@
     if (error) { console.error(error); alert('No se pudo guardar. Intenta de nuevo.'); }
     cargarModoFF();
   });
+  // Tienda en mantenimiento (configuracion "mantenimiento", publico; js/mantenimiento.js manda a los
+  // clientes a /mantenimiento.html). Mientras está encendido, el panel lo avisa arriba.
+  async function cargarMantenimiento() {
+    const { data } = await cliente.from('configuracion').select('valor').eq('clave', 'mantenimiento').maybeSingle();
+    const valor = data && data.valor;
+    const activo = !!(valor && valor.activo === true);
+    $('mantenimientoActivo').checked = activo;
+    $('avisoMantenimiento').hidden = !activo;
+    $('mensajeMantenimiento').textContent = activo
+      ? `🛠️ En mantenimiento${valor.desde ? ' desde ' + fecha(valor.desde) : ''}: los clientes ven la página de "Estamos mejorando".`
+      : '✅ La tienda está abierta.';
+  }
+  $('mantenimientoActivo').addEventListener('change', async (ev) => {
+    const activar = ev.target.checked;
+    const texto = activar
+      ? '¿Poner la tienda en MANTENIMIENTO?\n\nLos clientes que entren verán "Estamos mejorando la tienda" y el botón para recargar por WhatsApp. No podrán recargar en la web hasta que lo apagues.'
+      : '¿Abrir la tienda otra vez?\n\nLos clientes vuelven a recargar en la web al instante.';
+    if (!confirm(texto)) { cargarMantenimiento(); return; }
+    ev.target.disabled = true;
+    const { error } = await cliente.from('configuracion').upsert({ clave: 'mantenimiento', valor: { activo: activar, desde: new Date().toISOString() }, publico: true, actualizado: new Date().toISOString() }, { onConflict: 'clave' });
+    ev.target.disabled = false;
+    if (error) { console.error(error); alert('No se pudo guardar. Intenta de nuevo.'); }
+    cargarMantenimiento();
+  });
+  $('irMantenimiento').addEventListener('click', () => {
+    document.querySelector('[data-seccion="ajustes"]').click();
+    $('mantenimientoActivo').focus();
+  });
+
+  // Avisos en las tiendas (configuracion "avisos_juegos", publico; los muestra js/aviso-juego.js):
+  // { <juego>|todas: { titulo, texto, activo, id } }. Un aviso por juego; el id nuevo en cada cambio hace
+  // que vuelva a salir a quien ya cerró el anterior.
+  const NOMBRE_AVISO = Object.assign({ todas: 'Todas las tiendas' }, JUEGOS);
+  let avisos = {};
+  async function cargarAvisos() {
+    const { data, error } = await cliente.from('configuracion').select('valor').eq('clave', 'avisos_juegos').maybeSingle();
+    const lista = $('listaAvisos');
+    if (error) { console.error(error); lista.replaceChildren(el('li', 'vacio', 'No se pudieron cargar los avisos.')); return; }
+    avisos = (data && data.valor && typeof data.valor === 'object') ? data.valor : {};
+    lista.replaceChildren();
+    const juegos = Object.keys(NOMBRE_AVISO).filter((j) => avisos[j] && avisos[j].texto);
+    if (!juegos.length) { lista.append(el('li', 'vacio', 'No hay avisos. Escribe uno arriba.')); return; }
+    juegos.forEach((j) => {
+      const a = avisos[j];
+      const li = el('li', 'pedido');
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', `${NOMBRE_AVISO[j]}${a.titulo ? ' · ' + a.titulo : ''}`),
+        el('span', 'etiqueta ' + (a.activo ? 'etiqueta--completado' : 'etiqueta--en_revision'), a.activo ? 'Se muestra' : 'Oculto'));
+      const acciones = el('div', 'acciones-cuenta');
+      acciones.append(
+        boton('✏️ Editar', 'btn-ver', () => {
+          $('avisoJuego').value = j; $('avisoTitulo').value = a.titulo || ''; $('avisoTexto').value = a.texto || '';
+          $('avisoActivo').checked = !!a.activo; $('avisoTexto').focus();
+        }),
+        boton(a.activo ? 'Ocultar' : 'Mostrar', 'btn-ver', (b) => guardarAvisos({ ...avisos, [j]: { ...a, activo: !a.activo, id: String(Date.now()) } }, b)),
+        boton('🗑️ Quitar', 'btn-ver btn-ver--peligro', (b) => {
+          if (!confirm(`¿Quitar el aviso de ${NOMBRE_AVISO[j]}?`)) return;
+          const resto = { ...avisos }; delete resto[j];
+          guardarAvisos(resto, b);
+        }));
+      li.append(cabeza, el('span', 'precio-detalle', a.texto), acciones);
+      lista.append(li);
+    });
+  }
+  async function guardarAvisos(valor, b) {
+    if (b) b.disabled = true;
+    const { error } = await cliente.from('configuracion').upsert({ clave: 'avisos_juegos', valor, publico: true, actualizado: new Date().toISOString() }, { onConflict: 'clave' });
+    if (b) b.disabled = false;
+    if (error) { console.error(error); alert('No se pudo guardar. Intenta de nuevo.'); return false; }
+    await cargarAvisos();
+    return true;
+  }
+  $('formAviso').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const juego = $('avisoJuego').value;
+    const texto = $('avisoTexto').value.trim();
+    const msg = $('mensajeAviso');
+    if (!NOMBRE_AVISO[juego]) return;
+    if (!texto) { msg.textContent = 'Escribe el mensaje del aviso.'; return; }
+    if (avisos[juego] && avisos[juego].texto && !confirm(`${NOMBRE_AVISO[juego]} ya tiene un aviso. ¿Reemplazarlo por este?`)) return;
+    const aviso = { titulo: $('avisoTitulo').value.trim().slice(0, 80), texto: texto.slice(0, 600), activo: $('avisoActivo').checked, id: String(Date.now()) };
+    if (await guardarAvisos({ ...avisos, [juego]: aviso }, $('btnAviso'))) {
+      msg.textContent = aviso.activo ? `✅ Listo: el aviso ya sale en ${NOMBRE_AVISO[juego]}.` : '✅ Guardado (oculto).';
+      $('avisoTitulo').value = ''; $('avisoTexto').value = ''; $('avisoActivo').checked = true;
+    }
+  });
+
   async function cargarSaldo() {
     const caja = $('cuentasSaldo');
     try {
@@ -1386,6 +1476,37 @@
   // Pedidos con problema de todas las tiendas y sus incidencias (lo que antes había que buscar en la
   // pestaña "errores" de cada hoja). Resolver cambia el estado del pedido (admin_revision_resolver).
   const NOMBRE_JUEGO = Object.assign({}, JUEGOS);
+  let ultimaRevision = { abiertos: [], sueltas: [] };
+
+  // "Marcar todas como entregadas": lo mismo que "✅ Ya la entregué" en cada pedido de la lista (fichas,
+  // comisión del creador y el cliente la ve entregada) y cierra las incidencias sin pedido. Una tras otra,
+  // nunca en paralelo, y solo las que se ven en la lista en ese momento.
+  $('btnEntregarTodas').addEventListener('click', async () => {
+    const { abiertos, sueltas } = ultimaRevision;
+    if (!abiertos.length && !sueltas.length) return;
+    const partes = [abiertos.length && `${abiertos.length} recarga(s) pasan a ENTREGADA`, sueltas.length && `${sueltas.length} aviso(s) sin pedido se cierran`].filter(Boolean);
+    if (!confirm(`¿Marcar TODO lo de "Para revisar" como resuelto?\n\n• ${partes.join('\n• ')}\n\nLos clientes las verán entregadas en su perfil, y suman fichas y comisión del creador si aplica. Hazlo solo si ya las entregaste todas.`)) return;
+    const b = $('btnEntregarTodas');
+    const msg = $('mensajeRevision');
+    b.disabled = true;
+    let listas = 0;
+    const fallos = [];
+    for (const p of abiertos) {
+      msg.textContent = `Marcando ${listas + fallos.length + 1} de ${abiertos.length + sueltas.length}…`;
+      const { error } = await cliente.rpc('admin_revision_resolver', { p_id_pedido: p.id_pedido, p_accion: 'entregado', p_nota: null, p_incidencia: null });
+      if (error) { console.error(error); fallos.push(`${p.paquete} (${p.cuenta || p.id_pedido})`); } else listas++;
+    }
+    for (const i of sueltas) {
+      msg.textContent = `Marcando ${listas + fallos.length + 1} de ${abiertos.length + sueltas.length}…`;
+      const { error } = await cliente.rpc('admin_revision_resolver', { p_id_pedido: '', p_accion: 'entregado', p_nota: null, p_incidencia: i.id });
+      if (error) { console.error(error); fallos.push(`aviso ${i.paquete || i.id}`); } else listas++;
+    }
+    msg.textContent = fallos.length ? `✅ ${listas} listas. ❌ No se pudieron marcar: ${fallos.join(', ')}.` : `✅ Listo: ${listas} marcadas.`;
+    b.disabled = false;
+    cargarRevision();
+    cargarPedidos();
+  });
+
   async function cargarRevision() {
     const { data, error } = await cliente.rpc('admin_revision');
     const lista = $('listaRevision');
@@ -1397,6 +1518,8 @@
     const abiertos = data.abiertos || [];
     const sueltas = data.sueltas || [];
     const total = abiertos.length + sueltas.length;
+    ultimaRevision = { abiertos, sueltas };
+    $('btnEntregarTodas').hidden = total === 0;
     $('contadorRevision').hidden = total === 0;
     $('contadorRevision').textContent = total;
     lista.replaceChildren();
@@ -2136,7 +2259,7 @@
     if (error || esAdmin !== true) return estado('Esta cuenta no es administradora. Entra con la cuenta correcta.', true);
     $('panelEstado').hidden = true;
     $('panel').hidden = false;
-    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarManuales().catch(() => {}), cargarAlarma().catch(() => {}), cargarModoFF().catch(() => {}), cargarHojas().catch(() => {})]);
+    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarManuales().catch(() => {}), cargarAlarma().catch(() => {}), cargarModoFF().catch(() => {}), cargarHojas().catch(() => {}), cargarMantenimiento().catch(() => {})]);
     escuchar();
   })();
 })();

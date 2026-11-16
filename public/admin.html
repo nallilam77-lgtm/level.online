@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=20">
+  <link rel="stylesheet" href="css/admin.css?v=22">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
-       Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Pagos → "Pago Móvil que ven los clientes". -->
+       Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=36" defer></script>
+  <script src="/js/admin.js?v=40" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -36,56 +36,57 @@
     </section>
 
     <div id="panel" hidden>
+      <div class="tarjeta alarma-referencias" id="avisoMantenimiento" role="alert" hidden>
+        <h2>La tienda está en mantenimiento</h2>
+        <p>Los clientes ven la página de "Estamos mejorando la tienda" y no pueden recargar en la web.</p>
+        <button type="button" class="btn-ver" id="irMantenimiento">Ir a Ajustes para apagarlo</button>
+      </div>
       <nav class="pestanas" role="tablist" aria-label="Secciones del panel">
-        <button type="button" role="tab" data-seccion="resumen" aria-selected="true">Resumen</button>
-        <button type="button" role="tab" data-seccion="pedidos" aria-selected="false">Pedidos</button>
-        <button type="button" role="tab" data-seccion="revision" aria-selected="false">Revisión <span class="contador-pestana" id="contadorRevision" hidden></span></button>
-        <button type="button" role="tab" data-seccion="manuales" aria-selected="false">Manuales <span class="contador-pestana" id="contadorManuales" hidden></span></button>
-        <button type="button" role="tab" data-seccion="pagos" aria-selected="false">Pagos</button>
-        <button type="button" role="tab" data-seccion="cuentas" aria-selected="false">Cuentas</button>
-        <button type="button" role="tab" data-seccion="creadores" aria-selected="false">Creadores</button>
-        <button type="button" role="tab" data-seccion="precios" aria-selected="false">Precios</button>
-        <button type="button" role="tab" data-seccion="roblox" aria-selected="false">Roblox</button>
-        <button type="button" role="tab" data-seccion="canjes" aria-selected="false">Canjes</button>
-        <button type="button" role="tab" data-seccion="juego" aria-selected="false">Minijuego</button>
-        <button type="button" role="tab" data-seccion="espacio" aria-selected="false">Supabase</button>
+        <div class="grupo-pestanas" role="group" aria-label="Día a día">
+          <span class="grupo-nombre" aria-hidden="true">Día a día</span>
+          <div class="grupo-botones">
+            <button type="button" role="tab" data-seccion="resumen" aria-selected="true">Resumen</button>
+            <button type="button" role="tab" data-seccion="pedidos" aria-selected="false">Pedidos</button>
+            <button type="button" role="tab" data-seccion="revision" aria-selected="false">Revisión <span class="contador-pestana" id="contadorRevision" hidden></span></button>
+            <button type="button" role="tab" data-seccion="manuales" aria-selected="false">Manuales <span class="contador-pestana" id="contadorManuales" hidden></span></button>
+            <button type="button" role="tab" data-seccion="pagos" aria-selected="false">Pagos</button>
+          </div>
+        </div>
+        <div class="grupo-pestanas" role="group" aria-label="Tienda">
+          <span class="grupo-nombre" aria-hidden="true">Tienda</span>
+          <div class="grupo-botones">
+            <button type="button" role="tab" data-seccion="precios" aria-selected="false">Precios</button>
+            <button type="button" role="tab" data-seccion="roblox" aria-selected="false">Roblox</button>
+            <button type="button" role="tab" data-seccion="canjes" aria-selected="false">Canjes</button>
+            <button type="button" role="tab" data-seccion="creadores" aria-selected="false">Creadores</button>
+          </div>
+        </div>
+        <div class="grupo-pestanas" role="group" aria-label="Clientes">
+          <span class="grupo-nombre" aria-hidden="true">Clientes</span>
+          <div class="grupo-botones">
+            <button type="button" role="tab" data-seccion="cuentas" aria-selected="false">Cuentas</button>
+            <button type="button" role="tab" data-seccion="juego" aria-selected="false">Minijuego</button>
+          </div>
+        </div>
+        <div class="grupo-pestanas" role="group" aria-label="Sistema">
+          <span class="grupo-nombre" aria-hidden="true">Sistema</span>
+          <div class="grupo-botones">
+            <button type="button" role="tab" data-seccion="ajustes" aria-selected="false">Ajustes</button>
+            <button type="button" role="tab" data-seccion="espacio" aria-selected="false">Supabase</button>
+          </div>
+        </div>
       </nav>
 
-      <!-- RESUMEN -->
+      <!-- ======================= DÍA A DÍA ======================= -->
+
+      <!-- RESUMEN: alarma, ventas y saldo. Los interruptores (Free Fire, Google Sheets) están en Ajustes. -->
       <section class="seccion" id="seccion-resumen">
         <div class="tarjeta alarma-referencias" id="alarmaReferencias" role="alert" hidden>
           <h2>Están probando referencias al azar</h2>
           <p id="alarmaTexto"></p>
           <button type="button" class="btn-ver" id="alarmaVisto">Ya lo revisé</button>
         </div>
-        <div class="tarjeta" id="tarjetaSaldo">
-          <div class="fila-titulo">
-            <h2>Saldo en Central One</h2>
-            <button type="button" class="btn-ver" id="actualizarSaldo">Actualizar</button>
-          </div>
-          <div class="alerta-saldo" id="alertaSaldo" role="alert" hidden></div>
-          <div id="cuentasSaldo"><p class="nota">Cargando…</p></div>
-          <p class="nota">Con lo <strong>disponible</strong> se pagan los pedidos nuevos; lo <strong>retenido</strong> está en pedidos que se están entregando.</p>
-        </div>
-        <!-- Free Fire: pedir directo a Central One sin la hoja (configuracion "ff_modo"; api/_lib/juegos/freefire.js) -->
-        <div class="tarjeta">
-          <h2>Free Fire: cómo se piden las recargas</h2>
-          <form class="formulario" id="formModoFF" novalidate>
-            <label class="opcion-pm"><input type="radio" name="modoFF" value="central_one"> Directo a Central One (sin pasar por la hoja)</label>
-            <label class="opcion-pm"><input type="radio" name="modoFF" value="hoja"> Como antes: la hoja decide (Central One, pines o manual)</label>
-          </form>
-          <p class="nota"><strong>Directo</strong>: la recarga va del pago a Central One sin esperar turno en la hoja (se acaba el "Sistema ocupado"). La hoja sigue anotando cada venta en "finalizados" después; la pestaña "fazer_card" ya no se llena. Si un paquete no se puede pedir, la recarga va a <strong>Revisión</strong>. <strong>Como antes</strong>: lo que diga el menú de la hoja (🔀 Modo de recarga).</p>
-          <p class="mensaje-form" id="mensajeModoFF" role="status"></p>
-        </div>
-        <!-- Libro diario en Google Sheets (configuracion "hojas_ventas"; api/_lib/libro.js) -->
-        <div class="tarjeta">
-          <h2>Google Sheets</h2>
-          <form class="formulario" id="formHojas" novalidate>
-            <label class="opcion-pm"><input type="checkbox" id="hojasVentas"> Anotar las ventas también en Google Sheets</label>
-          </form>
-          <p class="nota"><strong>Apagado</strong>: Free Fire, Blood Strike y Mobile Legends ya no escriben en sus hojas ("finalizados", "errores", "Descuentos", "fazer_card"). Todo sigue guardado en Supabase: ventas en <strong>Pedidos</strong> (con <strong>Descargar Excel</strong>), problemas en <strong>Revisión</strong> y códigos en <strong>Creadores</strong>. Roblox, las tiendas manuales y la ruleta siguen con su hoja.</p>
-          <p class="mensaje-form" id="mensajeHojas" role="status"></p>
-        </div>
+
         <div class="tarjeta">
           <div class="fila-titulo">
             <h2>Ventas</h2>
@@ -106,6 +107,7 @@
           </label>
           <p class="nota">Desde el 13/11/2026 cuentan todos los pedidos de la tienda. "Por revisar": en revisión o con problema.</p>
         </div>
+
         <div class="tarjeta">
           <h2>Por juego</h2>
           <div class="tabla-envoltura">
@@ -115,9 +117,19 @@
             </table>
           </div>
         </div>
+
+        <div class="tarjeta" id="tarjetaSaldo">
+          <div class="fila-titulo">
+            <h2>Saldo en Central One</h2>
+            <button type="button" class="btn-ver" id="actualizarSaldo">Actualizar</button>
+          </div>
+          <div class="alerta-saldo" id="alertaSaldo" role="alert" hidden></div>
+          <div id="cuentasSaldo"><p class="nota">Cargando…</p></div>
+          <p class="nota">Con lo <strong>disponible</strong> se pagan los pedidos nuevos; lo <strong>retenido</strong> está en pedidos que se están entregando.</p>
+        </div>
       </section>
 
-      <!-- PEDIDOS -->
+      <!-- PEDIDOS: lista en vivo y descarga en Excel -->
       <section class="seccion" id="seccion-pedidos" hidden>
         <div class="tarjeta">
           <div class="fila-titulo">
@@ -168,7 +180,7 @@
         </div>
       </section>
 
-      <!-- REVISIÓN: pedidos con problema (supabase/revision.sql). Reemplaza revisar la pestaña "errores" de cada hoja. -->
+      <!-- REVISIÓN: pedidos con problema (supabase/revision.sql) y premios de la ruleta -->
       <section class="seccion" id="seccion-revision" hidden>
         <div class="tarjeta">
           <div class="fila-titulo">
@@ -176,6 +188,10 @@
             <button type="button" class="btn-ver" id="actualizarRevision">Actualizar</button>
           </div>
           <p class="nota">Recargas en revisión, con problema o en proceso hace más de 1 hora, de todas las tiendas. Cuando la resuelvas, el cliente lo ve en su perfil al instante. <strong>Ya no hace falta revisar la pestaña "errores" de cada hoja.</strong></p>
+          <div class="fila-campos">
+            <button type="button" class="btn-ver btn-pagar" id="btnEntregarTodas" hidden>✅ Marcar todas como entregadas</button>
+          </div>
+          <p class="mensaje-form" id="mensajeRevision" role="status"></p>
           <ul class="pedidos" id="listaRevision"></ul>
         </div>
         <!-- Premios de la ruleta (supabase/ruleta.sql, tabla ruleta_giros) -->
@@ -193,8 +209,7 @@
         </div>
       </section>
 
-      <!-- MANUALES: pedidos de FC Mobile, COD Mobile y Clash Royale (supabase/manuales.sql). Reemplaza las pestañas
-           de pedidos de la hoja de manuales.gs. La contraseña la descifra Vercel (api/_lib/juegos/manuales.js, acción clave). -->
+      <!-- MANUALES: FC Mobile, COD Mobile y Clash Royale (supabase/manuales.sql); la contraseña la descifra Vercel -->
       <section class="seccion" id="seccion-manuales" hidden>
         <div class="tarjeta">
           <div class="fila-titulo">
@@ -210,16 +225,8 @@
         </div>
       </section>
 
-      <!-- PAGOS (supabase/pagos.sql): lo que MacroDroid avisa. Las tiendas cobran SOLO con esto (la hoja ya no). -->
+      <!-- PAGOS (supabase/pagos.sql): lo que avisa MacroDroid. Las cuentas que ven los clientes están en Ajustes. -->
       <section class="seccion" id="seccion-pagos" hidden>
-        <!-- Cuenta de Pago Móvil que ven los clientes: configuracion "pago_movil" (la lee js/datos-pago.js) -->
-        <div class="tarjeta">
-          <h2>Pago Móvil que ven los clientes</h2>
-          <p class="nota">Las cuentas con <strong>Mostrar en la tienda</strong> salen en las 7 tiendas y el perfil: el cliente elige a cuál paga y la <strong>predeterminada</strong> ya viene marcada. El aviso sale debajo de los botones. Deja <strong>encendidas las macros de las cuentas que se muestran</strong>.</p>
-          <div class="cuentas-pm" id="cuentasPm"><p class="nota">Cargando…</p></div>
-          <p class="mensaje-form" id="mensajePm" role="status"></p>
-        </div>
-
         <div class="tarjeta">
           <div class="fila-titulo">
             <h2>Pagos recibidos</h2>
@@ -259,68 +266,9 @@
         </div>
       </section>
 
-      <!-- CANJES: códigos de regalo (supabase/canjes.sql; la página pública es canjear.html) -->
-      <section class="seccion" id="seccion-canjes" hidden>
-        <div class="tarjeta">
-          <h2>Crear códigos de regalo</h2>
-          <p class="nota">El <strong>primero</strong> que canjea cada código en <a class="enlace-wa" href="/canjear.html" target="_blank" rel="noopener">levelupstore.online/canjear.html</a> se lleva el paquete, directo a su cuenta de Free Fire por Central One. Si Central One lo rechaza, el código vuelve a quedar libre.</p>
-          <form class="formulario" id="formCanjes" novalidate>
-            <div class="dos-campos">
-              <label class="campo">Cuántos códigos<input type="number" id="canjesCantidad" min="1" max="50" value="5" inputmode="numeric"></label>
-              <label class="campo">Paquete de Free Fire<select id="canjesPaquete"><option value="110 Diamantes">110 Diamantes</option></select></label>
-            </div>
-            <label class="campo">Nota (solo la ves tú)<input type="text" id="canjesNota" maxlength="120" placeholder="Ej. sorteo del canal 15/11" autocomplete="off"></label>
-            <button type="submit" class="btn btn--chico" id="btnCanjes">Crear códigos</button>
-            <p class="mensaje-form" id="mensajeCanjes" role="status"></p>
-          </form>
-          <div id="canjesNuevos" hidden>
-            <p class="nota">Códigos nuevos (cópialos y publícalos):</p>
-            <textarea id="canjesTexto" rows="6" readonly></textarea>
-            <button type="button" class="btn-ver" id="btnCopiarCanjes">📋 Copiar todos</button>
-          </div>
-        </div>
-        <div class="tarjeta">
-          <div class="fila-titulo">
-            <h2>Códigos</h2>
-            <button type="button" class="btn-ver" id="actualizarCanjes">Actualizar</button>
-          </div>
-          <div class="kpis">
-            <div class="kpi"><small>Libres</small><strong id="kpiCanjesLibres">–</strong></div>
-            <div class="kpi"><small>Canjeados</small><strong id="kpiCanjesUsados">–</strong></div>
-            <div class="kpi"><small>Entregados</small><strong id="kpiCanjesEntregados">–</strong></div>
-            <div class="kpi kpi--aviso"><small>Por revisar</small><strong id="kpiCanjesRevisar">–</strong></div>
-          </div>
-          <ul class="pedidos" id="listaCanjes"></ul>
-        </div>
-      </section>
+      <!-- ======================= TIENDA ======================= -->
 
-      <!-- CUENTAS -->
-      <section class="seccion" id="seccion-cuentas" hidden>
-        <div class="tarjeta">
-          <h2>Cuentas</h2>
-          <div class="kpis">
-            <div class="kpi"><small>Cuentas creadas</small><strong id="kpiCuentas">–</strong></div>
-            <div class="kpi"><small>Nuevas hoy · 7 días</small><strong id="kpiNuevas">–</strong></div>
-            <div class="kpi"><small>Recargas entregadas</small><strong id="kpiRecargas">–</strong></div>
-            <div class="kpi"><small>Fichas en juego</small><strong id="kpiFichas">–</strong></div>
-          </div>
-          <p class="nota" id="notaRecargas">Recargas entregadas desde que se guardan en Supabase.</p>
-        </div>
-        <div class="tarjeta">
-          <div class="fila-titulo">
-            <h2>Últimas cuentas</h2>
-            <select id="limiteCuentas" aria-label="Cuántas cuentas mostrar">
-              <option value="50">Últimas 50</option>
-              <option value="200">Últimas 200</option>
-              <option value="500">Últimas 500</option>
-            </select>
-          </div>
-          <input type="search" id="buscarCuenta" class="buscar" placeholder="Buscar correo o nombre…" aria-label="Buscar cuentas" autocomplete="off">
-          <ul class="pedidos" id="listaCuentas"></ul>
-        </div>
-      </section>
-
-      <!-- PRECIOS (supabase/precios.sql, desde 2026-11-14). La tienda todavía usa las hojas: aquí se preparan. -->
+      <!-- PRECIOS (supabase/precios.sql): la tienda cobra con esto. Las fichas del minijuego están en Minijuego. -->
       <section class="seccion" id="seccion-precios" hidden>
         <div class="tarjeta">
           <h2>Dólar y ganancia</h2>
@@ -345,27 +293,6 @@
         </div>
 
         <div class="tarjeta">
-          <h2>Minijuego</h2>
-          <div class="dos-campos">
-            <form class="campo" id="formCostoPartida">
-              <label for="costoPartida">Fichas por partida</label>
-              <div class="fila-campos">
-                <input type="number" id="costoPartida" inputmode="numeric" min="1" max="100" step="1" required>
-                <button type="submit" class="btn btn--chico">Guardar</button>
-              </div>
-            </form>
-            <form class="campo" id="formBsFicha">
-              <label for="bsPorFicha">Bs por ficha (paquetes sin fichas a mano)</label>
-              <div class="fila-campos">
-                <input type="number" id="bsPorFicha" inputmode="decimal" min="1" step="0.01" required>
-                <button type="submit" class="btn btn--chico">Guardar</button>
-              </div>
-            </form>
-          </div>
-          <p class="nota">A cada paquete le puedes poner sus fichas en <strong>Editar</strong>. Si lo dejas vacío, da 1 ficha por cada "Bs por ficha" de lo que pagó el cliente (mínimo 1). Con 0, ese paquete no da fichas.</p>
-        </div>
-
-        <div class="tarjeta">
           <div class="fila-titulo">
             <h2>Paquetes</h2>
             <select id="juegoPrecios" aria-label="Juego">
@@ -386,12 +313,6 @@
         </div>
 
         <div class="tarjeta">
-          <h2>Avisos de Central One</h2>
-          <p class="nota">Cuando Central One se queda sin stock de un producto, lo repone o cambia su costo, llega aquí y la tienda lo oculta o lo muestra sola.</p>
-          <ul class="pedidos" id="listaCambios"></ul>
-        </div>
-
-        <div class="tarjeta">
           <h2>Productos de Central One sin vender</h2>
           <p class="nota">Lo que trajiste de Central One para este juego y todavía no está en la tienda. Toca <strong>Agregar</strong> para venderlo (sale con precio automático; después puedes ponerle uno a mano).</p>
           <ul class="pedidos" id="listaSinUsar"></ul>
@@ -409,6 +330,12 @@
             <p class="mensaje-form" id="mensajeManual" role="status"></p>
           </form>
         </div>
+
+        <div class="tarjeta">
+          <h2>Avisos de Central One</h2>
+          <p class="nota">Cuando Central One se queda sin stock de un producto, lo repone o cambia su costo, llega aquí y la tienda lo oculta o lo muestra sola.</p>
+          <ul class="pedidos" id="listaCambios"></ul>
+        </div>
       </section>
 
       <!-- ROBLOX: códigos en Supabase (supabase/roblox.sql). El panel nunca ve el código entero. -->
@@ -422,6 +349,31 @@
             <span><strong>Comprar en Central One cuando se acaben los códigos</strong><small>Solo en los paquetes unidos a un producto de Central One. Se paga con tu saldo de Central One.</small></span>
           </label>
           <p class="mensaje-form" id="mensajeCentralOne" role="status"></p>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Cargar códigos</h2>
+          <form class="formulario" id="formRoblox" novalidate>
+            <label class="campo">Paquete
+              <select id="robloxPaquete"></select>
+            </label>
+            <label class="campo">Códigos (uno por línea)
+              <textarea id="robloxCodigos" rows="6" spellcheck="false" autocomplete="off" placeholder="Pega aquí los códigos, uno debajo del otro"></textarea>
+            </label>
+            <button type="submit" class="btn btn--chico" id="btnCargarRoblox">Guardar códigos</button>
+            <p class="mensaje-form" id="mensajeRoblox" role="status"></p>
+          </form>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Códigos sin entregar</h2>
+          <p class="nota">Por seguridad solo se ven los últimos 4 caracteres. <strong>Anular</strong> sirve para un código malo o que ya entregaste a mano.</p>
+          <ul class="pedidos" id="listaRobloxLibres"></ul>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Últimos entregados</h2>
+          <ul class="pedidos" id="listaRobloxEntregados"></ul>
         </div>
 
         <div class="tarjeta">
@@ -444,30 +396,41 @@
             <p class="mensaje-form" id="mensajeNuevoRoblox" role="status"></p>
           </form>
         </div>
+      </section>
+
+      <!-- CANJES: códigos de regalo (supabase/canjes.sql; la página pública es canjear.html) -->
+      <section class="seccion" id="seccion-canjes" hidden>
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Códigos</h2>
+            <button type="button" class="btn-ver" id="actualizarCanjes">Actualizar</button>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><small>Libres</small><strong id="kpiCanjesLibres">–</strong></div>
+            <div class="kpi"><small>Canjeados</small><strong id="kpiCanjesUsados">–</strong></div>
+            <div class="kpi"><small>Entregados</small><strong id="kpiCanjesEntregados">–</strong></div>
+            <div class="kpi kpi--aviso"><small>Por revisar</small><strong id="kpiCanjesRevisar">–</strong></div>
+          </div>
+          <ul class="pedidos" id="listaCanjes"></ul>
+        </div>
 
         <div class="tarjeta">
-          <h2>Cargar códigos</h2>
-          <form class="formulario" id="formRoblox" novalidate>
-            <label class="campo">Paquete
-              <select id="robloxPaquete"></select>
-            </label>
-            <label class="campo">Códigos (uno por línea)
-              <textarea id="robloxCodigos" rows="6" spellcheck="false" autocomplete="off" placeholder="Pega aquí los códigos, uno debajo del otro"></textarea>
-            </label>
-            <button type="submit" class="btn btn--chico" id="btnCargarRoblox">Guardar códigos</button>
-            <p class="mensaje-form" id="mensajeRoblox" role="status"></p>
+          <h2>Crear códigos de regalo</h2>
+          <p class="nota">El <strong>primero</strong> que canjea cada código en <a class="enlace-wa" href="/canjear.html" target="_blank" rel="noopener">levelupstore.online/canjear.html</a> se lleva el paquete, directo a su cuenta de Free Fire por Central One. Si Central One lo rechaza, el código vuelve a quedar libre.</p>
+          <form class="formulario" id="formCanjes" novalidate>
+            <div class="dos-campos">
+              <label class="campo">Cuántos códigos<input type="number" id="canjesCantidad" min="1" max="50" value="5" inputmode="numeric"></label>
+              <label class="campo">Paquete de Free Fire<select id="canjesPaquete"><option value="110 Diamantes">110 Diamantes</option></select></label>
+            </div>
+            <label class="campo">Nota (solo la ves tú)<input type="text" id="canjesNota" maxlength="120" placeholder="Ej. sorteo del canal 15/11" autocomplete="off"></label>
+            <button type="submit" class="btn btn--chico" id="btnCanjes">Crear códigos</button>
+            <p class="mensaje-form" id="mensajeCanjes" role="status"></p>
           </form>
-        </div>
-
-        <div class="tarjeta">
-          <h2>Últimos entregados</h2>
-          <ul class="pedidos" id="listaRobloxEntregados"></ul>
-        </div>
-
-        <div class="tarjeta">
-          <h2>Códigos sin entregar</h2>
-          <p class="nota">Por seguridad solo se ven los últimos 4 caracteres. <strong>Anular</strong> sirve para un código malo o que ya entregaste a mano.</p>
-          <ul class="pedidos" id="listaRobloxLibres"></ul>
+          <div id="canjesNuevos" hidden>
+            <p class="nota">Códigos nuevos (cópialos y publícalos):</p>
+            <textarea id="canjesTexto" rows="6" readonly></textarea>
+            <button type="button" class="btn-ver" id="btnCopiarCanjes">📋 Copiar todos</button>
+          </div>
         </div>
       </section>
 
@@ -489,6 +452,20 @@
             </div>
           </form>
           <p class="nota" id="notaCreadores">Cada venta con código le da al creador el 1,5 % en dólares, con la tasa de ese día. Actualiza la tasa cuando cambie.</p>
+        </div>
+
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Códigos</h2>
+            <select id="filtroCodigos" aria-label="Qué códigos mostrar">
+              <option value="">Todos</option>
+              <option value="debe">Les debo</option>
+              <option value="activos">Activos</option>
+              <option value="inactivos">Desactivados</option>
+            </select>
+          </div>
+          <input type="search" id="buscarCodigo" class="buscar" placeholder="Buscar código o creador…" aria-label="Buscar códigos" autocomplete="off">
+          <ul class="pedidos" id="listaCodigos"></ul>
         </div>
 
         <div class="tarjeta">
@@ -523,23 +500,37 @@
             <p class="mensaje-form" id="mensajeCodigo" role="status"></p>
           </form>
         </div>
+      </section>
 
+      <!-- ======================= CLIENTES ======================= -->
+
+      <!-- CUENTAS -->
+      <section class="seccion" id="seccion-cuentas" hidden>
+        <div class="tarjeta">
+          <h2>Cuentas</h2>
+          <div class="kpis">
+            <div class="kpi"><small>Cuentas creadas</small><strong id="kpiCuentas">–</strong></div>
+            <div class="kpi"><small>Nuevas hoy · 7 días</small><strong id="kpiNuevas">–</strong></div>
+            <div class="kpi"><small>Recargas entregadas</small><strong id="kpiRecargas">–</strong></div>
+            <div class="kpi"><small>Fichas en juego</small><strong id="kpiFichas">–</strong></div>
+          </div>
+          <p class="nota" id="notaRecargas">Recargas entregadas desde que se guardan en Supabase.</p>
+        </div>
         <div class="tarjeta">
           <div class="fila-titulo">
-            <h2>Códigos</h2>
-            <select id="filtroCodigos" aria-label="Qué códigos mostrar">
-              <option value="">Todos</option>
-              <option value="debe">Les debo</option>
-              <option value="activos">Activos</option>
-              <option value="inactivos">Desactivados</option>
+            <h2>Últimas cuentas</h2>
+            <select id="limiteCuentas" aria-label="Cuántas cuentas mostrar">
+              <option value="50">Últimas 50</option>
+              <option value="200">Últimas 200</option>
+              <option value="500">Últimas 500</option>
             </select>
           </div>
-          <input type="search" id="buscarCodigo" class="buscar" placeholder="Buscar código o creador…" aria-label="Buscar códigos" autocomplete="off">
-          <ul class="pedidos" id="listaCodigos"></ul>
+          <input type="search" id="buscarCuenta" class="buscar" placeholder="Buscar correo o nombre…" aria-label="Buscar cuentas" autocomplete="off">
+          <ul class="pedidos" id="listaCuentas"></ul>
         </div>
       </section>
 
-      <!-- MINIJUEGO -->
+      <!-- MINIJUEGO: ranking y fichas -->
       <section class="seccion" id="seccion-juego" hidden>
         <div class="tarjeta">
           <div class="fila-titulo">
@@ -552,9 +543,109 @@
           <p class="nota">Antes de pagar los 341 💎, revisa al 1.º: si dice <strong>Revisar</strong>, su partida fue demasiado perfecta (posible programa).</p>
           <ul class="ranking-admin" id="listaJuego"></ul>
         </div>
+
+        <div class="tarjeta">
+          <h2>Fichas del minijuego</h2>
+          <div class="dos-campos">
+            <form class="campo" id="formCostoPartida">
+              <label for="costoPartida">Fichas por partida</label>
+              <div class="fila-campos">
+                <input type="number" id="costoPartida" inputmode="numeric" min="1" max="100" step="1" required>
+                <button type="submit" class="btn btn--chico">Guardar</button>
+              </div>
+            </form>
+            <form class="campo" id="formBsFicha">
+              <label for="bsPorFicha">Bs por ficha (paquetes sin fichas a mano)</label>
+              <div class="fila-campos">
+                <input type="number" id="bsPorFicha" inputmode="decimal" min="1" step="0.01" required>
+                <button type="submit" class="btn btn--chico">Guardar</button>
+              </div>
+            </form>
+          </div>
+          <p class="nota">A cada paquete le puedes poner sus fichas en <strong>Precios → Paquetes → Editar</strong>. Si lo dejas vacío, da 1 ficha por cada "Bs por ficha" de lo que pagó el cliente (mínimo 1). Con 0, ese paquete no da fichas.</p>
+        </div>
       </section>
 
-      <!-- ESPACIO -->
+      <!-- ======================= SISTEMA ======================= -->
+
+      <!-- AJUSTES: lo que cambia cómo funciona la tienda (tabla configuracion) -->
+      <section class="seccion" id="seccion-ajustes" hidden>
+        <!-- Tienda en mantenimiento: configuracion "mantenimiento" (publico; la lee js/mantenimiento.js) -->
+        <div class="tarjeta">
+          <h2>Tienda en mantenimiento</h2>
+          <label class="interruptor">
+            <input type="checkbox" id="mantenimientoActivo">
+            <span><strong>Poner la tienda en mantenimiento</strong><small>El inicio y las 7 tiendas llevan a una página que dice "Estamos mejorando la tienda" y que pueden recargar por WhatsApp con total normalidad. El panel sigue funcionando.</small></span>
+          </label>
+          <p class="mensaje-form" id="mensajeMantenimiento" role="status"></p>
+          <div class="acciones-cuenta">
+            <a class="btn-ver enlace-boton" href="/mantenimiento.html" target="_blank" rel="noopener">Ver la página de mantenimiento</a>
+            <a class="btn-ver enlace-boton" href="/?probar=1" target="_blank" rel="noopener">Entrar a la tienda igual (solo tú)</a>
+          </div>
+          <p class="nota">Los clientes que ya tengan la tienda abierta la ven hasta que recarguen la página. "Entrar a la tienda igual" te deja probarla en esa pestaña mientras está en mantenimiento.</p>
+        </div>
+
+        <!-- Avisos que ven los clientes al entrar a una tienda: configuracion "avisos_juegos" (publico; la lee js/aviso-juego.js) -->
+        <div class="tarjeta">
+          <h2>Avisos en las tiendas</h2>
+          <p class="nota">Sale en una ventana apenas el cliente entra a la tienda del juego que elijas (o a todas). Cada juego tiene un solo aviso: guardar otro lo reemplaza. Con <strong>Mostrar</strong> apagado queda guardado pero no sale.</p>
+          <form class="formulario" id="formAviso" novalidate>
+            <div class="dos-campos">
+              <label class="campo">¿Para qué juego?
+                <select id="avisoJuego">
+                  <option value="freefire">Free Fire</option>
+                  <option value="bloodstrike">Blood Strike</option>
+                  <option value="mobilelegends">Mobile Legends</option>
+                  <option value="roblox">Roblox</option>
+                  <option value="fcmobile">FC Mobile</option>
+                  <option value="codmobile">COD Mobile</option>
+                  <option value="clashroyale">Clash Royale</option>
+                  <option value="todas">Todas las tiendas</option>
+                </select>
+              </label>
+              <label class="campo">Título (opcional)<input type="text" id="avisoTitulo" maxlength="80" placeholder="Ej. Recargas con demora" autocomplete="off"></label>
+            </div>
+            <label class="campo">Mensaje
+              <textarea id="avisoTexto" rows="4" maxlength="600" placeholder="Ej. Hoy las recargas pueden tardar hasta 30 minutos. Tu pago está seguro."></textarea>
+            </label>
+            <label class="opcion-pm"><input type="checkbox" id="avisoActivo" checked> Mostrar en la tienda</label>
+            <button type="submit" class="btn btn--chico" id="btnAviso">Guardar aviso</button>
+            <p class="mensaje-form" id="mensajeAviso" role="status"></p>
+          </form>
+          <ul class="pedidos" id="listaAvisos"></ul>
+        </div>
+
+        <!-- Cuenta de Pago Móvil que ven los clientes: configuracion "pago_movil" (la lee js/datos-pago.js) -->
+        <div class="tarjeta">
+          <h2>Pago Móvil que ven los clientes</h2>
+          <p class="nota">Las cuentas con <strong>Mostrar en la tienda</strong> salen en las 7 tiendas y el perfil: el cliente elige a cuál paga y la <strong>predeterminada</strong> ya viene marcada. El aviso sale debajo de los botones. Deja <strong>encendidas las macros de las cuentas que se muestran</strong>.</p>
+          <div class="cuentas-pm" id="cuentasPm"><p class="nota">Cargando…</p></div>
+          <p class="mensaje-form" id="mensajePm" role="status"></p>
+        </div>
+
+        <!-- Free Fire: pedir directo a Central One sin la hoja (configuracion "ff_modo"; api/_lib/juegos/freefire.js) -->
+        <div class="tarjeta">
+          <h2>Free Fire: cómo se piden las recargas</h2>
+          <form class="formulario" id="formModoFF" novalidate>
+            <label class="opcion-pm"><input type="radio" name="modoFF" value="central_one"> Directo a Central One (sin pasar por la hoja)</label>
+            <label class="opcion-pm"><input type="radio" name="modoFF" value="hoja"> Como antes: la hoja decide (Central One, pines o manual)</label>
+          </form>
+          <p class="nota"><strong>Directo</strong>: la recarga va del pago a Central One sin esperar turno en la hoja (se acaba el "Sistema ocupado"). La hoja sigue anotando cada venta en "finalizados" después; la pestaña "fazer_card" ya no se llena. Si un paquete no se puede pedir, la recarga va a <strong>Revisión</strong>. <strong>Como antes</strong>: lo que diga el menú de la hoja (🔀 Modo de recarga).</p>
+          <p class="mensaje-form" id="mensajeModoFF" role="status"></p>
+        </div>
+
+        <!-- Libro diario en Google Sheets (configuracion "hojas_ventas"; api/_lib/libro.js) -->
+        <div class="tarjeta">
+          <h2>Google Sheets</h2>
+          <form class="formulario" id="formHojas" novalidate>
+            <label class="opcion-pm"><input type="checkbox" id="hojasVentas"> Anotar las ventas también en Google Sheets</label>
+          </form>
+          <p class="nota"><strong>Apagado</strong>: Free Fire, Blood Strike y Mobile Legends ya no escriben en sus hojas ("finalizados", "errores", "Descuentos", "fazer_card"). Todo sigue guardado en Supabase: ventas en <strong>Pedidos</strong> (con <strong>Descargar Excel</strong>), problemas en <strong>Revisión</strong> y códigos en <strong>Creadores</strong>. Roblox, las tiendas manuales y la ruleta siguen con su hoja.</p>
+          <p class="mensaje-form" id="mensajeHojas" role="status"></p>
+        </div>
+      </section>
+
+      <!-- SUPABASE: espacio y limpieza -->
       <section class="seccion" id="seccion-espacio" hidden>
         <div class="tarjeta">
           <div class="fila-titulo">

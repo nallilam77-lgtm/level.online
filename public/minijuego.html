@@ -9,6 +9,8 @@
     // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque, animaciones ni transiciones (css/ligero.css)
     (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css?v=3'; document.head.appendChild(l); } })();
   </script>
+  <!-- Tienda en mantenimiento (admin.html → Ajustes): lleva a /mantenimiento.html mientras esté encendido -->
+  <script src="/js/mantenimiento.js?v=1" async></script>
   <meta name="description" content="Lluvia de Diamantes: el minijuego de Level Up. Gana fichas con tus recargas, juega y compite por 341 diamantes cada semana.">
   <meta name="theme-color" content="#0f172a">
   <title>Lluvia de Diamantes - Level Up</title>

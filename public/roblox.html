@@ -7,6 +7,8 @@
     // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque, animaciones ni transiciones (css/ligero.css)
     (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css?v=3'; document.head.appendChild(l); } })();
   </script>
+  <!-- Tienda en mantenimiento (admin.html → Ajustes): lleva a /mantenimiento.html mientras esté encendido -->
+  <script src="/js/mantenimiento.js?v=1" async></script>
   <title>Level Up - Recargas Roblox Pro</title>
   <meta name="description" content="Compra Robux con Pago Móvil y recibe tu código en segundos. 1,5 % menos con código de creador.">
   <meta name="theme-color" content="#0f172a">
@@ -49,6 +51,8 @@
   <script src="/js/whatsapp-cliente.js?v=2" defer></script>
   <script src="/js/canal.js?v=2" defer></script>
   <script src="/js/version-nueva.js?v=2" defer></script>
+  <!-- Aviso que escribe el administrador (admin.html → Ajustes → Avisos en las tiendas) -->
+  <script src="/js/aviso-juego.js?v=1" data-juego="roblox" defer></script>
   <style>
     :root {
       /* Acento del juego (Roblox: azul): bordes, botones, sombras y glows */

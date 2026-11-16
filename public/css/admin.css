@@ -69,7 +69,18 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .campo { display: grid; gap: 6px; font-size: 12px; color: var(--text-muted); font-weight: 600; }
 .campo--linea { grid-template-columns: 1fr 140px; align-items: center; }
 
-.pestanas { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; padding: 4px; border-radius: 24px; background: var(--bg-deep); }
+/* Pestañas agrupadas: Día a día · Tienda · Clientes · Sistema. En celular el nombre del grupo va arriba de
+   sus botones; desde 640px, a la izquierda (una fila por grupo). */
+.pestanas { display: grid; gap: 12px; padding: 12px; border-radius: 24px; background: var(--bg-deep); border: 1px solid var(--border-glass); }
+.grupo-pestanas { display: grid; gap: 6px; }
+.grupo-pestanas + .grupo-pestanas { padding-top: 12px; border-top: 1px solid var(--border-glass); }
+.grupo-nombre { padding-left: 12px; font-family: 'Montserrat', sans-serif; font-size: 10px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); }
+.grupo-botones { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; }
+@media (min-width: 640px) {
+  .grupo-pestanas { grid-template-columns: 96px 1fr; align-items: center; }
+  .grupo-nombre { padding-left: 8px; }
+  .grupo-botones { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}
 .pestanas button {
   min-height: 44px; border: 0; border-radius: 999px; cursor: pointer; background: transparent; color: var(--text-muted);
   font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;
@@ -212,3 +223,5 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .punto-vivo { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-neon); vertical-align: middle; }
 
 .ligero .tarjeta { box-shadow: none !important; }
+/* Ajustes → Tienda en mantenimiento: enlaces con forma de botón */
+.enlace-boton { display: inline-flex; align-items: center; text-decoration: none; }
