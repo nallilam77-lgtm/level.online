@@ -2169,10 +2169,19 @@ Monto que llegó (Bs) del pago …${s.ultimos5}:`, r.monto ? bs(r.monto) : '');
     // Varios pedidos con los mismos 5 dígitos: en el banco tiene que haber un pago por CADA uno
     const repetidas = {};
     data.forEach((s) => { repetidas[s.ultimos5] = (repetidas[s.ultimos5] || 0) + 1; });
-    data.forEach((s) => lista.append(filaPorAprobar(s, repetidas[s.ultimos5])));
+    // ¿Ya llegó por la macro (últimos 3 días) un pago que termina igual? (la notificación llegó tarde)
+    const llegados = {};
+    try {
+      const finales = [...new Set(data.map((s) => s.ultimos5))].filter((u) => /^\d{5}$/.test(u));
+      const { data: pagosIguales } = await cliente.from('pagos').select('referencia,monto,estado,recibido,origen')
+        .or(finales.map((u) => `referencia.like.*${u}`).join(','))
+        .gt('recibido', new Date(Date.now() - 3 * 864e5).toISOString()).order('recibido', { ascending: false });
+      (pagosIguales || []).forEach((p) => { (llegados[p.referencia.slice(-5)] ||= []).push(p); });
+    } catch (e) { /* sin esto, la fila sale como siempre */ }
+    data.forEach((s) => lista.append(filaPorAprobar(s, repetidas[s.ultimos5], llegados[s.ultimos5] || [])));
   }
 
-  function filaPorAprobar(s, iguales = 1) {
+  function filaPorAprobar(s, iguales = 1, llegados = []) {
     const li = el('li', 'pedido');
     const cabeza = el('div', 'pedido-cabeza');
     cabeza.append(el('strong', '', `${JUEGOS[s.juego] || s.juego}${s.paquete ? ' · ' + s.paquete : ''}`), el('span', 'etiqueta etiqueta--en_revision', hace(s.creado)));
@@ -2192,6 +2201,17 @@ Monto que llegó (Bs) del pago …${s.ultimos5}:`, r.monto ? bs(r.monto) : '');
     monto.setAttribute('aria-label', 'Monto que llegó en Bs');
     if (Number(s.monto) > 0) monto.value = bs(s.monto);
     campos.append(ref, monto);
+    // La notificación llegó después: si hay un pago LIBRE que termina igual, se rellena su referencia y monto
+    // (al soltar se usa ESE pago, no se guarda otro). Si ya se usó, se avisa: el cliente quizás ya recargó con él.
+    const libre = llegados.find((p) => p.estado === 'verificado');
+    if (libre) {
+      ref.value = libre.referencia;
+      monto.value = bs(libre.monto);
+      li.append(el('span', 'codigo-pago', `✅ Ya llegó por la macro: ${libre.referencia} · ${bs(libre.monto)} Bs · ${fecha(libre.recibido)}. Revisa que sea el mismo monto y toca Soltar: se usa ese pago.`));
+    } else if (llegados.length) {
+      const p = llegados[0];
+      li.append(el('span', 'motivo-fallo', `⚠️ Ya llegó un pago que termina en ${s.ultimos5} (${p.referencia} · ${bs(p.monto)} Bs) y está "${p.estado}": quizás el cliente ya recargó con él. Revisa en Pedidos antes de soltar; si es otro pago, escribe su referencia completa.`));
+    }
     const salida = el('p', 'mensaje-form');
     salida.setAttribute('role', 'status');
     const acciones = el('div', 'acciones-cuenta');
