@@ -138,6 +138,25 @@ export async function guardarPagoManual({ referencia, monto, remitente = null, n
   }
 }
 
+/**
+ * Al soltar CON referencia completa: ¿ya llegó por la macro (3 días) un pago con los mismos 5 dígitos pero escrito
+ * distinto? El banco y MacroDroid no siempre usan el mismo formato (p. ej. "0050938468018" en la app del banco y
+ * "932038468018" en la notificación): sin esto se guardaba un pago nuevo y el de la macro quedaba LIBRE para otra
+ * recarga (pasó el 2026-11-16 con …68018). Devuelve la respuesta 409 { llego } o null. distinto = el administrador
+ * confirmó que es OTRO pago.
+ */
+async function otroFormato(ultimos5, escrita, distinto) {
+  if (distinto) return null;
+  const desde = new Date(Date.now() - 3 * 864e5).toISOString();
+  const iguales = (await leerDonde('pagos', `referencia=like.*${ultimos5}&recibido=gt.${desde}&order=recibido.desc`, 'referencia,monto,estado')
+    .catch(() => [])) || [];
+  if (iguales.some((p) => p.referencia === escrita)) return null;   // es exactamente ese: se usa ese
+  const p = iguales[0];
+  if (!p) return null;
+  return { status: 'error', llego: { referencia: p.referencia, monto: Number(p.monto) || 0, estado: p.estado },
+    message: `Ya llegó por la macro el pago ${p.referencia} (${formatearVES(Number(p.monto) || 0)} Bs, "${p.estado}"), que termina igual. Si es el mismo pago, usa esa referencia; si de verdad es otro pago, confírmalo.` };
+}
+
 // Respuesta falsa para correr la recarga aquí mismo: guarda lo que la tienda respondería al cliente
 function respuestaFalsa() {
   const r = { statusCode: 200, cuerpo: null, headersSent: false };
@@ -248,6 +267,9 @@ export async function solicitudResolver(req, res) {
       console.error('⚠️ pagos a mano: no se pudo revisar si el pago ya se usó:', error.message);
       return res.status(503).json({ status: 'error', message: 'No se pudo comprobar el pago. Intenta de nuevo o escribe la referencia completa.' });
     }
+  } else {
+    const otro = await otroFormato(fila.ultimos5, escrita, b.distinto === true);
+    if (otro) return res.status(409).json(otro);
   }
 
   // Primero se "toma" la solicitud (solo si sigue pendiente: dos clics no aprueban dos veces); después el pago
@@ -347,6 +369,9 @@ async function deshacerRechazo(req, res, fila, b) {
     if (soltada) return res.status(409).json({ status: 'error', message: `Ya soltaste otro pago que termina en ${fila.ultimos5}. Para este, escribe su referencia completa del banco.` });
     const [llego] = (await leerDonde('pagos', `referencia=like.*${fila.ultimos5}&recibido=gt.${desde}`, 'estado').catch(() => [])) || [];
     if (llego) return res.status(409).json({ status: 'error', message: `Ya llegó un pago que termina en ${fila.ultimos5} (está "${llego.estado}"). Si es el mismo, escribe su referencia completa; si es otro, la de este.` });
+  } else {
+    const otro = await otroFormato(fila.ultimos5, escrita, b.distinto === true);
+    if (otro) return res.status(409).json(otro);
   }
   const referencia = escrita || `000${Date.now()}${fila.ultimos5}`;
 

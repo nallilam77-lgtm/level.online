@@ -253,3 +253,8 @@ Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creado
 **Síntoma**: tras subir admin.js?v=46, Cloudflare servía con ese `?v=` el archivo anterior (HIT, otro tamaño): el panel no tenía el botón nuevo.
 **Causa**: se pidió la URL nueva mientras Vercel todavía publicaba (el HTML ya era el nuevo, el JS salió de la versión anterior) y Cloudflare la guardó 4 h.
 **Regla**: después de desplegar, comprobar el JS con `?v=N&x=<algo>` (sin caché) y compararlo con `?v=N`; si difieren, subir otra vez el `?v=`. No pedir la URL nueva hasta que el despliegue termine (igual que los 404 de la regla 12).
+
+## 16. La misma referencia con otro formato (banco vs. MacroDroid) (2026-11-16)
+
+**Síntoma**: …68018: MacroDroid anotó `932038468018` (12 dígitos, libre) y el administrador soltó la solicitud escribiendo `0050938468018` (13 dígitos, como sale en la app del banco). Se guardó un pago nuevo para la recarga y el de la macro quedó LIBRE (cualquiera con "68018" se llevaba otra recarga).
+**Regla**: una referencia se identifica por sus últimos 5 + monto + fecha, no por el texto completo. Al soltar CON referencia, `otroFormato` (_lib/pagos-manual.js) frena si ya llegó (3 días) un pago con los mismos 5 dígitos escrito distinto y devuelve `{ llego }`: el panel ofrece usar ese o confirmar que es otro (`distinto`). Al revés (la notificación llega después) lo cubre `pagoYaSoltado` en pagos.js. El panel además rellena la referencia de la macro en la fila.

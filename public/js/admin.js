@@ -2226,9 +2226,11 @@ Monto que llegó (Bs) del pago …${s.ultimos5}:`, r.monto ? bs(r.monto) : '');
   }
 
   const MOTIVO_RECHAZO = 'No encontramos tu pago en nuestro banco. Revisa la referencia y el monto, o escríbenos por WhatsApp con tu comprobante.';
-  async function resolverSolicitud(s, accion, b, salida, referencia, monto) {
+  async function resolverSolicitud(s, accion, b, salida, referencia, monto, distinto = false) {
     let nota = '';
-    if (accion === 'aprobar') {
+    if (accion === 'aprobar' && distinto) {
+      // Ya confirmó en el aviso de "otro formato": no se vuelve a preguntar
+    } else if (accion === 'aprobar') {
       const ref = String(referencia || '').replace(/\D/g, '');
       if (ref && ref.length < 6) { salida.textContent = 'La referencia completa debe tener al menos 6 números (o déjala vacía).'; return; }
       if (ref && !ref.endsWith(s.ultimos5)) { salida.textContent = `La referencia debe terminar en ${s.ultimos5} (lo que escribió el cliente).`; return; }
@@ -2244,7 +2246,20 @@ Monto que llegó (Bs) del pago …${s.ultimos5}:`, r.monto ? bs(r.monto) : '');
     if (accion === 'aprobar') salida.textContent = '⏳ Soltando la recarga… (puede tardar hasta un minuto)';
     try {
       // Va por /api/recargar: al soltar se hace la recarga, que necesita su tiempo (api/_lib/pagos-manual.js)
-      const r = await llamarAdmin('solicitud_resolver', accion === 'aprobar' ? { id: s.id, accion, referencia, monto } : { id: s.id, accion, nota }, '/api/recargar');
+      const r = await llamarAdmin('solicitud_resolver', accion === 'aprobar' ? { id: s.id, accion, referencia, monto, ...(distinto && { distinto: true }) } : { id: s.id, accion, nota }, '/api/recargar');
+      // La macro ya trajo ese pago con OTRO formato de referencia (p. ej. 12 y 13 dígitos): se usa el de la macro
+      if (r.llego && !distinto) {
+        b.disabled = false;
+        salida.textContent = '';
+        if (confirm(`Ya llegó por la macro el pago ${r.llego.referencia} por ${bs(r.llego.monto)} Bs ("${r.llego.estado}"), que termina igual.\n\n¿Es el MISMO pago? Aceptar = usar ${r.llego.referencia}.`)) {
+          if (r.llego.estado !== 'verificado') { salida.textContent = `❌ Ese pago ya está "${r.llego.estado}": el cliente quizás ya recargó con él. Revisa en Pedidos.`; return; }
+          return resolverSolicitud(s, accion, b, salida, r.llego.referencia, monto, true);
+        }
+        if (confirm('¿Seguro que es OTRO pago distinto (no el mismo con otro formato)?\n\nSi es el mismo y lo sueltas igual, el cliente podría recargar dos veces.')) {
+          return resolverSolicitud(s, accion, b, salida, referencia, monto, true);
+        }
+        return;
+      }
       if (r.status !== 'success') { salida.textContent = '❌ ' + (r.message || 'No se pudo guardar.'); b.disabled = false; return; }
       if (accion === 'aprobar') alert(`Recarga soltada.\n\n${r.recarga || ''}${r.aviso ? '\n\n' + r.aviso : ''}`);
       if (document.activeElement) document.activeElement.blur();
