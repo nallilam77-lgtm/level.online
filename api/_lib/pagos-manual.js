@@ -17,7 +17,7 @@
 // Nunca se aprueba nada solo: sin el administrador, la solicitud se queda pendiente.
 import { randomUUID } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
-import { supabaseActivo, guardar, leer, actualizar, borrar, esAdminToken } from './supabase.js';
+import { supabaseActivo, guardar, leer, leerDonde, actualizar, borrar, esAdminToken } from './supabase.js';
 import { conCache } from './externo.js';
 import { limpiarMontoVES, formatearVES } from './recarga-comun.js';
 import { tokenDe, datosDeLaRecarga, marcarSolicitudPago, guardarPorVerificar, conHistorial } from './historial.js';
@@ -52,10 +52,15 @@ export async function pagosManualActivo() {
 export async function crearSolicitud(ultimos5, juego, monto, idPedido) {
   try {
     if (!/^\d{5}$/.test(String(ultimos5)) || !(await pagosManualActivo())) return null;
-    const pendiente = async () => (await leer('pagos_solicitudes', { ultimos5, juego, estado: 'pendiente' }, 'id'))?.[0]?.id || null;
+    // Una pendiente por referencia + juego + CLIENTE (ID en minúsculas): el mismo cliente que reintenta espera
+    // la misma; otro cliente con una referencia que termina igual tiene la suya (índice único de pagos-manual.sql)
+    const d = datosDeLaRecarga();
+    const idJugador = corto(String(d.idJugador ?? '').toLowerCase(), 60);
+    const pendiente = async () => (await leerDonde('pagos_solicitudes',
+      `ultimos5=eq.${ultimos5}&juego=eq.${encodeURIComponent(juego)}&estado=eq.pendiente&id_jugador=${idJugador ? `eq.${encodeURIComponent(idJugador)}` : 'is.null'}`,
+      'id'))?.[0]?.id || null;
     let id = await pendiente();
     if (!id) {
-      const d = datosDeLaRecarga();
       // Sin llave para cifrar no se guarda la petición: sin ella no se podría repetir la recarga
       const datos = cifrar(JSON.stringify(d.body || {}));
       id = randomUUID();
@@ -63,7 +68,7 @@ export async function crearSolicitud(ultimos5, juego, monto, idPedido) {
         await guardar('pagos_solicitudes', {
           id, ultimos5, juego: corto(juego, 30),
           monto: Number(monto) > 0 ? Math.round(Number(monto) * 100) / 100 : null,
-          id_jugador: corto(d.idJugador, 60), paquete: corto(d.paquete, 80), telefono: corto(d.telefono, 30),
+          id_jugador: idJugador, paquete: corto(d.paquete, 80), telefono: corto(d.telefono, 30),
           id_pedido: corto(idPedido, 80), usuario: (await d.usuario) || null, ip: corto(d.ip, 60), datos,
         });
         console.info(`🖐️ Pago por aprobar a mano: …${ultimos5} · ${juego} · ${monto || '?'} Bs`);
@@ -71,7 +76,9 @@ export async function crearSolicitud(ultimos5, juego, monto, idPedido) {
         await guardarPorVerificar({ idPedido, juego, precio: monto, ultimos5 })
           .catch((error) => console.error('⚠️ pagos a mano: no se pudo guardar el pedido pendiente:', error.message));
       } catch (error) {
-        // Otra petición del mismo cliente la creó a la vez (una sola pendiente por referencia y juego)
+        // Otra petición del mismo cliente la creó a la vez (una sola pendiente por referencia, juego y cliente).
+        // Mientras no se corra el índice nuevo, el viejo (referencia + juego) también choca con OTRO cliente:
+        // entonces no hay solicitud suya y la tienda responde "referencia no encontrada" (nunca se une a la ajena).
         if (!/Supabase 409/.test(error.message)) throw error;
         id = await pendiente();
       }
@@ -209,6 +216,20 @@ export async function solicitudResolver(req, res) {
   const sinReferencia = !escrita;
   const referencia = escrita || `000${Date.now()}${fila.ultimos5}`;
   if (!(monto > 0)) return res.status(400).json({ status: 'error', message: 'Escribe el monto que llegó, en Bs.' });
+  // Sin referencia completa, un mismo pago podría soltarse dos veces (dos clientes con los mismos 5 dígitos, o
+  // un pago que sí llegó). Entonces se exige la referencia completa: la base no deja usar la misma dos veces.
+  if (sinReferencia) {
+    const desde = new Date(Date.now() - 3 * 864e5).toISOString();
+    try {
+      const [soltada] = (await leerDonde('pagos_solicitudes', `ultimos5=eq.${fila.ultimos5}&estado=eq.aprobado&id=neq.${id}&resuelto=gt.${desde}`, 'id')) || [];
+      if (soltada) return res.status(409).json({ status: 'error', message: `En los últimos 3 días ya soltaste otro pago que termina en ${fila.ultimos5}. Para soltar este, escribe su referencia completa del banco (tiene que ser distinta).` });
+      const [llego] = (await leerDonde('pagos', `referencia=like.*${fila.ultimos5}&recibido=gt.${desde}&order=recibido.desc`, 'estado')) || [];
+      if (llego) return res.status(409).json({ status: 'error', message: `Ya llegó un pago que termina en ${fila.ultimos5} (está "${llego.estado}"). Si es el mismo pago, escribe su referencia completa y se usa ese; si es otro, escribe la referencia completa de este.` });
+    } catch (error) {
+      console.error('⚠️ pagos a mano: no se pudo revisar si el pago ya se usó:', error.message);
+      return res.status(503).json({ status: 'error', message: 'No se pudo comprobar el pago. Intenta de nuevo o escribe la referencia completa.' });
+    }
+  }
 
   // Primero se "toma" la solicitud (solo si sigue pendiente: dos clics no aprueban dos veces); después el pago
   let tomada;
@@ -219,7 +240,10 @@ export async function solicitudResolver(req, res) {
     return res.status(503).json({ status: 'error', message: 'No se pudo guardar. Intenta de nuevo.' });
   }
   if (!tomada?.length) return res.status(409).json({ status: 'error', message: 'Esa solicitud ya no está pendiente.' });
-  const r = await guardarPagoManual({ referencia, monto, nota: sinReferencia ? `Soltado a mano sin referencia completa (${fila.juego})` : `Soltado a mano (${fila.juego})` });
+  // Si la notificación de ESE pago ya llegó y está libre, se usa ese mismo (no se guarda otra vez)
+  const [existente] = escrita ? ((await leer('pagos', { referencia }, 'estado').catch(() => [])) || []) : [];
+  const r = existente?.estado === 'verificado' ? { ok: true }
+    : await guardarPagoManual({ referencia, monto, nota: sinReferencia ? `Soltado a mano sin referencia completa (${fila.juego})` : `Soltado a mano (${fila.juego})` });
   if (!r.ok) {
     // El pago no quedó: la solicitud vuelve a pendiente para corregir la referencia
     await actualizar('pagos_solicitudes', `id=eq.${id}&estado=eq.aprobado`, { estado: 'pendiente', resuelto: null, referencia: null, nota: null })

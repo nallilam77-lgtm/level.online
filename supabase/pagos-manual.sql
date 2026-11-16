@@ -39,9 +39,12 @@ alter table public.pagos_solicitudes add column if not exists ip text;
 alter table public.pagos_solicitudes add column if not exists datos text;
 alter table public.pagos_solicitudes add column if not exists recargada timestamptz;
 create index if not exists pagos_solicitudes_estado on public.pagos_solicitudes (estado, creado desc);
--- Una sola solicitud pendiente por referencia y juego (el cliente que reintenta espera la misma)
-create unique index if not exists pagos_solicitudes_una_pendiente
-  on public.pagos_solicitudes (ultimos5, juego) where estado = 'pendiente';
+-- Una sola solicitud pendiente por referencia, juego y CLIENTE (ID del jugador, en minúsculas): el mismo cliente
+-- que reintenta espera la misma; dos clientes distintos cuyas referencias terminan igual tienen una cada uno.
+-- (Antes era solo referencia + juego: el segundo cliente quedaba unido al primero.)
+drop index if exists public.pagos_solicitudes_una_pendiente;
+create unique index if not exists pagos_solicitudes_una_pendiente_por_cliente
+  on public.pagos_solicitudes (ultimos5, juego, coalesce(id_jugador, '')) where estado = 'pendiente';
 
 alter table public.pagos_solicitudes enable row level security;
 revoke all on public.pagos_solicitudes from anon, authenticated;

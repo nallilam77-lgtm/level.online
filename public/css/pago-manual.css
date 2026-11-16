@@ -1,55 +1,118 @@
-/* Espera del pago verificado a mano (js/pago-manual.js). Usa las variables del :root de cada tienda
-   (--game-*, --surface…): sale con el acento de su juego. Reglas: .claude/UI_RULES.md */
-.pago-manual-fondo {
-  position: fixed; inset: 0; z-index: 2147483000;   /* encima de TODO: las tiendas usan hasta 30000 (pantallaProcesando, modales) */ display: grid; place-items: center; padding: 16px;
-  background: var(--bg-deep);
-  background: linear-gradient(rgba(var(--game-accent-rgb), 0.06), rgba(var(--game-accent-rgb), 0.06)), color-mix(in srgb, var(--bg-deep) 88%, transparent);
+/* Ventana "Estamos verificando tu pago" (js/pago-manual.js). Usa las variables del :root de cada tienda
+   (--game-*, --surface, --border-glass…): sale con el acento de su juego. Reglas: .claude/UI_RULES.md
+   z-index: encima de TODO (las tiendas usan hasta 30000 en #pantallaProcesando y sus modales). */
+.vp-fondo {
+  position: fixed; inset: 0; z-index: 2147483000; display: grid; place-items: center; padding: 16px; overflow-y: auto;
+  background: var(--bg-deep);   /* navegadores viejos sin color-mix: fondo sólido */
+  background:
+    radial-gradient(circle at 50% 20%, rgba(var(--game-accent-rgb), 0.16), transparent 55%),
+    color-mix(in srgb, var(--bg-deep) 90%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  animation: vp-aparece 0.25s ease-out;
+}
+.vp-caja {
+  --vp-estado: var(--game-accent-rgb);
+  position: relative; width: min(420px, 100%); margin: auto;
+  display: grid; gap: 16px; justify-items: center; padding: 32px 24px 24px; text-align: center;
+  background: var(--surface); border: 1px solid rgba(var(--vp-estado), 0.4); border-radius: 20px;
+  box-shadow: var(--shadow-lg), 0 10px 40px -8px rgba(var(--vp-estado), 0.35);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
-.pago-manual {
-  width: min(440px, 100%); max-height: calc(100vh - 32px); overflow-y: auto;
-  display: grid; gap: 16px; justify-items: center; padding: 24px; text-align: center;
-  background: var(--surface); border: 1px solid rgba(var(--game-accent-rgb), 0.45); border-radius: 16px;
-  box-shadow: var(--shadow-lg), 0 10px 25px -5px rgba(var(--game-accent-rgb), 0.3);
+/* Línea de color arriba de la tarjeta */
+.vp-caja::before {
+  content: ''; position: absolute; top: 0; left: 24px; right: 24px; height: 3px; border-radius: 0 0 999px 999px;
+  background: var(--game-gradient);
 }
-.pago-manual-giro {
-  width: 44px; height: 44px; border-radius: 50%;
-  border: 4px solid var(--border-glass); border-top-color: var(--game-accent);
-  animation: pago-manual-gira 0.9s linear infinite;
+
+/* Sello: icono con anillo que late mientras se verifica */
+.vp-sello {
+  position: relative; width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--game-text); background: rgba(var(--vp-estado), 0.12); border: 2px solid rgba(var(--vp-estado), 0.5);
+  box-shadow: 0 0 24px rgba(var(--vp-estado), 0.35);
 }
-.pago-manual-titulo {
-  font-family: 'Montserrat', sans-serif; font-size: 18px; font-weight: 900; line-height: 1.3;
-  text-transform: uppercase; letter-spacing: 0.5px; color: var(--game-text);
+.vp-caja[data-estado="verificando"] .vp-sello::after {
+  content: ''; position: absolute; inset: -8px; border-radius: 50%; border: 2px solid rgba(var(--vp-estado), 0.35);
+  animation: vp-late 1.8s ease-out infinite;
 }
-.pago-manual-texto { font-size: 14px; line-height: 1.6; color: var(--text-main); }
-.pago-manual-estado { font-size: 13px; font-weight: 600; line-height: 1.5; color: var(--text-muted); }
-.pago-manual-ok, .pago-manual-error {
-  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
-  font-family: 'Montserrat', sans-serif; font-size: 22px; font-weight: 900; border: 2px solid currentColor;
+.vp-sello-icono { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.vp-caja[data-estado="rechazado"] .vp-sello { color: var(--text-main); }
+
+.vp-etiqueta {
+  padding: 4px 12px; border-radius: 999px; font-family: 'Montserrat', sans-serif; font-size: 11px; font-weight: 900;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--game-text);
+  background: rgba(var(--vp-estado), 0.12); border: 1px solid rgba(var(--vp-estado), 0.35);
 }
-.pago-manual-ok { color: var(--game-text); }
-.pago-manual-ok::before { content: '✓'; }
-.pago-manual-error { color: var(--text-muted); }
-.pago-manual-error::before { content: '!'; }
-.pago-manual-donde {
-  width: 100%; display: grid; gap: 8px; padding: 16px; text-align: left; border-radius: 12px;
+.vp-titulo { font-family: 'Montserrat', sans-serif; font-size: 22px; font-weight: 900; line-height: 1.2; color: var(--text-main); }
+.vp-texto { max-width: 34ch; font-size: 14px; line-height: 1.6; color: var(--text-muted); }
+
+/* Resumen del pedido */
+.vp-resumen {
+  width: 100%; display: grid; gap: 0; padding: 4px 16px; border-radius: 14px; text-align: left;
   background: var(--bg-deep); border: 1px solid var(--border-glass);
 }
-.pago-manual-donde-titulo { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: var(--game-text); }
-.pago-manual-lista { display: grid; gap: 6px; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
-.pago-manual-lista strong { color: var(--text-main); }
-.pago-manual-acciones { display: grid; gap: 12px; width: 100%; }
-.pago-manual-ver, .pago-manual-cancelar {
-  display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 24px;
-  border-radius: 999px; font-family: 'Montserrat', sans-serif; font-size: 14px; font-weight: 900;
-  text-transform: uppercase; text-decoration: none; cursor: pointer; transition: box-shadow 0.25s;
+.vp-resumen:empty { display: none; }
+.vp-dato { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; font-size: 13px; }
+.vp-dato + .vp-dato { border-top: 1px solid var(--border-glass); }
+.vp-dato dt { color: var(--text-muted); }
+.vp-dato dd { color: var(--text-main); font-family: 'Montserrat', sans-serif; font-weight: 800; text-align: right; overflow-wrap: anywhere; }
+
+/* Pasos: Pedido recibido → Verificando pago → Recarga en camino */
+.vp-pasos { width: 100%; list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; position: relative; }
+.vp-pasos::before {
+  content: ''; position: absolute; top: 15px; left: 16.6%; right: 16.6%; height: 2px; background: var(--border-glass);
 }
-.pago-manual-ver { background: var(--game-gradient); color: var(--on-game-cta); border: 0; }
-.pago-manual-cancelar { background: transparent; color: var(--text-muted); border: 1px solid var(--border-glass); }
-.pago-manual-ver:hover, .pago-manual-ver:focus-visible { box-shadow: 0 0 20px rgba(var(--game-accent-rgb), 0.4); }
-.pago-manual-ver:focus-visible, .pago-manual-cancelar:focus-visible { outline: 2px solid var(--text-main); outline-offset: 2px; }
-@keyframes pago-manual-gira { to { transform: rotate(360deg); } }
-/* Modo ligero (celulares): sin desenfoque; el círculo SÍ gira (es lo que dice "estamos en eso"), más lento */
-.ligero .pago-manual-fondo { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg-deep); }
-.ligero .pago-manual { background: var(--bg-base); }
-.ligero .pago-manual-giro { animation: pago-manual-gira 1.4s linear infinite !important; }
+.vp-paso { position: relative; display: grid; justify-items: center; gap: 8px; font-size: 11px; font-weight: 600; line-height: 1.3; color: var(--text-muted); }
+.vp-punto {
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--bg-deep); border: 2px solid var(--border-glass); color: var(--on-game-cta);
+}
+.vp-punto svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.vp-paso[data-paso="listo"] { color: var(--text-main); }
+.vp-paso[data-paso="listo"] .vp-punto { background: var(--game-gradient); border-color: transparent; }
+.vp-paso[data-paso="activo"] { color: var(--game-text); }
+.vp-paso[data-paso="activo"] .vp-punto { border-color: rgba(var(--game-accent-rgb), 0.9); box-shadow: 0 0 14px rgba(var(--game-accent-rgb), 0.5); }
+.vp-paso[data-paso="activo"] .vp-punto::after {
+  content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--game-gradient); animation: vp-pulso 1.2s ease-in-out infinite;
+}
+.vp-paso[data-paso="error"] { color: var(--text-main); }
+.vp-paso[data-paso="error"] .vp-punto { background: var(--text-muted); border-color: transparent; color: var(--bg-deep); }
+
+.vp-aviso {
+  width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 12px; text-align: left;
+  font-size: 13px; line-height: 1.5; color: var(--text-main);
+  background: rgba(var(--game-accent-rgb), 0.08); border: 1px solid rgba(var(--game-accent-rgb), 0.25);
+}
+.vp-aviso-icono { flex: none; width: 18px; height: 18px; margin-top: 1px; fill: none; stroke: var(--game-text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.vp-caja[data-estado="rechazado"] .vp-aviso { background: var(--bg-deep); border-color: var(--border-glass); }
+
+/* Botones */
+.vp-acciones { width: 100%; display: grid; gap: 10px; }
+.vp-secundarias { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.vp-boton {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 16px;
+  border-radius: 999px; font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900;
+  text-transform: uppercase; letter-spacing: 0.3px; text-decoration: none; cursor: pointer; transition: box-shadow 0.25s, border-color 0.25s;
+}
+.vp-boton--principal { background: var(--game-gradient); color: var(--on-game-cta); border: 0; box-shadow: 0 8px 20px -6px rgba(var(--game-accent-rgb), 0.5); }
+.vp-boton--borde { background: transparent; color: var(--text-main); border: 1px solid var(--border-glass); }
+.vp-boton--principal:hover, .vp-boton--principal:focus-visible { box-shadow: 0 0 22px rgba(var(--game-accent-rgb), 0.55); }
+.vp-boton--borde:hover, .vp-boton--borde:focus-visible { border-color: rgba(var(--game-accent-rgb), 0.6); }
+.vp-boton:focus-visible { outline: 2px solid var(--text-main); outline-offset: 2px; }
+.vp-boton-icono { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.vp-pie { font-size: 11px; line-height: 1.5; color: var(--text-muted); }
+
+@keyframes vp-aparece { from { opacity: 0; } to { opacity: 1; } }
+@keyframes vp-late { 0% { transform: scale(0.9); opacity: 0.9; } 100% { transform: scale(1.25); opacity: 0; } }
+@keyframes vp-pulso { 0%, 100% { transform: scale(0.7); opacity: 0.6; } 50% { transform: scale(1); opacity: 1; } }
+
+@media (max-width: 380px) {
+  .vp-caja { padding: 28px 16px 20px; }
+  .vp-titulo { font-size: 19px; }
+  .vp-secundarias { grid-template-columns: 1fr; }
+}
+
+/* Modo ligero (celulares): sin desenfoque; el punto activo SÍ late (dice "estamos en eso"), el anillo no */
+.ligero .vp-fondo { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg-deep); }
+.ligero .vp-caja { background: var(--bg-base); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.ligero .vp-caja .vp-sello::after { display: none; }
+.ligero .vp-paso[data-paso="activo"] .vp-punto::after { animation: vp-pulso 1.4s ease-in-out infinite !important; }

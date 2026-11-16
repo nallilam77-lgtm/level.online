@@ -2087,16 +2087,20 @@
     if (lista.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
     lista.replaceChildren();
     if (!n) { lista.append(el('li', 'vacio', '✅ No hay pagos por revisar.')); return; }
-    data.forEach((s) => lista.append(filaPorAprobar(s)));
+    // Varios pedidos con los mismos 5 dígitos: en el banco tiene que haber un pago por CADA uno
+    const repetidas = {};
+    data.forEach((s) => { repetidas[s.ultimos5] = (repetidas[s.ultimos5] || 0) + 1; });
+    data.forEach((s) => lista.append(filaPorAprobar(s, repetidas[s.ultimos5])));
   }
 
-  function filaPorAprobar(s) {
+  function filaPorAprobar(s, iguales = 1) {
     const li = el('li', 'pedido');
     const cabeza = el('div', 'pedido-cabeza');
     cabeza.append(el('strong', '', `${JUEGOS[s.juego] || s.juego}${s.paquete ? ' · ' + s.paquete : ''}`), el('span', 'etiqueta etiqueta--en_revision', hace(s.creado)));
     const datos = el('span', '');
     datos.append('Termina en ', el('strong', 'codigo-nombre', s.ultimos5), s.id_jugador ? ` · ID ${s.id_jugador}` : '');
     li.append(cabeza, datos);
+    if (iguales > 1) li.append(el('span', 'motivo-fallo', `⚠️ Hay ${iguales} pedidos con …${s.ultimos5}: en tu banco debe haber un pago por cada uno. Revisa ID y monto, y escribe la referencia completa.`));
     if (Number(s.monto) > 0) li.append(el('span', 'por-aprobar-monto', `Debe llegar: ${bs(s.monto)} Bs`));
     const campos = el('div', 'aprobar-campos');
     const ref = el('input');

@@ -1,28 +1,43 @@
 // =========================================================================
-// PAGO VERIFICADO A MANO (las 7 tiendas). Cuando la notificación del banco no llegó y el administrador
-// tiene encendido "Verificar a mano los pagos que no lleguen" (api/_lib/pagos-manual.js), /api/recargar
-// responde con { solicitudPago: <id> } en vez de "referencia no encontrada": el pedido ya quedó guardado
-// como "Recibido" y, cuando el administrador apruebe el pago, la recarga la hace el servidor solo.
-// Este archivo envuelve fetch SOLO para /api/recargar y, en ese caso, muestra "Estamos verificando tu pago"
-// con dónde ver el estado del pedido (Consulta tus últimas recargas con su ID, o su perfil). El cliente puede
-// cerrar la página. Mientras la ventana está abierta, el estado se pone al día cada 8 s
-// (/api/juego?accion=solicitud_estado). "Entendido" recarga la página (la tienda queda limpia).
+// PAGO VERIFICADO A MANO (las 7 tiendas). Cuando la notificación del banco no llegó ("Revisar pagos",
+// api/_lib/pagos-manual.js), /api/recargar responde con { solicitudPago: <id> } en vez de "referencia no
+// encontrada": el pedido ya quedó guardado ("Verificando pago") y, cuando el administrador suelte el pago,
+// la recarga la hace el servidor solo.
+// Este archivo envuelve fetch SOLO para /api/recargar y, en ese caso, muestra una ventana con el resumen del
+// pedido y tres pasos (Pedido recibido → Verificando pago → Recarga en camino) que avanzan solos mientras
+// está abierta (cada 8 s, /api/juego?accion=solicitud_estado; rechazado → el motivo que escribió el
+// administrador). El cliente puede cerrarla: "Ver el estado de mi pedido" lleva a la consulta del inicio
+// con su ID y "Entendido" recarga la página (la tienda queda limpia).
 // A la tienda nunca le llega esa respuesta: no muestra su error ni cuenta un intento fallido.
 // Estilos en css/pago-manual.css (usa los --game-* de cada tienda). Va en el <head> con defer.
 // =========================================================================
 (function () {
   const fetchOriginal = window.fetch.bind(window);
-  const CSS = '/css/pago-manual.css?v=3';
+  const CSS = '/css/pago-manual.css?v=4';
   const CADA_MS = 8000;
   const WHATSAPP = 'https://wa.me/584141916377?text=';
+  const SVG = 'http://www.w3.org/2000/svg';
+  // Iconos dibujados (nada de emojis como icono principal: .claude/UI_RULES.md)
+  const ICONOS = {
+    reloj: 'M12 7v5l3 2 M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18',
+    listo: 'M5 12.5l4.5 4.5L19 7.5',
+    error: 'M7 7l10 10 M17 7L7 17',
+    rayo: 'M13 3L5 14h6l-1 7 8-11h-6l1-7z',
+    whatsapp: 'M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.5 20.5l4.2-1.1A8.5 8.5 0 1 0 12 3.5z M9 8.5c.3 2.7 2.8 5.3 5.5 5.7l1-1.2 1.8.9-.4 1.6c-3.8.4-8-3.8-7.6-7.6l1.6-.4.9 1.8z',
+  };
 
   const esRecarga = (entrada) => /\/api\/recargar(\?|$)/.test(typeof entrada === 'string' ? entrada : (entrada && entrada.url) || '');
 
   function datosDe(init) {
     try {
       const b = JSON.parse(init && init.body) || {};
-      return { ultimos5: String(b.referencia || '').replace(/\D/g, '').slice(-5), id: String(b.id || b.user || '').trim().slice(0, 40) };
-    } catch (e) { return { ultimos5: '', id: '' }; }
+      return {
+        ultimos5: String(b.referencia || '').replace(/\D/g, '').slice(-5),
+        id: String(b.id || b.user || '').trim().slice(0, 40),
+        nombreId: b.user && !b.id ? 'Usuario' : 'ID',   // Roblox manda el usuario, no un ID
+        paquete: String(b.paquete || b.producto || '').trim().slice(0, 60),
+      };
+    } catch (e) { return { ultimos5: '', id: '', paquete: '', nombreId: 'ID' }; }
   }
 
   function cargarCss() {
@@ -38,72 +53,117 @@
     if (texto !== undefined) e.textContent = texto;
     return e;
   };
+  function icono(nombre, clase) {
+    const s = document.createElementNS(SVG, 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('aria-hidden', 'true');
+    if (clase) s.setAttribute('class', clase);
+    const p = document.createElementNS(SVG, 'path');
+    p.setAttribute('d', ICONOS[nombre]);
+    s.append(p);
+    return s;
+  }
 
-  function ventana(idSolicitud, { ultimos5, id }) {
+  function ventana(idSolicitud, { ultimos5, id, paquete, nombreId }) {
     cargarCss();
-    const conSesion = !!(window.Sesion && typeof Sesion.hay === 'function' && Sesion.hay());
-    const fondo = crear('div', 'pago-manual-fondo');
-    const caja = crear('div', 'pago-manual');
+    const fondo = crear('div', 'vp-fondo');
+    const caja = crear('div', 'vp-caja');
     caja.setAttribute('role', 'dialog');
     caja.setAttribute('aria-modal', 'true');
-    caja.setAttribute('aria-labelledby', 'pagoManualTitulo');
-    const icono = crear('div', 'pago-manual-giro');
-    icono.setAttribute('aria-hidden', 'true');
-    const titulo = crear('h2', 'pago-manual-titulo', 'Estamos verificando tu pago');
-    titulo.id = 'pagoManualTitulo';
-    const texto = crear('p', 'pago-manual-texto',
-      `Recibimos tu pedido${ultimos5 ? ` (referencia …${ultimos5})` : ''}. La notificación de tu banco todavía no nos llega y nuestro equipo lo está revisando. Apenas lo confirmemos, tu recarga se hace sola: no tienes que pagar de nuevo ni quedarte en esta página.`);
-    const estado = crear('p', 'pago-manual-estado', '🕐 Estado: pago en verificación');
-    estado.setAttribute('role', 'status');
+    caja.setAttribute('aria-labelledby', 'vpTitulo');
+    caja.setAttribute('aria-describedby', 'vpTexto');
+    caja.dataset.estado = 'verificando';
 
-    // Dónde ver el estado
-    const donde = crear('div', 'pago-manual-donde');
-    donde.append(crear('p', 'pago-manual-donde-titulo', '¿Dónde veo cómo va mi pedido?'));
-    const lista = crear('ul', 'pago-manual-lista');
-    const paso1 = crear('li');
-    paso1.append('En el inicio de ', crear('strong', '', 'levelupstore.online'), ', en ', crear('strong', '', '"Consulta tus últimas recargas"'),
-      id ? `, con tu ID ${id}.` : ', con tu ID de jugador.');
-    lista.append(paso1);
-    if (conSesion) {
-      const paso2 = crear('li');
-      paso2.append('En ', crear('strong', '', 'tu perfil'), ': sale en tus recargas y cambia solo.');
-      lista.append(paso2);
-    }
-    donde.append(lista);
+    // Cabecera: icono con anillo del color del juego
+    const sello = crear('div', 'vp-sello');
+    sello.append(icono('reloj', 'vp-sello-icono'));
+    const etiqueta = crear('p', 'vp-etiqueta', 'Pedido recibido');
+    const titulo = crear('h2', 'vp-titulo', 'Estamos verificando tu pago');
+    titulo.id = 'vpTitulo';
+    const texto = crear('p', 'vp-texto', 'Tu banco no nos envió el aviso del pago, así que lo revisamos a mano. Apenas lo confirmemos, tu recarga sale sola.');
+    texto.id = 'vpTexto';
 
-    const acciones = crear('div', 'pago-manual-acciones');
-    const ver = crear('a', 'pago-manual-ver', 'Ver el estado de mi pedido');
+    // Resumen del pedido
+    const resumen = crear('dl', 'vp-resumen');
+    const dato = (nombre, valor) => {
+      if (!valor) return;
+      const fila = crear('div', 'vp-dato');
+      fila.append(crear('dt', '', nombre), crear('dd', '', valor));
+      resumen.append(fila);
+    };
+    dato('Paquete', paquete);
+    dato(nombreId || 'ID', id);
+    dato('Referencia', ultimos5 ? `…${ultimos5}` : '');
+
+    // Pasos
+    const pasos = crear('ol', 'vp-pasos');
+    const paso = (nombre, estado) => {
+      const li = crear('li', 'vp-paso');
+      li.dataset.paso = estado;
+      const punto = crear('span', 'vp-punto');
+      punto.setAttribute('aria-hidden', 'true');
+      li.append(punto, crear('span', 'vp-paso-texto', nombre));
+      pasos.append(li);
+      return { li, punto };
+    };
+    const p1 = paso('Pedido recibido', 'listo');
+    p1.punto.append(icono('listo'));
+    const p2 = paso('Verificando pago', 'activo');
+    const p3 = paso('Recarga en camino', 'espera');
+
+    const aviso = crear('p', 'vp-aviso');
+    aviso.append(icono('rayo', 'vp-aviso-icono'), crear('span', '', 'No tienes que pagar de nuevo ni quedarte aquí: puedes cerrar esta ventana.'));
+    aviso.setAttribute('role', 'status');
+
+    // Acciones
+    const acciones = crear('div', 'vp-acciones');
+    const ver = crear('a', 'vp-boton vp-boton--principal', 'Ver el estado de mi pedido');
     ver.href = id ? `/?consulta=${encodeURIComponent(id)}#consulta` : '/#consulta';
-    const wa = crear('a', 'pago-manual-cancelar', 'Escribir por WhatsApp');
+    const segundarias = crear('div', 'vp-secundarias');
+    const wa = crear('a', 'vp-boton vp-boton--borde');
+    wa.append(icono('whatsapp', 'vp-boton-icono'), crear('span', '', 'WhatsApp'));
     wa.href = WHATSAPP + encodeURIComponent(`Hola Level Up, hice un pago${ultimos5 ? ` con referencia terminada en ${ultimos5}` : ''}${id ? ` para el ID ${id}` : ''} y está en verificación.`);
     wa.target = '_blank'; wa.rel = 'noopener';
-    const listo = crear('button', 'pago-manual-cancelar', 'Entendido');
+    const listo = crear('button', 'vp-boton vp-boton--borde', 'Entendido');
     listo.type = 'button';
     listo.addEventListener('click', () => location.reload());
-    acciones.append(ver, wa, listo);
+    segundarias.append(wa, listo);
+    acciones.append(ver, segundarias);
+    const pie = crear('p', 'vp-pie', 'También lo ves en "Consulta tus últimas recargas" del inicio y en tu perfil.');
 
-    caja.append(icono, titulo, texto, estado, donde, acciones);
+    caja.append(sello, etiqueta, titulo, texto, resumen, pasos, aviso, acciones, pie);
     fondo.append(caja);
     document.body.classList.add('modal-abierto');
     document.body.append(fondo);
     ver.focus();
 
-    // Mientras la ventana está abierta, el estado se pone al día solo
+    const cambiarAviso = (nombre, mensaje) => { aviso.replaceChildren(icono(nombre, 'vp-aviso-icono'), crear('span', '', mensaje)); };
+
+    // Mientras la ventana está abierta, los pasos avanzan solos
     const reloj = setInterval(async () => {
       if (!document.body.contains(fondo) || document.visibilityState !== 'visible') return;
       try {
         const d = await (await fetchOriginal(`/api/juego?accion=solicitud_estado&id=${encodeURIComponent(idSolicitud)}`, { cache: 'no-store' })).json();
         if (d.estado === 'aprobado') {
           clearInterval(reloj);
-          icono.className = 'pago-manual-ok';
-          titulo.textContent = '¡Pago confirmado!';
-          estado.textContent = '✅ Tu pago fue confirmado y tu recarga ya se está haciendo. Mira el estado de tu pedido para ver cuándo se entrega.';
+          caja.dataset.estado = 'aprobado';
+          sello.replaceChildren(icono('listo', 'vp-sello-icono'));
+          etiqueta.textContent = 'Pago confirmado';
+          titulo.textContent = '¡Tu recarga va en camino!';
+          texto.textContent = 'Confirmamos tu pago y ya estamos haciendo tu recarga. Mira el estado de tu pedido para ver cuándo se entrega.';
+          p2.li.dataset.paso = 'listo'; p2.punto.replaceChildren(icono('listo'));
+          p3.li.dataset.paso = 'activo';
+          cambiarAviso('rayo', 'Normalmente llega en pocos minutos.');
         } else if (d.estado === 'rechazado') {
           clearInterval(reloj);
-          icono.className = 'pago-manual-error';
-          titulo.textContent = 'Pago rechazado';
-          // El motivo lo escribe el administrador en "Revisar pagos" del panel
-          estado.textContent = d.motivo ? `❌ Motivo: ${String(d.motivo).slice(0, 200)}` : '❌ Revisa la referencia o escríbenos por WhatsApp con tu comprobante.';
+          caja.dataset.estado = 'rechazado';
+          sello.replaceChildren(icono('error', 'vp-sello-icono'));
+          etiqueta.textContent = 'Pago no confirmado';
+          titulo.textContent = 'No pudimos confirmar tu pago';
+          texto.textContent = 'Si crees que es un error, escríbenos por WhatsApp con tu comprobante y lo revisamos.';
+          p2.li.dataset.paso = 'error'; p2.punto.replaceChildren(icono('error'));
+          p2.li.querySelector('.vp-paso-texto').textContent = 'Pago rechazado';
+          cambiarAviso('error', d.motivo ? `Motivo: ${String(d.motivo).slice(0, 200)}` : 'Revisa la referencia y el monto de tu pago.');
         }
       } catch (e) { /* sin conexión: se vuelve a preguntar */ }
     }, CADA_MS);
