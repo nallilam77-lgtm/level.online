@@ -39,12 +39,14 @@ alter table public.pagos_solicitudes add column if not exists ip text;
 alter table public.pagos_solicitudes add column if not exists datos text;
 alter table public.pagos_solicitudes add column if not exists recargada timestamptz;
 create index if not exists pagos_solicitudes_estado on public.pagos_solicitudes (estado, creado desc);
--- Una sola solicitud pendiente por referencia, juego y CLIENTE (ID del jugador, en minúsculas): el mismo cliente
--- que reintenta espera la misma; dos clientes distintos cuyas referencias terminan igual tienen una cada uno.
--- (Antes era solo referencia + juego: el segundo cliente quedaba unido al primero.)
+-- UNA sola solicitud pendiente por referencia (últimos 5), sin importar juego, ID ni teléfono: el segundo
+-- pedido con esa referencia recibe "referencia repetida" (pagos-manual.js → crearSolicitud). (2026-11-17;
+-- antes era una por referencia + juego + ID y un mismo pago se mandaba para dos IDs distintos.)
+-- Si falla con "could not create unique index", primero resuelve en el panel las pendientes repetidas.
 drop index if exists public.pagos_solicitudes_una_pendiente;
-create unique index if not exists pagos_solicitudes_una_pendiente_por_cliente
-  on public.pagos_solicitudes (ultimos5, juego, coalesce(id_jugador, '')) where estado = 'pendiente';
+drop index if exists public.pagos_solicitudes_una_pendiente_por_cliente;
+create unique index if not exists pagos_solicitudes_una_pendiente_por_referencia
+  on public.pagos_solicitudes (ultimos5) where estado = 'pendiente';
 
 alter table public.pagos_solicitudes enable row level security;
 revoke all on public.pagos_solicitudes from anon, authenticated;

@@ -258,3 +258,9 @@ Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creado
 
 **Síntoma**: …68018: MacroDroid anotó `932038468018` (12 dígitos, libre) y el administrador soltó la solicitud escribiendo `0050938468018` (13 dígitos, como sale en la app del banco). Se guardó un pago nuevo para la recarga y el de la macro quedó LIBRE (cualquiera con "68018" se llevaba otra recarga).
 **Regla**: una referencia se identifica por sus últimos 5 + monto + fecha, no por el texto completo. Al soltar CON referencia, `otroFormato` (_lib/pagos-manual.js) frena si ya llegó (3 días) un pago con los mismos 5 dígitos escrito distinto y devuelve `{ llego }`: el panel ofrece usar ese o confirmar que es otro (`distinto`). Al revés (la notificación llega después) lo cubre `pagoYaSoltado` en pagos.js. El panel además rellena la referencia de la macro en la fila.
+
+## 17. Una misma referencia para dos pedidos en "Revisar pagos" (2026-11-17)
+
+**Síntoma**: …91799 quedó dos veces pendiente (2394 y 572 Diamantes, dos ID distintos, misma IP, 3 min de diferencia).
+**Causa**: la regla era una pendiente por referencia + juego + ID: con otro ID se creaba otra solicitud.
+**Regla**: una sola pendiente por referencia (últimos 5), sin importar juego, ID ni teléfono (índice `pagos_solicitudes_una_pendiente_por_referencia`). Solo el MISMO idPedido la reutiliza; cualquier otro pedido recibe `motivo: 'repetida'` ("Referencia repetida") y no se anota nada.

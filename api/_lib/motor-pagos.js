@@ -19,6 +19,7 @@ export const MENSAJES_PAGO = {
   usado: '❌ Este pago ya fue validado y gastado en otra recarga.',
   no_existe: '🔍 Referencia no encontrada en el sistema. Si acabas de pagar, espera un minuto e intenta de nuevo.',
   formato: '🔍 La referencia debe tener exactamente 5 dígitos.',
+  repetida: '❌ Referencia repetida: esa referencia ya está en otro pedido que estamos verificando. Si ese pedido es tuyo, espera: no hace falta enviarla otra vez.',
 };
 
 // Siempre Supabase. Sin sus variables en Vercel no se cobra nada (nunca se vuelve a la hoja).
@@ -59,6 +60,8 @@ export async function tomarPago(ultimos5, idPedido, juego, precio = 0) {
     const solicitud = await crearSolicitud(String(ultimos5), juego, precio, idPedido);
     // Ya se rechazó en "Revisar pagos": no se vuelve a anotar, el cliente ve el motivo
     if (solicitud?.rechazada) return { encontrado: false, motivo: 'rechazado', message: mensajeRechazada(solicitud.motivo) };
+    // Ya hay otro pedido esperando con esa referencia: no se anota un segundo
+    if (solicitud?.repetida) return { encontrado: false, motivo: 'repetida', message: MENSAJES_PAGO.repetida };
     if (solicitud) return { encontrado: false, motivo: 'por_aprobar', message: MENSAJE_SOLICITUD };
   }
   return { encontrado: false, motivo: r?.motivo, message: MENSAJES_PAGO[r?.motivo] || MENSAJES_PAGO.no_existe };

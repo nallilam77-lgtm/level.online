@@ -58,6 +58,8 @@ export async function pagosManualActivo() {
  * se pudo (la tienda responde entonces "referencia no encontrada", como siempre).
  * Una referencia RECHAZADA en los últimos DIAS_RECHAZO días (cualquier juego o ID) no se vuelve a anotar:
  * devuelve { rechazada: true, motivo } y la tienda le dice al cliente que ese pago fue rechazado.
+ * Si ya hay OTRO pedido pendiente con esos 5 dígitos (otro ID, otro teléfono o el mismo cliente otra vez),
+ * devuelve { repetida: true } y la tienda responde "referencia repetida" sin anotar nada.
  */
 export async function crearSolicitud(ultimos5, juego, monto, idPedido) {
   try {
@@ -66,14 +68,21 @@ export async function crearSolicitud(ultimos5, juego, monto, idPedido) {
     const [rechazada] = (await leerDonde('pagos_solicitudes',
       `ultimos5=eq.${ultimos5}&estado=eq.rechazado&resuelto=gt.${desde}&order=resuelto.desc&limit=1`, 'nota')) || [];
     if (rechazada) return { rechazada: true, motivo: String(rechazada.nota || '').slice(0, 200) };
-    // Una pendiente por referencia + juego + CLIENTE (ID en minúsculas): el mismo cliente que reintenta espera
-    // la misma; otro cliente con una referencia que termina igual tiene la suya (índice único de pagos-manual.sql)
+    // UNA sola pendiente por referencia (cualquier juego, ID o teléfono). Solo la reutiliza el MISMO pedido
+    // (la tienda repitió la petición por la red); otro pedido con esos 5 dígitos → "referencia repetida".
     const d = datosDeLaRecarga();
     const idJugador = corto(String(d.idJugador ?? '').toLowerCase(), 60);
-    const pendiente = async () => (await leerDonde('pagos_solicitudes',
-      `ultimos5=eq.${ultimos5}&juego=eq.${encodeURIComponent(juego)}&estado=eq.pendiente&id_jugador=${idJugador ? `eq.${encodeURIComponent(idJugador)}` : 'is.null'}`,
-      'id'))?.[0]?.id || null;
+    const pendiente = async () => {
+      const [fila] = (await leerDonde('pagos_solicitudes',
+        `ultimos5=eq.${ultimos5}&estado=eq.pendiente&order=creado.asc&limit=1`, 'id,id_pedido')) || [];
+      if (!fila) return null;
+      return idPedido && fila.id_pedido === String(idPedido) ? fila.id : { repetida: true };
+    };
     let id = await pendiente();
+    if (id?.repetida) {
+      console.info(`🖐️ Referencia repetida en Revisar pagos: …${ultimos5} · ${juego} (ya hay una pendiente)`);
+      return id;
+    }
     if (!id) {
       // Sin llave para cifrar no se guarda la petición: sin ella no se podría repetir la recarga
       const datos = cifrar(JSON.stringify(d.body || {}));
@@ -90,11 +99,11 @@ export async function crearSolicitud(ultimos5, juego, monto, idPedido) {
         await guardarPorVerificar({ idPedido, juego, precio: monto, ultimos5 })
           .catch((error) => console.error('⚠️ pagos a mano: no se pudo guardar el pedido pendiente:', error.message));
       } catch (error) {
-        // Otra petición del mismo cliente la creó a la vez (una sola pendiente por referencia, juego y cliente).
-        // Mientras no se corra el índice nuevo, el viejo (referencia + juego) también choca con OTRO cliente:
-        // entonces no hay solicitud suya y la tienda responde "referencia no encontrada" (nunca se une a la ajena).
+        // Otra petición con esa referencia la creó a la vez (índice único de pagos-manual.sql): si no es este
+        // mismo pedido, es "referencia repetida" (nunca se une a la ajena)
         if (!/Supabase 409/.test(error.message)) throw error;
-        id = await pendiente();
+        id = (await pendiente()) || { repetida: true };
+        if (id.repetida) return id;
       }
     }
     if (id) marcarSolicitudPago({ id, message: MENSAJE_SOLICITUD });
@@ -340,8 +349,8 @@ async function deshacerRechazo(req, res, fila, b) {
     try {
       vuelta = await actualizar('pagos_solicitudes', `id=eq.${fila.id}&estado=eq.rechazado`, { estado: 'pendiente', resuelto: null, nota: null }, 'id');
     } catch (error) {
-      // El mismo cliente ya tiene otra pendiente con esa referencia (una sola por cliente)
-      if (/Supabase 409/.test(error.message)) return res.status(409).json({ status: 'error', message: 'Ese cliente ya tiene otra solicitud pendiente con esa referencia en Revisar pagos: suelta esa.' });
+      // Ya hay otra pendiente con esa referencia (una sola por referencia)
+      if (/Supabase 409/.test(error.message)) return res.status(409).json({ status: 'error', message: 'Ya hay otra solicitud pendiente con esa referencia en Revisar pagos: resuelve esa primero.' });
       console.error('⚠️ pagos a mano: no se pudo deshacer:', error.message);
       return res.status(503).json({ status: 'error', message: 'No se pudo guardar. Intenta de nuevo.' });
     }
