@@ -7,7 +7,7 @@
     // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque, animaciones ni transiciones (css/ligero.css)
     (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css?v=3'; document.head.appendChild(l); } })();
   </script>
-  <meta name="description" content="Panel de Creadores de Level Up: tus seguidores ahorran 1,5 % en cada recarga y tú ganas otro 1,5 %. Retiro desde $3 y sin límite de creadores.">
+  <meta name="description" content="Panel de Creadores de Level Up: tus seguidores ahorran 1,5 % en cada recarga y tú ganas otro 1,5 %. Inscríbete cuando haya cupos y retira desde $3.">
   <meta name="theme-color" content="#0f172a">
   <title>Panel de Creadores - Level Up</title>
   <!-- Vista previa al compartir el enlace (WhatsApp, Facebook, Telegram, X) -->
@@ -17,7 +17,7 @@
   <meta property="og:locale" content="es_VE">
   <meta property="og:url" content="https://www.levelupstore.online/creadores.html">
   <meta property="og:title" content="Programa de Creadores · Level Up">
-  <meta property="og:description" content="Tus seguidores ahorran 1,5 % en cada recarga con tu código y tú ganas otro 1,5 %. Sin límite de creadores y retiro desde $3.">
+  <meta property="og:description" content="Tus seguidores ahorran 1,5 % en cada recarga con tu código y tú ganas otro 1,5 %. Inscríbete con tu cuenta de Google y retira desde $3.">
   <meta property="og:image" content="https://www.levelupstore.online/img/og-creadores.jpg?v=1">
   <meta property="og:image:secure_url" content="https://www.levelupstore.online/img/og-creadores.jpg?v=1">
   <meta property="og:image:type" content="image/jpeg">
@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/paginas-legales.css">
-  <link rel="stylesheet" href="css/creadores.css?v=5">
+  <link rel="stylesheet" href="css/creadores.css?v=6">
   <!-- "Entrar con Google" del panel de creadores (desde 2026-11-13): sesión de la tienda -->
   <script src="/js/sesion.js?v=6" defer></script>
   <link rel="stylesheet" href="css/pie-legal.css">
@@ -70,15 +70,52 @@
     <header class="animate-up">
       <h1 class="titulo-principal">⭐ Panel de Creadores</h1>
       <p class="subtitulo">Comparte tu código: tu seguidor ahorra 1,5 % en cada recarga y tú ganas otro 1,5 % de lo que pagó.</p>
-      <p class="chip-cupos"><span class="punto-vivo" aria-hidden="true"></span>Inscripciones abiertas: sin límite de creadores</p>
+      <p class="chip-cupos" id="chipCupos" hidden><span class="punto-vivo" aria-hidden="true"></span><span id="chipCuposTexto"></span></p>
     </header>
 
     <div class="creadores-container">
 
+      <!-- INSCRIPCIÓN (desde 2026-11-17): con cuenta de Google, cuando el administrador abre cupos.
+           POST /api/creadores { accion: "inscripcion" } (estado) y { cuenta: true, accion: "inscribir" } -->
+      <section class="panel-caja animate-up inscripcion" id="seccionInscripcion" aria-labelledby="tituloInscripcion" hidden>
+        <h2 id="tituloInscripcion">📝 Inscríbete como creador</h2>
+        <p id="inscEstado">Revisando si hay cupos…</p>
+
+        <ul class="requisitos" aria-label="Requisitos">
+          <li><span aria-hidden="true">🔐</span><p><strong>Cuenta de Google</strong>Entras con ella a tu panel.</p></li>
+          <li><span aria-hidden="true">📱</span><p><strong>Tu WhatsApp</strong>De cualquier país, con su código (+58, +57, +52…).</p></li>
+          <li><span aria-hidden="true">🎬</span><p><strong>Tu perfil o un video tuyo</strong>TikTok, YouTube, Instagram, Facebook o Kwai.</p></li>
+          <li><span aria-hidden="true">📈</span><p><strong>Mínimo <span class="insc-minimo">10</span> ventas por semana</strong>De lunes a domingo. Si no llegas, tu código se desactiva el lunes (lo que ganaste no se pierde).</p></li>
+        </ul>
+
+        <a class="btn-google" id="inscGoogle" href="/perfil.html?volver=%2Fcreadores.html%3Finscribir%3D1&amp;entrar=1" hidden>Entrar con Google para inscribirme</a>
+
+        <form class="form-datos form-inscripcion" id="formInscripcion" novalidate hidden>
+          <div class="campo">
+            <label for="inscCodigo">Tu código (4 a 15 letras o números)</label>
+            <input type="text" id="inscCodigo" maxlength="15" placeholder="Ej: JOSEFF" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+          </div>
+          <div class="campo">
+            <label for="inscWhatsapp">Tu WhatsApp (con el código de tu país)</label>
+            <input type="tel" id="inscWhatsapp" inputmode="tel" maxlength="22" placeholder="Ej: +58 414 1234567" autocomplete="tel" required>
+          </div>
+          <div class="campo">
+            <label for="inscEnlace">Enlace de tu perfil o de un video tuyo</label>
+            <input type="url" id="inscEnlace" inputmode="url" maxlength="300" placeholder="Ej: https://www.tiktok.com/@jose" autocomplete="url" required>
+          </div>
+          <label class="acepto">
+            <input type="checkbox" id="inscAcepto">
+            <span>Acepto las reglas: mínimo <strong class="insc-minimo">10</strong> ventas por semana y nada de autocompras ni recargas falsas.</span>
+          </label>
+          <p class="form-acceso__error" id="inscError" role="alert"></p>
+          <button type="submit" class="btn-consultar-panel" id="btnInscribir">Crear mi código</button>
+        </form>
+      </section>
+
       <!-- CONSULTA: solo con Google (desde 2026-11-13 ya no se entra con código + PIN) -> ventas, comisión y movimientos -->
       <section class="panel-caja animate-up" aria-labelledby="tituloConsulta">
         <h2 id="tituloConsulta">📊 Consulta tu panel</h2>
-        <p>Entra con el correo de Google que nos diste. ¿Todavía no nos lo has dado? Pídenos tu acceso por WhatsApp.</p>
+        <p>Entra con la cuenta de Google con la que te inscribiste (o la que nos diste por WhatsApp).</p>
 
         <div class="acceso-google">
           <a class="btn-google" id="btnGoogle" href="/perfil.html?volver=%2Fcreadores.html&amp;entrar=1">Entrar con Google</a>
@@ -141,12 +178,12 @@
                 <input type="number" id="datoEdad" inputmode="numeric" min="8" max="99" placeholder="Ej: 18">
               </div>
               <div class="campo">
-                <label for="datoTelefono">Tu WhatsApp</label>
-                <input type="tel" id="datoTelefono" inputmode="numeric" maxlength="15" placeholder="0414-1234567" autocomplete="tel-national">
+                <label for="datoTelefono">Tu WhatsApp (con el código de tu país)</label>
+                <input type="tel" id="datoTelefono" inputmode="tel" maxlength="22" placeholder="+58 414 1234567" autocomplete="tel">
               </div>
             </div>
 
-            <div class="bloque-pm">
+            <div class="bloque-pm" id="bloquePm">
               <h4>📲 Datos de Pago Móvil</h4>
               <div class="campo">
                 <label for="datoBanco">Banco</label>
@@ -207,6 +244,13 @@
             <p>Tus seguidores ahorran <strong id="resDescuento"></strong> en cada recarga y tú ganas <strong id="resGanancia"></strong> de lo que pagan.</p>
           </div>
 
+          <!-- Inscritos: ventas de esta semana contra el mínimo -->
+          <div class="semana" id="resSemana" hidden>
+            <h3 id="resSemanaTitulo"></h3>
+            <div class="barra"><div class="barra-relleno" id="resSemanaBarra"></div></div>
+            <p class="barra-texto" id="resSemanaTexto"></p>
+          </div>
+
           <div class="compartir">
             <button type="button" class="btn-compartir" id="btnCompartir">📣 Compartir mi código</button>
             <button type="button" class="btn-copiar" id="btnCopiar">📋 Copiar código</button>
@@ -243,7 +287,7 @@
       <!-- CÓMO GANAS -->
       <section class="panel-caja animate-up" aria-labelledby="tituloBeneficios">
         <h2 id="tituloBeneficios">💰 Cómo ganas</h2>
-        <p>Un solo plan para todos los creadores: sin niveles, sin metas semanales y sin límite de cupos. Cada recarga con tu código suma desde la primera.</p>
+        <p>Un solo plan para todos los creadores, sin niveles. Cada recarga con tu código suma desde la primera.</p>
         <div class="formula">
           <strong>1,5 % para tu seguidor + 1,5 % para ti</strong>
           <p>Tu seguidor paga 1,5 % menos en cada recarga y tú ganas el 1,5 % de lo que pagó. Cada venta guarda su ganancia en dólares a la tasa de ese día.</p>
@@ -283,7 +327,7 @@
           </details>
           <details>
             <summary>¿Tengo que cumplir alguna meta?</summary>
-            <p>No. Ya no hay niveles ni metas semanales: ganas el 1,5 % de cada recarga con tu código, sean muchas o pocas.</p>
+            <p>Sí: mínimo <strong class="insc-minimo">10</strong> ventas con tu código cada semana (de lunes a domingo), para todos los creadores. Tu primera semana es de prueba y no cuenta. Si no llegas, el lunes tu código se desactiva, pero lo que ganaste sigue en tu panel y te lo pagamos igual. Puedes volver a inscribirte cuando abramos cupos.</p>
           </details>
           <details>
             <summary>Ya era creador, ¿qué pasa con lo que había ganado?</summary>
@@ -291,7 +335,7 @@
           </details>
           <details>
             <summary>¿Hay cupos limitados?</summary>
-            <p>No. Cualquier creador puede pedir su código por WhatsApp; no hay límite de creadores ni lista de espera.</p>
+            <p>Sí. Abrimos inscripciones con un número de cupos y, cuando se llenan, se cierran solas. Si están cerradas, síguenos en el canal para saber cuándo abrimos otra vez.</p>
           </details>
           <details>
             <summary>¿Cada cuánto se actualiza mi panel?</summary>
@@ -303,7 +347,11 @@
           </details>
           <details>
             <summary>¿Cómo entro a mi panel?</summary>
-            <p>Con tu cuenta de Google. Mándanos por WhatsApp tu código y tu correo de Gmail y nosotros creamos tu acceso: las cuentas de creador solo las hace Level Up. Si cambias de correo, avísanos.</p>
+            <p>Con la cuenta de Google con la que te inscribiste: toca "Entrar con Google" y listo. Si ya eras creador antes de las inscripciones, pídenos tu acceso por WhatsApp. Si cambias de correo, avísanos.</p>
+          </details>
+          <details>
+            <summary>¿Puedo inscribirme si no vivo en Venezuela?</summary>
+            <p>Sí. Tu WhatsApp puede ser de cualquier país. Si no tienes Pago Móvil, cobras tus ganancias en diamantes de Free Fire.</p>
           </details>
         </div>
       </section>
@@ -314,14 +362,15 @@
         <p>Para que el programa sea justo para todos:</p>
         <ul class="reglas">
           <li><span aria-hidden="true">💵</span><p><strong>Retiro mínimo de $3 USD</strong>Cada venta suma tu ganancia en dólares a la tasa del día en que se hizo; al llegar a $3 puedes pedir tu pago por WhatsApp.</p></li>
-          <li><span aria-hidden="true">✍️</span><p><strong>Códigos 100 % manuales</strong>Cada código lo creamos nosotros por WhatsApp. No hay registro automático ni códigos autogestionados.</p></li>
+          <li><span aria-hidden="true">📈</span><p><strong>Mínimo <span class="insc-minimo">10</span> ventas por semana</strong>Todo creador que no llegue en una semana (lunes a domingo) pierde su código el lunes. Lo ganado se les paga igual.</p></li>
+          <li><span aria-hidden="true">🪪</span><p><strong>Un código por persona</strong>Una cuenta de Google y un WhatsApp por creador.</p></li>
           <li><span aria-hidden="true">🛡️</span><p><strong>Supervisión antifraude estricta</strong>Revisamos cada venta. Las recargas falsas, autocompras o abusos anulan la comisión y el código.</p></li>
         </ul>
         <div class="aviso-cupos">
-          <strong>🔥 Sin límite de creadores</strong>
-          <p>No hay cupos ni lista de espera: escríbenos por WhatsApp, creamos tu código y empiezas a ganar desde la primera recarga.</p>
+          <strong>🔥 Cupos limitados</strong>
+          <p>Abrimos inscripciones por temporadas. Cuando estén abiertas, inscríbete arriba en un minuto y empieza a ganar desde la primera recarga.</p>
         </div>
-        <a class="btn-whatsapp-creador" href="https://wa.me/584141916377?text=Hola%2C%20quiero%20ser%20creador%20de%20Level%20Up%20y%20tener%20mi%20c%C3%B3digo" target="_blank" rel="noopener noreferrer">💬 Quiero mi código de creador</a>
+        <a class="btn-consultar-panel btn-ir-inscripcion" href="#seccionInscripcion" id="btnIrInscripcion">📝 Quiero mi código de creador</a>
       </section>
 
     </div>
@@ -357,7 +406,7 @@
           <li><span aria-hidden="true">✅</span><p><strong>¿Ya tenías código?</strong> Pide tu acceso aquí abajo. Nosotros creamos tu cuenta de creador: solo las hace Level Up.</p></li>
           <li><span aria-hidden="true">💰</span><p><strong>No pierdes nada.</strong> Tus ventas, tu ganancia y lo que te debemos siguen igual.</p></li>
           <li><span aria-hidden="true">🎟️</span><p><strong>Tu código sigue igual.</strong> Tus seguidores lo siguen usando para su descuento.</p></li>
-          <li><span aria-hidden="true">⭐</span><p><strong>¿Quieres ser creador?</strong> También pide tu código nuevo aquí abajo.</p></li>
+          <li><span aria-hidden="true">⭐</span><p><strong>¿Quieres ser creador?</strong> Inscríbete en esta misma página cuando haya cupos abiertos.</p></li>
         </ul>
         <button type="button" class="aviso-cambio__whatsapp" id="avisoIrFormulario">📝 Pedir mi acceso</button>
         <button type="button" class="aviso-cambio__ok" id="avisoCambioOk">Ahora no</button>
@@ -365,11 +414,7 @@
 
       <form id="formAcceso" class="form-acceso" novalidate hidden>
         <h2>📝 Pide tu acceso</h2>
-        <fieldset class="opciones-acceso">
-          <legend>¿Ya tienes código de creador?</legend>
-          <label><input type="radio" name="tipoAcceso" value="ya" checked> <span>Sí, ya tengo código</span></label>
-          <label><input type="radio" name="tipoAcceso" value="nuevo"> <span>No, quiero uno nuevo</span></label>
-        </fieldset>
+        <p class="form-acceso__nota">Solo para quien ya tiene código. Los creadores nuevos se inscriben en esta página.</p>
         <div class="campo">
           <label for="accesoCodigo" id="accesoCodigoTexto">Tu código actual</label>
           <input type="text" id="accesoCodigo" placeholder="Ej: JOSEFF" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
@@ -501,11 +546,40 @@
           if (i === 3) celda.className = 'comision';
         });
       }
+      pintarSemana(d);
+
       $('resNotaTasa').textContent = d.tasa
         ? `Ganas el ${formatoPorcentaje(d.comisionPorcentaje)} de cada recarga con tu código. Cada venta guarda su ganancia con la tasa de ese día (hoy: ${Number(d.tasa).toLocaleString('es-VE')} Bs por USD). Lo que ya te pagamos no vuelve a contar.`
         : `Ganas el ${formatoPorcentaje(d.comisionPorcentaje)} de cada recarga con tu código. Cada venta guarda su ganancia con la tasa de ese día.`;
 
       $('panelResultado').classList.add('visible');
+    }
+
+    // Inscritos: cuántas ventas lleva esta semana contra el mínimo (o por qué se desactivó)
+    function pintarSemana(d) {
+      const caja = $('resSemana');
+      caja.classList.remove('listo', 'baja');
+      caja.hidden = !(d.semana || d.baja === 'ventas_semana');
+      if (caja.hidden) return;
+      if (!d.semana) {
+        caja.classList.add('baja');
+        $('resSemanaTitulo').textContent = '⛔ Tu código se desactivó';
+        $('resSemanaBarra').style.width = '0%';
+        $('resSemanaTexto').textContent = 'No llegó al mínimo de ventas de la semana. Lo que ganaste sigue aquí y te lo pagamos igual. Puedes volver a inscribirte cuando abramos cupos.';
+        return;
+      }
+      const s = d.semana;
+      const cierre = new Date(new Date(s.cierra).getTime() - 60000);
+      const cuando = isNaN(cierre) ? 'el domingo' : cierre.toLocaleString('es-VE', { timeZone: 'America/Caracas', weekday: 'long', day: 'numeric', month: 'numeric', hour: 'numeric', minute: '2-digit' });
+      const listo = s.ventas >= s.minimo;
+      caja.classList.toggle('listo', listo);
+      $('resSemanaTitulo').textContent = `📈 Esta semana: ${s.ventas} de ${s.minimo} ventas`;
+      $('resSemanaBarra').style.width = `${Math.min(100, (s.ventas / s.minimo) * 100)}%`;
+      $('resSemanaTexto').textContent = s.primera
+        ? `Esta es tu semana de prueba: no cuenta. Desde el lunes necesitas ${s.minimo} ventas por semana para mantener tu código.`
+        : listo
+          ? `¡Meta cumplida! Tu código sigue activo la próxima semana.`
+          : `Te faltan ${s.minimo - s.ventas}. Tienes hasta el ${cuando}; si no llegas, tu código se desactiva el lunes.`;
     }
 
     // =========================================================================
@@ -519,6 +593,15 @@
     let listaCodigos = [];
     const telVisible = (t) => String(t || '').replace(/^\+58(\d{3})(\d{7})$/, '0$1-$2');
     const soloDigitos = (t) => String(t || '').replace(/\D/g, '');
+    // WhatsApp de cualquier país (igual que whatsappInternacional de api/creadores.js): "+57 300…",
+    // "0057 300…" o un celular venezolano sin código ("0414-1234567")
+    function whatsappValido(texto) {
+      const crudo = String(texto || '').trim();
+      let d = soloDigitos(crudo);
+      if (crudo.startsWith('00')) d = d.slice(2);
+      else if (!crudo.startsWith('+') && /^4(12|14|16|22|24|26)\d{7}$/.test(d.replace(/^0/, ''))) d = '58' + d.replace(/^0/, '');
+      return /^[1-9]\d{7,14}$/.test(d);
+    }
 
     function pintarDatos(f) {
       $('resCobro').replaceChildren();
@@ -529,6 +612,9 @@
       fuerte.textContent = f.preferencia === 'diamantes' ? 'Diamantes' : 'Bolívares (Pago Móvil)';
       texto.append('Cobras en ', fuerte);
       $('resCobro').append(icono, texto);
+      // Sin Pago Móvil (cobra en diamantes, p. ej. fuera de Venezuela): esas tres casillas no salen
+      const conPm = !!f.pm_banco;
+      ['resBanco', 'resCedula', 'resPmTelefono'].forEach((id) => { $(id).parentElement.hidden = !conPm; });
       $('resBanco').textContent = f.banco ? `${f.pm_banco} · ${f.banco}` : f.pm_banco;
       $('resCedula').textContent = f.pm_cedula.replace(/^([VE])(\d+)$/, '$1-$2');
       $('resPmTelefono').textContent = telVisible(f.pm_telefono);
@@ -548,6 +634,7 @@
       $('datoCedula').value = f ? f.pm_cedula.slice(1) : '';
       $('datoPmTelefono').value = f ? telVisible(f.pm_telefono) : '';
       $('campoIdJugador').hidden = !(f && f.preferencia === 'diamantes');
+      $('bloquePm').hidden = !!(f && f.preferencia === 'diamantes');
       $('datosError').textContent = '';
     }
 
@@ -568,6 +655,8 @@
 
     document.querySelectorAll('input[name="preferencia"]').forEach((r) => r.addEventListener('change', () => {
       $('campoIdJugador').hidden = r.value !== 'diamantes' || !r.checked;
+      // En diamantes no hace falta Pago Móvil (creadores de cualquier país)
+      $('bloquePm').hidden = r.value === 'diamantes' && r.checked;
       if (r.value === 'diamantes' && r.checked) $('datoIdJugador').focus();
     }));
     $('btnEditarDatos').addEventListener('click', () => mostrarDatos(true));
@@ -577,21 +666,24 @@
       e.preventDefault();
       const error = $('datosError');
       const elegido = document.querySelector('input[name="preferencia"]:checked');
+      const enBs = !!elegido && elegido.value === 'bolivares';
       const datos = {
         preferencia: elegido ? elegido.value : '',
         id_jugador: soloDigitos($('datoIdJugador').value),
         edad: Number($('datoEdad').value),
         telefono: $('datoTelefono').value,
-        pm_banco: $('datoBanco').value,
-        pm_cedula: $('datoCedulaTipo').value + soloDigitos($('datoCedula').value),
-        pm_telefono: $('datoPmTelefono').value,
+        // En diamantes no se manda el Pago Móvil (está escondido)
+        pm_banco: enBs ? $('datoBanco').value : '',
+        pm_cedula: enBs ? $('datoCedulaTipo').value + soloDigitos($('datoCedula').value) : '',
+        pm_telefono: enBs ? $('datoPmTelefono').value : '',
       };
       // Revisión rápida aquí; la de verdad la hace el servidor
       const cel = (t) => /^4(12|14|16|22|24|26)\d{7}$/.test(soloDigitos(t).replace(/^58/, '').replace(/^0/, ''));
       const falta = !datos.preferencia ? 'Elige cómo quieres cobrar: diamantes o bolívares.'
         : datos.preferencia === 'diamantes' && !/^\d{5,15}$/.test(datos.id_jugador) ? 'Escribe tu ID de Free Fire para mandarte los diamantes.'
         : !(datos.edad >= 8 && datos.edad <= 99) ? 'Escribe tu edad.'
-        : !cel(datos.telefono) ? 'Escribe tu WhatsApp (ej: 0414-1234567).'
+        : !whatsappValido(datos.telefono) ? 'Escribe tu WhatsApp con el código de tu país (ej: +58 414 1234567).'
+        : !enBs ? ''
         : !datos.pm_banco ? 'Elige el banco de tu Pago Móvil.'
         : !/^[VE]\d{6,9}$/.test(datos.pm_cedula) ? 'Escribe tu cédula (solo números).'
         : !cel(datos.pm_telefono) ? 'Escribe el teléfono de tu Pago Móvil (ej: 0414-1234567).' : '';
@@ -671,8 +763,13 @@
         if (datos.sesion === false) { mostrarMensaje('Tu sesión se cerró. Toca "Entrar con Google" otra vez.'); return; }
         if (datos.status !== 'success') { mostrarMensaje(datos.message || 'No pudimos abrir tu panel.'); return; }
         const lista = datos.codigos || [];
+        // Con un código activo no hace falta inscribirse; sin ninguno (o solo desactivados por la semana), sí
+        tieneCodigoActivo = lista.some((c) => c.activo);
+        pintarInscripcion();
         if (!lista.length) {
-          mostrarMensaje(`La cuenta ${datos.correo || ''} todavía no tiene código de creador. Pide tu acceso con el botón de arriba.`);
+          mostrarMensaje(inscripcion && inscripcion.abierta
+            ? `La cuenta ${datos.correo || ''} todavía no tiene código de creador. Inscríbete arriba: ¡quedan cupos!`
+            : `La cuenta ${datos.correo || ''} todavía no tiene código de creador. Las inscripciones están cerradas por ahora.`);
           if (datos.correo) $('accesoCorreo').value = datos.correo;
           return;
         }
@@ -744,10 +841,6 @@
     $('accesoVolver').addEventListener('click', () => verPaso(false));
     $('btnPedirAcceso').addEventListener('click', () => mostrarAviso(true));
 
-    document.querySelectorAll('input[name="tipoAcceso"]').forEach((r) => r.addEventListener('change', () => {
-      const nuevo = document.querySelector('input[name="tipoAcceso"]:checked').value === 'nuevo';
-      $('accesoCodigoTexto').textContent = nuevo ? '¿Cómo quieres tu código?' : 'Tu código actual';
-    }));
     $('accesoCodigo').addEventListener('input', () => {
       const limpio = $('accesoCodigo').value.toUpperCase().replace(/[^A-Z0-9_-]/g, '');
       if (limpio !== $('accesoCodigo').value) $('accesoCodigo').value = limpio;
@@ -756,7 +849,7 @@
     $('formAcceso').addEventListener('submit', (e) => {
       e.preventDefault();
       const error = $('accesoError');
-      const nuevo = document.querySelector('input[name="tipoAcceso"]:checked').value === 'nuevo';
+      const nuevo = false; // los creadores nuevos se inscriben en la página (desde 2026-11-17)
       const codigo = $('accesoCodigo').value.trim().toUpperCase();
       const correo = $('accesoCorreo').value.trim().toLowerCase();
       let enlace = $('accesoEnlace').value.trim();
@@ -779,11 +872,103 @@
       if (ventana) ventana.opener = null; else location.href = url;
     });
 
-    mostrarAviso(false);
+    // =========================================================================
+    // INSCRIPCIÓN (desde 2026-11-17): estado público + formulario con la cuenta de Google
+    // =========================================================================
+    let inscripcion = null;        // { abierta, quedan, minimo } o null si no se pudo leer
+    let tieneCodigoActivo = false;
+
+    function pintarInscripcion() {
+      const sesion = !!(window.Sesion && Sesion.hay());
+      const seccion = $('seccionInscripcion');
+      if (!inscripcion) { seccion.hidden = true; $('chipCupos').hidden = true; return; }
+      const { abierta, quedan, minimo } = inscripcion;
+      document.querySelectorAll('.insc-minimo').forEach((e) => { e.textContent = String(minimo); });
+      $('chipCupos').hidden = false;
+      $('chipCupos').classList.toggle('cerrado', !abierta);
+      $('chipCuposTexto').textContent = abierta
+        ? `Inscripciones abiertas: quedan ${quedan} ${quedan === 1 ? 'cupo' : 'cupos'}`
+        : 'Inscripciones cerradas por ahora';
+      // Quien ya tiene su código activo no ve la inscripción
+      seccion.hidden = tieneCodigoActivo;
+      $('inscEstado').textContent = abierta
+        ? `¡Inscripciones abiertas! Quedan ${quedan} ${quedan === 1 ? 'cupo' : 'cupos'}. Crea tu código en un minuto: funciona al instante y ganas el 1,5 % de cada recarga.`
+        : 'Las inscripciones están cerradas: se llenaron los cupos. Síguenos en el canal de WhatsApp para saber cuándo abrimos otra vez.';
+      $('inscGoogle').hidden = !abierta || sesion;
+      $('formInscripcion').hidden = !abierta || !sesion;
+    }
+
+    async function cargarInscripcion() {
+      try {
+        const r = await fetch('/api/creadores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'inscripcion' }) });
+        const d = await r.json();
+        inscripcion = d.status === 'success' ? { abierta: d.abierta === true, quedan: Number(d.quedan) || 0, minimo: Number(d.minimo) || 10 } : null;
+      } catch (e) { inscripcion = null; }
+      pintarInscripcion();
+      return inscripcion;
+    }
+
+    $('inscCodigo').addEventListener('input', () => {
+      const limpio = $('inscCodigo').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (limpio !== $('inscCodigo').value) $('inscCodigo').value = limpio;
+    });
+
+    $('formInscripcion').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const error = $('inscError');
+      const codigo = $('inscCodigo').value.trim().toUpperCase();
+      const whatsapp = $('inscWhatsapp').value.trim();
+      let enlace = $('inscEnlace').value.trim();
+      if (enlace && !/^https?:\/\//i.test(enlace)) enlace = 'https://' + enlace;
+      const falta = !/^[A-Z0-9]{4,15}$/.test(codigo) ? ['inscCodigo', 'Tu código debe tener de 4 a 15 letras o números, sin espacios (ej: JOSEFF).']
+        : !whatsappValido(whatsapp) ? ['inscWhatsapp', 'Escribe tu WhatsApp con el código de tu país (ej: +58 414 1234567).']
+        : !/^https?:\/\/[^\s/]+\.[^\s]+/i.test(enlace) ? ['inscEnlace', 'Pega el enlace de tu perfil o de un video tuyo.']
+        : !$('inscAcepto').checked ? ['inscAcepto', 'Marca que aceptas las reglas del programa.'] : null;
+      if (falta) { error.textContent = falta[1]; $(falta[0]).focus(); return; }
+      error.textContent = '';
+      const boton = $('btnInscribir');
+      boton.disabled = true;
+      boton.textContent = 'Creando tu código...';
+      try {
+        const r = await pedirCreador({ accion: 'inscribir', codigo, whatsapp, enlace, acepto: true });
+        if (r.sesion === false) { error.textContent = 'Tu sesión se cerró. Vuelve a entrar con Google.'; return; }
+        if (r.status !== 'success') {
+          error.textContent = r.message || 'No pudimos inscribirte. Intenta de nuevo.';
+          if (r.cerrada) cargarInscripcion();
+          return;
+        }
+        // ¡Listo! Se abre su panel (primero le pide sus datos de pago)
+        $('seccionInscripcion').hidden = true;
+        await cargarInscripcion();
+        await panelConGoogle();
+        const datosWa = $('datoTelefono');
+        if (datosWa && !datosWa.value) datosWa.value = whatsapp;
+        $('tituloConsulta').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (err) {
+        error.textContent = 'No pudimos inscribirte. Revisa tu conexión e intenta de nuevo.';
+      } finally {
+        boton.disabled = false;
+        boton.textContent = 'Crear mi código';
+      }
+    });
+
+    $('btnIrInscripcion').addEventListener('click', (e) => {
+      const seccion = $('seccionInscripcion');
+      if (seccion.hidden) { e.preventDefault(); if (inscripcion && !inscripcion.abierta) alert('Las inscripciones están cerradas por ahora. Síguenos para saber cuándo abrimos.'); return; }
+      e.preventDefault();
+      seccion.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
 
     // sesion.js carga con defer: ya está listo al llegar DOMContentLoaded
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', panelConGoogle);
-    else panelConGoogle();
+    async function iniciar() {
+      const estado = await cargarInscripcion();
+      // El aviso del cambio (para los creadores de antes) solo sale si no hay inscripciones abiertas
+      if (!(estado && estado.abierta) && !(window.Sesion && Sesion.hay())) mostrarAviso(false);
+      await panelConGoogle();
+      if (/[?&]inscribir=1/.test(location.search) && !$('seccionInscripcion').hidden) $('seccionInscripcion').scrollIntoView({ block: 'start' });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
+    else iniciar();
   </script>
 
 </body>

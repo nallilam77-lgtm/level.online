@@ -311,3 +311,24 @@
   .compartir { grid-template-columns: 2fr 1fr; }
   .beneficios { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* --- Inscripción de creadores (desde 2026-11-17) --- */
+.inscripcion[hidden], .chip-cupos[hidden], .semana[hidden], .datos-lista > div[hidden], .bloque-pm[hidden] { display: none; }
+.inscripcion { display: grid; gap: 20px; border-color: rgba(57, 255, 20, 0.35); }
+.inscripcion > p { margin-bottom: 0; color: var(--text-main); font-weight: 600; }
+.requisitos { list-style: none; display: grid; gap: 12px; }
+.requisitos li { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: rgba(11, 17, 32, 0.5); border: 1px solid var(--border-glass); }
+.requisitos li span[aria-hidden] { font-size: 22px; line-height: 1; }
+.requisitos li p { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.requisitos li strong { color: var(--text-main); display: block; margin-bottom: 2px; }
+.form-inscripcion #inscCodigo { text-transform: uppercase; letter-spacing: 1px; }
+.acepto { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; font-size: 13px; color: var(--text-muted); line-height: 1.5; cursor: pointer; }
+.acepto input { flex: none; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent-neon); }
+.acepto strong { color: var(--text-main); }
+.chip-cupos.cerrado { color: var(--text-muted); border-color: var(--border-glass); box-shadow: none; }
+.chip-cupos.cerrado .punto-vivo { background: var(--text-muted); animation: none; }
+.semana { padding: 20px; border-radius: 14px; background: rgba(11, 17, 32, 0.6); border: 1px solid rgba(34, 211, 238, 0.3); }
+.semana h3 { font-size: 13px; font-weight: 800; color: var(--text-main); margin-bottom: 12px; }
+.semana.listo { border-color: rgba(57, 255, 20, 0.5); box-shadow: 0 0 20px rgba(57, 255, 20, 0.1); }
+.semana.baja { border-color: rgba(255, 59, 59, 0.45); }
+.btn-ir-inscripcion { display: flex; align-items: center; justify-content: center; margin-top: 24px; text-decoration: none; }

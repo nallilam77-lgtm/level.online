@@ -113,7 +113,7 @@
     if (b.dataset.seccion === 'juego') { cargarJuego(); cargarPrecios().catch(() => {}); }
     if (b.dataset.seccion === 'espacio') cargarEspacio();
     if (b.dataset.seccion === 'cuentas') cargarCuentas();
-    if (b.dataset.seccion === 'creadores') cargarCodigos();
+    if (b.dataset.seccion === 'creadores') { cargarCodigos(); cargarInscripciones(); }
     if (b.dataset.seccion === 'precios') cargarPrecios();
     if (b.dataset.seccion === 'roblox') cargarRoblox();
     if (b.dataset.seccion === 'canjes') cargarCanjes();
@@ -639,6 +639,8 @@
   // "💵 Bolívares · Pago Móvil 0134 Banesco · V-12345678 · 0414-1234567" (para ver y para pagar)
   function textoCobro(f) {
     const pm = `Pago Móvil ${f.pm_banco} ${BANCOS[f.pm_banco] || ''} · ${String(f.pm_cedula).replace(/^([VE])/, '$1-')} · ${telCorto(f.pm_telefono)}`;
+    // Sin Pago Móvil (creadores de fuera de Venezuela): solo diamantes
+    if (!f.pm_banco) return `💎 Diamantes · ID Free Fire ${f.id_jugador} (sin Pago Móvil)`;
     return f.preferencia === 'diamantes' ? `💎 Diamantes · ID Free Fire ${f.id_jugador} (o ${pm})` : `💵 Bolívares · ${pm}`;
   }
   function mensajeCreador(codigo, pin, correo) {
@@ -878,6 +880,108 @@
   });
   $('buscarCodigo').addEventListener('input', pintarCodigos);
   $('filtroCodigos').addEventListener('change', pintarCodigos);
+
+  // ---------------------------------------------------------------- inscripciones de creadores
+  // supabase/creadores-inscripcion.sql: admin_inscripciones, admin_inscripcion_abrir/cerrar/minimo y
+  // admin_limpieza_semanal. Cada lunes 12:15 a. m. pg_cron desactiva a TODO creador (inscrito o creado a mano;
+  // las promos no) que no llegó al mínimo de la semana anterior; aquí se ve cómo va cada uno esta semana.
+  let inscritos = [];
+  let minimoSemana = 10;
+
+  async function cargarInscripciones() {
+    const { data, error } = await cliente.rpc('admin_inscripciones');
+    if (error || !data) {
+      console.error(error);
+      $('estadoInscripcion').textContent = '–';
+      $('listaInscritos').replaceChildren(el('li', 'vacio', 'No se pudieron cargar las inscripciones. ¿Ya corriste supabase/creadores-inscripcion.sql?'));
+      return;
+    }
+    const cfg = data.config || {};
+    const est = data.estado || {};
+    minimoSemana = Number(est.minimo) || 10;
+    const abierta = est.abierta === true;
+    $('estadoInscripcion').textContent = abierta ? `Abiertas · quedan ${est.quedan}` : 'Cerradas';
+    $('estadoInscripcion').className = 'etiqueta ' + (abierta ? 'etiqueta--completado' : 'etiqueta--reembolsado');
+    if (document.activeElement !== $('inscMinimo')) $('inscMinimo').value = String(minimoSemana);
+    const partes = [];
+    if (Number(cfg.cupos) > 0) partes.push(`Última apertura: ${Number(cfg.usados) || 0} de ${cfg.cupos} cupos usados${cfg.abierta_desde ? ' (desde ' + fecha(cfg.abierta_desde) + ')' : ''}.`);
+    partes.push(`Mínimo: ${minimoSemana} ventas por semana para todos los creadores (también los que creas tú). La primera semana es de prueba.`);
+    if (cfg.revisada) {
+      const bajas = Array.isArray(cfg.bajas) ? cfg.bajas : [];
+      partes.push(`Semana del ${cfg.revisada.split('-').reverse().join('/')} revisada: ${bajas.length ? bajas.length + ' desactivado(s) (' + bajas.map((b) => `${b.codigo} ${b.ventas}`).join(', ') + ')' : 'nadie desactivado'}.`);
+    }
+    $('notaInscripcion').textContent = partes.join(' ');
+    inscritos = Array.isArray(data.creadores) ? data.creadores : [];
+    pintarInscritos();
+  }
+
+  function pintarInscritos() {
+    const texto = $('buscarInscrito').value.trim().toLowerCase();
+    const lista = $('listaInscritos');
+    lista.replaceChildren();
+    const visibles = inscritos.filter((c) => !texto || `${c.codigo} ${c.creador || ''} ${c.whatsapp || ''} ${c.correo || ''}`.toLowerCase().includes(texto));
+    if (!visibles.length) { lista.append(el('li', 'vacio', inscritos.length ? 'Nadie con esa búsqueda.' : 'Todavía no se ha inscrito nadie.')); return; }
+    visibles.forEach((c) => {
+      const li = el('li', 'pedido codigo' + (c.activo ? '' : ' codigo--inactivo'));
+      const cabeza = el('div', 'pedido-cabeza');
+      const llega = Number(c.ventas_semana) >= minimoSemana;
+      const etiqueta = !c.activo ? (c.baja === 'ventas_semana' ? 'Fuera por ventas' : 'Desactivado')
+        : c.primera_semana ? 'Semana de prueba' : llega ? 'Cumple' : 'En riesgo';
+      cabeza.append(el('strong', 'codigo-nombre', c.codigo),
+        el('span', 'etiqueta ' + (!c.activo ? 'etiqueta--reembolsado' : c.primera_semana ? 'etiqueta--pendiente' : llega ? 'etiqueta--completado' : 'etiqueta--en_revision'), etiqueta));
+      li.append(cabeza,
+        el('span', '', `Esta semana: ${c.ventas_semana} de ${minimoSemana} ventas · semana pasada: ${c.ventas_pasada} · total: ${Number(c.usos).toLocaleString('es-VE')}`),
+        el('span', '', `${c.origen === 'inscripcion' ? 'Se inscribió' : 'Lo creaste tú'} el ${corta(c.creado)}${c.correo ? ' · ' + c.correo : ''}${c.baja_fecha ? ' · desactivado el ' + corta(c.baja_fecha) : ''}`));
+      if (Number(c.pendiente_usd) > 0) li.append(el('strong', 'codigo-debe', `Le debes ${usd(c.pendiente_usd)}`));
+      const acciones = el('div', 'acciones-cuenta');
+      if (c.whatsapp) acciones.append(enlaceWhatsapp(c.whatsapp, `¡Hola! Te escribimos de Level Up por tu código de creador *${c.codigo}*.`));
+      if (c.enlace) {
+        const a = el('a', 'btn-ver', 'Ver perfil o video');
+        a.href = c.enlace; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        acciones.append(a);
+      }
+      li.append(acciones);
+      lista.append(li);
+    });
+  }
+
+  async function accionInscripcion(rpc, args, boton, listo) {
+    const msg = $('mensajeInscripcion');
+    boton.disabled = true;
+    const { data, error } = await cliente.rpc(rpc, args);
+    boton.disabled = false;
+    if (error) { msg.textContent = textoError(error, 'No se pudo. Intenta de nuevo.'); return; }
+    msg.textContent = listo(data || {});
+    cargarInscripciones();
+    cargarCodigos();
+  }
+
+  $('formInscripcion').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const cupos = Number($('inscCupos').value);
+    const minimo = Number($('inscMinimo').value) || 10;
+    if (!(Number.isInteger(cupos) && cupos >= 1)) { $('mensajeInscripcion').textContent = 'Escribe cuántas cuentas se pueden crear (ej. 20).'; $('inscCupos').focus(); return; }
+    if (!confirm(`¿Abrir inscripciones para ${cupos} ${cupos === 1 ? 'cuenta' : 'cuentas'}?\n\nCada inscrito necesita ${minimo} ventas por semana. Al llenarse los ${cupos} cupos se cierran solas.`)) return;
+    accionInscripcion('admin_inscripcion_abrir', { p_cupos: cupos, p_minimo: minimo }, $('btnAbrirInscripcion'),
+      (d) => `✅ Abiertas: quedan ${d.quedan} cupos. Comparte ${location.origin}/creadores.html`);
+    $('inscCupos').value = '';
+  });
+  $('btnCerrarInscripcion').addEventListener('click', (ev) => {
+    if (!confirm('¿Cerrar las inscripciones ahora?\n\nLos que ya se inscribieron siguen con su código.')) return;
+    accionInscripcion('admin_inscripcion_cerrar', {}, ev.currentTarget, () => '🔒 Inscripciones cerradas.');
+  });
+  $('btnGuardarMinimo').addEventListener('click', (ev) => {
+    const minimo = Number($('inscMinimo').value);
+    if (!(Number.isInteger(minimo) && minimo >= 1)) { $('mensajeInscripcion').textContent = 'Escribe el mínimo de ventas por semana.'; return; }
+    accionInscripcion('admin_inscripcion_minimo', { p_minimo: minimo }, ev.currentTarget, (d) => `✅ Mínimo guardado: ${d.minimo} ventas por semana.`);
+  });
+  $('btnRevisarSemana').addEventListener('click', (ev) => {
+    if (!confirm(`¿Revisar la semana pasada ahora?\n\nSe desactivan los creadores (inscritos y los que creaste tú) con menos de ${minimoSemana} ventas de lunes a domingo (la semana de prueba no cuenta). Se hace sola cada lunes a las 12:15 a. m.; si ya se hizo, no cambia nada.`)) return;
+    accionInscripcion('admin_limpieza_semanal', {}, ev.currentTarget, (d) => (d.hecho
+      ? `✅ Semana revisada: ${(d.bajas || []).length} desactivado(s).`
+      : `Esa semana ya se había revisado (${String(d.semana || '').split('-').reverse().join('/')}).`));
+  });
+  $('buscarInscrito').addEventListener('input', pintarInscritos);
 
   // ---------------------------------------------------------------- precios (supabase/precios.sql)
   // Precio de un paquete: el manual o costo de Central One × cantidad × dólar × (1 + ganancia %). La base

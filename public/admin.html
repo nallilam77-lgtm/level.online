@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=51" defer></script>
+  <script src="/js/admin.js?v=52" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -474,6 +474,32 @@
             </div>
           </form>
           <p class="nota" id="notaCreadores">Cada venta con código le da al creador el 1,5 % en dólares, con la tasa de ese día. Actualiza la tasa cuando cambie.</p>
+        </div>
+
+        <!-- INSCRIPCIONES de mini influencers (supabase/creadores-inscripcion.sql, desde 2026-11-17) -->
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Inscripciones y semana</h2>
+            <span class="etiqueta" id="estadoInscripcion">–</span>
+          </div>
+          <p class="nota" id="notaInscripcion">Los creadores se inscriben solos en creadores.html con su cuenta de Google, su WhatsApp y el enlace de su perfil o video. Al llenarse los cupos se cierran solas.</p>
+          <form class="formulario" id="formInscripcion" novalidate>
+            <label class="campo">Cuentas que se pueden crear
+              <input type="number" id="inscCupos" inputmode="numeric" min="1" max="1000" step="1" placeholder="Ej. 20">
+            </label>
+            <label class="campo">Ventas mínimas por semana (lunes a domingo)
+              <input type="number" id="inscMinimo" inputmode="numeric" min="1" max="500" step="1" placeholder="10">
+            </label>
+            <div class="acciones-cuenta">
+              <button type="submit" class="btn" id="btnAbrirInscripcion">Abrir inscripciones</button>
+              <button type="button" class="btn-ver" id="btnCerrarInscripcion">Cerrar ahora</button>
+              <button type="button" class="btn-ver" id="btnGuardarMinimo">Guardar solo el mínimo</button>
+              <button type="button" class="btn-ver" id="btnRevisarSemana">Revisar la semana pasada</button>
+            </div>
+            <p class="mensaje-form" id="mensajeInscripcion" role="status"></p>
+          </form>
+          <input type="search" id="buscarInscrito" class="buscar" placeholder="Buscar código, creador, WhatsApp o correo…" aria-label="Buscar inscritos" autocomplete="off">
+          <ul class="pedidos" id="listaInscritos"></ul>
         </div>
 
         <div class="tarjeta">

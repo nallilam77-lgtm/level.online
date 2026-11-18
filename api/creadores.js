@@ -8,6 +8,10 @@ import { tokenDe } from './_lib/historial.js';
 // El código + PIN ya no abre el panel (el PIN queda guardado en "codigos" solo como dato del creador).
 // Con { cuenta: true, accion: "perfil", datos } guarda sus datos de pago (creador_guardar_perfil): cómo
 // quiere cobrar (bolívares o diamantes), edad, WhatsApp y Pago Móvil. Solo quien ya tiene código.
+// INSCRIPCIÓN (desde 2026-11-17, supabase/creadores-inscripcion.sql):
+//   { accion: "inscripcion" } (sin sesión) → { abierta, quedan, minimo }
+//   { cuenta: true, accion: "inscribir", codigo, whatsapp, enlace } → crea su código si quedan cupos
+//   (creador_inscribir: un código por cuenta y por WhatsApp; los cupos los abre el administrador).
 const RETIRO_MINIMO_USD = 3;
 
 // Bancos de Pago Móvil (código SUDEBAN). Igual que la lista de creadores.html.
@@ -29,31 +33,75 @@ function celular(texto) {
   return CELULAR.test(d) ? '+58' + d : '';
 }
 
+// WhatsApp de CUALQUIER país → "+<código de país><número>" (o ''). Un celular venezolano escrito sin
+// código ("0414-1234567") se toma como +58; cualquier otro tiene que traer su código de país.
+export function whatsappInternacional(texto) {
+  const crudo = String(texto ?? '').trim();
+  let d = crudo.replace(/\D/g, '');
+  if (crudo.startsWith('00')) d = d.slice(2);
+  else if (!crudo.startsWith('+') && CELULAR.test(d.replace(/^0/, ''))) d = '58' + d.replace(/^0/, '');
+  return /^[1-9]\d{7,14}$/.test(d) ? '+' + d : '';
+}
+
+// Enlace del perfil o de un video: siempre https, con dominio y sin usuario/contraseña. '' si no sirve.
+export function enlaceLimpio(texto) {
+  let t = String(texto ?? '').trim();
+  if (!t || t.length > 300) return '';
+  if (!/^https?:\/\//i.test(t)) t = 'https://' + t;
+  try {
+    const url = new URL(t);
+    if (url.username || url.password || !/\.[a-z]{2,}$/i.test(url.hostname)) return '';
+    url.protocol = 'https:';
+    const limpio = url.href;
+    return limpio.length <= 300 && !/[\s<>"]/.test(limpio) ? limpio : '';
+  } catch {
+    return '';
+  }
+}
+
+/** Valida la inscripción. Devuelve { datos } o { error } para mostrarle al creador. */
+export function limpiarInscripcion(entrada) {
+  const e = entrada && typeof entrada === 'object' ? entrada : {};
+  const codigo = String(e.codigo ?? '').toUpperCase().replace(/\s/g, '');
+  const whatsapp = whatsappInternacional(e.whatsapp);
+  const enlace = enlaceLimpio(e.enlace);
+  if (!/^[A-Z0-9]{4,15}$/.test(codigo)) return { error: 'Tu código debe tener de 4 a 15 letras o números, sin espacios ni símbolos (ej: JOSEFF).' };
+  if (!whatsapp) return { error: 'Escribe tu WhatsApp con el código de tu país (ej: +58 414 1234567 o +57 300 1234567).' };
+  if (!enlace) return { error: 'Pega el enlace de tu perfil o de un video tuyo (TikTok, YouTube, Instagram…).' };
+  if (e.acepto !== true) return { error: 'Marca que aceptas las reglas del programa.' };
+  return { datos: { codigo, whatsapp, enlace } };
+}
+
 /** Valida los datos de pago del creador. Devuelve { datos } limpios o { error } para mostrarle. */
 export function limpiarPerfil(entrada) {
   const e = entrada && typeof entrada === 'object' ? entrada : {};
   const preferencia = e.preferencia === 'diamantes' ? 'diamantes' : e.preferencia === 'bolivares' ? 'bolivares' : '';
   const idJugador = String(e.id_jugador ?? '').replace(/\D/g, '');
   const edad = Number(e.edad);
-  const telefono = celular(e.telefono);
+  // WhatsApp de cualquier país (desde 2026-11-17: hay creadores fuera de Venezuela)
+  const telefono = whatsappInternacional(e.telefono);
   const cedula = String(e.pm_cedula ?? '').toUpperCase().replace(/[^VE0-9]/g, '');
   const pmCedula = /^[VE]\d{6,9}$/.test(cedula) ? cedula : /^\d{6,9}$/.test(cedula) ? 'V' + cedula : '';
   const pmTelefono = celular(e.pm_telefono);
   const pmBanco = String(e.pm_banco ?? '');
+  // Pago Móvil: obligatorio en bolívares; en diamantes es opcional (si lo deja, completo)
+  const conPm = preferencia === 'bolivares' || !!(cedula || String(e.pm_telefono ?? '').trim() || pmBanco);
   if (!preferencia) return { error: 'Elige cómo quieres cobrar: bolívares o diamantes.' };
   if (preferencia === 'diamantes' && !/^\d{5,15}$/.test(idJugador)) return { error: 'Para cobrar en diamantes escribe tu ID de Free Fire.' };
   if (!Number.isInteger(edad) || edad < 8 || edad > 99) return { error: 'Escribe tu edad.' };
-  if (!telefono) return { error: 'Escribe tu WhatsApp: 0412, 0414, 0416, 0422, 0424 o 0426 y 7 números más.' };
-  if (!pmCedula) return { error: 'Escribe la cédula de tu Pago Móvil (ej: V12345678).' };
-  if (!pmTelefono) return { error: 'Escribe el teléfono de tu Pago Móvil (ej: 0414-1234567).' };
-  if (!BANCOS[pmBanco]) return { error: 'Elige el banco de tu Pago Móvil.' };
-  return { datos: { preferencia, id_jugador: idJugador || null, edad, telefono, pm_cedula: pmCedula, pm_telefono: pmTelefono, pm_banco: pmBanco } };
+  if (!telefono) return { error: 'Escribe tu WhatsApp con el código de tu país (ej: +58 414 1234567).' };
+  if (conPm && !pmCedula) return { error: 'Escribe la cédula de tu Pago Móvil (ej: V12345678).' };
+  if (conPm && !pmTelefono) return { error: 'Escribe el teléfono de tu Pago Móvil (ej: 0414-1234567).' };
+  if (conPm && !BANCOS[pmBanco]) return { error: 'Elige el banco de tu Pago Móvil.' };
+  return { datos: { preferencia, id_jugador: idJugador || null, edad, telefono,
+    pm_cedula: conPm ? pmCedula : null, pm_telefono: conPm ? pmTelefono : null, pm_banco: conPm ? pmBanco : null } };
 }
 
 // Lo que ve el creador de sus datos (sin nada que no haga falta)
 const perfilVisible = (f) => (f && typeof f === 'object' ? {
   preferencia: f.preferencia === 'diamantes' ? 'diamantes' : 'bolivares', id_jugador: f.id_jugador || '', edad: Number(f.edad) || null,
   telefono: String(f.telefono || ''), pm_cedula: String(f.pm_cedula || ''), pm_telefono: String(f.pm_telefono || ''),
+  // (sin Pago Móvil, los tres pm_* llegan vacíos: cobra en diamantes)
   pm_banco: String(f.pm_banco || ''), banco: BANCOS[f.pm_banco] || '', actualizado: f.actualizado || null,
 } : null);
 
@@ -63,6 +111,8 @@ const numeroONulo = (v) => (v === null || v === undefined || v === '' ? null : n
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ status: "error", message: "Método no permitido" });
+  // ¿Hay inscripciones abiertas? (sin sesión: solo el estado y los cupos que quedan, sin datos de nadie)
+  if (req.body?.accion === 'inscripcion') return estadoInscripcion(res);
   // Desde 2026-11-13 el panel es SOLO con Google: el código + PIN ya no abre nada
   if (req.body?.cuenta !== true) {
     return res.status(410).json({ status: "error", encontrado: false, message: "Ahora entras a tu panel con tu cuenta de Google. Pídenos tu acceso por WhatsApp." });
@@ -75,6 +125,7 @@ async function panelPorCuenta(req, res) {
   if (!supabaseActivo()) return res.status(503).json({ status: "error", message: "El panel no está disponible ahora. Intenta de nuevo en unos minutos." });
   const usuario = await usuarioDelToken(tokenDe(req));
   if (!usuario) return res.status(401).json({ status: "error", sesion: false, message: "Tu sesión venció. Vuelve a entrar con Google." });
+  if (req.body?.accion === 'inscribir') return inscribir(req, res, usuario);
   if (req.body?.accion === 'perfil') {
     const { datos, error } = limpiarPerfil(req.body?.datos);
     if (error) return res.status(400).json({ status: "error", message: error });
@@ -108,6 +159,34 @@ async function panelPorCuenta(req, res) {
   }
 }
 
+async function estadoInscripcion(res) {
+  if (!supabaseActivo()) return res.status(200).json({ status: "success", abierta: false, quedan: 0, minimo: 10 });
+  try {
+    const e = (await rpc('creadores_inscripcion_estado', {})) || {};
+    return res.status(200).json({ status: "success", abierta: e.abierta === true, quedan: numero(e.quedan), minimo: numero(e.minimo) || 10 });
+  } catch (error) {
+    console.error("Error al leer las inscripciones de creadores:", error.message);
+    return res.status(503).json({ status: "error", message: "No pudimos revisar las inscripciones. Intenta de nuevo en unos segundos." });
+  }
+}
+
+// El usuario sale del token (ya comprobado); la base revisa cupos, código repetido, cuenta y WhatsApp
+async function inscribir(req, res, usuario) {
+  const { datos, error } = limpiarInscripcion(req.body);
+  if (error) return res.status(400).json({ status: "error", message: error });
+  try {
+    const r = await rpc('creador_inscribir', { p_usuario: usuario, p_codigo: datos.codigo, p_whatsapp: datos.whatsapp, p_enlace: datos.enlace });
+    if (r?.ok !== true) {
+      return res.status(r?.cerrada ? 409 : 400).json({ status: "error", cerrada: r?.cerrada === true, message: String(r?.error || 'No pudimos inscribirte. Revisa tus datos.').slice(0, 200) });
+    }
+    console.info(`⭐ Creador inscrito: ${r.codigo} (quedan ${r.quedan} cupos)`);
+    return res.status(200).json({ status: "success", codigo: String(r.codigo), quedan: numero(r.quedan) });
+  } catch (e) {
+    console.error("Error al inscribir un creador:", e.message);
+    return res.status(503).json({ status: "error", message: "No pudimos inscribirte ahora. Intenta de nuevo en unos segundos." });
+  }
+}
+
 const NOMBRES_JUEGO = {
   freefire: 'Free Fire', bloodstrike: 'Blood Strike', mobilelegends: 'Mobile Legends', roblox: 'Roblox',
   fcmobile: 'FC Mobile', codmobile: 'COD Mobile', clashroyale: 'Clash Royale',
@@ -128,6 +207,13 @@ function respuestaPanel(datos) {
     retiroMinimoUsd: numero(datos.retiroMinimoUsd),
     faltaParaRetiroUsd: numeroONulo(datos.faltaParaRetiroUsd),
     tasa: datos.tasa ? numero(datos.tasa) : null,
+    // Inscritos: ventas de esta semana contra el mínimo (cierra = lunes 00:00 de Venezuela)
+    inscrito: datos.inscrito === true,
+    baja: datos.baja === 'ventas_semana' || datos.baja === 'admin' ? datos.baja : null,
+    semana: datos.semana && typeof datos.semana === 'object' ? {
+      ventas: numero(datos.semana.ventas), minimo: numero(datos.semana.minimo) || 10,
+      cierra: String(datos.semana.cierra || '').slice(0, 40), primera: datos.semana.primera === true,
+    } : null,
     movimientos: movimientos.map((m) => ({
       fecha: String(m.fecha || '').slice(0, 20),
       juego: String(NOMBRES_JUEGO[m.juego] || m.juego || '').slice(0, 20),

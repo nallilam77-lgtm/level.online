@@ -254,7 +254,9 @@ create trigger codigos_contar_venta after insert or update of estado, codigo_des
 -- ---------------------------------------------------------------------
 -- Panel del creador (api/creadores.js, solo con la llave secreta): código + PIN → sus números
 -- ---------------------------------------------------------------------
--- Números de un código para su creador (lo usan creador_panel y creador_por_usuario; nadie más)
+-- Números de un código para su creador (lo usan creador_panel y creador_por_usuario; nadie más).
+-- La versión NUEVA (con la semana de los inscritos) está en supabase/creadores-inscripcion.sql: si vuelves
+-- a correr este archivo, corre ese después.
 create or replace function public.codigos_panel_de(p_codigo text)
 returns jsonb
 language plpgsql
