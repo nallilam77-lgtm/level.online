@@ -42,7 +42,7 @@
 /* --- Entrar con Google (desde 2026-11-13) --- */
 .acceso-google { display: grid; gap: 12px; }
 .btn-google {
-  display: flex; align-items: center; justify-content: center; min-height: 50px; border-radius: 12px; text-decoration: none;
+  display: flex; align-items: center; justify-content: center; min-height: 50px; padding: 8px 16px; border-radius: 12px; text-decoration: none; text-align: center;
   background: var(--cta-gradient); color: var(--on-cta); font-family: 'Montserrat', sans-serif; font-weight: 900;
   font-size: 14px; letter-spacing: 1px; text-transform: uppercase; box-shadow: var(--shadow-glow);
   transition: transform 0.2s ease, box-shadow 0.25s ease;
