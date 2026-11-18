@@ -34,9 +34,11 @@ alter table public.codigos add column if not exists alta timestamptz;
 alter table public.codigos add column if not exists baja text check (baja is null or baja in ('ventas_semana', 'admin'));
 alter table public.codigos add column if not exists baja_fecha timestamptz;
 create index if not exists codigos_inscritos on public.codigos (origen, activo) where origen = 'inscripcion';
--- Los creadores que ya existían (creados a mano) empiezan a contar desde que se instala esto: su primera
--- semana es de prueba, igual que la de un inscrito (solo la primera vez: después alta ya no está vacía)
-update public.codigos set alta = now() where creador is not null and alta is null;
+-- Los creadores que ya existían (creados a mano) cuentan desde el lunes de la semana en que se instala esto,
+-- SIN semana de prueba (lo pidió el dueño el 2026-11-17: la semana del 16 al 22 de noviembre ya cuenta).
+-- Solo la primera vez: después alta ya no está vacía. La semana de prueba queda para los que se inscriben.
+update public.codigos set alta = date_trunc('week', now() at time zone 'America/Caracas') at time zone 'America/Caracas'
+ where creador is not null and alta is null;
 
 -- Activar/desactivar deja la marca sola: desactivar a mano = baja "admin"; reactivar borra la baja y
 -- vuelve a empezar la cuenta semanal (si no, se desactivaría el lunes por la semana que estuvo apagado)
