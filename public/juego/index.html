@@ -7,56 +7,59 @@
     // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque ni brillos (css/ligero.css)
     (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '../css/ligero.css?v=3'; document.head.appendChild(l); } })();
   </script>
-  <meta name="description" content="Serpientes Neón de Level Up: come, crece y elimina a los demás en partidas en línea de hasta 15 jugadores.">
+  <meta name="description" content="Último en Pie de Level Up: battle royale en línea de hasta 15 jugadores. Recoge armas, sobrevive a la zona y queda de último.">
   <meta name="theme-color" content="#0f172a">
   <meta name="robots" content="noindex">
-  <title>Serpientes Neón - Level Up</title>
+  <title>Último en Pie - Level Up</title>
   <link rel="icon" type="image/png" href="../logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="juego.css?v=1">
-  <script src="juego.js?v=1" defer></script>
+  <link rel="stylesheet" href="juego.css?v=2">
+  <script src="juego.js?v=2" defer></script>
 </head>
 <body>
-  <canvas id="lienzo" aria-label="Mapa del juego"></canvas>
+  <canvas id="lienzo" aria-label="Mapa de la partida"></canvas>
 
-  <!-- Arriba a la izquierda: tu largo, tu puesto y la conexión -->
+  <!-- Arriba a la izquierda: vivos, bajas y la zona; debajo, quién eliminó a quién -->
   <div class="hud hud--estado glass" id="hudEstado" hidden>
-    <span>Largo <strong id="hudLargo">0</strong></span>
-    <span>Puesto <strong id="hudPuesto">-</strong></span>
-    <span class="hud-ping" id="hudPing">… ms</span>
+    <span>Vivos <strong id="hudVivos">0</strong></span>
+    <span>Bajas <strong id="hudBajas">0</strong></span>
+    <span class="hud-zona" id="hudZona"></span>
   </div>
-
-  <!-- Arriba a la derecha: los 10 más largos -->
-  <aside class="hud hud--tabla glass" aria-label="Mejores de la partida">
-    <h2>Top 10 <small id="hudJugadores"></small></h2>
-    <ol id="tabla"></ol>
-  </aside>
+  <ul class="hud hud--bajas" id="listaBajas" aria-live="polite"></ul>
 
   <canvas id="minimapa" class="minimapa" width="120" height="120" aria-hidden="true"></canvas>
 
-  <button type="button" class="btn-turbo" id="btnTurbo" aria-label="Acelerar (mantén presionado)" hidden>⚡</button>
+  <!-- Abajo al centro: vida, escudo y arma -->
+  <div class="hud hud--vida" id="hudVida" hidden>
+    <div class="barra barra--escudo"><span id="barraEscudo"></span></div>
+    <div class="barra barra--vida"><span id="barraVida"></span><b id="textoVida">100</b></div>
+    <p class="hud-arma" id="hudArma">Pistola</p>
+  </div>
 
-  <!-- Inicio y "volver a jugar" -->
-  <div class="capa" id="capaInicio">
+  <button type="button" class="btn-cambiar" id="btnCambiar" hidden>Cambiar por <span id="armaPiso"></span></button>
+  <p class="banner" id="banner" hidden></p>
+
+  <!-- Inicio, espera, eliminado y fin de la partida -->
+  <div class="capa" id="capa">
     <form class="panel glass" id="formJugar" novalidate>
       <p class="panel-marca">Level Up</p>
-      <h1>Serpientes <span>Neón</span></h1>
-      <p class="panel-texto" id="textoInicio">Come las luces para crecer. Si tu cabeza toca a otra serpiente, pierdes. Haz que ellas choquen contigo.</p>
+      <h1 id="panelTitulo">Último <span>en Pie</span></h1>
+      <p class="panel-texto" id="panelTexto">Caes con una pistola. Recoge armas, botiquines y chalecos, escóndete detrás de las cajas y no te quedes fuera de la zona. El último vivo gana.</p>
       <div class="resultado" id="resultado" hidden>
-        <span>Largo final <strong id="resLargo">0</strong></span>
-        <span>Récord <strong id="resRecord">0</strong></span>
+        <span>Puesto <strong id="resPuesto">-</strong></span>
+        <span>Bajas <strong id="resBajas">0</strong></span>
       </div>
-      <label class="campo">Tu nombre
+      <label class="campo" id="campoNombre">Tu nombre
         <input type="text" id="nombre" maxlength="14" autocomplete="nickname" placeholder="Ej. ElRey" spellcheck="false">
       </label>
       <button type="submit" class="btn-jugar" id="btnJugar" disabled>Conectando…</button>
-      <ul class="controles">
-        <li><strong>Mover:</strong> apunta con el mouse o toca la pantalla hacia donde quieras ir.</li>
-        <li><strong>Acelerar:</strong> mantén el clic, la barra espaciadora o el botón ⚡. Acelerar te achica.</li>
+      <ul class="controles" id="controles">
+        <li><strong>Computadora:</strong> WASD o flechas para moverte, el mouse para apuntar, clic para disparar y E para cambiar de arma.</li>
+        <li><strong>Celular:</strong> el dedo izquierdo te mueve; el derecho apunta y dispara.</li>
       </ul>
-      <p class="panel-aviso" id="avisoInicio" role="status"></p>
+      <p class="panel-aviso" id="avisoPanel" role="status"></p>
     </form>
   </div>
 </body>

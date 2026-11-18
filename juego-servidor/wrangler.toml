@@ -1,4 +1,4 @@
-# Serpientes Neón · servidor del juego en Cloudflare (plan gratis: Workers + Durable Objects con SQLite)
+# Último en Pie · servidor del juego en Cloudflare (plan gratis: Workers + Durable Objects con SQLite)
 name = "levelup-juego"
 main = "src/worker.js"
 compatibility_date = "2025-09-01"

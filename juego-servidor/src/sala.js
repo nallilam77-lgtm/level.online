@@ -1,13 +1,14 @@
 // =========================================================================
-// Serpientes Neón · la sala (Cloudflare Durable Object).
+// Último en Pie · la sala (Cloudflare Durable Object).
 //
-// Una sola sala para todos. Mientras haya alguien conectado corre la partida 20 veces por segundo y manda
-// a todos el mismo mensaje con lo que cambió. Si no queda nadie, se detiene (no gasta).
+// Una sola sala para todos. Mientras haya alguien conectado corre 20 veces por segundo y manda a todos el
+// mismo mensaje con lo que cambió. Si no queda nadie, se detiene (no gasta).
 //
 // Mensajes del navegador (JSON, pequeños):
-//   { t: 'jugar', n: 'Nombre' }    entrar a jugar (o volver a jugar)
-//   { t: 'd', a: 1.57, b: 1 }      hacia dónde apunta (radianes) y si acelera
-//   { t: 'p', k: 123 }             ping (el servidor contesta { t: 'po', k })
+//   { t: 'jugar', n: 'Nombre' }                 anotarse para la próxima partida
+//   { t: 'd', x: 1, y: 0, a: 1.57, f: 1 }       moverse (x, y entre -1 y 1), apuntar (radianes) y disparar
+//   { t: 'c' }                                  cambiar el arma por la del piso
+//   { t: 'p', k: 123 }                          ping (el servidor contesta { t: 'po', k })
 // =========================================================================
 
 import { Partida, AJUSTES } from './partida.js';
@@ -28,6 +29,8 @@ export class Sala {
 
   async fetch(request) {
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Solo WebSocket', { status: 426 });
+    const prueba = Number(request.headers.get('X-Espera-Prueba'));   // solo llega desde localhost (worker.js)
+    if (prueba > 0) this.partida.esperaS = prueba;
     if (this.conexiones.size + this.porEntrar.length >= MAX_CONEXIONES) return new Response('Sala llena', { status: 503 });
 
     const par = new WebSocketPair();
@@ -64,14 +67,17 @@ export class Sala {
     if (!m || typeof m !== 'object') return;
 
     if (m.t === 'd') {
-      if (con.id) this.partida.dirigir(con.id, Number(m.a), m.b);
+      if (con.id) this.partida.dirigir(con.id, m);
     } else if (m.t === 'jugar') {
-      if (con.id && this.partida.serpientes.has(con.id)) return;     // ya está jugando
-      if (this.partida.humanos >= AJUSTES.MAX_JUGADORES) { this.enviar(con, { t: 'lleno', max: AJUSTES.MAX_JUGADORES }); return; }
-      con.id = this.partida.crearSerpiente(m.n, false);
-      this.enviar(con, { t: 'tu', id: con.id });
+      if (!con.id) {
+        con.id = this.partida.unirse(m.n);
+        this.enviar(con, { t: 'yo', id: con.id });
+      }
+      this.partida.listo(con.id, m.n);
+    } else if (m.t === 'c') {
+      if (con.id) this.partida.cambiar(con.id);
     } else if (m.t === 'p') {
-      this.enviar(con, { t: 'po', k: Number(m.k) || 0, j: this.partida.humanos, max: AJUSTES.MAX_JUGADORES });
+      this.enviar(con, { t: 'po', k: Number(m.k) || 0 });
     }
   }
 
@@ -80,13 +86,17 @@ export class Sala {
     con.salio = true;
     this.conexiones.delete(con);
     this.porEntrar = this.porEntrar.filter((c) => c !== con);
-    if (con.id) this.partida.quitar(con.id);
+    if (con.id) this.partida.salir(con.id);
   }
 
   paso() {
     if (!this.conexiones.size && !this.porEntrar.length) {
       clearInterval(this.reloj);
       this.reloj = null;
+      // Sala vacía: la próxima vez empieza limpia (sin una partida a medias)
+      const esperaS = this.partida.esperaS;
+      this.partida = new Partida();
+      this.partida.esperaS = esperaS;
       return;
     }
     const cambios = JSON.stringify(this.partida.paso());

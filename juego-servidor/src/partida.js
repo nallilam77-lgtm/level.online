@@ -1,315 +1,557 @@
 // =========================================================================
-// Serpientes Neón · lógica de la partida (sin red).
+// Último en Pie · lógica de la partida (sin red).
 //
-// El servidor manda: mueve las serpientes, reparte la comida y decide los choques. El navegador solo dice
-// hacia dónde apunta y si acelera. Las posiciones se guardan en enteros para que el navegador rehaga cada
-// cuerpo exactamente igual (recibe la cabeza en cada paso y recorta con recortar(), la misma función).
+// Battle royale 2D visto desde arriba. El servidor manda: mueve a los jugadores, dispara, decide los
+// impactos, cierra la zona y declara al ganador. El navegador solo dice hacia dónde se mueve, hacia
+// dónde apunta y si dispara.
+//
+// Ciclo de la sala:  espera (cuenta regresiva con los que tocaron "Jugar") → partida → fin → espera …
 // =========================================================================
 
 export const AJUSTES = {
-  TICK_MS: 50,              // 20 pasos por segundo
-  RADIO_MAPA: 2000,
-  COMIDA: 650,              // comida suelta que siempre hay en el mapa
-  MIN_SERPIENTES: 12,       // con pocos jugadores se rellena con bots
+  TICK_MS: 50,               // 20 pasos por segundo
+  MAPA: 2400,                // cuadrado de 2400 × 2400
+  R: 22,                     // radio de cada jugador
+  VEL: 11,                   // unidades por paso (220 por segundo)
   MAX_JUGADORES: 15,
-  MASA_INICIAL: 10,
-  VELOCIDAD: 9,             // unidades por paso (180 por segundo)
-  VELOCIDAD_TURBO: 17,
-  MASA_MINIMA_TURBO: 12,
-  GASTO_TURBO: 0.12,        // masa por paso acelerando
+  MIN_EN_PARTIDA: 10,        // si hay menos personas, se rellena con bots
+  ESPERA_S: 20,
+  ESPERA_LLENA_S: 5,
+  FIN_S: 8,
+  ALCANCE_RECOGER: 40,
 };
+
+// Igual que en public/juego/juego.js
+export const ARMAS = [
+  { nombre: 'Pistola', cad: 8, dano: 14, vel: 40, alcance: 700, disp: 0.05, balas: 1 },
+  { nombre: 'Subfusil', cad: 2, dano: 8, vel: 42, alcance: 600, disp: 0.12, balas: 1 },
+  { nombre: 'Escopeta', cad: 16, dano: 10, vel: 38, alcance: 380, disp: 0.3, balas: 6 },
+  { nombre: 'Rifle', cad: 5, dano: 17, vel: 48, alcance: 950, disp: 0.04, balas: 1 },
+  { nombre: 'Francotirador', cad: 30, dano: 80, vel: 75, alcance: 1600, disp: 0, balas: 1 },
+];
+export const BOTIQUIN = 10;   // +35 de vida
+export const CHALECO = 11;    // +50 de escudo
+
+// La zona: espera (s), cuánto tarda en cerrarse (s), radio final y daño por segundo afuera
+const FASES = [
+  { espera: 35, cierre: 30, r: 1000, dano: 3 },
+  { espera: 25, cierre: 25, r: 550, dano: 5 },
+  { espera: 20, cierre: 20, r: 250, dano: 8 },
+  { espera: 15, cierre: 25, r: 0, dano: 12 },
+];
 
 const COLORES = 12;
 const NOMBRES_BOT = ['Kairo', 'Nebula', 'Vortex', 'Zafiro', 'Pixel', 'Rayo', 'Cobra', 'Jade', 'Turbo', 'Eclipse',
   'Fénix', 'Orion', 'Tifón', 'Volt', 'Lince', 'Quasar', 'Brasa', 'Nova'];
 
-export const largo = (masa) => 40 + masa * 3;
-export const radio = (masa) => Math.min(28, 8 + Math.sqrt(masa) * 0.9);
-
-// Deja el cuerpo (cola en [0], cabeza al final) con el largo pedido. El navegador usa la misma función.
-export function recortar(pts, L) {
-  let total = 0;
-  for (let i = pts.length - 1; i > 0; i--) {
-    total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-    if (total >= L) {
-      if (i - 1 > 0) pts.splice(0, i - 1);
-      return;
-    }
-  }
-}
-
 const azar = (a, b) => a + Math.random() * (b - a);
-const angulo = (a) => Math.atan2(Math.sin(a), Math.cos(a));   // entre -π y π
+const pasos = (seg) => Math.round(seg * 1000 / AJUSTES.TICK_MS);
 
 export function limpiarNombre(texto) {
   const n = String(texto || '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 14);
   return n || 'Jugador';
 }
 
+// Saca un círculo de dentro de las cajas y del borde del mapa. El navegador usa la misma función.
+export function empujarFuera(o, cajas, R = AJUSTES.R) {
+  for (const [x, y, w, h] of cajas) {
+    const cx = Math.max(x, Math.min(o.x, x + w));
+    const cy = Math.max(y, Math.min(o.y, y + h));
+    const dx = o.x - cx;
+    const dy = o.y - cy;
+    const d2 = dx * dx + dy * dy;
+    if (d2 >= R * R) continue;
+    if (d2 === 0) {
+      // El centro quedó dentro: sale por el lado más cercano
+      const lados = [o.x - x, x + w - o.x, o.y - y, y + h - o.y];
+      const m = Math.min(...lados);
+      if (m === lados[0]) o.x = x - R; else if (m === lados[1]) o.x = x + w + R;
+      else if (m === lados[2]) o.y = y - R; else o.y = y + h + R;
+    } else {
+      const d = Math.sqrt(d2);
+      o.x = cx + (dx / d) * R;
+      o.y = cy + (dy / d) * R;
+    }
+  }
+  o.x = Math.max(R, Math.min(AJUSTES.MAPA - R, o.x));
+  o.y = Math.max(R, Math.min(AJUSTES.MAPA - R, o.y));
+}
+
+// Un paso de movimiento (el navegador lo usa para que el propio jugador se mueva sin esperar al servidor)
+export function mover(o, mx, my, cajas, factor = 1) {
+  const l = Math.hypot(mx, my);
+  if (l > 1) { mx /= l; my /= l; }
+  o.x += mx * AJUSTES.VEL * factor;
+  o.y += my * AJUSTES.VEL * factor;
+  empujarFuera(o, cajas);
+}
+
+const dentroDeCaja = (x, y, cajas) => cajas.some(([cx, cy, w, h]) => x >= cx && x <= cx + w && y >= cy && y <= cy + h);
+
 export class Partida {
   constructor() {
-    this.serpientes = new Map();
-    this.comida = new Map();
-    this.sigSerpiente = 1;
-    this.sigComida = 1;
+    this.personas = new Map();      // conexiones: id → { id, nombre, listo }
+    this.sigPersona = 1;
+    this.estado = 'espera';
+    this.cuenta = null;             // pasos que faltan para empezar o para volver a la espera
     this.paso_ = 0;
+    this.sigBala = 1;
+    this.sigItem = 1;
+    this.sigBot = 100000;
+    this.ganador = null;
+    this.vaciar();
     this.limpiarEventos();
-    while (this.comida.size < AJUSTES.COMIDA) this.soltarComida(...this.puntoAlAzar(0.97), 1, true);
-    this.limpiarEventos();
+  }
+
+  vaciar() {
+    this.jugadores = new Map();     // los de la partida en curso (vivos y eliminados)
+    this.balas = [];
+    this.items = new Map();
+    this.cajas = [];
+    this.zona = null;
   }
 
   limpiarEventos() {
-    this.nuevas = [];      // serpientes que aparecieron en este paso
-    this.muertes = [];     // [id, idDelQueLaEliminó (0 = borde o se fue)]
-    this.comidaNueva = [];
-    this.comidaComida = [];
+    this.balasNuevas = [];
+    this.balasFin = [];
+    this.itemsNuevos = [];
+    this.itemsFuera = [];
+    this.bajas = [];
+    this.inicio = null;
+    this.cambioEstado = false;
   }
 
-  get humanos() {
-    let n = 0;
-    for (const s of this.serpientes.values()) if (!s.bot) n++;
-    return n;
+  // ------------------------------------------------------------ personas
+  unirse(nombre) {
+    const id = this.sigPersona++;
+    this.personas.set(id, { id, nombre: limpiarNombre(nombre), listo: false });
+    return id;
   }
 
-  puntoAlAzar(fraccion) {
-    const r = AJUSTES.RADIO_MAPA * fraccion * Math.sqrt(Math.random());
-    const a = Math.random() * Math.PI * 2;
-    return [Math.round(Math.cos(a) * r), Math.round(Math.sin(a) * r)];
+  listo(id, nombre) {
+    const p = this.personas.get(id);
+    if (!p) return;
+    p.nombre = limpiarNombre(nombre);
+    const j = this.jugadores.get(id);
+    if (this.estado === 'partida' && j && j.vivo) return;   // ya está jugando
+    p.listo = true;
+    this.cambioEstado = true;
   }
 
-  soltarComida(x, y, valor, inicial = false) {
-    const id = this.sigComida++;
-    const c = [id, Math.round(x), Math.round(y), Math.round(valor * 10), Math.floor(Math.random() * COLORES)];
-    this.comida.set(id, c);
-    if (!inicial) this.comidaNueva.push(c);
+  salir(id) {
+    const j = this.jugadores.get(id);
+    if (j && j.vivo) this.eliminar(j, null, -1);
+    this.personas.delete(id);
+    this.cambioEstado = true;
   }
 
-  // Busca un lugar lejos de las demás cabezas y cuerpos
-  lugarLibre() {
+  dirigir(id, m) {
+    const j = this.jugadores.get(id);
+    if (!j || !j.vivo || j.bot) return;
+    const mx = Number(m.x);
+    const my = Number(m.y);
+    const a = Number(m.a);
+    j.mx = Number.isFinite(mx) ? Math.max(-1, Math.min(1, mx)) : 0;
+    j.my = Number.isFinite(my) ? Math.max(-1, Math.min(1, my)) : 0;
+    if (Number.isFinite(a)) j.a = a;
+    j.disparando = m.f === 1 || m.f === true;
+  }
+
+  // Cambiar el arma por la que está en el piso (botón "Cambiar" / tecla E)
+  cambiar(id) {
+    const j = this.jugadores.get(id);
+    if (!j || !j.vivo) return;
+    const it = this.itemCerca(j, (t) => t >= 1 && t <= 4 && t !== j.arma);
+    if (!it) return;
+    this.quitarItem(it[0]);
+    if (j.arma !== 0) this.ponerItem(it[1], it[2], j.arma);
+    j.arma = it[3];
+    j.proximo = Math.max(j.proximo, this.paso_ + 6);
+  }
+
+  // ------------------------------------------------------------ mapa
+  generarMapa() {
+    const L = AJUSTES.MAPA;
+    const cajas = [];
+    const libre = (x, y, w, h, margen) => cajas.every(([cx, cy, cw, ch]) =>
+      x + w + margen < cx || cx + cw + margen < x || y + h + margen < cy || cy + ch + margen < y);
+    for (let i = 0, intentos = 0; i < 46 && intentos < 2000; intentos++) {
+      const largo = Math.random() < 0.2;
+      const w = Math.round(largo ? (Math.random() < 0.5 ? azar(220, 380) : azar(24, 32)) : azar(50, 150));
+      const h = Math.round(largo ? (w < 40 ? azar(220, 380) : azar(24, 32)) : azar(50, 150));
+      const x = Math.round(azar(120, L - 120 - w));
+      const y = Math.round(azar(120, L - 120 - h));
+      if (libre(x, y, w, h, 70)) { cajas.push([x, y, w, h]); i++; }
+    }
+    this.cajas = cajas;
+    for (let i = 0; i < 48; i++) {
+      const [x, y] = this.puntoLibre(60);
+      const r = Math.random();
+      const tipo = r < 0.22 ? 1 : r < 0.42 ? 2 : r < 0.62 ? 3 : r < 0.7 ? 4 : r < 0.86 ? BOTIQUIN : CHALECO;
+      this.ponerItem(x, y, tipo, true);
+    }
+  }
+
+  puntoLibre(margen) {
+    for (let i = 0; i < 200; i++) {
+      const x = Math.round(azar(80, AJUSTES.MAPA - 80));
+      const y = Math.round(azar(80, AJUSTES.MAPA - 80));
+      const cerca = this.cajas.some(([cx, cy, w, h]) => x > cx - margen && x < cx + w + margen && y > cy - margen && y < cy + h + margen);
+      if (!cerca) return [x, y];
+    }
+    return [AJUSTES.MAPA / 2, AJUSTES.MAPA / 2];
+  }
+
+  ponerItem(x, y, tipo, inicial = false) {
+    const it = [this.sigItem++, Math.round(x), Math.round(y), tipo];
+    this.items.set(it[0], it);
+    if (!inicial) this.itemsNuevos.push(it);
+  }
+
+  quitarItem(id) {
+    if (this.items.delete(id)) this.itemsFuera.push(id);
+  }
+
+  itemCerca(j, sirve) {
     let mejor = null;
-    let mejorDist = -1;
-    for (let intento = 0; intento < 8; intento++) {
-      const [x, y] = this.puntoAlAzar(0.7);
-      let min = Infinity;
-      for (const s of this.serpientes.values()) {
-        for (let i = 0; i < s.pts.length; i += 3) {
-          const d = Math.hypot(s.pts[i][0] - x, s.pts[i][1] - y);
-          if (d < min) min = d;
-        }
-      }
-      if (min > mejorDist) { mejorDist = min; mejor = [x, y]; }
-      if (min > 500) break;
+    let dm = AJUSTES.ALCANCE_RECOGER + AJUSTES.R;
+    for (const it of this.items.values()) {
+      if (!sirve(it[3])) continue;
+      const d = Math.hypot(it[1] - j.x, it[2] - j.y);
+      if (d < dm) { dm = d; mejor = it; }
     }
     return mejor;
   }
 
-  crearSerpiente(nombre, bot) {
-    const id = this.sigSerpiente++;
-    const [x, y] = this.lugarLibre();
-    const ang = Math.atan2(-y, -x) + azar(-0.8, 0.8);    // mirando más o menos hacia el centro
-    const masa = bot ? azar(10, 60) : AJUSTES.MASA_INICIAL;
-    const L = largo(masa);
-    const pts = [];
-    for (let d = L; d >= 0; d -= AJUSTES.VELOCIDAD) {
-      pts.push([Math.round(x - Math.cos(ang) * d), Math.round(y - Math.sin(ang) * d)]);
-    }
-    const s = {
-      id, nombre: limpiarNombre(nombre), color: Math.floor(Math.random() * COLORES), bot,
-      x, y, ang, objetivo: ang, turbo: false, masa, pts, pasoTurbo: 0, idea: 0,
+  // ------------------------------------------------------------ partida
+  iniciar() {
+    this.vaciar();
+    this.generarMapa();
+    const entran = [...this.personas.values()].filter((p) => p.listo).slice(0, AJUSTES.MAX_JUGADORES);
+    const bots = Math.max(0, AJUSTES.MIN_EN_PARTIDA - entran.length);
+    const lugares = [];
+    const lugar = () => {
+      let mejor = null;
+      let mejorD = -1;
+      for (let i = 0; i < 30; i++) {
+        const p = this.puntoLibre(40);
+        const d = Math.min(Infinity, ...lugares.map((q) => Math.hypot(q[0] - p[0], q[1] - p[1])));
+        if (d > mejorD) { mejorD = d; mejor = p; }
+        if (d > 500) break;
+      }
+      lugares.push(mejor);
+      return mejor;
     };
-    this.serpientes.set(id, s);
-    this.nuevas.push(s);
-    return id;
-  }
-
-  dirigir(id, a, turbo) {
-    const s = this.serpientes.get(id);
-    if (!s || s.bot) return;
-    if (Number.isFinite(a)) s.objetivo = angulo(a);
-    s.turbo = turbo === true || turbo === 1;
-  }
-
-  // El jugador se desconectó: su serpiente desaparece sin soltar comida
-  quitar(id) {
-    if (this.serpientes.delete(id)) this.muertes.push([id, 0]);
-  }
-
-  matar(s, asesino) {
-    if (!this.serpientes.has(s.id)) return;
-    this.serpientes.delete(s.id);
-    this.muertes.push([s.id, asesino || 0]);
-    // Suelta comida por el cuerpo: el 70 % de su masa, en bolitas grandes
-    const total = s.masa * 0.7;
-    const cada = Math.max(1, Math.floor(s.pts.length / Math.max(1, Math.round(total / 3))));
-    let soltada = 0;
-    for (let i = s.pts.length - 1; i >= 0 && soltada < total; i -= cada) {
-      const v = Math.min(3, total - soltada);
-      this.soltarComida(s.pts[i][0] + azar(-6, 6), s.pts[i][1] + azar(-6, 6), Math.max(0.5, v));
-      soltada += v;
+    const crear = (id, nombre, bot) => {
+      const [x, y] = lugar();
+      this.jugadores.set(id, {
+        id, nombre, bot, color: Math.floor(Math.random() * COLORES), x, y, a: azar(-Math.PI, Math.PI),
+        mx: 0, my: 0, disparando: false, vivo: true, vida: 100, escudo: 0, arma: 0, proximo: 0, bajas: 0, puesto: 0,
+        idea: 0, visto: 0, lado: Math.random() < 0.5 ? 1 : -1, vagar: azar(-Math.PI, Math.PI),
+      });
+    };
+    for (const p of entran) { p.listo = false; crear(p.id, p.nombre, false); }
+    const usados = new Set();
+    for (let i = 0; i < bots; i++) {
+      const libres = NOMBRES_BOT.filter((n) => !usados.has(n));
+      const nombre = libres[Math.floor(Math.random() * libres.length)] || 'Bot';
+      usados.add(nombre);
+      crear(this.sigBot++, nombre, true);
     }
+    const L = AJUSTES.MAPA;
+    this.zona = { cx: L / 2, cy: L / 2, r: Math.ceil(L * 0.72), fase: 0, modo: 'espera', t: pasos(FASES[0].espera) };
+    this.siguienteObjetivo();
+    this.estado = 'partida';
+    this.ganador = null;
+    this.cuenta = null;
+    this.cambioEstado = true;
+    this.inicio = this.datosMapa();
   }
 
-  pensarBot(s) {
-    if (--s.idea > 0) return;
-    s.idea = 3;
-    const R = AJUSTES.RADIO_MAPA;
-    const r = radio(s.masa);
-    // 1) Cerca del borde: volver hacia el centro
-    if (Math.hypot(s.x, s.y) > R - 220 - r) {
-      s.objetivo = Math.atan2(-s.y, -s.x) + azar(-0.3, 0.3);
-      s.turbo = false;
+  siguienteObjetivo() {
+    const z = this.zona;
+    const f = FASES[z.fase];
+    const margen = Math.max(0, z.r - f.r);
+    const a = azar(0, Math.PI * 2);
+    const d = azar(0, margen * 0.8);
+    z.ox = z.cx; z.oy = z.cy; z.or = z.r;                // de dónde parte el cierre
+    z.tx = Math.max(f.r, Math.min(AJUSTES.MAPA - f.r, z.cx + Math.cos(a) * d));
+    z.ty = Math.max(f.r, Math.min(AJUSTES.MAPA - f.r, z.cy + Math.sin(a) * d));
+    z.tr = f.r;
+  }
+
+  moverZona() {
+    const z = this.zona;
+    if (z.t-- > 0) {
+      if (z.modo === 'cierre') {
+        const total = pasos(FASES[z.fase].cierre);
+        const k = 1 - z.t / total;
+        z.cx = z.ox + (z.tx - z.ox) * k;
+        z.cy = z.oy + (z.ty - z.oy) * k;
+        z.r = z.or + (z.tr - z.or) * k;
+      }
       return;
     }
-    // 2) Algo adelante: esquivar
-    const mira = 70 + r * 2;
-    const ax = s.x + Math.cos(s.ang) * mira;
-    const ay = s.y + Math.sin(s.ang) * mira;
-    for (const o of this.serpientes.values()) {
-      if (o === s) continue;
-      const lim = radio(o.masa) + r + 30;
-      for (let i = 0; i < o.pts.length; i += 2) {
-        const p = o.pts[i];
-        if (Math.abs(p[0] - ax) < lim && Math.abs(p[1] - ay) < lim) {
-          const lado = Math.sin(Math.atan2(p[1] - s.y, p[0] - s.x) - s.ang) > 0 ? -1 : 1;
-          s.objetivo = s.ang + lado * 1.4;
-          s.turbo = false;
-          return;
+    if (z.modo === 'espera') {
+      z.modo = 'cierre';
+      z.t = pasos(FASES[z.fase].cierre);
+    } else if (z.fase < FASES.length - 1) {
+      z.cx = z.tx; z.cy = z.ty; z.r = z.tr;
+      z.fase++;
+      z.modo = 'espera';
+      z.t = pasos(FASES[z.fase].espera);
+      this.siguienteObjetivo();
+    } else {
+      z.t = 0;
+    }
+  }
+
+  vivos() {
+    return [...this.jugadores.values()].filter((j) => j.vivo);
+  }
+
+  eliminar(j, asesino, arma) {
+    if (!j.vivo) return;
+    j.puesto = this.vivos().length;
+    j.vivo = false;
+    j.disparando = false;
+    if (asesino && asesino !== j) asesino.bajas++;
+    this.bajas.push([asesino ? asesino.id : 0, j.id, arma]);
+    if (arma === -1) return;           // se desconectó: no suelta nada
+    if (j.arma !== 0) this.ponerItem(j.x + azar(-15, 15), j.y + azar(-15, 15), j.arma);
+    if (Math.random() < 0.6) this.ponerItem(j.x + azar(-25, 25), j.y + azar(-25, 25), BOTIQUIN);
+  }
+
+  danar(j, cantidad, asesino, arma, ignoraEscudo = false) {
+    let resto = cantidad;
+    if (!ignoraEscudo && j.escudo > 0) {
+      const absorbe = Math.min(j.escudo, resto);
+      j.escudo -= absorbe;
+      resto -= absorbe;
+    }
+    j.vida -= resto;
+    if (j.vida <= 0) { j.vida = 0; this.eliminar(j, asesino, arma); }
+  }
+
+  disparar(j) {
+    const arma = ARMAS[j.arma];
+    j.proximo = this.paso_ + arma.cad;
+    for (let i = 0; i < arma.balas; i++) {
+      const a = j.a + (arma.balas > 1 ? (i / (arma.balas - 1) - 0.5) * arma.disp * 2 : azar(-arma.disp, arma.disp));
+      const x = j.x + Math.cos(a) * (AJUSTES.R + 8);
+      const y = j.y + Math.sin(a) * (AJUSTES.R + 8);
+      const b = { id: this.sigBala++, x, y, dx: Math.cos(a), dy: Math.sin(a), vel: arma.vel, resto: arma.alcance, dano: arma.dano, dueno: j, arma: j.arma };
+      this.balas.push(b);
+      this.balasNuevas.push([b.id, Math.round(x), Math.round(y), Math.round(a * 1000), arma.vel, arma.alcance, j.arma]);
+    }
+  }
+
+  moverBalas() {
+    const vivos = this.vivos();
+    const R2 = AJUSTES.R * AJUSTES.R;
+    this.balas = this.balas.filter((b) => {
+      const n = Math.ceil(b.vel / 12);
+      const paso = b.vel / n;
+      for (let s = 0; s < n; s++) {
+        b.x += b.dx * paso;
+        b.y += b.dy * paso;
+        b.resto -= paso;
+        if (b.resto <= 0 || b.x < 0 || b.y < 0 || b.x > AJUSTES.MAPA || b.y > AJUSTES.MAPA || dentroDeCaja(b.x, b.y, this.cajas)) {
+          this.balasFin.push([b.id, 0]);
+          return false;
+        }
+        for (const j of vivos) {
+          if (j === b.dueno || !j.vivo) continue;
+          const dx = j.x - b.x;
+          const dy = j.y - b.y;
+          if (dx * dx + dy * dy < R2) {
+            this.danar(j, b.dano, b.dueno, b.arma);
+            this.balasFin.push([b.id, j.id]);
+            return false;
+          }
         }
       }
-    }
-    // 3) Ir a la comida más rica cerca
-    let mejor = null;
-    let puntaje = 0;
-    for (const c of this.comida.values()) {
-      const dx = c[1] - s.x;
-      const dy = c[2] - s.y;
-      if (Math.abs(dx) > 450 || Math.abs(dy) > 450) continue;
-      const p = (c[3] + 5) / (Math.hypot(dx, dy) + 40);
-      if (p > puntaje) { puntaje = p; mejor = c; }
-    }
-    if (mejor) s.objetivo = Math.atan2(mejor[2] - s.y, mejor[1] - s.x);
-    else if (Math.random() < 0.1) s.objetivo = s.ang + azar(-1, 1);
-    s.turbo = s.masa > 40 && Math.random() < 0.03 ? true : (s.turbo && Math.random() < 0.85);
+      return true;
+    });
   }
 
-  mover(s) {
-    const r = radio(s.masa);
-    const giro = Math.max(0.12, 0.24 - (r - 8) * 0.006);
-    const diff = angulo(s.objetivo - s.ang);
-    s.ang = angulo(s.ang + Math.max(-giro, Math.min(giro, diff)));
-    const turbo = s.turbo && s.masa > AJUSTES.MASA_MINIMA_TURBO;
-    const v = turbo ? AJUSTES.VELOCIDAD_TURBO : AJUSTES.VELOCIDAD;
-    s.x = Math.round(s.x + Math.cos(s.ang) * v);
-    s.y = Math.round(s.y + Math.sin(s.ang) * v);
-    s.pts.push([s.x, s.y]);
-    s.acelerando = turbo;
-    if (turbo) {
-      s.masa -= AJUSTES.GASTO_TURBO;
-      if (++s.pasoTurbo % 5 === 0) this.soltarComida(s.pts[0][0], s.pts[0][1], AJUSTES.GASTO_TURBO * 5 * 0.8);
+  recoger(j) {
+    for (const it of this.items.values()) {
+      if (Math.hypot(it[1] - j.x, it[2] - j.y) > AJUSTES.R + 18) continue;
+      const t = it[3];
+      if (t === BOTIQUIN && j.vida < 100) { j.vida = Math.min(100, j.vida + 35); this.quitarItem(it[0]); }
+      else if (t === CHALECO && j.escudo < 100) { j.escudo = Math.min(100, j.escudo + 50); this.quitarItem(it[0]); }
+      else if (t >= 1 && t <= 4 && j.arma === 0) { j.arma = t; this.quitarItem(it[0]); }   // con pistola se agarra sola
     }
-    recortar(s.pts, largo(s.masa));
   }
 
-  comer(s) {
-    const r = radio(s.masa) + 12;
-    for (const c of this.comida.values()) {
-      const dx = c[1] - s.x;
-      const dy = c[2] - s.y;
-      const alcance = r + c[3] / 10 * 2;
-      if (dx * dx + dy * dy < alcance * alcance) {
-        this.comida.delete(c[0]);
-        this.comidaComida.push(c[0]);
-        s.masa += c[3] / 10;
+  tieneVista(a, b) {
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    const n = Math.ceil(d / 25);
+    for (let i = 1; i < n; i++) {
+      const k = i / n;
+      if (dentroDeCaja(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, this.cajas)) return false;
+    }
+    return true;
+  }
+
+  pensarBot(j) {
+    if (--j.idea > 0) return;
+    j.idea = 3;
+    const z = this.zona;
+    const fuera = Math.hypot(j.x - z.cx, j.y - z.cy) > z.r - 80;
+    let objetivo = null;
+    let dmin = 650;
+    for (const o of this.jugadores.values()) {
+      if (o === j || !o.vivo) continue;
+      const d = Math.hypot(o.x - j.x, o.y - j.y);
+      if (d < dmin && this.tieneVista(j, o)) { dmin = d; objetivo = o; }
+    }
+    let rumbo;
+    if (objetivo) {
+      j.visto++;
+      j.a = Math.atan2(objetivo.y - j.y, objetivo.x - j.x) + azar(-0.16, 0.16);
+      j.disparando = j.visto > 4 && dmin <= ARMAS[j.arma].alcance * 0.9;
+      if (Math.random() < 0.05) j.lado = -j.lado;
+      if (fuera) rumbo = Math.atan2(z.cy - j.y, z.cx - j.x);
+      else if (dmin < 220) rumbo = j.a + Math.PI + j.lado * 0.6;
+      else if (dmin > 450 || (j.arma === 2 && dmin > 250)) rumbo = j.a + j.lado * 0.4;
+      else rumbo = j.a + j.lado * Math.PI / 2;
+    } else {
+      j.visto = 0;
+      j.disparando = false;
+      const lejosDelObjetivo = Math.hypot(j.x - z.tx, j.y - z.ty) > z.tr * 0.85;
+      let item = null;
+      let di = 700;
+      for (const it of this.items.values()) {
+        const t = it[3];
+        const sirve = (t <= 4 && j.arma === 0) || (t === BOTIQUIN && j.vida < 70) || (t === CHALECO && j.escudo < 50);
+        if (!sirve) continue;
+        const d = Math.hypot(it[1] - j.x, it[2] - j.y);
+        if (d < di) { di = d; item = it; }
       }
-    }
-  }
-
-  // Choques: la cabeza contra el cuerpo de otra serpiente, o contra el borde
-  choques() {
-    const vivas = [...this.serpientes.values()];
-    const cajas = new Map();
-    for (const s of vivas) {
-      let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
-      for (const p of s.pts) {
-        if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
-        if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
+      if (fuera || (z.modo === 'cierre' && lejosDelObjetivo)) rumbo = Math.atan2(z.ty - j.y, z.tx - j.x);
+      else if (item) rumbo = Math.atan2(item[2] - j.y, item[1] - j.x);
+      else {
+        if (Math.random() < 0.04) j.vagar += azar(-1.2, 1.2);
+        rumbo = j.vagar;
       }
-      cajas.set(s.id, [x0, y0, x1, y1]);
+      j.a = rumbo;
     }
-    const muertas = [];
-    for (const a of vivas) {
-      const ra = radio(a.masa);
-      if (Math.hypot(a.x, a.y) + ra > AJUSTES.RADIO_MAPA) { muertas.push([a, 0]); continue; }
-      for (const b of vivas) {
-        if (b === a) continue;
-        const rb = radio(b.masa);
-        const [x0, y0, x1, y1] = cajas.get(b.id);
-        const m = ra + rb;
-        if (a.x < x0 - m || a.x > x1 + m || a.y < y0 - m || a.y > y1 + m) continue;
-        const lim = (ra * 0.8 + rb) ** 2;
-        let choco = false;
-        for (const p of b.pts) {
-          const dx = p[0] - a.x;
-          const dy = p[1] - a.y;
-          if (dx * dx + dy * dy < lim) { choco = true; break; }
-        }
-        if (choco) { muertas.push([a, b.id]); break; }
-      }
+    // Esquivar cajas: si adelante hay una, girar 90°
+    for (let intento = 0; intento < 3; intento++) {
+      const ax = j.x + Math.cos(rumbo) * 45;
+      const ay = j.y + Math.sin(rumbo) * 45;
+      const choca = this.cajas.some(([x, y, w, h]) => ax > x - AJUSTES.R && ax < x + w + AJUSTES.R && ay > y - AJUSTES.R && ay < y + h + AJUSTES.R);
+      if (!choca) break;
+      rumbo += j.lado * Math.PI / 2;
     }
-    for (const [s, asesino] of muertas) this.matar(s, asesino);
+    j.mx = Math.cos(rumbo);
+    j.my = Math.sin(rumbo);
   }
 
-  // Bots: rellenan hasta MIN_SERPIENTES; si entran jugadores, sobran y se van
-  ajustarBots() {
-    const humanos = this.humanos;
-    const quiero = Math.max(0, AJUSTES.MIN_SERPIENTES - humanos);
-    const bots = [...this.serpientes.values()].filter((s) => s.bot);
-    if (bots.length < quiero && this.paso_ % 20 === 0) {
-      const usados = new Set([...this.serpientes.values()].map((s) => s.nombre));
-      const libres = NOMBRES_BOT.filter((n) => !usados.has(n));
-      const lista = libres.length ? libres : NOMBRES_BOT;
-      this.crearSerpiente(lista[Math.floor(Math.random() * lista.length)], true);
-    } else if (bots.length > quiero + 1 && this.paso_ % 40 === 0) {
-      this.quitar(bots[0].id);
+  pasoPartida() {
+    this.moverZona();
+    const z = this.zona;
+    const f = FASES[z.fase];
+    for (const j of this.vivos()) if (j.bot) this.pensarBot(j);
+    for (const j of this.vivos()) {
+      mover(j, j.mx, j.my, this.cajas);
+      j.x = Math.round(j.x * 10) / 10;
+      j.y = Math.round(j.y * 10) / 10;
+      this.recoger(j);
+    }
+    for (const j of this.vivos()) if (j.disparando && this.paso_ >= j.proximo) this.disparar(j);
+    this.moverBalas();
+    for (const j of this.vivos()) {
+      if (Math.hypot(j.x - z.cx, j.y - z.cy) > z.r) this.danar(j, f.dano / 20, null, -2, true);
+    }
+    const vivos = this.vivos();
+    const humanosVivos = vivos.filter((j) => !j.bot).length;
+    if (vivos.length <= 1 || humanosVivos === 0) {
+      const g = vivos.length === 1 ? vivos[0] : null;
+      if (g) g.puesto = 1;
+      this.ganador = g ? { id: g.id, nombre: g.nombre, bajas: g.bajas, bot: g.bot } : null;
+      this.estado = 'fin';
+      this.cuenta = pasos(AJUSTES.FIN_S);
+      this.cambioEstado = true;
     }
   }
 
-  // Un paso de 50 ms. Devuelve lo que cambió, para mandarlo igual a todos.
+  pasoEspera() {
+    const listos = [...this.personas.values()].filter((p) => p.listo).length;
+    if (!listos) { if (this.cuenta !== null) { this.cuenta = null; this.cambioEstado = true; } return; }
+    if (this.cuenta === null) { this.cuenta = pasos(this.esperaS || AJUSTES.ESPERA_S); this.cambioEstado = true; }
+    if (listos >= AJUSTES.MAX_JUGADORES) this.cuenta = Math.min(this.cuenta, pasos(AJUSTES.ESPERA_LLENA_S));
+    if (--this.cuenta <= 0) this.iniciar();
+  }
+
+  datosEstado() {
+    const listos = [...this.personas.values()].filter((p) => p.listo);
+    return {
+      s: this.estado,
+      t: this.cuenta === null ? null : Math.ceil(this.cuenta * AJUSTES.TICK_MS / 1000),
+      n: listos.length,
+      c: this.personas.size,
+      v: this.estado === 'partida' ? this.vivos().length : 0,
+      g: this.ganador,
+      max: AJUSTES.MAX_JUGADORES,
+    };
+  }
+
+  datosMapa() {
+    return {
+      cajas: this.cajas,
+      items: [...this.items.values()],
+      jugadores: [...this.jugadores.values()].map((j) => [j.id, j.nombre, j.color, j.bot ? 1 : 0, j.vivo ? 1 : 0, j.bajas]),
+    };
+  }
+
+  datosZona() {
+    const z = this.zona;
+    if (!z) return null;
+    return [Math.round(z.cx), Math.round(z.cy), Math.round(z.r), Math.round(z.tx), Math.round(z.ty), Math.round(z.tr),
+      Math.ceil(z.t * AJUSTES.TICK_MS / 1000), z.modo === 'cierre' ? 1 : 0, FASES[z.fase].dano];
+  }
+
+  // Un paso de 50 ms. Devuelve lo que cambió (el mismo mensaje para todos).
   paso() {
     this.paso_++;
-    for (const s of this.serpientes.values()) if (s.bot) this.pensarBot(s);
-    for (const s of this.serpientes.values()) this.mover(s);
-    for (const s of this.serpientes.values()) this.comer(s);
-    this.choques();
-    this.ajustarBots();
-    let faltan = AJUSTES.COMIDA - this.comida.size;
-    for (let i = 0; i < 6 && faltan > 0; i++, faltan--) this.soltarComida(...this.puntoAlAzar(0.97), 1);
-
-    const nuevasIds = new Set(this.nuevas.map((s) => s.id));
-    const cambios = {
-      t: 'u',
-      s: [...this.serpientes.values()].map((s) => [s.id, s.x, s.y, Math.round(largo(s.masa)), Math.round(radio(s.masa) * 10), s.acelerando ? 1 : 0]),
-      j: this.nuevas.filter((s) => this.serpientes.has(s.id)).map((s) => this.datosCompletos(s)),
-      m: this.muertes.filter(([id]) => !nuevasIds.has(id)),   // la que nació y murió en el mismo paso nunca se mandó
-      n: this.comidaNueva.filter((c) => this.comida.has(c[0])),
-      e: this.comidaComida.filter((id) => !this.comidaNueva.some((c) => c[0] === id)),
-    };
+    if (this.estado === 'espera') this.pasoEspera();
+    else if (this.estado === 'partida') this.pasoPartida();
+    else if (this.estado === 'fin' && --this.cuenta <= 0) {
+      this.estado = 'espera';
+      this.cuenta = null;
+      this.vaciar();
+      this.cambioEstado = true;
+    }
+    const m = { t: 'u' };
+    if (this.inicio) m.ini = this.inicio;
+    if (this.estado === 'partida' || this.estado === 'fin') {
+      m.p = this.vivos().map((j) => [j.id, Math.round(j.x), Math.round(j.y), Math.round(j.a * 100), Math.ceil(j.vida), Math.ceil(j.escudo), j.arma]);
+      if (this.paso_ % 2 === 0 || this.inicio) m.z = this.datosZona();
+    }
+    if (this.balasNuevas.length) m.b = this.balasNuevas;
+    if (this.balasFin.length) m.x = this.balasFin;
+    if (this.itemsNuevos.length) m.ia = this.itemsNuevos;
+    if (this.itemsFuera.length) m.ir = this.itemsFuera;
+    if (this.bajas.length) m.k = this.bajas;
+    if (this.cambioEstado || this.paso_ % 20 === 0) m.e = this.datosEstado();
     this.limpiarEventos();
-    return cambios;
-  }
-
-  datosCompletos(s) {
-    return [s.id, s.nombre, s.color, s.pts.flat(), Math.round(largo(s.masa)), Math.round(radio(s.masa) * 10), s.bot ? 1 : 0];
+    return m;
   }
 
   // Todo el estado, para quien recién se conecta
   foto() {
     return {
       t: 'i',
-      R: AJUSTES.RADIO_MAPA,
+      L: AJUSTES.MAPA,
+      R: AJUSTES.R,
       tick: AJUSTES.TICK_MS,
-      sn: [...this.serpientes.values()].map((s) => this.datosCompletos(s)),
-      f: [...this.comida.values()],
+      e: this.datosEstado(),
+      mapa: this.estado === 'espera' ? null : this.datosMapa(),
+      p: this.vivos().map((j) => [j.id, Math.round(j.x), Math.round(j.y), Math.round(j.a * 100), Math.ceil(j.vida), Math.ceil(j.escudo), j.arma]),
+      z: this.datosZona(),
     };
   }
 }
