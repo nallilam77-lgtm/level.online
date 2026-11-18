@@ -3,6 +3,9 @@ name = "levelup-juego"
 main = "src/worker.js"
 compatibility_date = "2025-09-01"
 
+# El juego queda en https://juego.levelupstore.online (Cloudflare crea el registro DNS solo al publicar)
+routes = [{ pattern = "juego.levelupstore.online", custom_domain = true }]
+
 # La página del juego (para probar en local con `npm run dev` → http://localhost:8787)
 [assets]
 directory = "../public/juego"

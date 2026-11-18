@@ -15,9 +15,18 @@
   const TACTIL = window.matchMedia && matchMedia('(pointer: coarse)').matches;
 
   // En la tienda la página la sirve Vercel; el juego corre en Cloudflare. En local, el mismo servidor.
-  const SERVIDOR = /(^|\.)levelupstore\.online$/.test(location.hostname)
-    ? 'wss://juego.levelupstore.online/ws'
-    : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws${location.search}`;   // en local, ?espera=3 acorta la espera
+  const BASE = /(^|\.)levelupstore\.online$/.test(location.hostname) ? 'https://juego.levelupstore.online' : location.origin;
+  // El juego es privado: el enlace trae ?c=<código> (se crea en admin.html → Minijuego). Se recuerda en
+  // este navegador para que al recargar no haga falta el enlace otra vez.
+  const parametros = new URLSearchParams(location.search);
+  let CODIGO = parametros.get('c') || '';
+  try {
+    if (CODIGO) localStorage.setItem('ultimo_enlace', CODIGO);
+    else CODIGO = localStorage.getItem('ultimo_enlace') || '';
+  } catch (e) { /* sin almacenamiento */ }
+  const ESPERA = parametros.get('espera');   // solo en local: ?espera=3 acorta la espera
+  const urlSala = () => `${BASE.replace(/^http/, 'ws')}/ws?c=${encodeURIComponent(CODIGO)}${ESPERA ? '&espera=' + encodeURIComponent(ESPERA) : ''}`;
+  let privado = false;                        // el enlace no sirve (o no hay)
 
   // ---------------- Igual que juego-servidor/src/partida.js ----------------
   let L = 2400;
@@ -225,9 +234,19 @@
   medir();
 
   // ---------------- Conexión ----------------
-  function conectar() {
+  async function conectar() {
     pintarPanel();
-    try { ws = new WebSocket(SERVIDOR); } catch (e) { reconectar(); return; }
+    // Primero: ¿el enlace sirve? (si no, no tiene sentido intentar conectarse)
+    try {
+      const r = await (await fetch(`${BASE}/acceso?c=${encodeURIComponent(CODIGO)}`, { cache: 'no-store' })).json();
+      if (!r.ok && !r.error) {
+        privado = true;
+        try { localStorage.removeItem('ultimo_enlace'); } catch (e) { /* sin almacenamiento */ }
+        pintarPanel();
+        return;
+      }
+    } catch (e) { reconectar(); return; }
+    try { ws = new WebSocket(urlSala()); } catch (e) { reconectar(); return; }
     ws.addEventListener('open', () => { reintento = 0; mandar({ t: 'p', k: Math.round(performance.now()) }); });
     ws.addEventListener('message', (e) => {
       let m;
@@ -235,6 +254,7 @@
       recibir(m);
     });
     ws.addEventListener('close', () => {
+      if (privado) return;
       yo = null;
       anotado = false;
       enPartida = false;
@@ -427,6 +447,13 @@
     capa.classList.toggle('capa--mirar', estado.s === 'partida' || estado.s === 'fin');
     btn.disabled = !conectado();
 
+    if (privado) {
+      titulo.innerHTML = 'Juego <span>privado</span>';
+      texto.innerHTML = 'Para jugar necesitas un <strong>enlace de invitación</strong> de Level Up. Pídeselo a quien te invitó.<br><br>Si ya tenías uno, puede que haya vencido.';
+      $('avisoPanel').textContent = '';
+      mostrar({});
+      return;
+    }
     if (!conectado()) {
       titulo.innerHTML = 'Último <span>en Pie</span>';
       texto.textContent = 'Conectando con la partida…';

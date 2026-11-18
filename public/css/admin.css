@@ -231,3 +231,6 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 .aprobar-campos input { width: 100%; }
 .por-aprobar-monto { font-family: 'Montserrat', sans-serif; font-size: 16px; font-weight: 900; color: var(--accent-neon); }
 .codigo-semana { color: var(--text-main); font-weight: 600; }
+
+/* Enlaces con aspecto de botón (p. ej. "Mandar por WhatsApp" en Minijuego → Último en Pie) */
+a.btn-ver { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }

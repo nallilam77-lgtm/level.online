@@ -110,7 +110,7 @@
     document.querySelectorAll('[data-seccion]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
     document.querySelectorAll('.seccion').forEach((s) => { s.hidden = s.id !== 'seccion-' + b.dataset.seccion; });
     // Minijuego: el ranking y las fichas por partida / Bs por ficha (vienen con admin_precios)
-    if (b.dataset.seccion === 'juego') { cargarJuego(); cargarPrecios().catch(() => {}); }
+    if (b.dataset.seccion === 'juego') { cargarJuego(); cargarPrecios().catch(() => {}); cargarEnlacesJuego(); }
     if (b.dataset.seccion === 'espacio') cargarEspacio();
     if (b.dataset.seccion === 'cuentas') cargarCuentas();
     if (b.dataset.seccion === 'creadores') { cargarCodigos(); cargarInscripciones(); }
@@ -433,6 +433,84 @@
   }
 
   // ---------------------------------------------------------------- minijuego
+  // ---------------------------------------------------------------- Último en Pie (juego privado)
+  // Enlaces de supabase/juego-enlaces.sql. El servidor del juego (Cloudflare) revisa el código al entrar.
+  const URL_JUEGO = 'https://www.levelupstore.online/juego/?c=';
+  const enlaceJuego = (codigo) => URL_JUEGO + codigo;
+  let miEnlaceJuego = null;
+  async function miEnlace() {
+    if (miEnlaceJuego) return miEnlaceJuego;
+    const { data, error } = await cliente.rpc('admin_juego_mi_enlace');
+    if (error || !data) throw error || new Error('sin enlace');
+    miEnlaceJuego = data;
+    return data;
+  }
+  async function copiar(texto, b, listo) {
+    try { await navigator.clipboard.writeText(texto); b.textContent = listo; } catch (e) { prompt('Copia el enlace:', texto); }
+  }
+  $('btnJugarUltimo').addEventListener('click', async (e) => {
+    const ventana = window.open('about:blank', '_blank');   // se abre ya (si no, el navegador la bloquea)
+    try {
+      const codigo = await miEnlace();
+      if (ventana) ventana.location.href = enlaceJuego(codigo); else location.href = enlaceJuego(codigo);
+    } catch (err) {
+      if (ventana) ventana.close();
+      alert(textoError(err, 'No se pudo abrir el juego. ¿Ya corriste supabase/juego-enlaces.sql?'));
+    }
+  });
+  $('btnCopiarMiEnlace').addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    try { await copiar(enlaceJuego(await miEnlace()), b, '¡Copiado!'); } catch (err) { alert(textoError(err, 'No se pudo copiar.')); }
+  });
+  $('formEnlaceJuego').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = $('mensajeEnlaceJuego');
+    msg.textContent = 'Creando…';
+    const { data, error } = await cliente.rpc('admin_juego_crear_enlace', {
+      p_nota: $('notaEnlaceJuego').value.trim(), p_dias: Number($('diasEnlaceJuego').value),
+    });
+    if (error || !data) { msg.textContent = textoError(error, 'No se pudo crear el enlace.'); return; }
+    $('notaEnlaceJuego').value = '';
+    try { await navigator.clipboard.writeText(enlaceJuego(data)); msg.textContent = 'Enlace creado y copiado. Pásaselo por WhatsApp.'; }
+    catch (err) { msg.textContent = 'Enlace creado: ' + enlaceJuego(data); }
+    cargarEnlacesJuego();
+  });
+  async function cargarEnlacesJuego() {
+    const lista = $('listaEnlacesJuego');
+    const { data, error } = await cliente.rpc('admin_juego_enlaces');
+    lista.replaceChildren();
+    if (error) { lista.append(el('li', 'vacio', 'No se pudieron cargar. ¿Ya corriste supabase/juego-enlaces.sql?')); return; }
+    if (!data.length) { lista.append(el('li', 'vacio', 'Todavía no has invitado a nadie.')); return; }
+    const ahora = Date.now();
+    data.forEach((x) => {
+      const vencido = x.vence && new Date(x.vence).getTime() < ahora;
+      const [texto, clase] = !x.activo ? ['Anulado', 'etiqueta--problema'] : vencido ? ['Vencido', 'etiqueta--incompleto'] : ['Activo', 'etiqueta--completado'];
+      const li = el('li', 'pedido');
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', x.nota || 'Sin nota'), el('span', 'etiqueta ' + clase, texto));
+      const vence = x.vence ? `vence ${fecha(x.vence)}` : 'no vence';
+      const usos = x.entradas ? `${x.entradas} ${x.entradas === 1 ? 'entrada' : 'entradas'}${x.ultimo_uso ? ', la última ' + fecha(x.ultimo_uso) : ''}` : 'sin usar';
+      li.append(cabeza, el('span', '', `Creado ${fecha(x.creado)} · ${vence} · ${usos}`));
+      if (x.activo && !vencido) {
+        const acciones = el('div', 'fila-campos');
+        acciones.append(boton('Copiar enlace', 'btn-ver', (b) => copiar(enlaceJuego(x.codigo), b, '¡Copiado!')));
+        const wa = el('a', 'btn-ver', 'Mandar por WhatsApp');
+        wa.href = `https://wa.me/?text=${encodeURIComponent('¡Te invito a jugar Último en Pie de Level Up! Entra aquí: ' + enlaceJuego(x.codigo))}`;
+        wa.target = '_blank';
+        wa.rel = 'noopener';
+        acciones.append(wa, boton('Anular', 'btn-ver btn-ver--peligro', async (b) => {
+          if (!confirm(`¿Anular el enlace de "${x.nota || 'sin nota'}"?\n\nQuien lo tenga ya no podrá entrar al juego.`)) return;
+          b.disabled = true;
+          const { error: e2 } = await cliente.rpc('admin_juego_anular_enlace', { p_codigo: x.codigo });
+          if (e2) { alert(textoError(e2, 'No se pudo anular.')); b.disabled = false; return; }
+          cargarEnlacesJuego();
+        }));
+        li.append(acciones);
+      }
+      lista.append(li);
+    });
+  }
+
   async function cargarJuego() {
     const s = iniciosVE();
     const pasada = $('semanaJuego').value === 'pasada';

@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=24">
+  <link rel="stylesheet" href="css/admin.css?v=25">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=54" defer></script>
+  <script src="/js/admin.js?v=55" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -582,6 +582,34 @@
 
       <!-- MINIJUEGO: ranking y fichas -->
       <section class="seccion" id="seccion-juego" hidden>
+        <!-- Último en Pie: juego privado (supabase/juego-enlaces.sql, juego-servidor/). Solo con enlace. -->
+        <div class="tarjeta">
+          <h2>Último en Pie (privado)</h2>
+          <p class="nota">Solo entra quien tenga un enlace. <strong>Jugar ahora</strong> abre el tuyo (no vence). Para invitar a alguien, crea un enlace y pásaselo; lo puedes anular cuando quieras.</p>
+          <div class="fila-campos">
+            <button type="button" class="btn btn--chico" id="btnJugarUltimo">Jugar ahora</button>
+            <button type="button" class="btn-ver" id="btnCopiarMiEnlace">Copiar mi enlace</button>
+          </div>
+          <form class="formulario" id="formEnlaceJuego" novalidate>
+            <div class="dos-campos">
+              <label class="campo">Para quién (nota)
+                <input type="text" id="notaEnlaceJuego" maxlength="60" placeholder="Ej. Primo Luis" autocomplete="off">
+              </label>
+              <label class="campo">Vence
+                <select id="diasEnlaceJuego">
+                  <option value="1">En 1 día</option>
+                  <option value="7" selected>En 7 días</option>
+                  <option value="30">En 30 días</option>
+                  <option value="0">No vence</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit" class="btn btn--chico">Crear enlace</button>
+            <p class="mensaje-form" id="mensajeEnlaceJuego" role="status"></p>
+          </form>
+          <ul class="pedidos" id="listaEnlacesJuego"></ul>
+        </div>
+
         <div class="tarjeta">
           <div class="fila-titulo">
             <h2>Ranking del minijuego</h2>

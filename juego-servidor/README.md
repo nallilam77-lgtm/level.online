@@ -27,11 +27,19 @@ npm run dev        # abre http://localhost:8787  (o http://localhost:8787/?esper
 Abre esa dirección en varias pestañas para jugar entre varios.
 `npm run prueba` conecta 15 jugadores de prueba a la vez (con `npm run dev` corriendo).
 
+## Acceso privado
+
+Solo se juega con un enlace `https://www.levelupstore.online/juego/?c=<código>`. Los códigos se crean en
+admin.html → Minijuego → "Último en Pie" (supabase/juego-enlaces.sql): **Jugar ahora** usa el tuyo (no vence) y
+**Crear enlace** hace uno para otra persona (vence en 1, 7, 30 días o nunca; se puede anular). El Worker revisa
+el código con `juego_entrar()` en `/acceso` y al abrir `/ws`. En local (localhost) no pide código.
+
 ## Publicar (Cloudflare, plan gratis)
 
 1. `npx wrangler login` (abre tu cuenta de Cloudflare).
-2. `npm run deploy`.
-3. En Cloudflare → Workers → levelup-juego → Settings → Domains: agregar `juego.levelupstore.online`.
+2. Las dos variables (una sola vez): `npx wrangler secret put SUPABASE_URL` y `npx wrangler secret put SUPABASE_KEY`
+   (la URL del proyecto y la clave pública "anon"/publishable de Supabase).
+3. `npm run deploy` (también crea `juego.levelupstore.online`, por `routes` en wrangler.toml).
 
 Plan gratis: los mensajes de los jugadores cuentan como peticiones (20 mensajes = 1 petición, tope de
 100.000 por día). Por eso el navegador solo manda los controles cuando cambian, máximo 10 veces por segundo

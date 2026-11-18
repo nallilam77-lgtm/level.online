@@ -7,7 +7,7 @@ Dominio: `https://levelupstore.online` (CORS de `/api/*` restringido a él en `v
 ## Estructura
 
 ```
-juego-servidor/           Último en Pie (battle royale 2D en línea, 15 jugadores): Cloudflare Worker + Durable Object (no Vercel: necesita conexión abierta). Página en public/juego/. Ver juego-servidor/README.md
+juego-servidor/           Último en Pie (battle royale 2D en línea, 15 jugadores): Cloudflare Worker + Durable Object (no Vercel: necesita conexión abierta). Página en public/juego/. Privado: solo con enlace ?c=<código> (supabase/juego-enlaces.sql, admin.html → Minijuego). Ver juego-servidor/README.md
 api/                      Funciones serverless de Vercel (un archivo = un endpoint)
 ├── _lib/                 Código compartido (el "_" evita que Vercel lo publique)
 │   ├── juegos/           Lógica de cada tienda (enrutada por api/juego.js y api/recargar.js)
