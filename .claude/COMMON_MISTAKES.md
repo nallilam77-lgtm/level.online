@@ -264,3 +264,9 @@ Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creado
 **Síntoma**: …91799 quedó dos veces pendiente (2394 y 572 Diamantes, dos ID distintos, misma IP, 3 min de diferencia).
 **Causa**: la regla era una pendiente por referencia + juego + ID: con otro ID se creaba otra solicitud.
 **Regla**: una sola pendiente por referencia (últimos 5), sin importar juego, ID ni teléfono (índice `pagos_solicitudes_una_pendiente_por_referencia`). Solo el MISMO idPedido la reutiliza; cualquier otro pedido recibe `motivo: 'repetida'` ("Referencia repetida") y no se anota nada.
+
+## 18. Una segunda lista de los mismos creadores tapó la de siempre (2026-11-18)
+
+**Síntoma**: "no me aparecen los datos de pago ni el botón Ya le pagué" en Panel → Creadores.
+**Causa**: la tarjeta nueva de inscripciones traía su propia lista de creadores (sin datos de pago ni botones) y estaba ARRIBA de la lista "Códigos"; el administrador miraba esa.
+**Regla**: un dato nuevo de algo que ya tiene su lista va DENTRO de esa lista (aquí: la semana en cada tarjeta de código, `semanaPorCodigo`), no en una lista aparte. Y al mover bloques de admin.html, buscar el título dentro de su `<section>`: "Códigos" existe también en Canjes.
