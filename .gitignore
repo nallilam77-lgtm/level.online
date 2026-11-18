@@ -17,3 +17,6 @@ privado/
 
 # Wrangler (Cloudflare) en local
 .wrangler/
+
+# Paquetes de arte completos (Kenney): el juego usa solo lo copiado a public/juego/img y public/juego/sonidos
+recursos-juego/

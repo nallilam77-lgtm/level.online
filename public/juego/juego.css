@@ -2,7 +2,7 @@
 :root {
   --bg-base: #0f172a;
   --bg-deep: #0b1120;
-  --surface: rgba(15, 23, 42, 0.6);
+  --surface: rgba(15, 23, 42, 0.82);   /* más opaco: el mapa de arena es claro */
   --accent-cyan: #22d3ee;
   --accent-neon: #39ff14;
   --text-main: #f1f5f9;
@@ -15,31 +15,32 @@
   --shadow-glow-fuerte: 0 12px 30px -5px rgba(6, 182, 212, 0.35);
 
   /* Lienzo: mapa */
-  --mapa-fuera: #070b16;
-  --mapa-suelo: #111c33;
-  --mapa-rejilla: rgba(148, 163, 184, 0.06);
-  --mapa-caja: #1e2a44;
-  --mapa-caja-borde: #334366;
-  --mapa-caja-luz: rgba(34, 211, 238, 0.18);
-  --zona-fuera: rgba(248, 113, 113, 0.16);
+  --mapa-fuera: #3b2a35;
+  --zona-fuera: rgba(220, 38, 38, 0.2);
   --zona-borde: #f87171;
   --zona-objetivo: rgba(241, 245, 249, 0.6);
   --mapa-nombre: rgba(241, 245, 249, 0.9);
-  --mapa-contorno: rgba(2, 6, 23, 0.7);
-  --mapa-canon: #cbd5e1;
-  --mapa-bala: #fde68a;
-  --mapa-impacto: #ffffff;
+  --mapa-contorno: rgba(2, 6, 23, 0.75);
+  --mapa-bala: #fff7c2;
+  --mapa-bala-borde: rgba(234, 88, 12, 0.85);
+  --mapa-impacto: #fff7c2;
+  --mapa-fogonazo: #ffd166;
+  --mapa-sombra: rgba(59, 42, 53, 0.35);
+  --mapa-tu: #39ff14;
+  --dano-otro: #ffd166;
+  --dano-mio: #ff4d6d;
+  --brillo-arma: rgba(255, 209, 102, 0.45);
+  --brillo-botiquin: rgba(57, 255, 20, 0.4);
+  --brillo-chaleco: rgba(77, 148, 255, 0.45);
   --mapa-vida: #39ff14;
   --mapa-vida-fondo: rgba(2, 6, 23, 0.7);
   --mapa-escudo: #4d94ff;
   --item-arma: #ff9900;
-  --item-botiquin: #39ff14;
-  --item-chaleco: #4d94ff;
-  --item-texto: #0b1120;
   --palanca: rgba(241, 245, 249, 0.18);
   --palanca-borde: rgba(241, 245, 249, 0.35);
   --minimapa-tu: #39ff14;
-  --minimapa-otros: rgba(241, 245, 249, 0.6);
+  --minimapa-caja: rgba(203, 213, 225, 0.55);
+  --minimapa-arbol: rgba(61, 255, 154, 0.55);
 
   /* Lienzo: 12 colores de jugadores */
   --color-0: #22d3ee;
@@ -71,7 +72,7 @@ html, body {
   -webkit-user-select: none;
 }
 
-#lienzo { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+#lienzo { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: none; image-rendering: pixelated; }
 
 .glass {
   background: var(--surface);
@@ -117,6 +118,7 @@ html, body {
   left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%);
   width: min(320px, calc(100% - 32px));
   display: grid; gap: 6px; text-align: center;
+  padding: 10px 14px;
 }
 .barra { height: 14px; border-radius: 8px; background: var(--mapa-vida-fondo); border: 1px solid var(--border-glass); overflow: hidden; position: relative; }
 .barra span { display: block; height: 100%; width: 100%; transition: width 0.2s; }
@@ -127,6 +129,26 @@ html, body {
 .barra--escudo { height: 8px; }
 .barra--escudo span { background: var(--mapa-escudo); }
 .hud-arma { margin: 0; font-size: 14px; font-weight: 900; color: var(--accent-cyan); letter-spacing: 0.04em; text-shadow: 0 1px 4px var(--bg-deep); }
+.hud-municion { color: var(--text-main); }
+.hud-municion.vacio { color: var(--warning); }
+
+.btn-sonido {
+  position: fixed; z-index: 3; right: 12px; top: calc(max(12px, env(safe-area-inset-top)) + 132px);
+  width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+  border: 1px solid var(--border-glass); background: var(--surface); color: var(--text-main); cursor: pointer;
+}
+.btn-sonido:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+.btn-sonido .tachado { display: none; }
+.btn-sonido.apagado { color: var(--text-muted); }
+.btn-sonido.apagado .onda { display: none; }
+.btn-sonido.apagado .tachado { display: inline; }
+
+.btn-recargar {
+  position: fixed; z-index: 3; right: 12px; top: calc(max(12px, env(safe-area-inset-top)) + 152px);
+  min-height: 44px; padding: 0 16px; border-radius: 12px;
+  border: 1px solid var(--accent-cyan); background: var(--surface); color: var(--accent-cyan);
+  font: 800 13px 'Montserrat', sans-serif;
+}
 
 .btn-cambiar {
   position: fixed; z-index: 3; left: 50%; transform: translateX(-50%);
@@ -199,6 +221,17 @@ html, body {
 .btn-jugar:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 3px; }
 .btn-jugar:disabled { opacity: 0.6; cursor: default; }
 
+.tabla-final { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; text-align: left; }
+.tabla-final li { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; padding: 6px 10px; border-radius: 8px; color: var(--text-muted); }
+.tabla-final li b { color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabla-final li:first-child { background: rgba(57, 255, 20, 0.08); }
+.tabla-final li.yo { outline: 1px solid var(--accent-neon); }
+.tabla-final li.yo b { color: var(--accent-neon); }
+
+.creditos { margin: 0; font-size: 11px; color: var(--text-muted); }
+.creditos a { color: var(--text-muted); }
+.creditos a:focus-visible { outline: 2px solid var(--accent-cyan); }
+
 .controles { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 12px; color: var(--text-muted); text-align: left; line-height: 1.5; }
 .controles strong { color: var(--text-main); }
 
@@ -207,6 +240,8 @@ html, body {
   .hud--estado { gap: 4px 10px; padding: 8px 12px; max-width: calc(100% - 120px); }
   .hud--estado strong { font-size: 14px; }
   .minimapa { width: 88px; height: 88px; }
+  .btn-sonido { top: calc(max(12px, env(safe-area-inset-top)) + 98px); }
+  .capa.capa--mirar .panel { max-height: 70vh; overflow-y: auto; }
   .hud--bajas { font-size: 11px; top: calc(max(12px, env(safe-area-inset-top)) + 80px); }
   .panel { padding: 24px 20px; }
   .panel h1 { font-size: 28px; }

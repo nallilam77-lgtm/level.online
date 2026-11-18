@@ -8,6 +8,7 @@
 //   { t: 'jugar', n: 'Nombre' }                 anotarse para la próxima partida
 //   { t: 'd', x: 1, y: 0, a: 1.57, f: 1 }       moverse (x, y entre -1 y 1), apuntar (radianes) y disparar
 //   { t: 'c' }                                  cambiar el arma por la del piso
+//   { t: 'r' }                                  recargar
 //   { t: 'p', k: 123 }                          ping (el servidor contesta { t: 'po', k })
 // =========================================================================
 
@@ -76,6 +77,8 @@ export class Sala {
       this.partida.listo(con.id, m.n);
     } else if (m.t === 'c') {
       if (con.id) this.partida.cambiar(con.id);
+    } else if (m.t === 'r') {
+      if (con.id) this.partida.recargar(con.id);
     } else if (m.t === 'p') {
       this.enviar(con, { t: 'po', k: Number(m.k) || 0 });
     }

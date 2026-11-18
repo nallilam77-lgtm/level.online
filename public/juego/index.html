@@ -15,8 +15,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="juego.css?v=2">
-  <script src="juego.js?v=2" defer></script>
+  <link rel="stylesheet" href="juego.css?v=5">
+  <script src="juego.js?v=5" defer></script>
 </head>
 <body>
   <canvas id="lienzo" aria-label="Mapa de la partida"></canvas>
@@ -32,11 +32,16 @@
   <canvas id="minimapa" class="minimapa" width="120" height="120" aria-hidden="true"></canvas>
 
   <!-- Abajo al centro: vida, escudo y arma -->
-  <div class="hud hud--vida" id="hudVida" hidden>
+  <div class="hud hud--vida glass" id="hudVida" hidden>
     <div class="barra barra--escudo"><span id="barraEscudo"></span></div>
     <div class="barra barra--vida"><span id="barraVida"></span><b id="textoVida">100</b></div>
-    <p class="hud-arma" id="hudArma">Pistola</p>
+    <p class="hud-arma"><span id="hudArma">Pistola</span> · <span class="hud-municion" id="hudMunicion">12 / 12</span></p>
   </div>
+
+  <button type="button" class="btn-sonido" id="btnSonido" aria-pressed="true" aria-label="Silenciar">
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path class="onda" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/><path class="tachado" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 9l5 6M21 9l-5 6"/></svg>
+  </button>
+  <button type="button" class="btn-recargar" id="btnRecargar" hidden>Recargar</button>
 
   <button type="button" class="btn-cambiar" id="btnCambiar" hidden>Cambiar por <span id="armaPiso"></span></button>
   <p class="banner" id="banner" hidden></p>
@@ -51,15 +56,17 @@
         <span>Puesto <strong id="resPuesto">-</strong></span>
         <span>Bajas <strong id="resBajas">0</strong></span>
       </div>
+      <ol class="tabla-final" id="tablaFinal" hidden aria-label="Resultados de la partida"></ol>
       <label class="campo" id="campoNombre">Tu nombre
         <input type="text" id="nombre" maxlength="14" autocomplete="nickname" placeholder="Ej. ElRey" spellcheck="false">
       </label>
       <button type="submit" class="btn-jugar" id="btnJugar" disabled>Conectando…</button>
       <ul class="controles" id="controles">
-        <li><strong>Computadora:</strong> WASD o flechas para moverte, el mouse para apuntar, clic para disparar y E para cambiar de arma.</li>
+        <li><strong>Computadora:</strong> WASD o flechas para moverte, el mouse para apuntar, clic para disparar, R para recargar y E para cambiar de arma.</li>
         <li><strong>Celular:</strong> el dedo izquierdo te mueve; el derecho apunta y dispara.</li>
       </ul>
       <p class="panel-aviso" id="avisoPanel" role="status"></p>
+      <p class="creditos">Arte y sonidos: <a href="https://kenney.nl" target="_blank" rel="noopener">Kenney</a> (CC0)</p>
     </form>
   </div>
 </body>

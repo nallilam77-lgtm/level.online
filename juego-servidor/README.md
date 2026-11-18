@@ -9,7 +9,12 @@
 
 Reglas: todos caen con pistola; en el piso hay subfusil, escopeta, rifle, francotirador, botiquines (+35 de
 vida) y chalecos (+50 de escudo). Con pistola el arma se agarra sola; con otra, se cambia con E o el botón.
-La zona se cierra en 4 fases y quema más en cada una. Si hay menos de 10 personas, entran bots.
+Cada arma tiene cargador y recarga (R o el botón). La zona se cierra en 4 fases y quema más en cada una. Si hay
+menos de 10 personas, entran bots.
+
+Arte y sonidos: Kenney "Desert Shooter Pack" (CC0, `public/juego/img/LICENCIA-kenney.txt`). Solo se usan
+las hojas copiadas a `public/juego/img/` y 14 sonidos de `public/juego/sonidos/`; los paquetes completos
+quedan en `recursos-juego/` (no se suben).
 
 ## Probar en tu computadora
 

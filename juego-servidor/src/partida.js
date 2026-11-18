@@ -22,13 +22,18 @@ export const AJUSTES = {
 };
 
 // Igual que en public/juego/juego.js
+// cad = pasos entre disparos · cargador = balas antes de recargar · recarga = segundos
 export const ARMAS = [
-  { nombre: 'Pistola', cad: 8, dano: 14, vel: 40, alcance: 700, disp: 0.05, balas: 1 },
-  { nombre: 'Subfusil', cad: 2, dano: 8, vel: 42, alcance: 600, disp: 0.12, balas: 1 },
-  { nombre: 'Escopeta', cad: 16, dano: 10, vel: 38, alcance: 380, disp: 0.3, balas: 6 },
-  { nombre: 'Rifle', cad: 5, dano: 17, vel: 48, alcance: 950, disp: 0.04, balas: 1 },
-  { nombre: 'Francotirador', cad: 30, dano: 80, vel: 75, alcance: 1600, disp: 0, balas: 1 },
+  { nombre: 'Pistola', cad: 8, dano: 14, vel: 40, alcance: 700, disp: 0.05, balas: 1, cargador: 12, recarga: 1.1 },
+  { nombre: 'Subfusil', cad: 2, dano: 8, vel: 42, alcance: 600, disp: 0.12, balas: 1, cargador: 30, recarga: 1.8 },
+  { nombre: 'Escopeta', cad: 16, dano: 10, vel: 38, alcance: 380, disp: 0.3, balas: 6, cargador: 5, recarga: 2.2 },
+  { nombre: 'Rifle', cad: 5, dano: 17, vel: 48, alcance: 950, disp: 0.04, balas: 1, cargador: 24, recarga: 2 },
+  { nombre: 'Francotirador', cad: 30, dano: 80, vel: 75, alcance: 1600, disp: 0, balas: 1, cargador: 5, recarga: 2.6 },
 ];
+
+// Obstáculos: [x, y, ancho, alto, tipo]. El rectángulo es lo que choca; el navegador dibuja según el tipo.
+export const OBSTACULO = { CAJAS: 0, BARRIL: 1, MURO: 2, ARBOL: 3, ROCA: 4 };
+const T = 48;   // una casilla del dibujo (16 px × 3)
 export const BOTIQUIN = 10;   // +35 de vida
 export const CHALECO = 11;    // +50 de escudo
 
@@ -87,6 +92,7 @@ export function mover(o, mx, my, cajas, factor = 1) {
 }
 
 const dentroDeCaja = (x, y, cajas) => cajas.some(([cx, cy, w, h]) => x >= cx && x <= cx + w && y >= cy && y <= cy + h);
+const cargar = (j, arma) => { j.arma = arma; j.mun = ARMAS[arma].cargador; j.recarga = 0; };
 
 export class Partida {
   constructor() {
@@ -165,25 +171,44 @@ export class Partida {
     if (!it) return;
     this.quitarItem(it[0]);
     if (j.arma !== 0) this.ponerItem(it[1], it[2], j.arma);
-    j.arma = it[3];
+    cargar(j, it[3]);
     j.proximo = Math.max(j.proximo, this.paso_ + 6);
+  }
+
+  // Recargar antes de vaciar el cargador (tecla R / botón)
+  recargar(id) {
+    const j = this.jugadores.get(id);
+    if (j && j.vivo) this.empezarRecarga(j);
+  }
+
+  empezarRecarga(j) {
+    if (j.recarga || j.mun >= ARMAS[j.arma].cargador) return;
+    j.recarga = this.paso_ + pasos(ARMAS[j.arma].recarga);
   }
 
   // ------------------------------------------------------------ mapa
   generarMapa() {
     const L = AJUSTES.MAPA;
     const cajas = [];
-    const libre = (x, y, w, h, margen) => cajas.every(([cx, cy, cw, ch]) =>
-      x + w + margen < cx || cx + cw + margen < x || y + h + margen < cy || cy + ch + margen < y);
-    for (let i = 0, intentos = 0; i < 46 && intentos < 2000; intentos++) {
-      const largo = Math.random() < 0.2;
-      const w = Math.round(largo ? (Math.random() < 0.5 ? azar(220, 380) : azar(24, 32)) : azar(50, 150));
-      const h = Math.round(largo ? (w < 40 ? azar(220, 380) : azar(24, 32)) : azar(50, 150));
-      const x = Math.round(azar(120, L - 120 - w));
-      const y = Math.round(azar(120, L - 120 - h));
-      if (libre(x, y, w, h, 70)) { cajas.push([x, y, w, h]); i++; }
-    }
+    // Deja al menos 60 de paso entre obstáculos (un jugador mide 44)
+    const libre = (x, y, w, h) => x > 90 && y > 90 && x + w < L - 90 && y + h < L - 90 && cajas.every(([cx, cy, cw, ch]) =>
+      x + w + 60 < cx || cx + cw + 60 < x || y + h + 60 < cy || cy + ch + 60 < y);
+    const poner = (cuantos, medida, tipo) => {
+      for (let i = 0, intentos = 0; i < cuantos && intentos < 600; intentos++) {
+        const [w, h] = medida();
+        const x = Math.round(azar(0, L - w) / 4) * 4;
+        const y = Math.round(azar(0, L - h) / 4) * 4;
+        if (libre(x, y, w, h)) { cajas.push([x, y, w, h, tipo]); i++; }
+      }
+    };
+    const formas = [[1, 1], [1, 1], [2, 1], [1, 2], [2, 2], [3, 1], [1, 3]];
+    poner(12, () => [T * Math.round(azar(3, 6)), 36], OBSTACULO.MURO);
+    poner(26, () => { const f = formas[Math.floor(Math.random() * formas.length)]; return [f[0] * T, f[1] * T]; }, OBSTACULO.CAJAS);
+    poner(22, () => [30, 26], OBSTACULO.ARBOL);
+    poner(12, () => [30, 36], OBSTACULO.BARRIL);
+    poner(10, () => [40, 30], OBSTACULO.ROCA);
     this.cajas = cajas;
+    this.semilla = Math.floor(Math.random() * 1e9);
     for (let i = 0; i < 48; i++) {
       const [x, y] = this.puntoLibre(60);
       const r = Math.random();
@@ -246,7 +271,7 @@ export class Partida {
       const [x, y] = lugar();
       this.jugadores.set(id, {
         id, nombre, bot, color: Math.floor(Math.random() * COLORES), x, y, a: azar(-Math.PI, Math.PI),
-        mx: 0, my: 0, disparando: false, vivo: true, vida: 100, escudo: 0, arma: 0, proximo: 0, bajas: 0, puesto: 0,
+        mx: 0, my: 0, disparando: false, vivo: true, vida: 100, escudo: 0, arma: 0, mun: ARMAS[0].cargador, recarga: 0, proximo: 0, bajas: 0, puesto: 0,
         idea: 0, visto: 0, lado: Math.random() < 0.5 ? 1 : -1, vagar: azar(-Math.PI, Math.PI),
       });
     };
@@ -336,13 +361,14 @@ export class Partida {
   disparar(j) {
     const arma = ARMAS[j.arma];
     j.proximo = this.paso_ + arma.cad;
+    if (--j.mun <= 0) { j.mun = 0; this.empezarRecarga(j); }
     for (let i = 0; i < arma.balas; i++) {
       const a = j.a + (arma.balas > 1 ? (i / (arma.balas - 1) - 0.5) * arma.disp * 2 : azar(-arma.disp, arma.disp));
       const x = j.x + Math.cos(a) * (AJUSTES.R + 8);
       const y = j.y + Math.sin(a) * (AJUSTES.R + 8);
       const b = { id: this.sigBala++, x, y, dx: Math.cos(a), dy: Math.sin(a), vel: arma.vel, resto: arma.alcance, dano: arma.dano, dueno: j, arma: j.arma };
       this.balas.push(b);
-      this.balasNuevas.push([b.id, Math.round(x), Math.round(y), Math.round(a * 1000), arma.vel, arma.alcance, j.arma]);
+      this.balasNuevas.push([b.id, Math.round(x), Math.round(y), Math.round(a * 1000), arma.vel, arma.alcance, j.arma, j.id]);
     }
   }
 
@@ -381,7 +407,7 @@ export class Partida {
       const t = it[3];
       if (t === BOTIQUIN && j.vida < 100) { j.vida = Math.min(100, j.vida + 35); this.quitarItem(it[0]); }
       else if (t === CHALECO && j.escudo < 100) { j.escudo = Math.min(100, j.escudo + 50); this.quitarItem(it[0]); }
-      else if (t >= 1 && t <= 4 && j.arma === 0) { j.arma = t; this.quitarItem(it[0]); }   // con pistola se agarra sola
+      else if (t >= 1 && t <= 4 && j.arma === 0) { cargar(j, t); this.quitarItem(it[0]); }   // con pistola se agarra sola
     }
   }
 
@@ -420,6 +446,7 @@ export class Partida {
     } else {
       j.visto = 0;
       j.disparando = false;
+      if (j.mun < ARMAS[j.arma].cargador / 2) this.empezarRecarga(j);
       const lejosDelObjetivo = Math.hypot(j.x - z.tx, j.y - z.ty) > z.tr * 0.85;
       let item = null;
       let di = 700;
@@ -461,7 +488,10 @@ export class Partida {
       j.y = Math.round(j.y * 10) / 10;
       this.recoger(j);
     }
-    for (const j of this.vivos()) if (j.disparando && this.paso_ >= j.proximo) this.disparar(j);
+    for (const j of this.vivos()) {
+      if (j.recarga && this.paso_ >= j.recarga) { j.mun = ARMAS[j.arma].cargador; j.recarga = 0; }
+      if (j.disparando && !j.recarga && j.mun > 0 && this.paso_ >= j.proximo) this.disparar(j);
+    }
     this.moverBalas();
     for (const j of this.vivos()) {
       if (Math.hypot(j.x - z.cx, j.y - z.cy) > z.r) this.danar(j, f.dano / 20, null, -2, true);
@@ -472,6 +502,9 @@ export class Partida {
       const g = vivos.length === 1 ? vivos[0] : null;
       if (g) g.puesto = 1;
       this.ganador = g ? { id: g.id, nombre: g.nombre, bajas: g.bajas, bot: g.bot } : null;
+      for (const j of vivos) j.puesto = g ? 1 : 0;   // 0 = seguía en pie cuando se acabó (ya no quedaban personas)
+      this.tabla = [...this.jugadores.values()].sort((a, b) => a.puesto - b.puesto || b.bajas - a.bajas).slice(0, 10)
+        .map((j) => [j.id, j.nombre, j.puesto, j.bajas, j.bot ? 1 : 0]);
       this.estado = 'fin';
       this.cuenta = pasos(AJUSTES.FIN_S);
       this.cambioEstado = true;
@@ -495,6 +528,7 @@ export class Partida {
       c: this.personas.size,
       v: this.estado === 'partida' ? this.vivos().length : 0,
       g: this.ganador,
+      tabla: this.estado === 'fin' ? this.tabla : undefined,
       max: AJUSTES.MAX_JUGADORES,
     };
   }
@@ -502,6 +536,7 @@ export class Partida {
   datosMapa() {
     return {
       cajas: this.cajas,
+      semilla: this.semilla,
       items: [...this.items.values()],
       jugadores: [...this.jugadores.values()].map((j) => [j.id, j.nombre, j.color, j.bot ? 1 : 0, j.vivo ? 1 : 0, j.bajas]),
     };
@@ -528,7 +563,7 @@ export class Partida {
     const m = { t: 'u' };
     if (this.inicio) m.ini = this.inicio;
     if (this.estado === 'partida' || this.estado === 'fin') {
-      m.p = this.vivos().map((j) => [j.id, Math.round(j.x), Math.round(j.y), Math.round(j.a * 100), Math.ceil(j.vida), Math.ceil(j.escudo), j.arma]);
+      m.p = this.vivos().map((j) => [j.id, Math.round(j.x), Math.round(j.y), Math.round(j.a * 100), Math.ceil(j.vida), Math.ceil(j.escudo), j.arma, j.mun, j.recarga ? 1 : 0]);
       if (this.paso_ % 2 === 0 || this.inicio) m.z = this.datosZona();
     }
     if (this.balasNuevas.length) m.b = this.balasNuevas;
@@ -550,7 +585,7 @@ export class Partida {
       tick: AJUSTES.TICK_MS,
       e: this.datosEstado(),
       mapa: this.estado === 'espera' ? null : this.datosMapa(),
-      p: this.vivos().map((j) => [j.id, Math.round(j.x), Math.round(j.y), Math.round(j.a * 100), Math.ceil(j.vida), Math.ceil(j.escudo), j.arma]),
+      p: this.vivos().map((j) => [j.id, Math.round(j.x), Math.round(j.y), Math.round(j.a * 100), Math.ceil(j.vida), Math.ceil(j.escudo), j.arma, j.mun, j.recarga ? 1 : 0]),
       z: this.datosZona(),
     };
   }
