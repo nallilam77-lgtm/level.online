@@ -1,0 +1,181 @@
+/* Serpientes Neón · Level Up. Colores solo como variables (.claude/UI_RULES.md); el lienzo los lee de aquí. */
+:root {
+  --bg-base: #0f172a;
+  --bg-deep: #0b1120;
+  --surface: rgba(15, 23, 42, 0.6);
+  --accent-cyan: #22d3ee;
+  --accent-neon: #39ff14;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border-glass: rgba(148, 163, 184, 0.15);
+  --danger: #f87171;
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 10px 25px -5px rgba(6, 182, 212, 0.2);
+  --shadow-glow-fuerte: 0 12px 30px -5px rgba(6, 182, 212, 0.35);
+
+  /* Lienzo: mapa */
+  --mapa-fondo: #0b1120;
+  --mapa-rejilla: rgba(148, 163, 184, 0.07);
+  --mapa-fuera: #1a0b14;
+  --mapa-borde: #22d3ee;
+  --mapa-nombre: rgba(241, 245, 249, 0.85);
+  --mapa-ojo: #f1f5f9;
+  --mapa-pupila: #0b1120;
+  --mapa-contorno: rgba(2, 6, 23, 0.55);
+  --mapa-brillo: rgba(255, 255, 255, 0.28);
+  --minimapa-tu: #39ff14;
+  --minimapa-otros: rgba(241, 245, 249, 0.55);
+
+  /* Lienzo: 12 colores de serpientes y comida */
+  --serp-0: #22d3ee;
+  --serp-1: #39ff14;
+  --serp-2: #ff9900;
+  --serp-3: #e040fb;
+  --serp-4: #4d94ff;
+  --serp-5: #ffc94a;
+  --serp-6: #ff4d6d;
+  --serp-7: #3dff9a;
+  --serp-8: #a78bfa;
+  --serp-9: #f472b6;
+  --serp-10: #fb923c;
+  --serp-11: #2dd4bf;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-main);
+  font-family: 'Montserrat', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#lienzo { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+.glass {
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+/* ---------- Marcadores ---------- */
+.hud { position: fixed; z-index: 2; pointer-events: none; font-size: 13px; }
+.hud[hidden], .btn-turbo[hidden] { display: none; }
+
+.hud--estado {
+  top: max(12px, env(safe-area-inset-top)); left: 12px;
+  display: flex; gap: 16px; align-items: center;
+  padding: 10px 16px;
+}
+.hud--estado strong { color: var(--accent-neon); font-weight: 900; font-size: 16px; margin-left: 4px; }
+.hud-ping { color: var(--text-muted); font-size: 12px; }
+
+.hud--tabla {
+  top: max(12px, env(safe-area-inset-top)); right: 12px;
+  width: 190px; padding: 12px 16px;
+}
+.hud--tabla h2 { margin: 0 0 8px; font-size: 13px; font-weight: 900; color: var(--accent-cyan); letter-spacing: 0.04em; }
+.hud--tabla h2 small { color: var(--text-muted); font-weight: 600; }
+.hud--tabla ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; counter-reset: puesto; }
+.hud--tabla li { display: flex; justify-content: space-between; gap: 8px; color: var(--text-muted); counter-increment: puesto; }
+.hud--tabla li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud--tabla li span::before { content: counter(puesto) ". "; }
+.hud--tabla li.yo { color: var(--accent-neon); font-weight: 800; }
+
+.minimapa {
+  position: fixed; z-index: 2; right: 12px; bottom: max(12px, env(safe-area-inset-bottom));
+  width: 120px; height: 120px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--border-glass);
+  pointer-events: none;
+}
+
+.btn-turbo {
+  position: fixed; z-index: 3; left: 20px; bottom: max(20px, env(safe-area-inset-bottom));
+  width: 72px; height: 72px; border-radius: 50%;
+  border: 2px solid var(--accent-cyan); background: var(--surface);
+  color: var(--accent-cyan); font-size: 30px; font-family: inherit;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  touch-action: none;
+}
+.btn-turbo.activo { background: var(--accent-cyan); color: var(--bg-base); }
+
+/* ---------- Inicio / volver a jugar ---------- */
+.capa {
+  position: fixed; inset: 0; z-index: 5;
+  display: grid; place-items: center;
+  padding: 16px;
+  background: radial-gradient(ellipse at center, rgba(34, 211, 238, 0.08), rgba(11, 17, 32, 0.75) 70%);
+  overflow-y: auto;
+  touch-action: auto;
+}
+.capa[hidden] { display: none; }
+
+.panel {
+  width: 100%; max-width: 400px;
+  padding: 32px 24px;
+  display: grid; gap: 16px;
+  text-align: center;
+}
+.panel-marca { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--text-muted); }
+.panel h1 { margin: 0; font-size: 32px; font-weight: 900; line-height: 1.1; }
+.panel h1 span { color: var(--accent-cyan); }
+.panel-texto { margin: 0; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+.panel-aviso { margin: 0; min-height: 1em; font-size: 13px; color: var(--danger); }
+.panel-aviso:empty { display: none; }
+
+.resultado { display: flex; justify-content: center; gap: 24px; font-size: 14px; color: var(--text-muted); }
+.resultado[hidden] { display: none; }
+.resultado strong { display: block; font-size: 28px; font-weight: 900; color: var(--accent-neon); }
+
+.campo { display: grid; gap: 8px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.campo input {
+  min-height: 48px; padding: 0 16px;
+  border-radius: 12px; border: 1px solid var(--border-glass);
+  background: var(--bg-deep); color: var(--text-main);
+  font: 600 16px 'Montserrat', sans-serif;
+  user-select: text; -webkit-user-select: text;
+}
+.campo input:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+
+.btn-jugar {
+  min-height: 52px; border: 0; border-radius: 12px;
+  background: var(--accent-neon); color: var(--bg-base);
+  font: 900 17px 'Montserrat', sans-serif; letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  transition: box-shadow 0.25s, transform 0.25s;
+}
+.btn-jugar:hover:not(:disabled), .btn-jugar:focus-visible { box-shadow: var(--shadow-lg), var(--shadow-glow-fuerte); transform: translateY(-1px); }
+.btn-jugar:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 3px; }
+.btn-jugar:disabled { opacity: 0.6; cursor: wait; }
+
+.controles { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 12px; color: var(--text-muted); text-align: left; line-height: 1.5; }
+.controles strong { color: var(--text-main); }
+
+/* Teléfonos: marcadores más chicos para no tapar el mapa */
+@media (max-width: 600px) {
+  .hud { font-size: 12px; }
+  .hud--estado { gap: 10px; padding: 8px 12px; }
+  .hud--estado strong { font-size: 14px; }
+  .hud--tabla { width: 140px; padding: 8px 12px; }
+  .hud--tabla ol li:nth-child(n + 6) { display: none; }
+  .hud--tabla h2 small { display: none; }
+  .minimapa { width: 84px; height: 84px; }
+  .panel { padding: 24px 20px; }
+  .panel h1 { font-size: 28px; }
+}
+@media (max-width: 380px) {
+  .hud-ping { display: none; }
+}
+
+/* Celulares sencillos: sin desenfoque (como el resto de la tienda) */
+.ligero .glass { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(15, 23, 42, 0.88); }
