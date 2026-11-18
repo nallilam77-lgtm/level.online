@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=23">
+  <link rel="stylesheet" href="css/admin.css?v=24">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=52" defer></script>
+  <script src="/js/admin.js?v=53" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -476,10 +476,26 @@
           <p class="nota" id="notaCreadores">Cada venta con código le da al creador el 1,5 % en dólares, con la tasa de ese día. Actualiza la tasa cuando cambie.</p>
         </div>
 
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Códigos</h2>
+            <select id="filtroCodigos" aria-label="Qué códigos mostrar">
+              <option value="">Todos</option>
+              <option value="debe">Les debo</option>
+              <option value="activos">Activos</option>
+              <option value="inactivos">Desactivados</option>
+              <option value="riesgo">En riesgo esta semana</option>
+              <option value="inscritos">Se inscribieron solos</option>
+            </select>
+          </div>
+          <input type="search" id="buscarCodigo" class="buscar" placeholder="Buscar código, creador, WhatsApp o correo…" aria-label="Buscar códigos" autocomplete="off">
+          <ul class="pedidos" id="listaCodigos"></ul>
+        </div>
+
         <!-- INSCRIPCIONES de mini influencers (supabase/creadores-inscripcion.sql, desde 2026-11-17) -->
         <div class="tarjeta">
           <div class="fila-titulo">
-            <h2>Inscripciones y semana</h2>
+            <h2>Inscripciones</h2>
             <span class="etiqueta" id="estadoInscripcion">–</span>
           </div>
           <p class="nota" id="notaInscripcion">Los creadores se inscriben solos en creadores.html con su cuenta de Google, su WhatsApp y el enlace de su perfil o video. Al llenarse los cupos se cierran solas.</p>
@@ -498,22 +514,6 @@
             </div>
             <p class="mensaje-form" id="mensajeInscripcion" role="status"></p>
           </form>
-          <input type="search" id="buscarInscrito" class="buscar" placeholder="Buscar código, creador, WhatsApp o correo…" aria-label="Buscar inscritos" autocomplete="off">
-          <ul class="pedidos" id="listaInscritos"></ul>
-        </div>
-
-        <div class="tarjeta">
-          <div class="fila-titulo">
-            <h2>Códigos</h2>
-            <select id="filtroCodigos" aria-label="Qué códigos mostrar">
-              <option value="">Todos</option>
-              <option value="debe">Les debo</option>
-              <option value="activos">Activos</option>
-              <option value="inactivos">Desactivados</option>
-            </select>
-          </div>
-          <input type="search" id="buscarCodigo" class="buscar" placeholder="Buscar código o creador…" aria-label="Buscar códigos" autocomplete="off">
-          <ul class="pedidos" id="listaCodigos"></ul>
         </div>
 
         <div class="tarjeta">

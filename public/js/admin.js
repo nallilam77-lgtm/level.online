@@ -613,6 +613,9 @@
   // Todo pasa por funciones de supabase/codigos.sql (admin_codigos, admin_codigo_guardar, admin_codigo_pagar,
   // admin_codigo_borrar, admin_tasa_guardar): la base revisa que seas administrador y que los datos sean válidos.
   let codigos = [];
+  // Semana de cada creador (admin_inscripciones de supabase/creadores-inscripcion.sql) y el mínimo
+  let semanaPorCodigo = new Map();
+  let minimoSemana = 10;
   const usd = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Errores que la base escribe para ti (código vacío, PIN corto, ya existe…); los demás, genéricos
   const ERRORES_PROPIOS = ['22023', '23505', '23503', 'P0002'];
@@ -674,9 +677,15 @@
     const filtro = $('filtroCodigos').value;
     const lista = $('listaCodigos');
     lista.replaceChildren();
-    const visibles = codigos.filter((c) => (!texto || `${c.codigo} ${c.creador || ''}`.toLowerCase().includes(texto))
-      && (filtro !== 'debe' || Number(c.pendiente_usd) > 0)
-      && (filtro !== 'activos' || c.activo) && (filtro !== 'inactivos' || !c.activo));
+    const visibles = codigos.filter((c) => {
+      const s = semanaPorCodigo.get(c.codigo);
+      const extra = s ? `${s.whatsapp || ''} ${s.correo || ''}` : '';
+      return (!texto || `${c.codigo} ${c.creador || ''} ${c.correo || ''} ${extra}`.toLowerCase().includes(texto))
+        && (filtro !== 'debe' || Number(c.pendiente_usd) > 0)
+        && (filtro !== 'activos' || c.activo) && (filtro !== 'inactivos' || !c.activo)
+        && (filtro !== 'riesgo' || (estadoSemana(c, s) || {}).texto === 'En riesgo')
+        && (filtro !== 'inscritos' || (s && s.origen === 'inscripcion'));
+    });
     if (!visibles.length) { lista.append(el('li', 'vacio', 'No hay códigos con ese filtro.')); return; }
     visibles.forEach((c) => lista.append(tarjetaCodigo(c)));
   }
@@ -693,10 +702,17 @@
     const cabeza = el('div', 'pedido-cabeza');
     cabeza.append(el('strong', 'codigo-nombre', c.codigo),
       el('span', 'etiqueta ' + (c.activo ? 'etiqueta--completado' : 'etiqueta--reembolsado'), c.activo ? 'Activo' : 'Desactivado'));
+    const semana = semanaPorCodigo.get(c.codigo);
+    const estado = estadoSemana(c, semana);
+    if (estado) cabeza.append(el('span', 'etiqueta ' + estado.clase, estado.texto));
     const debe = Number(c.pendiente_usd) || 0;
     li.append(cabeza,
       el('span', '', c.creador ? `Creador: ${c.creador}` : `Promo de ${bs(c.descuento).replace(/,00$/, '')} % (sin creador)`),
       el('span', '', `${Number(c.usos).toLocaleString('es-VE')} ventas · ${bs(c.ventas_bs)} Bs movidos con su código`));
+    if (c.creador && semana) {
+      li.append(el('span', 'codigo-semana', `📈 Esta semana: ${semana.ventas_semana} de ${minimoSemana} · semana pasada: ${semana.ventas_pasada}`
+        + ` · ${semana.origen === 'inscripcion' ? 'se inscribió solo' : 'lo creaste tú'}${semana.baja_fecha && !c.activo ? ' · desactivado el ' + corta(semana.baja_fecha) : ''}`));
+    }
     if (c.creador) {
       const plata = el('span', 'codigo-plata');
       plata.append(el('span', '', `Ganado ${usd(c.comision_usd)}`), el('strong', debe > 0 ? 'codigo-debe' : '', debe > 0 ? `Le debes ${usd(debe)}` : 'No le debes nada'));
@@ -712,10 +728,15 @@
     }
 
     const acciones = el('div', 'acciones-cuenta');
-    const tel = (c.perfil && c.perfil.telefono) || telefonoDe(c.creador);
+    const tel = (c.perfil && c.perfil.telefono) || telefonoDe(c.creador) || (semana && semana.whatsapp);
     if (tel) acciones.append(enlaceWhatsapp(tel, mensajeCreador(c.codigo, '', c.correo)));
     if (debe > 0) acciones.append(boton(`Ya le pagué ${usd(debe)}`, 'btn-ver btn-pagar', (b) => pagarCodigo(c, b)));
     if (Number(c.usos) > 0) acciones.append(boton('Ver ventas', 'btn-ver', (b) => verVentasCodigo(c.codigo, li, b)));
+    if (semana && semana.enlace) {
+      const a = el('a', 'btn-ver', 'Ver perfil o video');
+      a.href = semana.enlace; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      acciones.append(a);
+    }
     acciones.append(boton('Editar', 'btn-ver', () => editarCodigo(c, li)));
     acciones.append(boton(c.activo ? 'Desactivar' : 'Activar', 'btn-ver', (b) => cambiarActivo(c, b)));
     if (Number(c.usos) === 0 && Number(c.comision_usd) === 0 && Number(c.pagado_usd) === 0) {
@@ -885,15 +906,13 @@
   // supabase/creadores-inscripcion.sql: admin_inscripciones, admin_inscripcion_abrir/cerrar/minimo y
   // admin_limpieza_semanal. Cada lunes 12:15 a. m. pg_cron desactiva a TODO creador (inscrito o creado a mano;
   // las promos no) que no llegó al mínimo de la semana anterior; aquí se ve cómo va cada uno esta semana.
-  let inscritos = [];
-  let minimoSemana = 10;
 
   async function cargarInscripciones() {
     const { data, error } = await cliente.rpc('admin_inscripciones');
     if (error || !data) {
       console.error(error);
       $('estadoInscripcion').textContent = '–';
-      $('listaInscritos').replaceChildren(el('li', 'vacio', 'No se pudieron cargar las inscripciones. ¿Ya corriste supabase/creadores-inscripcion.sql?'));
+      $('notaInscripcion').textContent = 'No se pudieron cargar las inscripciones ni las ventas de la semana. Toca otra pestaña y vuelve a Creadores.';
       return;
     }
     const cfg = data.config || {};
@@ -911,38 +930,17 @@
       partes.push(`Semana del ${cfg.revisada.split('-').reverse().join('/')} revisada: ${bajas.length ? bajas.length + ' desactivado(s) (' + bajas.map((b) => `${b.codigo} ${b.ventas}`).join(', ') + ')' : 'nadie desactivado'}.`);
     }
     $('notaInscripcion').textContent = partes.join(' ');
-    inscritos = Array.isArray(data.creadores) ? data.creadores : [];
-    pintarInscritos();
+    // Ventas de la semana de cada creador: se muestran DENTRO de su tarjeta en la lista de Códigos
+    semanaPorCodigo = new Map((Array.isArray(data.creadores) ? data.creadores : []).map((c) => [c.codigo, c]));
+    pintarCodigos();
   }
 
-  function pintarInscritos() {
-    const texto = $('buscarInscrito').value.trim().toLowerCase();
-    const lista = $('listaInscritos');
-    lista.replaceChildren();
-    const visibles = inscritos.filter((c) => !texto || `${c.codigo} ${c.creador || ''} ${c.whatsapp || ''} ${c.correo || ''}`.toLowerCase().includes(texto));
-    if (!visibles.length) { lista.append(el('li', 'vacio', inscritos.length ? 'Nadie con esa búsqueda.' : 'Todavía no se ha inscrito nadie.')); return; }
-    visibles.forEach((c) => {
-      const li = el('li', 'pedido codigo' + (c.activo ? '' : ' codigo--inactivo'));
-      const cabeza = el('div', 'pedido-cabeza');
-      const llega = Number(c.ventas_semana) >= minimoSemana;
-      const etiqueta = !c.activo ? (c.baja === 'ventas_semana' ? 'Fuera por ventas' : 'Desactivado')
-        : c.primera_semana ? 'Semana de prueba' : llega ? 'Cumple' : 'En riesgo';
-      cabeza.append(el('strong', 'codigo-nombre', c.codigo),
-        el('span', 'etiqueta ' + (!c.activo ? 'etiqueta--reembolsado' : c.primera_semana ? 'etiqueta--pendiente' : llega ? 'etiqueta--completado' : 'etiqueta--en_revision'), etiqueta));
-      li.append(cabeza,
-        el('span', '', `Esta semana: ${c.ventas_semana} de ${minimoSemana} ventas · semana pasada: ${c.ventas_pasada} · total: ${Number(c.usos).toLocaleString('es-VE')}`),
-        el('span', '', `${c.origen === 'inscripcion' ? 'Se inscribió' : 'Lo creaste tú'} el ${corta(c.creado)}${c.correo ? ' · ' + c.correo : ''}${c.baja_fecha ? ' · desactivado el ' + corta(c.baja_fecha) : ''}`));
-      if (Number(c.pendiente_usd) > 0) li.append(el('strong', 'codigo-debe', `Le debes ${usd(c.pendiente_usd)}`));
-      const acciones = el('div', 'acciones-cuenta');
-      if (c.whatsapp) acciones.append(enlaceWhatsapp(c.whatsapp, `¡Hola! Te escribimos de Level Up por tu código de creador *${c.codigo}*.`));
-      if (c.enlace) {
-        const a = el('a', 'btn-ver', 'Ver perfil o video');
-        a.href = c.enlace; a.target = '_blank'; a.rel = 'noopener noreferrer';
-        acciones.append(a);
-      }
-      li.append(acciones);
-      lista.append(li);
-    });
+  // Estado de la semana de un creador: { texto, clase } para su etiqueta (o null si no aplica)
+  function estadoSemana(c, s) {
+    if (!s || !c.creador) return null;
+    if (!c.activo) return s.baja === 'ventas_semana' ? { texto: 'Fuera por ventas', clase: 'etiqueta--reembolsado' } : null;
+    if (s.primera_semana) return { texto: 'Semana de prueba', clase: 'etiqueta--pendiente' };
+    return Number(s.ventas_semana) >= minimoSemana ? { texto: 'Cumple la semana', clase: 'etiqueta--completado' } : { texto: 'En riesgo', clase: 'etiqueta--en_revision' };
   }
 
   async function accionInscripcion(rpc, args, boton, listo) {
@@ -981,7 +979,6 @@
       ? `✅ Semana revisada: ${(d.bajas || []).length} desactivado(s).`
       : `Esa semana ya se había revisado (${String(d.semana || '').split('-').reverse().join('/')}).`));
   });
-  $('buscarInscrito').addEventListener('input', pintarInscritos);
 
   // ---------------------------------------------------------------- precios (supabase/precios.sql)
   // Precio de un paquete: el manual o costo de Central One × cantidad × dólar × (1 + ganancia %). La base
