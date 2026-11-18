@@ -1305,16 +1305,7 @@
     }));
     if (elegido) $('robloxPaquete').value = elegido;
 
-    const entregados = $('listaRobloxEntregados');
-    entregados.replaceChildren();
-    if (!(data.ultimos || []).length) entregados.append(el('li', 'vacio', 'Todavía no se ha entregado ningún código desde Supabase.'));
-    (data.ultimos || []).forEach((c) => {
-      const li = el('li', 'pedido');
-      const cabeza = el('div', 'pedido-cabeza');
-      cabeza.append(el('strong', '', `${c.paquete} Robux · …${c.fin}`), el('span', 'etiqueta etiqueta--completado', 'Entregado'));
-      li.append(cabeza, el('span', '', `${c.usuario || 'sin usuario'} · ${c.entregado ? fecha(c.entregado) : ''} · ${c.id_pedido || ''}`));
-      entregados.append(li);
-    });
+    cargarRobloxEntregados(data.ultimos || []);
 
     const libres = $('listaRobloxLibres');
     libres.replaceChildren();
@@ -1335,6 +1326,48 @@
       libres.append(li);
     });
   }
+
+  // "Entregados: qué código a quién" (admin_roblox_entregados de supabase/roblox-entregados.sql). Si ese SQL
+  // aún no está, se muestran los últimos de admin_roblox (solo los últimos 4 caracteres).
+  let buscarRobloxTimer = null;
+  async function cargarRobloxEntregados(respaldo) {
+    const lista = $('listaRobloxEntregados');
+    const texto = $('buscarRoblox').value.trim();
+    const { data, error } = await cliente.rpc('admin_roblox_entregados', { p_buscar: texto || null });
+    if (texto !== $('buscarRoblox').value.trim()) return;   // llegó tarde: ya buscan otra cosa
+    let filas = data;
+    if (error) {
+      console.error(error);
+      filas = (respaldo || []).map((c) => ({ paquete: c.paquete, codigo: '…' + c.fin, entregado: c.entregado, id_pedido: c.id_pedido }));
+    }
+    lista.replaceChildren();
+    if (error) lista.append(el('li', 'vacio', 'Para ver el código completo y a quién, corre supabase/roblox-entregados.sql en Supabase.'));
+    if (!(filas || []).length) {
+      lista.append(el('li', 'vacio', texto ? 'Nada coincide con esa búsqueda.' : 'Todavía no se ha entregado ningún código desde Supabase.'));
+      return;
+    }
+    filas.forEach((c) => {
+      const li = el('li', 'pedido');
+      const cabeza = el('div', 'pedido-cabeza');
+      cabeza.append(el('strong', '', `${c.paquete} Robux → ${c.roblox || 'sin usuario'}`), el('span', 'etiqueta etiqueta--completado', 'Entregado'));
+      const codigo = el('div', 'borrar-fila');
+      codigo.append(el('strong', 'codigo-nombre', c.codigo));
+      if (!error) {
+        codigo.append(boton('Copiar', 'btn-ver', async (b) => {
+          try { await navigator.clipboard.writeText(c.codigo); b.textContent = '¡Copiado!'; } catch (e) { b.textContent = c.codigo; }
+        }));
+      }
+      const datos = [c.entregado ? fecha(c.entregado) : '', c.referencia ? `ref. …${c.referencia}` : '',
+        c.precio ? `${bs(c.precio)} Bs` : '', c.codigo_descuento ? `código ${c.codigo_descuento}` : '', c.correo || ''].filter(Boolean);
+      li.append(cabeza, codigo, el('span', '', datos.join(' · ')));
+      if (c.estado && c.estado !== 'completado') li.append(el('span', 'precio-detalle', `Pedido en estado: ${ESTADOS[c.estado] || c.estado}`));
+      lista.append(li);
+    });
+  }
+  $('buscarRoblox').addEventListener('input', () => {
+    clearTimeout(buscarRobloxTimer);
+    buscarRobloxTimer = setTimeout(() => cargarRobloxEntregados([]), 300);
+  });
 
   // Paquetes: precio, unión con Central One y crear nuevos (admin_precio_guardar de supabase/precios.sql)
   function opcionesCentralOne(select, sinUsar, actual) {

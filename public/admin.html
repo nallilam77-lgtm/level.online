@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=53" defer></script>
+  <script src="/js/admin.js?v=54" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -394,7 +394,9 @@
         </div>
 
         <div class="tarjeta">
-          <h2>Últimos entregados</h2>
+          <h2>Entregados: qué código a quién</h2>
+          <p class="nota">Código completo, usuario de Roblox, referencia del pago y fecha. Los últimos 200.</p>
+          <input type="search" id="buscarRoblox" class="buscar" placeholder="Buscar usuario de Roblox, código, referencia o correo…" aria-label="Buscar códigos de Roblox entregados" autocomplete="off">
           <ul class="pedidos" id="listaRobloxEntregados"></ul>
         </div>
 
