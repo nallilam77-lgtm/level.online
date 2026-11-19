@@ -7,7 +7,7 @@ Dominio: `https://levelupstore.online` (CORS de `/api/*` restringido a él en `v
 ## Estructura
 
 ```
-juego-servidor/           Último en Pie (battle royale 2D en línea, 15 jugadores): Cloudflare Worker + Durable Object (no Vercel: necesita conexión abierta). Página en public/juego/. Privado: solo con enlace ?c=<código> (supabase/juego-enlaces.sql, admin.html → Minijuego). Ver juego-servidor/README.md
+juego-servidor/           Duelo de Acero (2 vs 2 por turnos, cuerpo a cuerpo con habilidades; reemplazó a Último en Pie el 2026-11-19): Cloudflare Worker + Durable Object, uno por sala (no Vercel: necesita conexión abierta). Página en public/juego/. Privado: solo el administrador CREA salas (admin.html → Minijuego → Crear partida, con su código ?c= de supabase/juego-enlaces.sql); se invita con el enlace de la sala ?s=<sala>. El creador decide cuándo empieza; bots en los puestos vacíos. Ver juego-servidor/README.md
 api/                      Funciones serverless de Vercel (un archivo = un endpoint)
 ├── _lib/                 Código compartido (el "_" evita que Vercel lo publique)
 │   ├── juegos/           Lógica de cada tienda (enrutada por api/juego.js y api/recargar.js)

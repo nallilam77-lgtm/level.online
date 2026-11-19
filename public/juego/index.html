@@ -2,72 +2,119 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <script>
     // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque ni brillos (css/ligero.css)
     (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '../css/ligero.css?v=3'; document.head.appendChild(l); } })();
   </script>
-  <meta name="description" content="Último en Pie de Level Up: battle royale en línea de hasta 15 jugadores. Recoge armas, sobrevive a la zona y queda de último.">
+  <meta name="description" content="Duelo de Acero de Level Up: combate 2 vs 2 por turnos con armas cuerpo a cuerpo y habilidades.">
   <meta name="theme-color" content="#0f172a">
   <meta name="robots" content="noindex">
-  <title>Último en Pie - Level Up</title>
+  <title>Duelo de Acero - Level Up</title>
   <link rel="icon" type="image/png" href="../logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="juego.css?v=5">
-  <script src="juego.js?v=6" defer></script>
+  <link rel="stylesheet" href="juego.css?v=8">
+  <script src="juego.js?v=8" defer></script>
 </head>
 <body>
-  <canvas id="lienzo" aria-label="Mapa de la partida"></canvas>
+  <header class="barra glass">
+    <p class="marca">Level Up · <strong>Duelo <span>de Acero</span></strong></p>
+    <button type="button" class="btn-icono" id="btnSonido" aria-pressed="true" aria-label="Silenciar">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path class="onda" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/><path class="tachado" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 9l5 6M21 9l-5 6"/></svg>
+    </button>
+  </header>
 
-  <!-- Arriba a la izquierda: vivos, bajas y la zona; debajo, quién eliminó a quién -->
-  <div class="hud hud--estado glass" id="hudEstado" hidden>
-    <span>Vivos <strong id="hudVivos">0</strong></span>
-    <span>Bajas <strong id="hudBajas">0</strong></span>
-    <span class="hud-zona" id="hudZona"></span>
-  </div>
-  <ul class="hud hud--bajas" id="listaBajas" aria-live="polite"></ul>
+  <main class="contenido">
+    <!-- Entrada: crear sala (con código de acceso) o entrar a una (con el enlace de la sala) -->
+    <section class="pantalla" id="pantallaInicio">
+      <form class="panel glass" id="formEntrar" novalidate>
+        <h1>Duelo <span>de Acero</span></h1>
+        <p class="panel-texto" id="textoInicio">Combate 2 vs 2 por turnos con espadas, hachas, lanzas y dagas.</p>
+        <label class="campo" id="campoNombre">Tu nombre
+          <input type="text" id="nombre" maxlength="14" autocomplete="nickname" placeholder="Ej. ElRey" spellcheck="false">
+        </label>
+        <button type="submit" class="btn-principal" id="btnEntrar" disabled>Cargando…</button>
+        <p class="panel-aviso" id="avisoInicio" role="status"></p>
+      </form>
+    </section>
 
-  <canvas id="minimapa" class="minimapa" width="120" height="120" aria-hidden="true"></canvas>
-
-  <!-- Abajo al centro: vida, escudo y arma -->
-  <div class="hud hud--vida glass" id="hudVida" hidden>
-    <div class="barra barra--escudo"><span id="barraEscudo"></span></div>
-    <div class="barra barra--vida"><span id="barraVida"></span><b id="textoVida">100</b></div>
-    <p class="hud-arma"><span id="hudArma">Pistola</span> · <span class="hud-municion" id="hudMunicion">12 / 12</span></p>
-  </div>
-
-  <button type="button" class="btn-sonido" id="btnSonido" aria-pressed="true" aria-label="Silenciar">
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path class="onda" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/><path class="tachado" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 9l5 6M21 9l-5 6"/></svg>
-  </button>
-  <button type="button" class="btn-recargar" id="btnRecargar" hidden>Recargar</button>
-
-  <button type="button" class="btn-cambiar" id="btnCambiar" hidden>Cambiar por <span id="armaPiso"></span></button>
-  <p class="banner" id="banner" hidden></p>
-
-  <!-- Inicio, espera, eliminado y fin de la partida -->
-  <div class="capa" id="capa">
-    <form class="panel glass" id="formJugar" novalidate>
-      <p class="panel-marca">Level Up</p>
-      <h1 id="panelTitulo">Último <span>en Pie</span></h1>
-      <p class="panel-texto" id="panelTexto">Caes con una pistola. Recoge armas, botiquines y chalecos, escóndete detrás de las cajas y no te quedes fuera de la zona. El último vivo gana.</p>
-      <div class="resultado" id="resultado" hidden>
-        <span>Puesto <strong id="resPuesto">-</strong></span>
-        <span>Bajas <strong id="resBajas">0</strong></span>
+    <!-- Sala de espera: puestos, clases y el enlace para invitar -->
+    <section class="pantalla pantalla--sala" id="pantallaSala" hidden>
+      <div class="tarjeta glass invitar" id="invitar">
+        <div>
+          <h2>Invita a tus amigos</h2>
+          <p class="nota">Quien abra este enlace entra a tu sala. Tú decides cuándo empieza; los puestos vacíos los juegan bots.</p>
+        </div>
+        <div class="enlace">
+          <input type="text" id="enlaceSala" readonly aria-label="Enlace de la sala">
+          <div class="fila-botones">
+            <button type="button" class="btn-sec" id="btnCopiar">Copiar</button>
+            <a class="btn-sec btn-wa" id="btnWhatsapp" target="_blank" rel="noopener">WhatsApp</a>
+          </div>
+        </div>
       </div>
-      <ol class="tabla-final" id="tablaFinal" hidden aria-label="Resultados de la partida"></ol>
-      <label class="campo" id="campoNombre">Tu nombre
-        <input type="text" id="nombre" maxlength="14" autocomplete="nickname" placeholder="Ej. ElRey" spellcheck="false">
-      </label>
-      <button type="submit" class="btn-jugar" id="btnJugar" disabled>Conectando…</button>
-      <ul class="controles" id="controles">
-        <li><strong>Computadora:</strong> WASD o flechas para moverte, el mouse para apuntar, clic para disparar, R para recargar y E para cambiar de arma.</li>
-        <li><strong>Celular:</strong> el dedo izquierdo te mueve; el derecho apunta y dispara.</li>
-      </ul>
-      <p class="panel-aviso" id="avisoPanel" role="status"></p>
-      <p class="creditos">Arte y sonidos: <a href="https://kenney.nl" target="_blank" rel="noopener">Kenney</a> (CC0)</p>
-    </form>
-  </div>
+
+      <div class="equipos" id="equipos">
+        <div class="equipo equipo--rojo">
+          <h2>Equipo Rojo</h2>
+          <div class="puestos" data-equipo="0"></div>
+        </div>
+        <p class="vs" aria-hidden="true">VS</p>
+        <div class="equipo equipo--azul">
+          <h2>Equipo Azul</h2>
+          <div class="puestos" data-equipo="1"></div>
+        </div>
+      </div>
+
+      <div class="tarjeta glass" id="bloqueClases">
+        <h2>Elige tu clase</h2>
+        <p class="nota" id="notaClases">Siéntate en un puesto para elegir clase.</p>
+        <div class="clases" id="clases"></div>
+      </div>
+
+      <div class="pie-sala glass">
+        <p class="nota" id="textoGente"></p>
+        <button type="button" class="btn-principal" id="btnEmpezar" hidden>Empezar partida</button>
+        <p class="esperando" id="textoEsperando"></p>
+      </div>
+    </section>
+
+    <!-- Combate -->
+    <section class="pantalla pantalla--combate" id="pantallaCombate" hidden>
+      <div class="escena">
+        <canvas id="lienzo" aria-label="Campo de batalla"></canvas>
+        <p class="aviso-centro" id="avisoCentro" hidden></p>
+      </div>
+      <div class="lateral">
+        <div class="turno glass">
+          <p id="textoTurno">Preparando…</p>
+          <div class="reloj" id="reloj" hidden><span id="relojBarra"></span></div>
+        </div>
+        <div class="acciones glass" id="acciones">
+          <div class="botones-accion" id="botonesAccion"></div>
+          <p class="detalle" id="detalleAccion"></p>
+          <div class="objetivos" id="objetivos" hidden></div>
+        </div>
+        <ol class="registro glass" id="registro" aria-live="polite" aria-label="Lo que pasó"></ol>
+      </div>
+
+      <div class="capa" id="capaFin" hidden>
+        <div class="panel glass">
+          <h1 id="tituloFin">¡Victoria!</h1>
+          <p class="panel-texto" id="textoFin"></p>
+          <table class="tabla-final">
+            <thead><tr><th>Luchador</th><th>Daño</th><th>Bajas</th></tr></thead>
+            <tbody id="tablaFin"></tbody>
+          </table>
+          <button type="button" class="btn-principal" id="btnOtra" hidden>Otra partida</button>
+          <p class="nota" id="notaOtra"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <p class="creditos">Sonidos: <a href="https://kenney.nl" target="_blank" rel="noopener">Kenney</a> (CC0)</p>
 </body>
 </html>

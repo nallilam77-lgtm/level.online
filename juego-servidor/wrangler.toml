@@ -1,4 +1,4 @@
-# Último en Pie · servidor del juego en Cloudflare (plan gratis: Workers + Durable Objects con SQLite)
+# Duelo de Acero (2 vs 2 por turnos) · servidor del juego en Cloudflare (plan gratis: Workers + Durable Objects con SQLite)
 name = "levelup-juego"
 main = "src/worker.js"
 compatibility_date = "2025-09-01"

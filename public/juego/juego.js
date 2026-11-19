@@ -1,158 +1,45 @@
 // =========================================================================
-// Último en Pie · el juego en el navegador.
+// Duelo de Acero · el juego en el navegador (2 vs 2 por turnos).
 //
-// El servidor (juego-servidor/, Cloudflare) decide todo: impactos, vida, munición, zona y ganador. Aquí se
-// dibuja y se manda hacia dónde se mueve, apunta y si dispara. El propio jugador se mueve al instante
-// (predicción) y se va corrigiendo con lo que dice el servidor; a los demás se les suaviza el movimiento.
-//
-// Arte y sonidos: Kenney "Desert Shooter Pack" (CC0, img/LICENCIA-kenney.txt). Pixel art a escala ×3.
+// El servidor (juego-servidor/, Cloudflare) decide todo: turnos, daño, efectos y ganador. Aquí se muestra la
+// sala, se elige puesto y clase, y en el combate se manda la acción elegida; lo que pasa (ev) se anima.
+// Entrada: ?c=<código> (solo el del administrador, desde el panel → "Crear partida", que agrega &nueva=1) para
+// CREAR una sala, o ?s=<sala> (enlace que comparte el creador) para entrar a ella. Los personajes son pixel art dibujado aquí mismo (sin imágenes).
 // =========================================================================
 (function () {
   'use strict';
 
   const $ = (id) => document.getElementById(id);
-  const ES_LIGERO = document.documentElement.classList.contains('ligero');
-  const TACTIL = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  const el = (etiqueta, clase, texto) => {
+    const e = document.createElement(etiqueta);
+    if (clase) e.className = clase;
+    if (texto !== undefined) e.textContent = texto;
+    return e;
+  };
+  const estilos = getComputedStyle(document.documentElement);
+  const color = (n) => estilos.getPropertyValue('--' + n).trim();
+  const guardar = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento */ } };
+  const leer = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const guardarSesion = (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) { /* sin almacenamiento */ } };
+  const leerSesion = (k) => { try { return sessionStorage.getItem(k); } catch (e) { return null; } };
 
   // En la tienda la página la sirve Vercel; el juego corre en Cloudflare. En local, el mismo servidor.
   const BASE = /(^|\.)levelupstore\.online$/.test(location.hostname) ? 'https://juego.levelupstore.online' : location.origin;
-  // El juego es privado: el enlace trae ?c=<código> (se crea en admin.html → Minijuego). Se recuerda en
-  // este navegador para que al recargar no haga falta el enlace otra vez.
+  const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const parametros = new URLSearchParams(location.search);
   let CODIGO = parametros.get('c') || '';
-  try {
-    if (CODIGO) localStorage.setItem('ultimo_enlace', CODIGO);
-    else CODIGO = localStorage.getItem('ultimo_enlace') || '';
-  } catch (e) { /* sin almacenamiento */ }
-  const ESPERA = parametros.get('espera');   // solo en local: ?espera=3 acorta la espera
-  const urlSala = () => `${BASE.replace(/^http/, 'ws')}/ws?c=${encodeURIComponent(CODIGO)}${ESPERA ? '&espera=' + encodeURIComponent(ESPERA) : ''}`;
-  let privado = false;                        // el enlace no sirve (o no hay)
+  if (CODIGO) guardar('duelo_enlace', CODIGO);
+  else CODIGO = leer('duelo_enlace') || leer('ultimo_enlace') || '';
+  let salaId = /^[a-z2-9]{10}$/.test(parametros.get('s') || '') ? parametros.get('s') : '';
 
-  // ---------------- Igual que juego-servidor/src/partida.js ----------------
-  let L = 2400;
-  let R = 22;
-  let TICK = 50;
-  const VEL = 11;
-  const ARMAS = [
-    { nombre: 'Pistola', cargador: 12, sprite: 0, largo: 16, sonido: 'tiroPistola' },
-    { nombre: 'Subfusil', cargador: 30, sprite: 2, largo: 22, sonido: 'tiroSubfusil' },
-    { nombre: 'Escopeta', cargador: 5, sprite: 4, largo: 26, sonido: 'tiroEscopeta' },
-    { nombre: 'Rifle', cargador: 24, sprite: 5, largo: 30, sonido: 'tiroRifle' },
-    { nombre: 'Francotirador', cargador: 5, sprite: 3, largo: 36, sonido: 'tiroFranco' },
-  ];
-  const BOTIQUIN = 10;
-  const CHALECO = 11;
-  const OB = { CAJAS: 0, BARRIL: 1, MURO: 2, ARBOL: 3, ROCA: 4 };
-  function empujarFuera(o, lista) {
-    for (const [x, y, w, h] of lista) {
-      const cx = Math.max(x, Math.min(o.x, x + w));
-      const cy = Math.max(y, Math.min(o.y, y + h));
-      const dx = o.x - cx;
-      const dy = o.y - cy;
-      const d2 = dx * dx + dy * dy;
-      if (d2 >= R * R) continue;
-      if (d2 === 0) {
-        const lados = [o.x - x, x + w - o.x, o.y - y, y + h - o.y];
-        const m = Math.min(...lados);
-        if (m === lados[0]) o.x = x - R; else if (m === lados[1]) o.x = x + w + R;
-        else if (m === lados[2]) o.y = y - R; else o.y = y + h + R;
-      } else {
-        const d = Math.sqrt(d2);
-        o.x = cx + (dx / d) * R;
-        o.y = cy + (dy / d) * R;
-      }
-    }
-    o.x = Math.max(R, Math.min(L - R, o.x));
-    o.y = Math.max(R, Math.min(L - R, o.y));
-  }
-  function mover(o, mx, my, lista, factor) {
-    const l = Math.hypot(mx, my);
-    if (l > 1) { mx /= l; my /= l; }
-    o.x += mx * VEL * factor;
-    o.y += my * VEL * factor;
-    empujarFuera(o, lista);
-  }
-  const dentroDeCaja = (x, y) => cajas.some(([cx, cy, w, h]) => x >= cx && x <= cx + w && y >= cy && y <= cy + h);
+  const EQUIPOS = ['Rojo', 'Azul'];
+  const FILAS = ['Adelante', 'Atrás'];
+  const NOMBRE_EFECTO = { at: 'Aturdido', pr: 'Provoca', mu: 'Muro', fu: 'Furia', ve: 'Veneno', ev: 'Evasión', gu: 'Guardia' };
 
-  // ---------------- Colores (variables de juego.css) ----------------
-  const css = getComputedStyle(document.documentElement);
-  const v = (n) => css.getPropertyValue(n).trim();
-  const COLORES = Array.from({ length: 12 }, (_, i) => v(`--color-${i}`));
-  const C = {};
-  ['mapa-fuera', 'zona-fuera', 'zona-borde', 'zona-objetivo', 'mapa-nombre', 'mapa-contorno', 'mapa-bala', 'mapa-bala-borde',
-    'mapa-impacto', 'mapa-fogonazo', 'mapa-vida', 'mapa-vida-fondo', 'mapa-escudo', 'mapa-sombra', 'mapa-tu', 'dano-otro',
-    'dano-mio', 'brillo-arma', 'brillo-botiquin', 'brillo-chaleco', 'palanca', 'palanca-borde', 'minimapa-tu',
-    'minimapa-caja', 'minimapa-arbol'].forEach((k) => { C[k.replace(/-(\w)/g, (_, l) => l.toUpperCase())] = v(`--${k}`); });
-
-  // ---------------- Sprites ----------------
-  const ESCALA = 3;
-  const HOJAS = {
-    jugadores: { src: 'img/jugadores.png', t: 24, cols: 4 },
-    criaturas: { src: 'img/criaturas.png', t: 24, cols: 4 },
-    armas: { src: 'img/armas-pixel.png', t: 24, cols: 10 },
-    mapa: { src: 'img/mapa.png', t: 16, cols: 18 },
-  };
-  for (const h of Object.values(HOJAS)) {
-    h.img = new Image();
-    h.img.onload = () => { h.lista = true; if (h === HOJAS.mapa) prepararSuelo(); };
-    h.img.src = h.src;
-  }
-  // 8 aspectos: 4 de "jugadores" y 4 de "criaturas" (fila de la hoja)
-  const ASPECTOS = [['jugadores', 0], ['jugadores', 1], ['jugadores', 2], ['jugadores', 3],
-    ['criaturas', 3], ['criaturas', 2], ['criaturas', 1], ['criaturas', 0]];
-  const TILE = {
-    suelo: [73, 157, 158, 175, 176, 73, 73],
-    adornos: [58, 58, 44, 44, 39, 81, 82, 84, 85, 60, 61],
-    cajas: [220, 221], barriles: [202, 203], rocas: [76],
-    muroGris: [144, 145, 146], muroRojo: [147, 148, 149],
-    arboles: [80, 62, 63, 57, 75],
-    botiquin: 222, chaleco: 227, valla: 232,
-  };
-
-  function dibujarTile(hoja, idx, dx, dy, dw, dh) {
-    const h = HOJAS[hoja];
-    if (!h.lista) return false;
-    const sx = (idx % h.cols) * (h.t + 1);   // las hojas traen 1 px de separación (así no se cuela el vecino)
-    const sy = Math.floor(idx / h.cols) * (h.t + 1);
-    ctx.drawImage(h.img, sx, sy, h.t, h.t, dx, dy, dw, dh);
-    return true;
-  }
-
-  let patronSuelo = null;
-  function prepararSuelo() {
-    const c = document.createElement('canvas');
-    c.width = 128; c.height = 128;
-    const g = c.getContext('2d');
-    const azar = aleatorio(7);
-    const h = HOJAS.mapa;
-    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-      const idx = TILE.suelo[Math.floor(azar() * TILE.suelo.length)];
-      g.drawImage(h.img, (idx % h.cols) * 17, Math.floor(idx / h.cols) * 17, 16, 16, x * 16, y * 16, 16, 16);
-    }
-    patronSuelo = ctx.createPattern(c, 'repeat');
-  }
-
-  // Mismo azar en todos los navegadores para los adornos (sale de la semilla del mapa)
-  function aleatorio(semilla) {
-    let a = semilla >>> 0;
-    return () => {
-      a = (a + 0x6d2b79f5) >>> 0;
-      let t = a;
-      t = Math.imul(t ^ (t >>> 15), t | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-  const hash = (x, y, k = 0) => Math.abs(Math.imul(x * 73856093 ^ y * 19349663 ^ k * 83492791, 2654435761)) % 1000;
-
-  // ---------------- Sonidos ----------------
-  const ARCHIVOS = {
-    tiroPistola: 'shoot-a', tiroSubfusil: 'shoot-c', tiroEscopeta: 'shoot-g', tiroRifle: 'shoot-e', tiroFranco: 'shoot-h',
-    golpe: 'hurt-a', acierto: 'hurt-c', recoger: 'coin-a', baja: 'explosion-a', perder: 'lose-a', ganar: 'coin-d',
-    salto: 'jump-a', recargar: 'move-a', clic: 'select-a',
-  };
+  // ---------------- Sonidos (Kenney, CC0) ----------------
+  const ARCHIVOS = { golpe: 'hurt-a', golpe2: 'hurt-c', critico: 'explosion-a', efecto: 'coin-a', ganar: 'coin-d', perder: 'lose-a', esquiva: 'jump-a', mover: 'move-a', clic: 'select-a' };
   const sonido = {
-    ctx: null, buffers: {}, activo: true, esteCuadro: 0,
+    ctx: null, buffers: {}, activo: leer('duelo_sonido') !== 'no',
     iniciar() {
       if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
       try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
@@ -163,908 +50,882 @@
       }
     },
     tocar(k, volumen = 1) {
-      if (!this.activo || !this.ctx || !this.buffers[k] || volumen <= 0.02 || this.esteCuadro >= 5) return;
-      this.esteCuadro++;
+      if (!this.activo || !this.ctx || !this.buffers[k]) return;
       const s = this.ctx.createBufferSource();
       s.buffer = this.buffers[k];
       const g = this.ctx.createGain();
-      g.gain.value = Math.min(1, volumen) * 0.6;
+      g.gain.value = volumen * 0.6;
       s.connect(g).connect(this.ctx.destination);
       s.start();
     },
-    // Más bajo mientras más lejos de mí
-    cerca(k, x, y, volumen = 1) {
-      const d = Math.hypot(x - camara.x, y - camara.y);
-      this.tocar(k, volumen * Math.max(0, 1 - d / 1100));
-    },
   };
-  try { sonido.activo = localStorage.getItem('ultimo_sonido') !== 'no'; } catch (e) { /* sin almacenamiento */ }
+  function pintarSonido() {
+    const b = $('btnSonido');
+    b.classList.toggle('apagado', !sonido.activo);
+    b.setAttribute('aria-pressed', String(sonido.activo));
+    b.setAttribute('aria-label', sonido.activo ? 'Silenciar' : 'Activar sonido');
+  }
+  $('btnSonido').addEventListener('click', () => {
+    sonido.activo = !sonido.activo;
+    guardar('duelo_sonido', sonido.activo ? 'si' : 'no');
+    sonido.iniciar();
+    pintarSonido();
+  });
+  pintarSonido();
+
+  // ---------------- Pixel art ----------------
+  // 16 × 20 píxeles mirando a la derecha; se les pone contorno (18 × 22) y el equipo Azul se dibuja volteado.
+  const ANCHO_PJ = 18, ALTO_PJ = 22;
+  const cacheSprites = new Map();
+  function sprite(k, equipo, blanco = false) {
+    const clave = `${k}-${equipo}-${blanco}`;
+    if (cacheSprites.has(clave)) return cacheSprites.get(clave);
+    const P = {
+      piel: color('pj-piel'), pielS: color('pj-piel-sombra'), pelo: color('pj-pelo'), barba: color('pj-barba'), ojo: color('pj-ojo'),
+      acero: color('pj-acero'), aceroC: color('pj-acero-claro'), aceroO: color('pj-acero-oscuro'), madera: color('pj-madera'),
+      oro: color('pj-oro'), pantalon: color('pj-pantalon'), bota: color('pj-bota'),
+      eq: color(equipo ? 'azul' : 'rojo'), eqO: color(equipo ? 'azul-oscuro' : 'rojo-oscuro'),
+    };
+    const m = Array.from({ length: 20 }, () => Array(16).fill(null));
+    const r = (x, y, w, h, c) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (j >= 0 && j < 20 && i >= 0 && i < 16) m[j][i] = c; };
+    const p = (x, y, c) => r(x, y, 1, 1, c);
+
+    // Cuerpo común: piernas, botas, torso, cabeza y brazos
+    r(6, 15, 2, 3, P.pantalon); r(9, 15, 2, 3, P.pantalon);
+    r(5, 18, 3, 2, P.bota); r(9, 18, 3, 2, P.bota);
+    r(5, 9, 6, 6, P.eq); r(5, 13, 6, 1, P.bota); p(8, 13, P.oro);
+    r(6, 4, 4, 5, P.piel); r(6, 8, 4, 1, P.pielS); p(9, 6, P.ojo);
+    r(4, 10, 1, 3, P.eqO); p(4, 13, P.piel);
+    r(11, 10, 1, 2, P.eq); p(11, 12, P.piel);
+
+    if (k === 'guerrero') {
+      r(5, 2, 6, 3, P.acero); r(5, 5, 1, 3, P.acero); r(6, 2, 4, 1, P.aceroC); p(7, 1, P.eq); p(8, 1, P.eq); p(8, 0, P.eq);
+      r(5, 9, 6, 2, P.aceroO);                                    // hombreras
+      r(1, 9, 4, 6, P.acero); r(1, 9, 1, 6, P.aceroO); r(2, 11, 2, 2, P.eq);   // escudo
+      r(12, 2, 1, 9, P.aceroC); p(12, 1, P.aceroC); r(11, 11, 3, 1, P.oro); p(12, 12, P.madera);  // espada
+    } else if (k === 'barbaro') {
+      r(4, 9, 8, 6, P.eq); r(4, 9, 1, 3, P.piel); r(11, 9, 1, 3, P.piel); r(6, 9, 4, 1, P.piel);
+      r(5, 2, 6, 2, P.barba); r(5, 4, 1, 4, P.barba); r(6, 8, 4, 2, P.barba); p(9, 7, P.barba);
+      p(4, 1, P.aceroC); p(11, 1, P.aceroC); r(5, 2, 6, 1, P.aceroO);            // cuernos y casco
+      r(12, 4, 1, 11, P.madera); r(13, 3, 2, 5, P.acero); r(15, 2, 1, 7, P.aceroC);   // hacha
+    } else if (k === 'lancero') {
+      r(6, 2, 4, 2, P.acero); p(7, 1, P.acero); p(8, 1, P.aceroC); r(5, 4, 1, 2, P.acero);
+      r(2, 9, 2, 8, P.eqO);                                       // capa
+      r(12, 3, 1, 17, P.madera); p(12, 0, P.aceroC); r(11, 1, 3, 1, P.acero); p(12, 2, P.acero); r(11, 4, 3, 1, P.eq);  // lanza
+    } else if (k === 'picaro') {
+      r(5, 2, 6, 3, P.eqO); r(5, 5, 1, 4, P.eqO); r(6, 1, 3, 1, P.eqO);         // capucha
+      r(6, 7, 4, 2, P.ojo);                                       // pañuelo
+      r(5, 9, 6, 6, P.eqO); r(6, 9, 4, 4, P.eq);
+      r(12, 9, 1, 3, P.aceroC); p(12, 12, P.madera);              // daga delantera
+      r(3, 12, 1, 3, P.acero); p(4, 13, P.piel);                  // daga trasera
+    }
+
+    const c = document.createElement('canvas');
+    c.width = ANCHO_PJ; c.height = ALTO_PJ;
+    const g = c.getContext('2d');
+    const contorno = color('pj-contorno');
+    const lleno = (i, j) => j >= 0 && j < 20 && i >= 0 && i < 16 && m[j][i];
+    for (let j = -1; j <= 20; j++) {
+      for (let i = -1; i <= 16; i++) {
+        let col = lleno(i, j) ? m[j][i] : null;
+        if (!col && (lleno(i - 1, j) || lleno(i + 1, j) || lleno(i, j - 1) || lleno(i, j + 1))) col = contorno;
+        if (!col) continue;
+        g.fillStyle = blanco ? color('pj-acero-claro') : col;
+        g.fillRect(i + 1, j + 1, 1, 1);
+      }
+    }
+    cacheSprites.set(clave, c);
+    return c;
+  }
+  function miniatura(canvas, k, equipo) {
+    canvas.width = ANCHO_PJ; canvas.height = ALTO_PJ;
+    const g = canvas.getContext('2d');
+    g.clearRect(0, 0, ANCHO_PJ, ALTO_PJ);
+    if (equipo) { g.translate(ANCHO_PJ, 0); g.scale(-1, 1); }
+    g.drawImage(sprite(k, equipo), 0, 0);
+  }
 
   // ---------------- Estado ----------------
   let ws = null;
+  let yo = null;
+  let tok = null;
+  let clases = null;            // info de clases que manda el servidor
+  let est = null;               // último estado { fase, jug, c, … }
+  let entrado = false;          // ya tocó "Entrar"/"Crear sala"
+  let fatal = false;            // la sala no existe / enlace malo: no reconectar
   let reintento = 0;
-  let yo = null;                      // mi id en la sala (se da al tocar "Jugar")
-  let anotado = false;                // pedí entrar a la próxima partida
-  let estado = { s: 'espera', t: null, n: 0, c: 0, v: 0, g: null, max: 15 };
-  let cajas = [];
-  let adornos = [];
-  const items = new Map();            // id → [id, x, y, tipo]
-  const jugadores = new Map();
-  const balas = new Map();            // id → { x, y, dx, dy, vel, alcance, t0, dueno }
-  const efectos = [];                 // impactos, fogonazos y números de daño
-  const cuerpos = [];                 // eliminados tirados en el piso
-  let zona = null;                    // [cx, cy, r, tx, ty, tr, segundos, cerrando, daño]
-  let zonaAnt = null;
-  let ultimoPaso = performance.now();
-  let ping = 80;
-  let enPartida = false;
-  let resultado = null;
-  let asesinoId = null;
-  const feed = [];
-  let temblor = 0;
-  let aviso = null;                   // { texto, t0 } en el centro ("Eliminaste a …")
+  let crear = false;
+  let elegida = null;           // acción elegida en mi turno: { h, obj }
+  let enviado = false;          // ya mandé mi acción (esperando al servidor)
+  let leyendo = null;           // fuera de mi turno: habilidad tocada para leer qué hace
+  let finTurno = 0;             // performance.now() en que se acaba el turno
+  let finMostrado = false;
 
-  const pred = { x: 0, y: 0, lista: false };
-  const historia = [];
+  const tokKey = (s) => 'duelo_tok_' + s;
+  const nombre = () => $('nombre').value.trim().slice(0, 14) || 'Jugador';
+  $('nombre').value = leer('duelo_nombre') || leer('ultimo_nombre') || '';
 
-  const teclas = new Set();
-  let apuntar = 0;
-  let disparando = false;
-  let raton = { x: -100, y: -100 };
-  let enviado = { x: null, y: null, a: null, f: null, cuando: 0 };
-  const palancas = { mover: null, apuntar: null };
-
-  const lienzo = $('lienzo');
-  const ctx = lienzo.getContext('2d', { alpha: false });
-  const mini = $('minimapa');
-  const mctx = mini.getContext('2d');
-  let ancho = 0;
-  let alto = 0;
-  let dpr = 1;
-  const camara = { x: 1200, y: 1200, zoom: 0.6 };
-
-  function medir() {
-    dpr = Math.min(window.devicePixelRatio || 1, ES_LIGERO ? 1.5 : 2);
-    ancho = window.innerWidth;
-    alto = window.innerHeight;
-    lienzo.width = Math.round(ancho * dpr);
-    lienzo.height = Math.round(alto * dpr);
+  function mostrar(pantalla) {
+    for (const id of ['pantallaInicio', 'pantallaSala', 'pantallaCombate']) $(id).hidden = id !== pantalla;
+    if (pantalla === 'pantallaCombate') { medir(); arrancarDibujo(); }
   }
-  window.addEventListener('resize', medir);
-  medir();
 
-  // ---------------- Conexión ----------------
-  async function conectar() {
-    pintarPanel();
-    // Primero: ¿el enlace sirve? (si no, no tiene sentido intentar conectarse)
+  // ---------------- Entrada ----------------
+  function aviso(texto) { $('avisoInicio').textContent = texto || ''; }
+  function botonEntrar(texto, activo) { const b = $('btnEntrar'); b.textContent = texto; b.disabled = !activo; }
+
+  async function preparar() {
+    mostrar('pantallaInicio');
+    if (salaId) {
+      $('textoInicio').innerHTML = 'Te invitaron a una sala de <strong>Duelo de Acero</strong>: combate 2 vs 2 por turnos con espadas, hachas, lanzas y dagas.';
+      botonEntrar('Entrar a la sala', true);
+      // Recargó la página: vuelve directo a su puesto
+      if (leerSesion(tokKey(salaId)) && $('nombre').value) entrar();
+      return;
+    }
+    if (!CODIGO && !LOCAL) {
+      $('textoInicio').textContent = 'Para jugar necesitas el enlace de una sala. Pídeselo a quien te invitó.';
+      $('campoNombre').hidden = true;
+      $('btnEntrar').hidden = true;
+      return;
+    }
+    $('textoInicio').innerHTML = 'Crea una sala y pásale el enlace a tus amigos. <strong>Tú decides cuándo empieza</strong>; los puestos vacíos los juegan bots.';
+    // Desde el panel ("Crear partida") llega con nueva=1: si ya hay nombre guardado, la sala se crea sola
+    const listo = () => { botonEntrar('Crear sala', true); if (parametros.get('nueva') === '1' && $('nombre').value) entrar(); };
+    if (LOCAL) { listo(); return; }
+    botonEntrar('Revisando tu enlace…', false);
     try {
       const r = await (await fetch(`${BASE}/acceso?c=${encodeURIComponent(CODIGO)}`, { cache: 'no-store' })).json();
-      if (!r.ok && !r.error) {
-        privado = true;
-        try { localStorage.removeItem('ultimo_enlace'); } catch (e) { /* sin almacenamiento */ }
-        pintarPanel();
+      if (r.ok) { listo(); return; }
+      if (!r.error) {
+        guardar('duelo_enlace', null);
+        $('textoInicio').textContent = 'Este enlace no sirve para crear partidas. Para jugar, pide el enlace de una sala a quien te invitó.';
+        $('campoNombre').hidden = true; $('btnEntrar').hidden = true;
         return;
       }
-    } catch (e) { reconectar(); return; }
-    try { ws = new WebSocket(urlSala()); } catch (e) { reconectar(); return; }
-    ws.addEventListener('open', () => { reintento = 0; mandar({ t: 'p', k: Math.round(performance.now()) }); });
+    } catch (e) { /* sin conexión: se deja intentar igual */ }
+    botonEntrar('Crear sala', true);
+    aviso('No se pudo revisar el enlace. Revisa tu conexión e inténtalo.');
+  }
+
+  $('formEntrar').addEventListener('submit', (e) => { e.preventDefault(); entrar(); });
+  function entrar() {
+    if (entrado) return;
+    entrado = true;
+    guardar('duelo_nombre', nombre());
+    sonido.iniciar();
+    crear = !salaId;
+    if (salaId) tok = leerSesion(tokKey(salaId));
+    botonEntrar('Conectando…', false);
+    aviso('');
+    conectar();
+  }
+
+  function conectar() {
+    const url = crear
+      ? `${BASE.replace(/^http/, 'ws')}/ws?c=${encodeURIComponent(CODIGO)}&crear=1`
+      : `${BASE.replace(/^http/, 'ws')}/ws?s=${salaId}`;
+    try { ws = new WebSocket(url); } catch (e) { reconectar(); return; }
+    const este = ws;
+    ws.addEventListener('open', () => { reintento = 0; mandar({ t: 'hola', n: nombre(), tok: tok || undefined }); });
     ws.addEventListener('message', (e) => {
       let m;
       try { m = JSON.parse(e.data); } catch (err) { return; }
       recibir(m);
     });
     ws.addEventListener('close', () => {
-      if (privado) return;
-      yo = null;
-      anotado = false;
-      enPartida = false;
-      $('avisoPanel').textContent = 'Se perdió la conexión. Reconectando…';
-      pintarPanel();
+      if (ws !== este) return;
+      ws = null;
+      if (fatal) return;
       reconectar();
     });
   }
-  function reconectar() { setTimeout(conectar, Math.min(10000, 1000 * 2 ** reintento++)); }
+
+  function reconectar() {
+    if (fatal || !entrado) return;
+    reintento++;
+    if (reintento > 8) { fallo('Se perdió la conexión. Recarga la página para volver.'); return; }
+    avisoCentro('Reconectando…');
+    if (!est) botonEntrar('Reconectando…', false);
+    setTimeout(() => { if (!ws) conectar(); }, Math.min(5000, 600 * reintento));
+  }
+
+  function fallo(texto) {
+    fatal = true;
+    entrado = false;
+    try { if (ws) ws.close(); } catch (e) { /* ya cerrada */ }
+    ws = null;
+    est = null;
+    if (salaId) guardarSesion(tokKey(salaId), '');
+    mostrar('pantallaInicio');
+    $('capaFin').hidden = true;
+    $('campoNombre').hidden = true;
+    $('btnEntrar').hidden = true;
+    $('textoInicio').textContent = '';
+    aviso(texto);
+  }
+
   function mandar(m) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); }
+  setInterval(() => mandar({ t: 'p', k: 1 }), 25000);   // mantiene viva la conexión en el celular
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && entrado && !fatal && !ws) { reintento = 0; conectar(); }
+  });
 
   function recibir(m) {
-    if (m.t === 'i') {
-      L = m.L; R = m.R; TICK = m.tick || 50;
-      estado = m.e;
-      if (m.mapa) cargarMapa(m.mapa);
-      if (m.p) actualizarJugadores(m.p);
-      zona = m.z;
-      zonaAnt = m.z;
-      $('avisoPanel').textContent = '';
-      pintarPanel();
-    } else if (m.t === 'u') {
-      aplicar(m);
-    } else if (m.t === 'yo') {
+    if (m.t === 'error') { fallo(m.m); return; }
+    if (m.t === 'yo') {
       yo = m.id;
-    } else if (m.t === 'po') {
-      ping = Math.max(1, Math.round(performance.now() - m.k));
-    }
-  }
-
-  function cargarMapa(d) {
-    cajas = d.cajas;
-    items.clear();
-    d.items.forEach((it) => items.set(it[0], it));
-    jugadores.clear();
-    balas.clear();
-    cuerpos.length = 0;
-    d.jugadores.forEach(([id, nombre, col, bot, vivo, bajas]) => {
-      jugadores.set(id, { id, nombre, color: COLORES[col % COLORES.length], aspecto: ASPECTOS[col % ASPECTOS.length], bot: !!bot,
-        vivo: !!vivo, bajas, x: 0, y: 0, a: 0, vida: 100, escudo: 0, arma: 0, mun: 12, recargando: false, ant: null, cab: null,
-        mira: 1, paso: 0, golpe: 0 });
-    });
-    // Adornos del piso: mismos en todos los navegadores, fuera de los obstáculos
-    adornos = [];
-    const azar = aleatorio(d.semilla || 1);
-    for (let i = 0; i < 150; i++) {
-      const x = azar() * L;
-      const y = azar() * L;
-      const tile = TILE.adornos[Math.floor(azar() * TILE.adornos.length)];
-      if (cajas.some(([cx, cy, w, h]) => x > cx - 40 && x < cx + w + 40 && y > cy - 40 && y < cy + h + 40)) continue;
-      adornos.push([x, y, tile]);
-    }
-  }
-
-  function actualizarJugadores(lista) {
-    const ahora = performance.now();
-    for (const [id, x, y, a100, vida, escudo, arma, mun, recargando] of lista) {
-      const j = jugadores.get(id);
-      if (!j) continue;
-      j.ant = j.cab || [x, y];
-      j.cab = [x, y];
-      j.x = x; j.y = y;
-      j.a = a100 / 100;
-      const perdio = (j.vida + j.escudo) - (vida + escudo);
-      if (perdio > 0.5 && j.cab) {
-        j.golpe = ahora;
-        efectos.push({ tipo: 'dano', x: x + (Math.random() * 20 - 10), y: y - 40, valor: Math.round(perdio), mio: id === yo, t0: ahora });
-        if (id === yo) { temblor = ahora; sonido.tocar('golpe', 0.8); }
-      }
-      if (id === yo) {
-        if (vida > j.vida || escudo > j.escudo || (arma !== j.arma && arma !== 0)) sonido.tocar('recoger', 0.7);
-        if (recargando && !j.recargando) sonido.tocar('recargar', 0.6);
-      }
-      j.vida = vida; j.escudo = escudo; j.arma = arma; j.mun = mun; j.recargando = recargando === 1;
-      if (id === yo) corregirPrediccion(x, y);
-    }
-  }
-
-  function corregirPrediccion(x, y) {
-    if (!pred.lista) { pred.x = x; pred.y = y; pred.lista = true; historia.length = 0; return; }
-    // El servidor va "atrasado" un viaje de ida y vuelta: se compara con dónde estaba yo en ese momento
-    const cuando = performance.now() - ping - TICK / 2;
-    let h = historia[0];
-    for (const e of historia) { if (e.t <= cuando) h = e; else break; }
-    if (!h) { pred.x = x; pred.y = y; return; }
-    const ex = x - h.x;
-    const ey = y - h.y;
-    if (Math.hypot(ex, ey) > 120) { pred.x = x; pred.y = y; historia.length = 0; return; }
-    pred.x += ex * 0.15;
-    pred.y += ey * 0.15;
-    for (const e of historia) { e.x += ex * 0.15; e.y += ey * 0.15; }
-  }
-
-  function aplicar(m) {
-    const ahora = performance.now();
-    if (m.ini) {
-      cargarMapa(m.ini);
-      pred.lista = false;
-      resultado = null;
-      asesinoId = null;
-      feed.length = 0;
-      if (yo && jugadores.has(yo)) { anotado = false; enPartida = true; sonido.tocar('salto', 0.7); }
-      else enPartida = false;
-    }
-    if (m.p) actualizarJugadores(m.p);
-    if (m.z) { zonaAnt = zona; zona = m.z; }
-    if (m.b) m.b.forEach(([id, x, y, a1000, vel, alcance, arma, dueno]) => {
-      const a = a1000 / 1000;
-      balas.set(id, { x, y, dx: Math.cos(a), dy: Math.sin(a), vel, alcance, t0: ahora, dueno });
-      const d = jugadores.get(dueno);
-      if (d) d.disparo = ahora;
-      if (!efectos.some((e) => e.tipo === 'fogonazo' && e.dueno === dueno && ahora - e.t0 < 30)) {
-        efectos.push({ tipo: 'fogonazo', x, y, a, dueno, t0: ahora });
-        if (ARMAS[arma]) sonido.cerca(ARMAS[arma].sonido, x, y, dueno === yo ? 0.9 : 0.6);
-      }
-    });
-    if (m.x) m.x.forEach(([id, quien]) => {
-      const b = balas.get(id);
-      if (!b) return;
-      const recorrido = Math.min(b.alcance, b.vel * (ahora - b.t0) / TICK);
-      efectos.push({ tipo: 'impacto', x: b.x + b.dx * recorrido, y: b.y + b.dy * recorrido, carne: !!quien, t0: ahora });
-      if (quien && b.dueno === yo) { efectos.push({ tipo: 'marca', t0: ahora }); sonido.tocar('acierto', 0.5); }
-      balas.delete(id);
-    });
-    if (m.ia) m.ia.forEach((it) => items.set(it[0], it));
-    if (m.ir) m.ir.forEach((id) => items.delete(id));
-    if (m.k) m.k.forEach(([asesino, victima, arma]) => baja(asesino, victima, arma));
-    if (m.e) {
-      const antes = estado.s;
-      estado = m.e;
-      if (antes !== 'fin' && estado.s === 'fin' && estado.g && estado.g.id === yo) sonido.tocar('ganar', 1);
-      if (antes !== 'espera' && estado.s === 'espera') {
-        jugadores.clear(); items.clear(); cajas = []; adornos = []; balas.clear(); cuerpos.length = 0; zona = null; enPartida = false;
-      }
-      pintarPanel();
-    }
-    ultimoPaso = ahora;
-  }
-
-  function baja(asesino, victima, arma) {
-    const vj = jugadores.get(victima);
-    const aj = jugadores.get(asesino);
-    if (vj) {
-      vj.vivo = false;
-      if (vj.cab) cuerpos.push({ x: vj.cab[0], y: vj.cab[1], aspecto: vj.aspecto, mira: vj.mira, t0: performance.now() });
-    }
-    if (aj && aj !== vj) aj.bajas++;
-    let texto;
-    if (arma === -1) texto = `<b>${esc(vj ? vj.nombre : '?')}</b> se desconectó`;
-    else if (arma === -2 || !aj) texto = `La zona eliminó a <b>${esc(vj ? vj.nombre : '?')}</b>`;
-    else texto = `<b>${esc(aj.nombre)}</b> → <b>${esc(vj ? vj.nombre : '?')}</b> · ${ARMAS[arma] ? ARMAS[arma].nombre : ''}`;
-    feed.unshift({ texto, mia: victima === yo || asesino === yo, t0: performance.now() });
-    feed.length = Math.min(feed.length, 5);
-    if (asesino === yo && victima !== yo && arma >= 0) {
-      aviso = { texto: `Eliminaste a ${vj ? vj.nombre : '?'}`, t0: performance.now() };
-      sonido.tocar('baja', 0.8);
-    }
-    if (victima === yo) {
-      enPartida = false;
-      asesinoId = aj && aj !== vj ? asesino : null;
-      const vivos = [...jugadores.values()].filter((j) => j.vivo).length;
-      resultado = { puesto: vivos + 1, bajas: vj ? vj.bajas : 0, asesino: aj && aj !== vj ? aj.nombre : null, arma, zona: arma === -2 };
-      sonido.tocar('perder', 0.9);
-      setTimeout(pintarPanel, 900);
-    }
-  }
-
-  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-  // ---------------- Paneles ----------------
-  const conectado = () => ws && ws.readyState === 1;
-
-  function pintarPanel() {
-    const capa = $('capa');
-    const btn = $('btnJugar');
-    const titulo = $('panelTitulo');
-    const texto = $('panelTexto');
-    const mostrar = (cosas) => {
-      $('campoNombre').hidden = !cosas.nombre;
-      $('controles').hidden = !cosas.controles;
-      $('resultado').hidden = !cosas.resultado;
-      $('tablaFinal').hidden = !cosas.tabla;
-      btn.hidden = !cosas.boton;
-    };
-    $('hudEstado').hidden = !enPartida && estado.s !== 'partida';
-    $('hudVida').hidden = !enPartida;
-    $('btnRecargar').hidden = !enPartida || !TACTIL;
-    if (enPartida) { capa.hidden = true; return; }
-    capa.hidden = false;
-    capa.classList.toggle('capa--mirar', estado.s === 'partida' || estado.s === 'fin');
-    btn.disabled = !conectado();
-
-    if (privado) {
-      titulo.innerHTML = 'Juego <span>privado</span>';
-      texto.innerHTML = 'Para jugar necesitas un <strong>enlace de invitación</strong> de Level Up. Pídeselo a quien te invitó.<br><br>Si ya tenías uno, puede que haya vencido.';
-      $('avisoPanel').textContent = '';
-      mostrar({});
+      tok = m.tok;
+      if (!clases) { clases = m.clases; pintarClases(); }
       return;
     }
-    if (!conectado()) {
-      titulo.innerHTML = 'Último <span>en Pie</span>';
-      texto.textContent = 'Conectando con la partida…';
-      btn.textContent = 'Conectando…';
-      mostrar({ nombre: true, controles: true, boton: true });
+    if (m.t !== 's') return;
+    if (m.sala && m.sala !== salaId) {
+      salaId = m.sala;
+      crear = false;          // si se reconecta, entra a ESTA sala
+      history.replaceState(null, '', `${location.pathname}?s=${salaId}`);
+    }
+    if (tok) guardarSesion(tokKey(salaId), tok);
+    avisoCentro('');
+    const antes = est;
+    est = m;
+    if (m.fase === 'sala') {
+      finMostrado = false;
+      $('capaFin').hidden = true;
+      mostrar('pantallaSala');
+      pintarSala();
       return;
     }
-    const hayTabla = estado.s === 'fin' && Array.isArray(estado.tabla) && estado.tabla.length > 0;
-    if (estado.s === 'fin' && estado.g) {
-      const gane = estado.g.id === yo;
-      titulo.innerHTML = gane ? '¡Último <span>en Pie!</span>' : 'Fin de la <span>partida</span>';
-      texto.innerHTML = gane ? `Ganaste con <strong>${estado.g.bajas}</strong> bajas.` : `Ganó <strong>${esc(estado.g.nombre)}</strong> con ${estado.g.bajas} bajas.`;
-      if (gane) resultado = { puesto: 1, bajas: estado.g.bajas };
-    } else if (resultado) {
-      titulo.innerHTML = resultado.puesto === 1 ? '¡Último <span>en Pie!</span>' : 'Te <span>eliminaron</span>';
-      texto.innerHTML = resultado.zona ? 'Te quedaste fuera de la zona.'
-        : resultado.asesino ? `Te eliminó <strong>${esc(resultado.asesino)}</strong>${ARMAS[resultado.arma] ? ' con ' + ARMAS[resultado.arma].nombre : ''}.` : 'Quedaste fuera.';
-    } else if (anotado) {
-      titulo.innerHTML = 'Ya estás <span>anotado</span>';
+    if (!antes || antes.fase === 'sala') { reiniciarCombate(); mostrar('pantallaCombate'); }
+    actualizarCombate(m);
+    if (m.ev) animar(m.ev);
+    if (m.fase === 'fin') mostrarFin(antes && antes.fase === 'combate' ? 1600 : 0);
+  }
+
+  // ---------------- Sala de espera ----------------
+  const jugadorEn = (p) => est.jug.find((j) => j.p === p);
+  const miJugador = () => est && est.jug.find((j) => j.id === yo);
+  const nombreAnfitrion = () => { const a = est.jug.find((j) => j.id === est.anf); return a ? a.n : 'el anfitrión'; };
+
+  function pintarSala() {
+    const enlace = `${location.origin}${location.pathname}?s=${est.sala}`;
+    $('enlaceSala').value = enlace;
+    $('btnWhatsapp').href = `https://wa.me/?text=${encodeURIComponent('¡Ven a jugar Duelo de Acero conmigo! Entra a mi sala: ' + enlace)}`;
+
+    // Orden en pantalla como en el combate: Rojo (atrás, adelante) VS Azul (adelante, atrás)
+    const orden = [[1, 0], [2, 3]];
+    document.querySelectorAll('.puestos').forEach((caja) => {
+      const equipo = Number(caja.dataset.equipo);
+      caja.replaceChildren(...orden[equipo].map((p) => tarjetaPuesto(p, equipo)));
+    });
+
+    const yoJ = miJugador();
+    const sentado = yoJ && yoJ.p >= 0;
+    $('notaClases').textContent = sentado ? 'Tu compañero y los rivales ven tu clase. Puedes cambiarla hasta que empiece.' : 'Siéntate en un puesto para elegir clase.';
+    document.querySelectorAll('.clase').forEach((b) => {
+      b.disabled = !sentado;
+      b.classList.toggle('elegida', !!sentado && b.dataset.k === yoJ.k);
+      b.setAttribute('aria-pressed', String(!!sentado && b.dataset.k === yoJ.k));
+      const lienzo = b.querySelector('canvas');
+      miniatura(lienzo, b.dataset.k, sentado && yoJ.p >= 2 ? 1 : 0);
+    });
+
+    const mirando = est.jug.filter((j) => j.p < 0);
+    $('textoGente').textContent = mirando.length ? `Mirando: ${mirando.map((j) => j.n).join(', ')}` : '';
+    const libres = [0, 1, 2, 3].filter((p) => !jugadorEn(p)).length;
+    const soyAnf = est.anf === yo;
+    $('btnEmpezar').hidden = !soyAnf;
+    $('btnEmpezar').disabled = false;
+    $('btnEmpezar').textContent = libres ? `Empezar partida (${libres} ${libres === 1 ? 'bot' : 'bots'})` : 'Empezar partida';
+    $('textoEsperando').textContent = soyAnf ? '' : `Esperando a que ${nombreAnfitrion()} empiece la partida…`;
+  }
+
+  function tarjetaPuesto(p, equipo) {
+    const j = jugadorEn(p);
+    const libre = !j;
+    const caja = el(libre ? 'button' : 'div', 'puesto' + (libre ? '' : ' ocupado') + (j && j.id === yo ? ' mio' : ''));
+    if (libre) {
+      caja.type = 'button';
+      caja.addEventListener('click', () => { sonido.tocar('clic'); mandar({ t: 'puesto', p }); });
+      caja.setAttribute('aria-label', `Sentarme en ${EQUIPOS[equipo]} ${FILAS[p % 2].toLowerCase()}`);
+    }
+    caja.append(el('span', 'puesto-fila', FILAS[p % 2]));
+    const lienzo = el('canvas');
+    miniatura(lienzo, j ? j.k : 'guerrero', equipo);
+    if (libre) lienzo.style.opacity = '0.25';
+    caja.append(lienzo);
+    if (j) {
+      caja.append(el('span', 'puesto-nombre', j.n + (j.id === yo ? ' (tú)' : '')));
+      const info = el('span', 'puesto-clase', clases && clases[j.k] ? clases[j.k].nombre : '');
+      if (!j.on) info.append(' · ', el('span', 'fuera', 'sin conexión'));
+      caja.append(info);
+      if (j.id === est.anf) caja.append(el('span', 'etiqueta-anf', 'ANFITRIÓN'));
     } else {
-      titulo.innerHTML = 'Último <span>en Pie</span>';
-      texto.textContent = 'Caes con una pistola. Recoge armas, botiquines y chalecos, escóndete detrás de las cajas y no te quedes fuera de la zona. El último vivo gana.';
+      caja.append(el('span', 'puesto-nombre', 'Libre'), el('span', 'puesto-libre', 'Sentarme aquí'));
     }
-    if (resultado) {
-      $('resPuesto').textContent = `#${resultado.puesto}`;
-      $('resBajas').textContent = resultado.bajas;
-    }
-    if (hayTabla) {
-      // En pantallas chicas: top 5 y mi fila, para que el botón quede a la vista
-      let filas = estado.tabla.slice(0, ancho < 600 ? 5 : 10);
-      const mia = estado.tabla.find((f) => f[0] === yo);
-      if (mia && !filas.includes(mia)) filas = filas.concat([mia]);
-      $('tablaFinal').innerHTML = filas.map(([id, nombre, puesto, bajas]) =>
-        `<li class="${id === yo ? 'yo' : ''}"><span>${puesto ? '#' + puesto : 'En pie'}</span><b>${esc(nombre)}</b><span>${bajas} ${bajas === 1 ? 'baja' : 'bajas'}</span></li>`).join('');
-    }
+    return caja;
+  }
 
-    let espera = '';
-    if (estado.s === 'espera') espera = estado.t ? `La partida empieza en <strong>${estado.t} s</strong>. ${estado.n} de ${estado.max} anotados; si faltan, entran bots.` : 'Esperando jugadores…';
-    else if (estado.s === 'partida') espera = `Partida en curso: <strong>${estado.v} vivos</strong>. Entras en la siguiente.`;
-    else espera = 'La siguiente partida se arma en unos segundos.';
-
-    if (anotado) {
-      if (!resultado && !(estado.s === 'fin' && estado.g)) texto.innerHTML = espera;
-      else texto.innerHTML += `<br>${espera}`;
-      mostrar({ resultado: !!resultado, tabla: hayTabla, boton: false });
-    } else {
-      btn.textContent = resultado || estado.s === 'fin' ? 'Siguiente partida' : 'Jugar';
-      if (!resultado && estado.s !== 'fin' && estado.s !== 'espera') texto.innerHTML += `<br><br>${espera}`;
-      mostrar({ nombre: !resultado && estado.s !== 'fin', controles: !resultado && estado.s !== 'partida' && estado.s !== 'fin', resultado: !!resultado, tabla: hayTabla, boton: true });
+  function pintarClases() {
+    const caja = $('clases');
+    caja.replaceChildren();
+    for (const [k, c] of Object.entries(clases)) {
+      const b = el('button', 'clase');
+      b.type = 'button';
+      b.dataset.k = k;
+      const lienzo = el('canvas');
+      miniatura(lienzo, k, 0);
+      const cabeza = el('div', 'clase-cabeza');
+      cabeza.append(el('strong', '', c.nombre), el('span', '', c.arma));
+      const datos = el('span');
+      datos.append('Vida ', el('em', '', String(c.vida)), ' · Velocidad ', el('em', '', String(c.vel)));
+      cabeza.append(datos, el('span', '', c.resumen));
+      const lista = el('ul');
+      const item = (h) => { const li = el('li'); li.append(el('b', '', h.n), h.cd ? ` (cada ${h.cd + 1} turnos): ` : ': ', h.d); return li; };
+      lista.append(item(c.basico), ...c.hab.map(item));
+      b.append(lienzo, cabeza, lista);
+      b.addEventListener('click', () => { sonido.tocar('clic'); mandar({ t: 'clase', k }); });
+      caja.append(b);
     }
   }
 
-  // ---------------- Controles ----------------
-  try { $('nombre').value = localStorage.getItem('ultimo_nombre') || ''; } catch (e) { /* sin almacenamiento */ }
-
-  $('formJugar').addEventListener('submit', (e) => {
-    e.preventDefault();
-    sonido.iniciar();
-    sonido.tocar('clic', 0.6);
-    const nombre = $('nombre').value.trim().slice(0, 14);
-    try { localStorage.setItem('ultimo_nombre', nombre); } catch (err) { /* sin almacenamiento */ }
-    mandar({ t: 'jugar', n: nombre });
-    anotado = true;
-    resultado = null;
-    pintarPanel();
+  $('btnCopiar').addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    try { await navigator.clipboard.writeText($('enlaceSala').value); b.textContent = '¡Copiado!'; }
+    catch (err) { $('enlaceSala').select(); b.textContent = 'Cópialo'; }
+    setTimeout(() => { b.textContent = 'Copiar'; }, 2000);
   });
+  $('btnEmpezar').addEventListener('click', (e) => { e.currentTarget.disabled = true; sonido.iniciar(); mandar({ t: 'empezar' }); });
+  $('btnOtra').addEventListener('click', (e) => { e.currentTarget.disabled = true; mandar({ t: 'otra' }); });
 
-  function pintarSonido() {
-    $('btnSonido').setAttribute('aria-pressed', String(sonido.activo));
-    $('btnSonido').classList.toggle('apagado', !sonido.activo);
-    $('btnSonido').setAttribute('aria-label', sonido.activo ? 'Silenciar' : 'Activar sonido');
+  // ---------------- Combate: lienzo ----------------
+  // Escenario en 128 × 72 píxeles "gordos"; nombres, barras y números se dibujan encima a resolución real.
+  const AW = 128, AH = 72, PISO = 60;
+  const POS_X = [[46, 22], [82, 106]];          // [equipo][fila]
+  const lienzo = $('lienzo');
+  const ctx = lienzo.getContext('2d');
+  const pix = document.createElement('canvas');
+  pix.width = AW; pix.height = AH;
+  const px = pix.getContext('2d');
+  let fondo = null;
+  let escala = 1, dpr = 1;
+  let dibujando = false;
+  const vis = [];                                // por puesto: posición, vida mostrada, animaciones
+  const flotantes = [];                          // textos que suben
+  let temblor = 0;
+
+  function medir() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const ancho = lienzo.clientWidth || 320;
+    lienzo.width = Math.round(ancho * dpr);
+    lienzo.height = Math.round(ancho * dpr * 9 / 16);
+    escala = lienzo.width / AW;
   }
-  $('btnSonido').addEventListener('click', () => {
-    sonido.activo = !sonido.activo;
-    sonido.iniciar();
-    try { localStorage.setItem('ultimo_sonido', sonido.activo ? 'si' : 'no'); } catch (e) { /* sin almacenamiento */ }
-    pintarSonido();
-  });
-  pintarSonido();
+  window.addEventListener('resize', () => { if (!$('pantallaCombate').hidden) medir(); });
 
-  const MOVER = { KeyW: [0, -1], ArrowUp: [0, -1], KeyS: [0, 1], ArrowDown: [0, 1], KeyA: [-1, 0], ArrowLeft: [-1, 0], KeyD: [1, 0], ArrowRight: [1, 0] };
-  window.addEventListener('keydown', (e) => {
-    if (e.target && e.target.tagName === 'INPUT') return;
-    if (MOVER[e.code]) { teclas.add(e.code); e.preventDefault(); }
-    if (e.code === 'KeyE' && enPartida) mandar({ t: 'c' });
-    if (e.code === 'KeyR' && enPartida) mandar({ t: 'r' });
-  });
-  window.addEventListener('keyup', (e) => teclas.delete(e.code));
-  window.addEventListener('blur', () => { teclas.clear(); disparando = false; });
-
-  function apuntarA(x, y) { raton = { x, y }; apuntar = Math.atan2(y - alto / 2, x - ancho / 2); }
-  lienzo.addEventListener('mousemove', (e) => apuntarA(e.clientX, e.clientY));
-  lienzo.addEventListener('mousedown', (e) => { apuntarA(e.clientX, e.clientY); disparando = true; sonido.iniciar(); });
-  window.addEventListener('mouseup', () => { disparando = false; });
-  lienzo.addEventListener('contextmenu', (e) => e.preventDefault());
-
-  // Celular: dos palancas. Mitad izquierda = moverse; mitad derecha = apuntar y disparar.
-  const ZONA_MUERTA = 14;
-  const RADIO_PALANCA = 56;
-  lienzo.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    sonido.iniciar();
-    for (const t of e.changedTouches) {
-      const lado = t.clientX < ancho / 2 ? 'mover' : 'apuntar';
-      if (!palancas[lado]) palancas[lado] = { id: t.identifier, ox: t.clientX, oy: t.clientY, x: t.clientX, y: t.clientY };
+  function crearFondo() {
+    const c = document.createElement('canvas');
+    c.width = AW; c.height = AH;
+    const g = c.getContext('2d');
+    g.fillStyle = color('arena-cielo'); g.fillRect(0, 0, AW, AH);
+    // Muro de piedra
+    g.fillStyle = color('arena-muro'); g.fillRect(0, 10, AW, PISO - 22);
+    g.fillStyle = color('arena-junta');
+    for (let y = 10; y < PISO - 12; y += 6) {
+      g.fillRect(0, y, AW, 1);
+      for (let x = ((y / 6) % 2) * 6; x < AW; x += 12) g.fillRect(x, y, 1, 6);
     }
-  }, { passive: false });
-  lienzo.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    for (const t of e.changedTouches) {
-      for (const p of Object.values(palancas)) if (p && p.id === t.identifier) { p.x = t.clientX; p.y = t.clientY; }
-    }
-  }, { passive: false });
-  const soltar = (e) => {
-    for (const t of e.changedTouches) {
-      for (const k of Object.keys(palancas)) if (palancas[k] && palancas[k].id === t.identifier) palancas[k] = null;
-    }
-  };
-  lienzo.addEventListener('touchend', soltar);
-  lienzo.addEventListener('touchcancel', soltar);
-
-  $('btnCambiar').addEventListener('click', () => mandar({ t: 'c' }));
-  $('btnRecargar').addEventListener('click', () => mandar({ t: 'r' }));
-
-  function leerControles() {
-    let mx = 0;
-    let my = 0;
-    for (const k of teclas) { mx += MOVER[k][0]; my += MOVER[k][1]; }
-    const pm = palancas.mover;
-    if (pm) {
-      const dx = pm.x - pm.ox;
-      const dy = pm.y - pm.oy;
-      const d = Math.hypot(dx, dy);
-      if (d > ZONA_MUERTA) { const k = Math.min(1, d / RADIO_PALANCA) / d; mx = dx * k; my = dy * k; }
-    }
-    let f = disparando;
-    if (TACTIL) {
-      f = false;
-      const pa = palancas.apuntar;
-      if (pa) {
-        const dx = pa.x - pa.ox;
-        const dy = pa.y - pa.oy;
-        if (Math.hypot(dx, dy) > ZONA_MUERTA) { apuntar = Math.atan2(dy, dx); f = true; }
-      }
-    }
-    return { mx: Math.round(mx * 100) / 100, my: Math.round(my * 100) / 100, f };
+    g.fillStyle = color('arena-muro-luz');
+    for (let y = 11; y < PISO - 12; y += 6) for (let x = ((y / 6) % 2) * 6 + 1; x < AW; x += 12) if ((x * 7 + y) % 5 === 0) g.fillRect(x, y, 10, 1);
+    // Almenas
+    g.fillStyle = color('arena-muro');
+    for (let x = 0; x < AW; x += 10) g.fillRect(x, 6, 6, 4);
+    // Piso
+    g.fillStyle = color('arena-piso'); g.fillRect(0, PISO - 12, AW, AH - PISO + 12);
+    g.fillStyle = color('arena-piso-luz'); g.fillRect(0, PISO - 12, AW, 1);
+    g.fillStyle = color('arena-piso-raya');
+    for (let y = PISO - 6; y < AH; y += 6) g.fillRect(0, y, AW, 1);
+    for (let x = 0; x < AW; x += 16) g.fillRect(x + ((x / 16) % 2) * 8, PISO - 11, 1, AH);
+    // Antorchas
+    g.fillStyle = color('arena-antorcha');
+    for (const x of [12, 64, 116]) g.fillRect(x, 24, 2, 7);
+    return c;
   }
 
-  // Se manda solo si cambió (como mucho 10 veces por segundo): cada mensaje cuenta en Cloudflare
-  function enviarControl(ahora, c) {
-    if (!enPartida) return;
-    const cambioDisparo = c.f !== enviado.f;
-    if (ahora - enviado.cuando < (cambioDisparo ? 50 : 100)) return;
-    const giro = enviado.a === null ? 1 : Math.abs(Math.atan2(Math.sin(apuntar - enviado.a), Math.cos(apuntar - enviado.a)));
-    if (!cambioDisparo && c.mx === enviado.x && c.my === enviado.y && giro < 0.04) return;
-    enviado = { x: c.mx, y: c.my, a: apuntar, f: c.f, cuando: ahora };
-    mandar({ t: 'd', x: c.mx, y: c.my, a: Math.round(apuntar * 100) / 100, f: c.f ? 1 : 0 });
+  function reiniciarCombate() {
+    vis.length = 0;
+    flotantes.length = 0;
+    $('registro').replaceChildren();
+    elegida = null;
+    enviado = false;
+    finMostrado = false;
+    $('capaFin').hidden = true;
   }
 
-  setInterval(() => mandar({ t: 'p', k: Math.round(performance.now()) }), 3000);
-
-  // ---------------- Dibujo ----------------
-  function posicion(j, alfa) {
-    if (j.id === yo && enPartida && pred.lista) return [pred.x, pred.y];
-    if (!j.cab) return [j.x, j.y];
-    return [j.ant[0] + (j.cab[0] - j.ant[0]) * alfa, j.ant[1] + (j.cab[1] - j.ant[1]) * alfa];
-  }
-
-  function zonaAhora(alfa) {
-    if (!zona) return null;
-    if (!zonaAnt) return zona;
-    const k = Math.min(1, alfa / 2);   // llega cada 2 pasos
-    return [0, 1, 2].map((i) => zonaAnt[i] + (zona[i] - zonaAnt[i]) * k);
-  }
-
-  let anteriorCuadro = performance.now();
-  function cuadro(ahora) {
-    const dt = Math.min(100, ahora - anteriorCuadro);
-    anteriorCuadro = ahora;
-    sonido.esteCuadro = 0;
-    const c = leerControles();
-    const mio = yo && jugadores.get(yo);
-    if (enPartida && pred.lista) {
-      const antes = [pred.x, pred.y];
-      mover(pred, c.mx, c.my, cajas, dt / TICK);
-      if (mio) mio.caminando = Math.hypot(pred.x - antes[0], pred.y - antes[1]) > 0.3;
-      historia.push({ t: ahora, x: pred.x, y: pred.y });
-      while (historia.length && historia[0].t < ahora - 1000) historia.shift();
-    }
-    enviarControl(ahora, c);
-    dibujar(ahora);
+  function arrancarDibujo() {
+    if (dibujando) return;
+    dibujando = true;
     requestAnimationFrame(cuadro);
   }
 
+  function cuadro(ahora) {
+    if ($('pantallaCombate').hidden) { dibujando = false; return; }
+    dibujar(ahora);
+    actualizarReloj(ahora);
+    requestAnimationFrame(cuadro);
+  }
+
+  function prepararVis(c, conAnimacion) {
+    c.l.forEach((x, i) => {
+      if (!vis[i]) vis[i] = { x: POS_X[x.e][x.f], hp: x.v, meta: x.v, muerto: x.v <= 0, caida: 0, golpe: 0, ataque: null, brillo: 0 };
+      if (!conAnimacion) { vis[i].meta = x.v; vis[i].muerto = x.v <= 0; }
+    });
+  }
+
   function dibujar(ahora) {
-    const alfa = Math.min(1, (ahora - ultimoPaso) / TICK);
-    const mio = yo && jugadores.get(yo);
-
-    // Cámara: sobre mí; eliminado, sobre quien me eliminó; si no, el vivo más cercano
-    let foco;
-    const asesino = asesinoId && jugadores.get(asesinoId);
-    if (mio && enPartida) foco = posicion(mio, alfa);
-    else if (asesino && asesino.vivo && asesino.cab) foco = posicion(asesino, alfa);
-    else {
-      let mejor = null;
-      let dm = Infinity;
-      for (const j of jugadores.values()) {
-        if (!j.vivo || !j.cab) continue;
-        const d = Math.hypot(j.x - camara.x, j.y - camara.y);
-        if (d < dm) { dm = d; mejor = j; }
-      }
-      foco = mejor ? posicion(mejor, alfa) : [L / 2, L / 2];
+    if (!est || !est.c) return;
+    if (!fondo) fondo = crearFondo();
+    const c = est.c;
+    px.imageSmoothingEnabled = false;
+    px.drawImage(fondo, 0, 0);
+    // Fuego de las antorchas
+    for (const x of [12, 64, 116]) {
+      const f = Math.sin(ahora / 120 + x) > 0;
+      px.fillStyle = color('arena-luz'); px.fillRect(x - 3, 17 + (f ? 0 : 1), 8, 8);
+      px.fillStyle = color('arena-fuego'); px.fillRect(x - 1, 20, 4, 4);
+      px.fillStyle = color('arena-fuego-luz'); px.fillRect(x + (f ? 0 : 1), 19 + (f ? 0 : 1), 2, 3);
     }
-    if (mio && enPartida) { camara.x = foco[0]; camara.y = foco[1]; }
-    else { camara.x += (foco[0] - camara.x) * 0.06; camara.y += (foco[1] - camara.y) * 0.06; }
-    const zoomQuiero = !cajas.length ? Math.min(ancho, alto) / 1400 : Math.min(ancho, alto) / (TACTIL ? 640 : 880);
-    camara.zoom += (zoomQuiero - camara.zoom) * 0.08;
-    const z = camara.zoom;
-    let tx = 0;
-    let ty = 0;
-    if (ahora - temblor < 160) { tx = (Math.random() - 0.5) * 10; ty = (Math.random() - 0.5) * 10; }
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = C.mapaFuera;
-    ctx.fillRect(0, 0, ancho, alto);
-    ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (ancho / 2 - camara.x * z + tx), dpr * (alto / 2 - camara.y * z + ty));
+    const objetivosValidos = objetivosElegibles();
+    // Primero los de atrás, para que los de adelante queden encima
+    const orden = c.l.map((x, i) => i).sort((a, b) => c.l[b].f - c.l[a].f);
+    for (const i of orden) {
+      const x = c.l[i], v = vis[i];
+      if (!v) continue;
+      const meta = POS_X[x.e][x.f];
+      v.x += (meta - v.x) * 0.15;
+      v.hp += (v.meta - v.hp) * 0.15;
+      let dx = 0;
+      if (v.ataque) {
+        const t = (ahora - v.ataque.t0) / 520;
+        if (t >= 1) v.ataque = null;
+        else if (t >= 0) dx = (v.ataque.hasta - v.x) * Math.sin(Math.PI * t) * 0.85;
+      }
+      const golpeado = ahora - v.golpe < 160;
+      const sacudida = golpeado ? (Math.round(ahora / 40) % 2 ? 1 : -1) : 0;
+      const bx = Math.round(v.x + dx + sacudida);
+      // Sombra y marca de turno
+      px.fillStyle = color('arena-sombra');
+      px.fillRect(bx - 6, PISO - 1, 12, 2);
+      if (c.t === i && est.fase === 'combate') {
+        px.fillStyle = color('marca-turno');
+        const a = 7 + Math.round(Math.sin(ahora / 200));
+        px.fillRect(bx - a, PISO, a * 2, 1);
+        px.fillRect(bx - a + 2, PISO + 1, a * 2 - 4, 1);
+      }
+      if (objetivosValidos.includes(i)) {
+        px.fillStyle = color('marca-objetivo');
+        px.fillRect(bx - 7, PISO, 14, 1);
+      }
+      const spr = sprite(x.k, x.e, golpeado && Math.round(ahora / 60) % 2 === 0);
+      px.save();
+      if (v.muerto) {
+        v.caida = Math.min(1, v.caida + 0.06);
+        px.globalAlpha = 1 - v.caida * 0.55;
+        px.translate(bx, PISO);
+        px.rotate((x.e ? 1 : -1) * v.caida * Math.PI / 2);
+        if (x.e) px.scale(-1, 1);
+        px.drawImage(spr, -ANCHO_PJ / 2, -ALTO_PJ + 1);
+      } else {
+        const salto = Math.round(Math.sin(ahora / 300 + i) * 0.6);
+        px.translate(bx, PISO + salto);
+        if (x.e) px.scale(-1, 1);
+        px.drawImage(spr, -ANCHO_PJ / 2, -ALTO_PJ + 1);
+      }
+      px.restore();
+    }
+
+    // Al lienzo real (con temblor tras los golpes fuertes)
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    const vx0 = camara.x - ancho / 2 / z - 80;
-    const vx1 = camara.x + ancho / 2 / z + 80;
-    const vy0 = camara.y - alto / 2 / z - 80;
-    const vy1 = camara.y + alto / 2 / z + 80;
-    const seVe = (x, y, m = 0) => x > vx0 - m && x < vx1 + m && y > vy0 - m && y < vy1 + m;
-    const T = 16 * ESCALA;
+    const tiembla = temblor > ahora ? (Math.random() - 0.5) * escala : 0;
+    ctx.drawImage(pix, tiembla, 0, lienzo.width, lienzo.height);
 
-    // Suelo de arena
-    if (patronSuelo) {
-      ctx.save();
-      ctx.scale(ESCALA, ESCALA);
-      ctx.fillStyle = patronSuelo;
-      ctx.fillRect(0, 0, L / ESCALA, L / ESCALA);
-      ctx.restore();
-    }
-    // Adornos (no chocan)
-    for (const [x, y, tile] of adornos) if (seVe(x, y, T)) dibujarTile('mapa', tile, x - T / 2, y - T / 2, T, T);
-    // Valla alrededor del mapa
-    for (let x = 0; x < L; x += T) {
-      if (x + T < vx0 || x > vx1) continue;
-      if (vy0 < T) dibujarTile('mapa', TILE.valla, x, -T + 10, T, T);
-      if (vy1 > L - T) dibujarTile('mapa', TILE.valla, x, L - 10, T, T);
-    }
-
-    // Cuerpos de los eliminados (se desvanecen)
-    for (let i = cuerpos.length - 1; i >= 0; i--) {
-      const c = cuerpos[i];
-      const edad = ahora - c.t0;
-      if (edad > 12000) { cuerpos.splice(i, 1); continue; }
-      if (!seVe(c.x, c.y, 60)) continue;
-      ctx.globalAlpha = edad > 9000 ? 1 - (edad - 9000) / 3000 : 1;
-      dibujarPersonaje(c.aspecto, 3, c.x, c.y, c.mira);
-      ctx.globalAlpha = 1;
-    }
-
-    // Botín en el piso: flota un poco con un brillo debajo
-    const flota = Math.sin(ahora / 260) * 3;
-    for (const [, x, y, tipo] of items.values()) {
-      if (!seVe(x, y, 40)) continue;
-      const brillo = tipo <= 4 ? C.brilloArma : tipo === BOTIQUIN ? C.brilloBotiquin : C.brilloChaleco;
-      ctx.fillStyle = brillo;
-      ctx.beginPath();
-      ctx.ellipse(x, y + 10, 22, 9, 0, 0, Math.PI * 2);
-      ctx.fill();
-      if (tipo <= 4) dibujarTile('armas', ARMAS[tipo].sprite, x - 36, y - 40 + flota, 72, 72);
-      else dibujarTile('mapa', tipo === BOTIQUIN ? TILE.botiquin : TILE.chaleco, x - 20, y - 24 + flota, 40, 40);
-    }
-
-    // Obstáculos bajos (cajas, barriles, muros, rocas)
-    for (const o of cajas) {
-      const [x, y, w, h, tipo] = o;
-      if (x > vx1 || x + w < vx0 || y - T > vy1 || y + h + T < vy0 || tipo === OB.ARBOL) continue;
-      dibujarObstaculo(o);
-    }
-
-    // Jugadores (de arriba hacia abajo, para que el de adelante tape al de atrás)
-    const vivos = [...jugadores.values()].filter((j) => j.vivo && j.cab);
-    const pos = new Map(vivos.map((j) => [j.id, posicion(j, alfa)]));
-    vivos.sort((a, b) => pos.get(a.id)[1] - pos.get(b.id)[1]);
-    for (const j of vivos) {
-      const [x, y] = pos.get(j.id);
-      if (!seVe(x, y, 80)) continue;
-      dibujarJugador(j, x, y, ahora);
-    }
-
-    // Copas de los árboles: encima de los jugadores (si estoy debajo, se vuelve transparente)
-    const yoPos = mio && enPartida ? pos.get(yo) : null;
-    for (const o of cajas) {
-      if (o[4] !== OB.ARBOL) continue;
-      const [x, y, w, h] = o;
-      if (x > vx1 + 40 || x + w < vx0 - 40 || y - 80 > vy1 || y + h < vy0) continue;
-      const debajo = yoPos && Math.abs(yoPos[0] - (x + w / 2)) < 46 && yoPos[1] < y + h && yoPos[1] > y - 70;
-      if (debajo) ctx.globalAlpha = 0.45;
-      dibujarObstaculo(o);
-      ctx.globalAlpha = 1;
-    }
-
-    // Balas
-    for (const [id, b] of balas) {
-      const recorrido = b.vel * (ahora - b.t0) / TICK;
-      if (recorrido > b.alcance) { balas.delete(id); continue; }
-      const x = b.x + b.dx * recorrido;
-      const y = b.y + b.dy * recorrido;
-      if (dentroDeCaja(x, y)) { balas.delete(id); continue; }
-      if (!seVe(x, y)) continue;
-      const cola = Math.min(recorrido, 18);
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = C.mapaBalaBorde;
-      ctx.lineWidth = 7;
-      ctx.beginPath();
-      ctx.moveTo(x - b.dx * cola, y - b.dy * cola);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      ctx.strokeStyle = C.mapaBala;
-      ctx.lineWidth = 3.5;
-      ctx.stroke();
-    }
-
-    dibujarEfectos(ahora);
-
-    // Zona: afuera en rojo; el próximo círculo en blanco
-    const zn = zonaAhora(alfa);
-    if (zn) {
-      ctx.fillStyle = C.zonaFuera;
-      ctx.beginPath();
-      ctx.rect(vx0 - 100, vy0 - 100, vx1 - vx0 + 200, vy1 - vy0 + 200);
-      ctx.arc(zn[0], zn[1], Math.max(0, zn[2]), 0, Math.PI * 2, true);
-      ctx.fill('evenodd');
-      ctx.strokeStyle = C.zonaBorde;
-      ctx.lineWidth = 6 + Math.sin(ahora / 200) * 2;
-      ctx.beginPath();
-      ctx.arc(zn[0], zn[1], Math.max(0, zn[2]), 0, Math.PI * 2);
-      ctx.stroke();
-      if (zona[5] < zn[2] - 5) {
-        ctx.strokeStyle = C.zonaObjetivo;
-        ctx.lineWidth = 3;
-        ctx.setLineDash([18, 14]);
-        ctx.beginPath();
-        ctx.arc(zona[3], zona[4], zona[5], 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    }
-
-    // ---- En la pantalla (no en el mapa) ----
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingEnabled = false;
-    if (TACTIL && enPartida) for (const p of Object.values(palancas)) {
-      if (!p) continue;
-      ctx.fillStyle = C.palanca;
-      ctx.strokeStyle = C.palancaBorde;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(p.ox, p.oy, RADIO_PALANCA, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      const dx = p.x - p.ox;
-      const dy = p.y - p.oy;
-      const d = Math.hypot(dx, dy);
-      const k = d > RADIO_PALANCA ? RADIO_PALANCA / d : 1;
-      ctx.beginPath();
-      ctx.arc(p.ox + dx * k, p.oy + dy * k, 24, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Mira del mouse (se agranda un instante al acertar)
-    if (!TACTIL && enPartida) {
-      const marca = efectos.find((e) => e.tipo === 'marca' && ahora - e.t0 < 160);
-      const tam = marca ? 60 : 48;
-      dibujarTile('armas', 25, raton.x - tam / 2, raton.y - tam / 2, tam, tam);
-    }
-    if (aviso && ahora - aviso.t0 < 1800) {
-      ctx.globalAlpha = Math.min(1, (1800 - (ahora - aviso.t0)) / 400);
-      ctx.font = '900 22px Montserrat, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = C.mapaContorno;
-      ctx.strokeText(aviso.texto, ancho / 2, alto * 0.3);
-      ctx.fillStyle = C.mapaTu;
-      ctx.fillText(aviso.texto, ancho / 2, alto * 0.3);
-      ctx.globalAlpha = 1;
-    }
-
-    dibujarMinimapa(zn);
-  }
-
-  function dibujarObstaculo([x, y, w, h, tipo]) {
-    const T = 16 * ESCALA;
-    if (tipo === OB.CAJAS) {
-      for (let cy = y; cy < y + h; cy += T) for (let cx = x; cx < x + w; cx += T) {
-        dibujarTile('mapa', TILE.cajas[hash(cx, cy) % 2], cx, cy, T, T);
-      }
-    } else if (tipo === OB.BARRIL) {
-      dibujarTile('mapa', TILE.barriles[hash(x, y) % 2], x + w / 2 - T / 2, y + h - T + 4, T, T);
-    } else if (tipo === OB.MURO) {
-      const piezas = hash(x, y) % 3 === 0 ? TILE.muroRojo : TILE.muroGris;
-      const n = Math.round(w / T);
-      for (let i = 0; i < n; i++) dibujarTile('mapa', i === 0 ? piezas[0] : i === n - 1 ? piezas[2] : piezas[1], x + i * T, y + h - T, T, T);
-    } else if (tipo === OB.ARBOL) {
-      const t = 16 * 4;
-      dibujarTile('mapa', TILE.arboles[hash(x, y) % TILE.arboles.length], x + w / 2 - t / 2, y + h - t + 6, t, t);
-    } else if (tipo === OB.ROCA) {
-      dibujarTile('mapa', TILE.rocas[0], x + w / 2 - T / 2, y + h - T + 6, T, T);
-    }
-  }
-
-  // Personaje de 24 px a escala ×3 (72 de lado), parado sobre su sombra
-  function dibujarPersonaje(aspecto, cuadro, x, y, mira) {
-    const [hoja, fila] = aspecto;
-    const h = HOJAS[hoja];
-    if (!h.lista) return false;
-    const t = 24 * ESCALA;
-    ctx.save();
-    ctx.translate(x, y - 14);
-    if (mira < 0) ctx.scale(-1, 1);
-    ctx.drawImage(h.img, cuadro * 25, fila * 25, 24, 24, -t / 2, -t / 2, t, t);
-    ctx.restore();
-    return true;
-  }
-
-  function dibujarJugador(j, x, y, ahora) {
-    const soy = j.id === yo && enPartida;
-    const a = soy ? apuntar : j.a;
-    j.mira = Math.cos(a) < 0 ? -1 : 1;
-    // Sombra (y un aro verde debajo de mí, para encontrarme rápido)
-    ctx.fillStyle = C.mapaSombra;
-    ctx.beginPath();
-    ctx.ellipse(x, y + 18, 20, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    if (soy) {
-      ctx.strokeStyle = C.mapaTu;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.ellipse(x, y + 18, 26, 11, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    if (j.escudo > 0) {
-      ctx.strokeStyle = C.mapaEscudo;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.ellipse(x, y + 18, soy ? 31 : 24, soy ? 14 : 10, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    const camina = soy ? j.caminando : j.cab && j.ant && Math.hypot(j.cab[0] - j.ant[0], j.cab[1] - j.ant[1]) > 1;
-    const golpeado = ahora - j.golpe < 120;
-    const cuadro = golpeado ? 2 : camina ? Math.floor(ahora / 150) % 2 : 0;
-    const arma = ARMAS[j.arma] || ARMAS[0];
-    const apuntaArriba = Math.sin(a) < -0.3;
-    if (apuntaArriba) dibujarArma(j, arma, x, y, a, ahora);     // el arma queda detrás del cuerpo
-    if (!dibujarPersonaje(j.aspecto, cuadro, x, y, j.mira)) {
-      ctx.fillStyle = j.color;
-      ctx.beginPath();
-      ctx.arc(x, y, R, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (golpeado) {
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.35;
-      dibujarPersonaje(j.aspecto, cuadro, x, y, j.mira);
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
-    }
-    if (!apuntaArriba) dibujarArma(j, arma, x, y, a, ahora);
-
-    // Nombre y vida (la mía va abajo en la pantalla)
-    if (!soy) {
-      const tam = Math.max(12 / camara.zoom, 13);
-      ctx.font = `800 ${tam}px Montserrat, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = C.mapaContorno;
-      ctx.strokeText(j.nombre, x, y - 62);
-      ctx.fillStyle = C.mapaNombre;
-      ctx.fillText(j.nombre, x, y - 62);
-      ctx.fillStyle = C.mapaVidaFondo;
-      ctx.fillRect(x - 24, y - 56, 48, 7);
-      ctx.fillStyle = j.color;
-      ctx.fillRect(x - 23, y - 55, 46 * j.vida / 100, 5);
-      if (j.escudo > 0) { ctx.fillStyle = C.mapaEscudo; ctx.fillRect(x - 23, y - 51, 46 * j.escudo / 100, 2); }
-    }
-  }
-
-  function dibujarArma(j, arma, x, y, a, ahora) {
-    const hx = x + j.mira * 4;
-    const hy = y - 4;
-    const retroceso = j.disparo && ahora - j.disparo < 70 ? -5 : 0;
-    ctx.save();
-    ctx.translate(hx, hy);
-    ctx.rotate(a);
-    if (j.mira < 0) ctx.scale(1, -1);
-    dibujarTile('armas', arma.sprite, -36 + 14 + retroceso, -36, 72, 72);
-    ctx.restore();
-  }
-
-  function dibujarEfectos(ahora) {
-    for (let i = efectos.length - 1; i >= 0; i--) {
-      const e = efectos[i];
-      const edad = ahora - e.t0;
-      if (e.tipo === 'fogonazo') {
-        if (edad > 70) { efectos.splice(i, 1); continue; }
-        const d = jugadores.get(e.dueno);
-        const largo = d ? (ARMAS[d.arma] || ARMAS[0]).largo : 16;
-        const fx = e.x + Math.cos(e.a) * (largo - 26);
-        const fy = e.y + Math.sin(e.a) * (largo - 26) - 4;
-        ctx.fillStyle = C.mapaFogonazo;
-        ctx.globalAlpha = 1 - edad / 70;
-        ctx.beginPath();
-        ctx.arc(fx, fy, 9 + Math.random() * 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      } else if (e.tipo === 'impacto') {
-        if (edad > 220) { efectos.splice(i, 1); continue; }
-        const k = edad / 220;
-        ctx.fillStyle = e.carne ? C.danoOtro : C.mapaImpacto;
-        ctx.globalAlpha = 1 - k;
-        for (let p = 0; p < 4; p++) {
-          const ang = p * 1.7 + e.t0;
-          ctx.fillRect(e.x + Math.cos(ang) * k * 18 - 2, e.y + Math.sin(ang) * k * 18 - 2, 5, 5);
+    // Encima: nombres, barras, efectos, flechas y números
+    const s = escala;
+    const fuente = Math.max(10 * dpr, s * 3.4);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    for (let i = 0; i < c.l.length; i++) {
+      const x = c.l[i], v = vis[i];
+      if (!v) continue;
+      const cx = v.x * s;
+      const arriba = (PISO - ALTO_PJ - 3) * s;
+      ctx.globalAlpha = v.muerto ? 0.5 : 1;
+      // Nombre
+      ctx.font = `800 ${fuente}px Montserrat, sans-serif`;
+      ctx.lineWidth = Math.max(2, fuente / 4);
+      ctx.strokeStyle = color('contorno-lienzo');
+      ctx.fillStyle = x.j && x.j === yo ? color('accent-neon') : color(x.e ? 'azul' : 'rojo');
+      const n = x.n.length > 9 && s < 5 ? x.n.slice(0, 8) + '…' : x.n;
+      ctx.strokeText(n, cx, arriba - fuente * 0.9);
+      ctx.fillText(n, cx, arriba - fuente * 0.9);
+      // Vida
+      const bw = 18 * s, bh = Math.max(4 * dpr, s * 1.5);
+      ctx.fillStyle = color('vida-fondo');
+      ctx.fillRect(cx - bw / 2, arriba - bh / 2 - fuente * 0.4, bw, bh);
+      const pct = Math.max(0, v.hp / x.m);
+      ctx.fillStyle = color(pct > 0.5 ? 'vida' : pct > 0.25 ? 'vida-media' : 'vida-baja');
+      ctx.fillRect(cx - bw / 2, arriba - bh / 2 - fuente * 0.4, bw * pct, bh);
+      ctx.font = `800 ${fuente * 0.8}px Montserrat, sans-serif`;
+      ctx.fillStyle = color('texto-lienzo');
+      ctx.strokeText(`${Math.max(0, Math.round(v.hp))}`, cx, arriba + fuente * 0.75);
+      ctx.fillText(`${Math.max(0, Math.round(v.hp))}`, cx, arriba + fuente * 0.75);
+      // Efectos (debajo de los pies)
+      if (!v.muerto) {
+        const efectos = Object.keys(NOMBRE_EFECTO).filter((k) => x[k]);
+        ctx.font = `800 ${fuente * 0.72}px Montserrat, sans-serif`;
+        efectos.slice(0, 2).forEach((k, n2) => {
+          const texto = k === 've' ? `Veneno ${x.ve}` : NOMBRE_EFECTO[k];
+          ctx.fillStyle = color('efecto-' + k);
+          ctx.strokeText(texto, cx, (PISO + 5) * s + n2 * fuente * 0.85);
+          ctx.fillText(texto, cx, (PISO + 5) * s + n2 * fuente * 0.85);
+        });
+        if (x.at) {                                   // estrellitas de aturdido
+          ctx.fillStyle = color('efecto-at');
+          for (let k = 0; k < 3; k++) {
+            const a = ahora / 300 + k * 2.1;
+            ctx.fillRect(cx + Math.cos(a) * 5 * s - s / 2, (PISO - ALTO_PJ + 1) * s + Math.sin(a) * s - s / 2, s, s);
+          }
         }
-        ctx.globalAlpha = 1;
-      } else if (e.tipo === 'dano') {
-        if (edad > 800) { efectos.splice(i, 1); continue; }
-        const k = edad / 800;
-        ctx.globalAlpha = 1 - k * k;
-        ctx.font = '900 20px Montserrat, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = C.mapaContorno;
-        ctx.strokeText(e.valor, e.x, e.y - k * 30);
-        ctx.fillStyle = e.mio ? C.danoMio : C.danoOtro;
-        ctx.fillText(e.valor, e.x, e.y - k * 30);
-        ctx.globalAlpha = 1;
-      } else if (edad > 200) efectos.splice(i, 1);
+      }
+      // Flecha sobre los objetivos que puedo elegir
+      if (objetivosValidos.includes(i)) {
+        const y0 = arriba - fuente * 2.4 + Math.sin(ahora / 150) * s;
+        ctx.fillStyle = color('marca-objetivo');
+        ctx.beginPath();
+        ctx.moveTo(cx - 3 * s, y0 - 3 * s); ctx.lineTo(cx + 3 * s, y0 - 3 * s); ctx.lineTo(cx, y0); ctx.closePath();
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    // Textos que suben
+    for (let k = flotantes.length - 1; k >= 0; k--) {
+      const f = flotantes[k];
+      const t = (ahora - f.t0) / f.dura;
+      if (t < 0) continue;
+      if (t >= 1) { flotantes.splice(k, 1); continue; }
+      const v = vis[f.o];
+      if (!v) continue;
+      ctx.globalAlpha = t > 0.7 ? (1 - t) / 0.3 : 1;
+      const tam = fuente * (f.grande ? 1.6 : 1.05);
+      ctx.font = `900 ${tam}px Montserrat, sans-serif`;
+      ctx.lineWidth = Math.max(3, tam / 4);
+      ctx.strokeStyle = color('contorno-lienzo');
+      ctx.fillStyle = color(f.color);
+      const y = (PISO - 12) * s - t * 10 * s - f.fila * tam;
+      ctx.strokeText(f.texto, v.x * s, y);
+      ctx.fillText(f.texto, v.x * s, y);
+      ctx.globalAlpha = 1;
     }
   }
 
-  function dibujarMinimapa(zn) {
-    const w = mini.width;
-    const k = w / L;
-    mctx.clearRect(0, 0, w, w);
-    if (!cajas.length) return;
-    for (const [x, y, cw, ch, tipo] of cajas) {
-      mctx.fillStyle = tipo === OB.ARBOL ? C.minimapaArbol : C.minimapaCaja;
-      mctx.fillRect(x * k, y * k, Math.max(2, cw * k), Math.max(2, ch * k));
+  // Tocar a un luchador en el lienzo = elegirlo como objetivo
+  lienzo.addEventListener('click', (e) => {
+    const validos = objetivosElegibles();
+    if (!validos.length) return;
+    const r = lienzo.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * AW;
+    const y = ((e.clientY - r.top) / r.height) * AH;
+    let mejor = null, dist = 14;
+    for (const i of validos) {
+      const d = Math.abs(vis[i].x - x) + (y < PISO - ALTO_PJ - 8 || y > PISO + 6 ? 10 : 0);
+      if (d < dist) { dist = d; mejor = i; }
     }
-    if (zn) {
-      mctx.strokeStyle = C.zonaBorde;
-      mctx.lineWidth = 2;
-      mctx.beginPath();
-      mctx.arc(zn[0] * k, zn[1] * k, Math.max(0, zn[2] * k), 0, Math.PI * 2);
-      mctx.stroke();
-      mctx.strokeStyle = C.zonaObjetivo;
-      mctx.lineWidth = 1;
-      mctx.beginPath();
-      mctx.arc(zona[3] * k, zona[4] * k, zona[5] * k, 0, Math.PI * 2);
-      mctx.stroke();
+    if (mejor !== null) usar(mejor);
+  });
+
+  // ---------------- Combate: turno y botones ----------------
+  const miLuchador = () => (est && est.c ? est.c.l.findIndex((x) => x.j === yo) : -1);
+  const esMiTurno = () => !!est && est.fase === 'combate' && est.c.t >= 0 && est.c.l[est.c.t].j === yo;
+  const objDe = (k, h) => (h === 'b' ? clases[k].basico.obj : h === 'cambiar' ? 'yo' : clases[k].hab[h].obj);
+  const nombreDe = (k, h) => (h === 'b' ? 'Ataque' : h === 'cambiar' ? 'Cambiar de fila' : clases[k].hab[h].n);
+  function objetivosElegibles() {
+    if (!elegida || enviado || !esMiTurno()) return [];
+    const op = est.c.op.find((o) => o.h === elegida.h);
+    return op && (elegida.obj === 'enemigo' || elegida.obj === 'cualquiera') ? op.o : [];
+  }
+
+  function actualizarCombate(m) {
+    const c = m.c;
+    prepararVis(c, !!m.ev);
+    if (!esMiTurno()) { elegida = null; enviado = false; }
+    const actor = c.t >= 0 ? c.l[c.t] : null;
+    const t = $('textoTurno');
+    t.replaceChildren();
+    if (m.fase === 'fin') t.textContent = 'Combate terminado';
+    else if (!actor) t.textContent = `Ronda ${c.r}`;
+    else if (actor.j === yo) t.append(el('span', 'tu-turno', '¡Tu turno!'), ` · Ronda ${c.r}`);
+    else {
+      const jug = actor.j && m.jug.find((j) => j.id === actor.j);
+      t.append('Turno de ', el('span', actor.e ? 'azul' : 'rojo', actor.n), !actor.j ? ' (bot)' : jug && !jug.on ? ' (sin conexión, juega solo)' : '', ` · Ronda ${c.r}`);
     }
-    // Solo me veo yo (a los demás hay que buscarlos)
-    if (enPartida && pred.lista) {
-      mctx.fillStyle = C.minimapaTu;
-      mctx.beginPath();
-      mctx.arc(pred.x * k, pred.y * k, 4, 0, Math.PI * 2);
-      mctx.fill();
+    finTurno = m.queda > 0 ? performance.now() + m.queda : 0;
+    $('reloj').hidden = !finTurno;
+    pintarAcciones();
+  }
+
+  function actualizarReloj(ahora) {
+    if (!finTurno) return;
+    const queda = Math.max(0, finTurno - ahora);
+    $('relojBarra').style.transform = `scaleX(${queda / 20000})`;
+    $('reloj').classList.toggle('poco', queda < 6000);
+  }
+
+  function pintarAcciones() {
+    const caja = $('botonesAccion');
+    const i = miLuchador();
+    $('acciones').hidden = i < 0;
+    if (i < 0) return;
+    const x = est.c.l[i];
+    const turno = esMiTurno() && !enviado;
+    const ops = turno ? est.c.op : [];
+    caja.replaceChildren();
+    const acciones = ['b', 0, 1, 2, 'cambiar'];
+    for (const h of acciones) {
+      const b = el('button', 'btn-accion' + (h === 'cambiar' ? ' btn-accion--ancho' : '') + (elegida && elegida.h === h ? ' elegida' : ''));
+      b.type = 'button';
+      const disponible = ops.some((o) => o.h === h);
+      // Fuera de turno se pueden tocar para leerlas (no hacen nada)
+      b.disabled = x.v <= 0 || (turno && !disponible);
+      if (!turno) b.classList.add('solo-leer');
+      if (!turno && leyendo === h) b.classList.add('elegida');
+      b.append(nombreDe(x.k, h));
+      if (typeof h === 'number') {
+        const espera = x.cd[h];
+        b.append(el('small', '', espera > 0 ? `Lista en ${espera} ${espera === 1 ? 'turno' : 'turnos'}` : 'Lista'));
+      } else if (h === 'b') {
+        b.append(el('small', '', `${clases[x.k].basico.d.split('.')[0]}`));
+      }
+      b.addEventListener('click', () => elegir(h));
+      caja.append(b);
+    }
+    const detalle = $('detalleAccion');
+    const obj = $('objetivos');
+    obj.replaceChildren();
+    obj.hidden = true;
+    if (x.v <= 0) { detalle.textContent = 'Caíste. Mira cómo termina tu compañero.'; return; }
+    if (!turno) {
+      if (enviado) detalle.textContent = 'Enviado…';
+      else if (leyendo !== null) detalle.replaceChildren(el('b', '', nombreDe(x.k, leyendo) + ': '), descripcion(x.k, leyendo));
+      else detalle.textContent = 'Espera tu turno. Toca una habilidad para leer qué hace.';
+      return;
+    }
+    if (!elegida) { detalle.textContent = 'Elige qué hacer.'; return; }
+    detalle.replaceChildren(el('b', '', nombreDe(x.k, elegida.h) + ': '), descripcion(x.k, elegida.h));
+    obj.hidden = false;
+    if (elegida.obj === 'enemigo' || elegida.obj === 'cualquiera') {
+      const op = est.c.op.find((o) => o.h === elegida.h);
+      for (const o of op ? op.o : []) {
+        const y = est.c.l[o];
+        const b = el('button', 'btn-objetivo');
+        b.type = 'button';
+        b.append(y.n, el('small', '', `${FILAS[y.f]} · ${y.v} de vida`));
+        b.addEventListener('click', () => usar(o));
+        obj.append(b);
+      }
+    } else {
+      const b = el('button', 'btn-objetivo', `Usar ${nombreDe(x.k, elegida.h)}`);
+      b.type = 'button';
+      b.style.gridColumn = '1 / -1';
+      b.addEventListener('click', () => usar());
+      obj.append(b);
     }
   }
 
-  // ---------------- Marcadores (4 veces por segundo) ----------------
-  function marcadores() {
-    const mio = yo && jugadores.get(yo);
-    const vivos = [...jugadores.values()].filter((j) => j.vivo).length;
-    $('hudVivos').textContent = vivos || estado.v || 0;
-    $('hudBajas').textContent = mio ? mio.bajas : 0;
-    const zt = $('hudZona');
-    if (zona) {
-      const fuera = mio && enPartida && pred.lista && Math.hypot(pred.x - zona[0], pred.y - zona[1]) > zona[2];
-      zt.textContent = fuera ? `¡Fuera de la zona! −${zona[8]}/s` : zona[7] ? 'La zona se está cerrando' : `La zona se cierra en ${zona[6]} s`;
-      zt.classList.toggle('peligro', !!fuera || !!zona[7]);
-    } else zt.textContent = '';
-    if (mio) {
-      $('barraVida').style.width = `${mio.vida}%`;
-      $('barraVida').parentElement.classList.toggle('baja', mio.vida <= 30);
-      $('textoVida').textContent = mio.vida;
-      $('barraEscudo').style.width = `${mio.escudo}%`;
-      const arma = ARMAS[mio.arma] || ARMAS[0];
-      $('hudArma').textContent = arma.nombre;
-      $('hudMunicion').textContent = mio.recargando ? 'Recargando…' : `${mio.mun} / ${arma.cargador}`;
-      $('hudMunicion').classList.toggle('vacio', mio.recargando || mio.mun <= Math.ceil(arma.cargador / 5));
-    }
-    let piso = null;
-    if (mio && enPartida && pred.lista && mio.arma !== 0) {
-      for (const [, x, y, tipo] of items.values()) {
-        if (tipo <= 4 && tipo !== mio.arma && Math.hypot(x - mio.x, y - mio.y) < 40 + R) { piso = tipo; break; }
+  function descripcion(k, h) {
+    if (h === 'cambiar') return 'Cambias de fila con tu compañero (gasta tu turno).';
+    return h === 'b' ? clases[k].basico.d : clases[k].hab[h].d;
+  }
+
+  function elegir(h) {
+    if (!esMiTurno()) { leyendo = leyendo === h ? null : h; pintarAcciones(); return; }
+    if (enviado) return;
+    leyendo = null;
+    const k = est.c.l[est.c.t].k;
+    sonido.tocar('clic', 0.6);
+    elegida = { h, obj: objDe(k, h) };
+    pintarAcciones();
+  }
+
+  function usar(o) {
+    if (!elegida || !esMiTurno() || enviado) return;
+    mandar({ t: 'accion', h: elegida.h, o });
+    enviado = true;
+    elegida = null;
+    pintarAcciones();
+    // Si el servidor no la aceptó (llegó tarde o no valía), se puede volver a elegir
+    setTimeout(() => { if (enviado && esMiTurno()) { enviado = false; pintarAcciones(); } }, 3000);
+  }
+
+  // ---------------- Animación de lo que pasó ----------------
+  function flotante(o, texto, colorVar, t0, extra = {}) {
+    const fila = flotantes.filter((f) => f.o === o && Math.abs(f.t0 - t0) < 400).length;
+    flotantes.push({ o, texto, color: colorVar, t0, dura: 1100, fila, ...extra });
+  }
+  function luego(ms, fn) { setTimeout(fn, ms); }
+
+  function animar(ev) {
+    const c = est.c;
+    const ahora = performance.now();
+    let t = 0;                     // ms desde ahora
+    let impacto = 0;
+    const metas = new Map();       // puesto → cuándo mostrar su vida nueva
+    for (const e of ev) {
+      if (e.t === 'accion') {
+        const a = c.l[e.a], v = vis[e.a];
+        const k = a.k;
+        const ataca = e.h === 'b' || (typeof e.h === 'number' && clases[k].hab[e.h].obj !== 'yo');
+        if (e.h !== 'b') flotante(e.a, nombreDe(k, e.h), 'accent-cyan', ahora + t, { dura: 1300 });
+        if (ataca) {
+          const blanco = e.o !== undefined ? e.o : c.l.findIndex((y) => y.e !== a.e && y.f === 0);
+          const destino = vis[blanco >= 0 ? blanco : 0].x + (a.e ? 12 : -12);
+          if (v) v.ataque = { t0: ahora + t, hasta: destino };
+          impacto = t + 230;
+        } else {
+          impacto = t + 150;
+          luego(t, () => sonido.tocar(e.h === 'cambiar' ? 'mover' : 'efecto', 0.7));
+        }
+        t = impacto;
+      } else if (e.t === 'dano') {
+        const cuando = t;
+        metas.set(e.o, cuando);
+        flotante(e.o, e.crit ? `¡${e.d}!` : `-${e.d}`, e.crit ? 'critico' : 'dano', ahora + cuando, { grande: !!e.crit });
+        luego(cuando, () => {
+          if (vis[e.o]) vis[e.o].golpe = performance.now();
+          sonido.tocar(e.crit ? 'critico' : Math.random() < 0.5 ? 'golpe' : 'golpe2', e.crit ? 0.8 : 1);
+          if (e.crit || e.d >= 30) temblor = performance.now() + 200;
+        });
+        t += 170;
+      } else if (e.t === 'esquiva') {
+        flotante(e.o, '¡Esquiva!', 'efecto-ev', ahora + t);
+        luego(t, () => sonido.tocar('esquiva'));
+        t += 170;
+      } else if (e.t === 'contra') {
+        flotante(e.a, '¡Contragolpe!', 'efecto-gu', ahora + t);
+        t += 120;
+      } else if (e.t === 'cae') {
+        const cuando = t + 100;
+        metas.set(e.o, Math.max(metas.get(e.o) || 0, cuando));
+        luego(cuando, () => { if (vis[e.o]) { vis[e.o].muerto = true; vis[e.o].caida = 0; } });
+        flotante(e.o, 'Cayó', 'vida-baja', ahora + cuando);
+        t += 200;
+      } else if (e.t === 'efecto') {
+        if (e.e === 'at' || e.e === 've') flotante(e.o, NOMBRE_EFECTO[e.e], 'efecto-' + e.e, ahora + t);
+      } else if (e.t === 'veneno') {
+        metas.set(e.o, t);
+        flotante(e.o, `-${e.d}`, 'efecto-ve', ahora + t);
+        luego(t, () => { if (vis[e.o]) vis[e.o].golpe = performance.now(); sonido.tocar('golpe2', 0.6); });
+        t += 300;
+      } else if (e.t === 'aturdido') {
+        flotante(e.o, 'Pierde el turno', 'efecto-at', ahora + t);
+        t += 300;
+      } else if (e.t === 'tiempo') {
+        flotante(e.o, 'Se acabó el tiempo', 'warning', ahora + t);
+      } else if (e.t === 'cambio') {
+        luego(t, () => sonido.tocar('mover', 0.6));
+      } else if (e.t === 'turno' && c.l[e.o] && c.l[e.o].j === yo) {
+        luego(t, () => { sonido.tocar('clic'); if (navigator.vibrate) navigator.vibrate(60); });
       }
     }
-    $('btnCambiar').hidden = piso === null;
-    if (piso !== null) $('armaPiso').textContent = ARMAS[piso].nombre + (TACTIL ? '' : ' (E)');
-    const ahora = performance.now();
-    $('listaBajas').innerHTML = feed.filter((f) => ahora - f.t0 < 6000).map((f) => `<li class="${f.mia ? 'mia' : ''}">${f.texto}</li>`).join('');
-    const banner = $('banner');
-    if (enPartida && zona && zona[6] <= 5 && !zona[7] && zona[6] > 0) { banner.hidden = false; banner.textContent = `La zona se cierra en ${zona[6]} s`; }
-    else banner.hidden = true;
-    if (!enPartida && !$('capa').hidden) pintarPanel();
+    // La barra de vida baja cuando llega el golpe (no antes)
+    c.l.forEach((x, i) => {
+      const v = vis[i];
+      if (!v) return;
+      if (metas.has(i)) luego(metas.get(i), () => { v.meta = x.v; });
+      else v.meta = x.v;
+      if (x.v <= 0 && !metas.has(i)) v.muerto = true;
+      if (x.v > 0) v.muerto = false;
+    });
+    anotar(ev);
   }
-  setInterval(marcadores, 250);
 
-  conectar();
-  requestAnimationFrame(cuadro);
+  // Registro de texto ("Ana · Tajo giratorio: Bot Toro -15, Bot Lobo -14")
+  function anotar(ev) {
+    const c = est.c;
+    const lista = $('registro');
+    const nombreB = (i) => el('b', c.l[i].e ? 'azul' : 'rojo', c.l[i].n);
+    let li = null;
+    let partes = 0;
+    const agregar = (...cosas) => { if (partes++) li.append(', '); li.append(...cosas); };
+    const nueva = () => { li = el('li'); partes = 0; lista.prepend(li); return li; };
+    for (const e of ev) {
+      if (e.t === 'accion') {
+        nueva().append(nombreB(e.a), ` · ${nombreDe(c.l[e.a].k, e.h)}`);
+        li.append(': ');
+      } else if (e.t === 'dano' && li) {
+        agregar(nombreB(e.o), ' ', el('span', e.crit ? 'crit' : 'num', `-${e.d}${e.crit ? ' (crítico)' : ''}`));
+      } else if (e.t === 'esquiva' && li) {
+        agregar(nombreB(e.o), ' esquivó');
+      } else if (e.t === 'contra' && li) {
+        agregar(nombreB(e.a), ' contraatacó');
+      } else if (e.t === 'cae') {
+        if (!li) nueva();
+        agregar(nombreB(e.o), ' cayó');
+      } else if (e.t === 'efecto' && li) {
+        if (e.e === 'at' || e.e === 've') agregar(nombreB(e.o), ` ${NOMBRE_EFECTO[e.e].toLowerCase()}`);
+      } else if (e.t === 'veneno') {
+        nueva().append('Veneno: ', nombreB(e.o), ' ', el('span', 'num', `-${e.d}`));
+      } else if (e.t === 'aturdido') {
+        nueva().append(nombreB(e.o), ' está aturdido y pierde el turno');
+      } else if (e.t === 'tiempo') {
+        nueva().append(nombreB(e.o), ' se quedó sin tiempo');
+        li = null;
+      }
+    }
+    // Quita el ": " de las acciones sin efectos visibles (Provocar, Muro…)
+    for (const item of lista.children) if (item.lastChild && item.lastChild.nodeType === 3 && item.lastChild.textContent === ': ') item.lastChild.remove();
+    while (lista.children.length > 30) lista.lastChild.remove();
+  }
+
+  function avisoCentro(texto) {
+    const a = $('avisoCentro');
+    a.textContent = texto;
+    a.hidden = !texto;
+  }
+
+  // ---------------- Fin ----------------
+  function mostrarFin(espera) {
+    if (finMostrado) return;
+    finMostrado = true;
+    setTimeout(() => {
+      if (!est || est.fase !== 'fin') return;
+      const c = est.c;
+      const i = miLuchador();
+      const miEquipo = i >= 0 ? c.l[i].e : null;
+      const titulo = $('tituloFin');
+      titulo.className = '';
+      if (c.g === 2) titulo.textContent = 'Empate';
+      else if (miEquipo === null) titulo.textContent = `Ganó el equipo ${EQUIPOS[c.g]}`;
+      else if (c.g === miEquipo) { titulo.textContent = '¡Victoria!'; titulo.className = 'gana'; sonido.tocar('ganar'); }
+      else { titulo.textContent = 'Derrota'; titulo.className = 'pierde'; sonido.tocar('perder', 0.7); }
+      $('textoFin').textContent = c.g === 2 ? 'Nadie cayó y quedaron con la misma vida.' : `El equipo ${EQUIPOS[c.g]} se quedó con la arena en ${c.r} ${c.r === 1 ? 'ronda' : 'rondas'}.`;
+      const cuerpo = $('tablaFin');
+      cuerpo.replaceChildren();
+      [...c.l].sort((a, b) => b.dano - a.dano).forEach((x) => {
+        const tr = el('tr', x.j === yo ? 'yo' : '');
+        const td = el('td');
+        td.append(el('span', x.e ? 'azul' : 'rojo', x.n), ` · ${clases[x.k].nombre}${x.j ? '' : ' (bot)'}`);
+        tr.append(td, el('td', '', String(x.dano)), el('td', '', String(x.bajas)));
+        cuerpo.append(tr);
+      });
+      const soyAnf = est.anf === yo;
+      $('btnOtra').hidden = !soyAnf;
+      $('btnOtra').disabled = false;
+      $('notaOtra').textContent = soyAnf ? 'Vuelven todos a la sala con los mismos puestos.' : `Esperando a que ${nombreAnfitrion()} prepare otra partida…`;
+      $('capaFin').hidden = false;
+    }, espera);
+  }
+
+  preparar();
 })();

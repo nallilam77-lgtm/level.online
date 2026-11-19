@@ -1,38 +1,57 @@
-# Último en Pie (battle royale en línea, hasta 15 jugadores)
+# Duelo de Acero (2 vs 2 por turnos, cuerpo a cuerpo)
 
-- `src/partida.js`: la partida (movimiento, disparos, botín, zona, bots y quién gana). El servidor decide todo.
-- `src/sala.js`: la sala (Cloudflare Durable Object): conexiones WebSocket, 20 pasos por segundo, ciclo
-  espera → partida → fin. Si no queda nadie conectado, se apaga y vuelve a empezar limpia.
-- `src/worker.js`: la entrada `/ws`; en local también sirve la página.
-- `../public/juego/`: la página del juego (Canvas). En la tienda queda en `/juego/` (Vercel) y se conecta a
-  `wss://juego.levelupstore.online/ws`.
+- `src/combate.js`: las reglas (clases, habilidades, filas, efectos, turnos y la jugada de los bots). Sin red.
+- `src/sala.js`: una sala (Cloudflare Durable Object, una por enlace): conexiones WebSocket, puestos, quién es
+  el anfitrión, el reloj de cada turno (20 s) y el ciclo sala → combate → fin → sala.
+- `src/worker.js`: la entrada `/ws` (crear sala o entrar a una) y `/acceso`; en local también sirve la página.
+- `../public/juego/`: la página (sala de espera + combate en pixel art dibujado en código). En la tienda queda
+  en `/juego/` (Vercel) y se conecta a `wss://juego.levelupstore.online/ws`.
 
-Reglas: todos caen con pistola; en el piso hay subfusil, escopeta, rifle, francotirador, botiquines (+35 de
-vida) y chalecos (+50 de escudo). Con pistola el arma se agarra sola; con otra, se cambia con E o el botón.
-Cada arma tiene cargador y recarga (R o el botón). La zona se cierra en 4 fases y quema más en cada una. Si hay
-menos de 10 personas, entran bots.
+## Cómo se juega
 
-Arte y sonidos: Kenney "Desert Shooter Pack" (CC0, `public/juego/img/LICENCIA-kenney.txt`). Solo se usan
-las hojas copiadas a `public/juego/img/` y 14 sonidos de `public/juego/sonidos/`; los paquetes completos
-quedan en `recursos-juego/` (no se suben).
+1. El administrador toca **Crear partida** en el panel (Minijuego). Se abre el juego con su sala y queda como anfitrión.
+2. La página le da el enlace de la sala (`/juego/?s=<sala>`) con botones para copiarlo o mandarlo por WhatsApp.
+   Quien lo abre entra a esa sala (no necesita código). Hay 4 puestos: Rojo y Azul, adelante y atrás.
+3. Cada uno elige puesto y clase. El anfitrión toca **Empezar** cuando quiera: los puestos vacíos los juegan bots.
+4. Por turnos (orden por velocidad), 20 s para decidir; si no, ataque básico automático. Si alguien se desconecta,
+   su luchador juega solo hasta que vuelva (al recargar recupera su puesto).
+5. Al terminar, el anfitrión toca **Otra partida** y vuelven todos a la sala con los mismos puestos.
+
+Cuerpo a cuerpo: solo se le pega al enemigo de adelante (el de atrás, cuando el de adelante cae o con habilidades
+que lo permiten). Cualquiera puede gastar su turno en cambiar de fila con su compañero. Las habilidades tienen
+enfriamiento.
+
+| Clase | Vida / Vel. | Habilidades |
+|---|---|---|
+| Guerrero (espada y escudo) | 140 / 3 | Golpe de escudo (aturde), Provocar, Muro |
+| Bárbaro (hacha) | 120 / 2 | Tajo giratorio (a los dos), Furia, Ejecutar |
+| Lancero (lanza, su básico llega atrás) | 112 / 4 | Estocada (atraviesa), Empujón (cambia las filas rivales), Guardia |
+| Pícaro (dagas, 25 % de crítico) | 100 / 5 | Veneno, Sombra (ignora filas), Evasión |
+
+Para cambiar números o habilidades: `src/combate.js` (la página toma los textos de ahí). Después correr
+`node prueba/combate.mjs`: simula 5000 partidas de bots y muestra el % de victorias de cada clase (hoy 47-52 %).
+
+Una sala se borra si se queda 2 minutos sin nadie conectado; su enlace deja de servir y hay que crear otra.
+
+Sonidos: Kenney (CC0, `public/juego/sonidos/LICENCIA-kenney.txt`).
 
 ## Probar en tu computadora
 
 ```
 cd juego-servidor
 npm install        # solo la primera vez
-npm run dev        # abre http://localhost:8787  (o http://localhost:8787/?espera=5 para no esperar 20 s)
+npm run dev        # abre http://localhost:8787 (en local no pide código)
+npm run prueba     # (con npm run dev corriendo) simula partidas y prueba una sala con dos jugadores
 ```
 
-Abre esa dirección en varias pestañas para jugar entre varios.
-`npm run prueba` conecta 15 jugadores de prueba a la vez (con `npm run dev` corriendo).
+Para jugar entre varios en local: crea la sala en una pestaña y abre el enlace de la sala en otras.
 
 ## Acceso privado
 
-Solo se juega con un enlace `https://www.levelupstore.online/juego/?c=<código>`. Los códigos se crean en
-admin.html → Minijuego → "Último en Pie" (supabase/juego-enlaces.sql): **Jugar ahora** usa el tuyo (no vence) y
-**Crear enlace** hace uno para otra persona (vence en 1, 7, 30 días o nunca; se puede anular). El Worker revisa
-el código con `juego_entrar()` en `/acceso` y al abrir `/ws`. En local (localhost) no pide código.
+Solo el administrador crea partidas: admin.html → Minijuego → **Crear partida** abre `/juego/?c=<su código>&nueva=1`
+(supabase/juego-enlaces.sql; el código no vence y el panel lo crea la primera vez) y la sala se crea sola. El Worker
+revisa el código con `juego_entrar()` (solo acepta el del dueño) en `/acceso` y al crear la sala. Los demás entran
+únicamente con el enlace de una sala (`?s=<sala>`).
 
 ## Publicar (Cloudflare, plan gratis)
 
@@ -41,6 +60,5 @@ el código con `juego_entrar()` en `/acceso` y al abrir `/ws`. En local (localho
    (la URL del proyecto y la clave pública "anon"/publishable de Supabase).
 3. `npm run deploy` (también crea `juego.levelupstore.online`, por `routes` en wrangler.toml).
 
-Plan gratis: los mensajes de los jugadores cuentan como peticiones (20 mensajes = 1 petición, tope de
-100.000 por día). Por eso el navegador solo manda los controles cuando cambian, máximo 10 veces por segundo
-(~7 por segundo por jugador en la prueba: con 15 jugadores a la vez alcanza para unas 4 horas al día).
+Plan gratis: los mensajes cuentan como peticiones (20 mensajes = 1 petición, tope de 100.000 por día). Al ser por
+turnos se mandan muy pocos (una acción por turno y un ping cada 25 s), así que alcanza de sobra.

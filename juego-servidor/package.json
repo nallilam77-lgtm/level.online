@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --port 8787",
+    "dev": "wrangler dev --port 8787 --var LOCAL:1",
     "deploy": "wrangler deploy",
-    "prueba": "node prueba/jugadores.mjs"
+    "prueba": "node prueba/combate.mjs && node prueba/sala.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
