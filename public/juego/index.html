@@ -15,8 +15,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="juego.css?v=10">
-  <script src="juego.js?v=10" defer></script>
+  <link rel="stylesheet" href="juego.css?v=11">
+  <!-- Sesión de Google de la tienda (torneo y duelo rápido de la Arena): va antes que juego.js -->
+  <script src="/js/sesion.js?v=6" defer></script>
+  <script src="juego.js?v=11" defer></script>
 </head>
 <body>
   <header class="barra glass">
@@ -121,6 +123,16 @@
         <ol class="registro glass" id="registro" aria-live="polite" aria-label="Lo que pasó"></ol>
       </div>
 
+      <!-- Entre combates de una serie (torneo al mejor de 3) -->
+      <div class="capa" id="capaEntre" hidden>
+        <div class="panel glass">
+          <h1 id="tituloEntre">Combate</h1>
+          <p class="marcador" id="marcadorEntre" aria-label="Marcador"></p>
+          <p class="panel-texto" id="textoEntre" role="status"></p>
+          <div class="clases-mini" id="clasesEntre"></div>
+        </div>
+      </div>
+
       <div class="capa" id="capaFin" hidden>
         <div class="panel glass">
           <h1 id="tituloFin">¡Victoria!</h1>
@@ -130,6 +142,8 @@
             <tbody id="tablaFin"></tbody>
           </table>
           <button type="button" class="btn-principal" id="btnOtra" hidden>Otra partida</button>
+          <button type="button" class="btn-principal" id="btnOtraCola" hidden>Buscar otro rival</button>
+          <a class="btn-sec" id="btnArena" href="/arena.html" hidden>Volver a la Arena</a>
           <p class="nota" id="notaOtra"></p>
         </div>
       </div>

@@ -6,6 +6,10 @@ import { cargarJuego } from './_lib/juegos/index.js';
 //   - traer_productos (POST, solo administrador): copia el catálogo de Central One del juego a Supabase.
 // El juego y la acción van siempre en la URL; el cuerpo solo lleva datos. Cada módulo de
 // api/_lib/juegos/ declara sus acciones, valida sus datos y responde como los endpoints anteriores.
+const ACCIONES_ARENA = {
+  arena_config: 'config', arena_inscribir: 'inscribir', arena_push: 'guardarPush', arena_sala: 'sala', arena_evento: 'evento', arena_tic: 'tic',
+};
+
 export default async function handler(req, res) {
   try {
     // Panel admin → Resumen: saldo de Central One (solo administrador; _lib/precios.js). No es de un juego.
@@ -26,6 +30,8 @@ export default async function handler(req, res) {
     // Panel admin → Revisión: verificar en Central One y rehacer una recarga (solo administrador; _lib/revision.js)
     if (req.query.accion === 'revision_verificar') return (await import('./_lib/revision.js')).verificarRevision(req, res);
     if (req.query.accion === 'revision_rehacer') return (await import('./_lib/revision.js')).rehacerRevision(req, res);
+    // Arena de Duelo de Acero (_lib/arena.js; aquí y no en un archivo propio: el plan de Vercel admite 12 funciones)
+    if (Object.hasOwn(ACCIONES_ARENA, req.query.accion)) return (await import('./_lib/arena.js'))[ACCIONES_ARENA[req.query.accion]](req, res);
     const juego = await cargarJuego(req.query.juego);
     if (!juego) {
       return res.status(400).json({ status: "error", message: "Juego no válido." });

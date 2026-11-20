@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque, animaciones ni transiciones (css/ligero.css)
+    (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/ligero.css?v=3'; document.head.appendChild(l); } })();
+  </script>
+  <!-- Tienda en mantenimiento (admin.html → Ajustes): lleva a /mantenimiento.html mientras esté encendido -->
+  <script src="/js/mantenimiento.js?v=1" async></script>
+  <meta name="description" content="Arena de Level Up: juega Duelo de Acero, sube en el ranking semanal y gana diamantes en torneos 1 vs 1 y 2 vs 2.">
+  <meta name="theme-color" content="#0f172a">
+  <title>Arena - Level Up</title>
+  <link rel="canonical" href="https://www.levelupstore.online/arena.html">
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="apple-touch-icon" href="img/app/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/sesion.css?v=1">
+  <link rel="stylesheet" href="css/arena.css?v=1">
+  <!-- Arena de Duelo de Acero: juego-servidor/ARENA.md, api/_lib/arena.js, supabase/arena.sql -->
+  <script src="/js/sesion.js?v=6" defer></script>
+  <script src="/js/datos-pago.js?v=6" defer></script>
+  <script src="/js/arena.js?v=1" defer></script>
+  <script src="/js/instalar-app.js?v=1" defer></script>
+  <script src="/js/version-nueva.js?v=2" defer></script>
+</head>
+<body>
+  <div class="barra">
+    <a href="index.html" class="volver">◄ Inicio</a>
+    <span class="marca">Level <span>Up</span></span>
+    <a data-sesion class="sesion-boton" href="/perfil.html">Entrar</a>
+  </div>
+
+  <main>
+    <header class="encabezado">
+      <p class="antetitulo">Duelo de Acero</p>
+      <h1>Arena ⚔️</h1>
+      <p class="bajada">Combates por turnos con espadas, hachas, lanzas, dagas y mazas. Juega gratis, sube en el <strong>ranking</strong> o entra al <strong>torneo</strong> y gana diamantes.</p>
+    </header>
+
+    <!-- Sin sesión -->
+    <section class="tarjeta" id="bloqueSesion" hidden>
+      <h2>Entra con Google para jugar</h2>
+      <p class="nota">Con tu cuenta guardamos tus puntos, tus partidas del torneo y tus premios.</p>
+      <a class="btn" id="btnGoogle" href="/perfil.html?volver=%2Farena.html&amp;entrar=1">Entrar con Google</a>
+    </section>
+
+    <!-- Mis partidas del torneo -->
+    <section class="tarjeta" id="bloqueMias" aria-labelledby="tituloMias" hidden>
+      <div class="fila-titulo">
+        <h2 id="tituloMias">Mis partidas</h2>
+        <button type="button" class="btn-sec btn-chico" id="btnAvisos" hidden>🔔 Activar avisos</button>
+      </div>
+      <p class="nota" id="notaAvisos" hidden></p>
+      <ul class="lista-partidas" id="listaMias"></ul>
+    </section>
+
+    <!-- Duelo rápido -->
+    <section class="tarjeta" aria-labelledby="tituloRapido">
+      <h2 id="tituloRapido">Duelo rápido · gratis</h2>
+      <p class="nota">Te emparejamos 1 vs 1 con otro jugador conectado. Ganarle a una persona da <strong>+25 puntos</strong> y perder resta 10. Si en 20 segundos no hay nadie, juegas contra un bot (sin puntos).</p>
+      <a class="btn" id="btnRapido" href="/juego/?cola=1">Buscar rival</a>
+    </section>
+
+    <!-- Torneo pagado -->
+    <section class="tarjeta" id="bloqueTorneo" aria-labelledby="tituloTorneo">
+      <h2 id="tituloTorneo">Torneo · gana diamantes</h2>
+      <p class="nota" id="notaTorneo">Cargando…</p>
+      <form class="formulario" id="formTorneo" novalidate hidden>
+        <fieldset class="opciones-grupo">
+          <legend>Modo</legend>
+          <div class="segmentos" role="group" aria-label="Modo">
+            <button type="button" class="segmento" data-modo="1v1" aria-pressed="true">1 vs 1</button>
+            <button type="button" class="segmento" data-modo="2v2" aria-pressed="false">2 vs 2</button>
+          </div>
+        </fieldset>
+        <fieldset class="opciones-grupo">
+          <legend>Juego del premio</legend>
+          <div class="juegos" id="juegos" role="group" aria-label="Juego del premio"></div>
+        </fieldset>
+        <p class="premio" id="textoPremio"></p>
+        <label class="campo"><span id="etiquetaId">Tu ID del juego</span>
+          <input type="text" id="idJugador" inputmode="numeric" maxlength="15" autocomplete="off" placeholder="Ej: 123456789" required>
+        </label>
+        <label class="campo" id="campoZona" hidden>Zona ID
+          <input type="text" id="zona" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Ej: 2345">
+        </label>
+        <label class="campo">Tu nombre en la partida
+          <input type="text" id="nombreArena" maxlength="14" autocomplete="nickname" placeholder="Ej: ElRey" spellcheck="false" required>
+        </label>
+        <div class="pago" id="pago">
+          <p class="pago-titulo">Paga <strong id="montoPago">—</strong> por Pago Móvil a:</p>
+          <dl class="pago-datos" id="datosPago"><div><dt>Cargando…</dt><dd></dd></div></dl>
+        </div>
+        <label class="campo">Últimos 5 números de la referencia
+          <input type="text" id="referencia" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="Ej: 12345" required>
+        </label>
+        <button type="submit" class="btn" id="btnInscribir">Inscribirme</button>
+        <p class="mensaje" id="mensajeTorneo" role="status" hidden></p>
+      </form>
+      <details class="reglas">
+        <summary>¿Cómo funciona el torneo?</summary>
+        <ul>
+          <li>Pagas la inscripción y quedas esperando rival del mismo modo y juego.</li>
+          <li>Cuando paga tu rival, te damos la <strong>hora</strong> de la partida (entre 9:00 a. m. y 10:00 p. m.) y te avisamos.</li>
+          <li>Se juega al <strong>mejor de 3</strong> combates. El ganador (en 2 vs 2, cada uno del equipo ganador) recibe el <strong>doble</strong> del paquete de inscripción en su ID.</li>
+          <li>Si en 24 horas no aparece rival, te enviamos tu paquete de inscripción: no pierdes nada.</li>
+          <li>La sala abre 10 minutos antes. Si a la hora + 10 minutos tu rival no entró, ganas por ausencia. Si no entra nadie, cada uno recibe su paquete.</li>
+        </ul>
+      </details>
+    </section>
+
+    <!-- Ranking -->
+    <section class="tarjeta" aria-labelledby="tituloRanking">
+      <div class="fila-titulo">
+        <h2 id="tituloRanking">Ranking de la semana</h2>
+        <span class="nota" id="semanaRanking"></span>
+      </div>
+      <ol class="ranking" id="ranking"><li class="vacio">Cargando…</li></ol>
+      <p class="nota" id="miPuesto" hidden></p>
+      <p class="nota">Se reinicia cada lunes. Solo cuentan los duelos rápidos contra personas (hasta 3 por día contra el mismo rival).</p>
+    </section>
+  </main>
+</body>
+</html>

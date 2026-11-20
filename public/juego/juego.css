@@ -340,6 +340,20 @@ button.puesto:hover, button.puesto:focus-visible { box-shadow: var(--shadow-lg),
   display: grid; place-items: center; padding: 16px; overflow-y: auto;
   background: var(--capa-fondo);
 }
+.marcador { margin: 0; font-size: 44px; font-weight: 900; letter-spacing: 0.06em; }
+.marcador .rojo, .turno .serie .rojo { color: var(--rojo); }
+.marcador .azul { color: var(--azul); }
+.turno .serie { color: var(--text-muted); font-weight: 700; }
+.clases-mini { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.btn-clase-mini {
+  min-height: 44px; padding: 0 8px; border-radius: 12px; border: 1px solid var(--border-glass);
+  background: var(--bg-deep); color: var(--text-main); font-weight: 800; font-size: 13px; cursor: pointer;
+  transition: box-shadow 0.25s, border-color 0.25s;
+}
+.btn-clase-mini:hover, .btn-clase-mini:focus-visible { border-color: var(--accent-cyan); box-shadow: var(--shadow-glow-fuerte); }
+.btn-clase-mini.elegida { border-color: var(--accent-neon); color: var(--accent-neon); }
+#capaEntre { z-index: 5; }
+
 .tabla-final { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
 .tabla-final th { font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; padding: 8px; }
 .tabla-final td { padding: 8px; border-top: 1px solid var(--border-glass); font-weight: 600; }

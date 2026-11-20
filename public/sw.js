@@ -1,6 +1,7 @@
-// Service worker de Level Up (lo registra js/instalar-app.js). Solo hace dos cosas:
+// Service worker de Level Up (lo registra js/instalar-app.js). Solo hace tres cosas:
 //   1. Permite instalar la tienda como app (Android pide un service worker).
 //   2. Si el cliente abre una página SIN internet, muestra un aviso en vez del dinosaurio.
+//   3. Muestra los avisos de la Arena (Web Push de api/_lib/push.js) y al tocarlos abre la Arena.
 // NO guarda páginas, precios ni nada en caché: todo sale siempre de internet (los precios y pagos
 // tienen que ser los de ese momento). Las peticiones que no son de navegación ni se tocan.
 self.addEventListener('install', () => self.skipWaiting());
@@ -13,4 +14,22 @@ const SIN_CONEXION = `<!doctype html><html lang="es"><head><meta charset="utf-8"
 self.addEventListener('fetch', (evento) => {
   if (evento.request.mode !== 'navigate') return;
   evento.respondWith(fetch(evento.request).catch(() => new Response(SIN_CONEXION, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })));
+});
+
+// Avisos de la Arena: { titulo, texto, url, etiqueta }
+self.addEventListener('push', (evento) => {
+  let d = {};
+  try { d = evento.data ? evento.data.json() : {}; } catch (e) { d = { texto: evento.data && evento.data.text() }; }
+  evento.waitUntil(self.registration.showNotification(d.titulo || 'Level Up', {
+    body: d.texto || '', icon: '/img/app/icono-192.png', badge: '/img/app/icono-192.png', tag: d.etiqueta || undefined,
+    data: { url: d.url || '/arena.html' }, vibrate: [120, 60, 120],
+  }));
+});
+self.addEventListener('notificationclick', (evento) => {
+  evento.notification.close();
+  const url = new URL((evento.notification.data && evento.notification.data.url) || '/arena.html', self.location.origin).href;
+  evento.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ventanas) => {
+    const abierta = ventanas.find((v) => v.url.startsWith(url));
+    return abierta ? abierta.focus() : self.clients.openWindow(url);
+  }));
 });

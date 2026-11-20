@@ -1,0 +1,163 @@
+/* Arena de Duelo de Acero (arena.html + js/arena.js). Paleta Level Up: .claude/UI_RULES.md */
+:root {
+  --bg-base: #0f172a;
+  --bg-deep: #0b1120;
+  --surface: rgba(15, 23, 42, 0.6);
+  --surface-solida: rgba(15, 23, 42, 0.92);
+  --border-glass: rgba(148, 163, 184, 0.15);
+  --accent-cyan: #22d3ee;
+  --accent-neon: #39ff14;
+  --cta-gradient: linear-gradient(135deg, var(--accent-cyan), var(--accent-neon));
+  --on-cta: #0f172a;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --peligro: #fb7185;
+  --aviso: #fbbf24;
+  --oro: #fbbf24;
+  --rojo: #ff4d6d;
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 10px 25px -5px rgba(6, 182, 212, 0.2);
+  --shadow-glow-hover: 0 12px 30px -5px rgba(6, 182, 212, 0.35);
+  --fondo-cyan: rgba(34, 211, 238, 0.18);
+  --fondo-rojo: rgba(255, 77, 109, 0.1);
+  --fondo-ok: rgba(57, 255, 20, 0.08);
+  --fondo-error: rgba(251, 113, 133, 0.08);
+  --fondo-aviso: rgba(251, 191, 36, 0.08);
+  --fondo-yo: rgba(57, 255, 20, 0.06);
+  --glass-blur: 12px;
+  --radius-card: 16px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  min-height: 100vh; color: var(--text-main); font-family: 'Poppins', sans-serif;
+  background:
+    radial-gradient(circle at 15% 0%, var(--fondo-cyan), transparent 45%),
+    radial-gradient(circle at 90% 25%, var(--fondo-rojo), transparent 40%),
+    var(--bg-base);
+  background-attachment: fixed;
+}
+h1, h2, button, .btn, .marca, legend { font-family: 'Montserrat', sans-serif; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+
+.barra {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border-glass);
+  backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+.barra .volver { color: var(--accent-cyan); text-decoration: none; font-weight: 600; font-size: 13px; min-height: 44px; display: inline-flex; align-items: center; }
+.marca { font-weight: 900; font-size: 15px; letter-spacing: 0.5px; }
+.marca span { color: var(--accent-neon); }
+
+main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 24px; }
+
+.encabezado { display: grid; gap: 8px; text-align: center; }
+.antetitulo { color: var(--accent-cyan); font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
+.encabezado h1 { font-size: clamp(28px, 8vw, 40px); font-weight: 900; }
+.bajada { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+.bajada strong { color: var(--text-main); }
+
+.tarjeta {
+  padding: 24px; display: grid; gap: 16px; background: var(--surface); border: 1px solid var(--border-glass); border-radius: var(--radius-card);
+  backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+.tarjeta h2 { font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-cyan); }
+.fila-titulo { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.nota { color: var(--text-muted); font-size: 13px; line-height: 1.55; }
+.nota strong { color: var(--text-main); }
+
+.btn {
+  min-height: 52px; padding: 0 24px; border: 0; border-radius: 999px; cursor: pointer; background: var(--cta-gradient); color: var(--on-cta);
+  display: inline-flex; align-items: center; justify-content: center; text-decoration: none; text-align: center;
+  font-weight: 900; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; box-shadow: var(--shadow-glow);
+  transition: box-shadow 0.25s, transform 0.25s;
+}
+.btn:hover:not(:disabled), .btn:focus-visible { box-shadow: var(--shadow-glow-hover); transform: translateY(-1px); }
+.btn:disabled, .btn.desactivado { opacity: 0.55; cursor: default; transform: none; }
+.btn-chico { min-height: 44px; font-size: 13px; padding: 0 18px; }
+.btn-sec {
+  min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--accent-cyan); background: var(--bg-deep);
+  color: var(--accent-cyan); font-weight: 800; font-size: 13px; cursor: pointer; transition: box-shadow 0.25s;
+}
+.btn-sec:hover { box-shadow: var(--shadow-glow-hover); }
+
+/* Formulario del torneo */
+.formulario { display: grid; gap: 16px; }
+.opciones-grupo { border: 0; display: grid; gap: 8px; }
+.opciones-grupo legend { font-size: 13px; font-weight: 800; color: var(--text-muted); margin-bottom: 8px; }
+.segmentos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.segmento, .juego-opcion {
+  min-height: 48px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--border-glass); background: var(--bg-deep);
+  color: var(--text-main); font-weight: 900; font-size: 15px; cursor: pointer; transition: border-color 0.25s, box-shadow 0.25s;
+}
+.segmento[aria-pressed="true"], .juego-opcion[aria-pressed="true"] { border-color: var(--accent-neon); box-shadow: var(--shadow-glow); }
+.segmento[aria-pressed="true"] { color: var(--accent-neon); }
+.juegos { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.juego-opcion { display: grid; gap: 2px; text-align: left; }
+.juego-opcion strong { font-size: 15px; }
+.juego-opcion span { font-size: 12px; font-weight: 600; color: var(--text-muted); font-family: 'Poppins', sans-serif; }
+.premio { font-size: 14px; line-height: 1.5; padding: 12px 16px; border-radius: 12px; background: var(--fondo-aviso); border: 1px solid var(--oro); }
+.premio strong { color: var(--oro); }
+
+.campo { display: grid; gap: 6px; font-size: 13px; color: var(--text-muted); font-weight: 600; }
+.campo input {
+  width: 100%; min-height: 48px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border-glass);
+  background: var(--bg-deep); color: var(--text-main); font-family: 'Montserrat', sans-serif; font-size: 16px; font-weight: 800; letter-spacing: 1px;
+}
+
+.pago { display: grid; gap: 12px; padding: 16px; border-radius: 12px; border: 1px dashed var(--border-glass); background: var(--bg-deep); }
+.pago-titulo { font-size: 14px; }
+.pago-titulo strong { color: var(--accent-neon); font-size: 18px; }
+.pago-datos { display: grid; gap: 8px; }
+.pago-datos div { display: grid; grid-template-columns: 76px 1fr auto; gap: 8px; align-items: center; font-size: 14px; }
+.pago-datos dt { color: var(--text-muted); font-size: 12px; }
+.pago-datos dd { font-weight: 800; overflow-wrap: anywhere; }
+.copiar {
+  min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border-glass); background: var(--surface-solida);
+  color: var(--accent-cyan); font-size: 12px; font-weight: 800; cursor: pointer;
+}
+
+.mensaje { font-size: 14px; line-height: 1.5; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border-glass); }
+.mensaje--ok { background: var(--fondo-ok); border-color: var(--accent-neon); }
+.mensaje--error { background: var(--fondo-error); border-color: var(--peligro); }
+
+.reglas summary { cursor: pointer; font-weight: 800; font-size: 14px; color: var(--accent-cyan); min-height: 44px; display: flex; align-items: center; }
+.reglas ul { display: grid; gap: 8px; padding-left: 20px; color: var(--text-muted); font-size: 13px; line-height: 1.55; }
+.reglas strong { color: var(--text-main); }
+
+/* Mis partidas */
+.lista-partidas { list-style: none; display: grid; gap: 12px; }
+.partida { display: grid; gap: 6px; padding: 16px; border-radius: 12px; background: var(--bg-deep); border: 1px solid var(--border-glass); }
+.partida--lista, .partida--jugando { border-color: var(--accent-neon); }
+.partida-cabeza { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
+.partida-cabeza strong { font-family: 'Montserrat', sans-serif; font-weight: 900; }
+.etiqueta { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-glass); color: var(--text-muted); }
+.partida--lista .etiqueta, .partida--jugando .etiqueta { color: var(--accent-neon); border-color: var(--accent-neon); }
+.partida-detalle { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.partida .btn { margin-top: 6px; justify-self: start; }
+.vacio { color: var(--text-muted); font-size: 13px; list-style: none; }
+
+/* Ranking */
+.ranking { list-style: none; display: grid; gap: 6px; }
+.ranking li:not(.vacio) {
+  display: grid; grid-template-columns: 32px 1fr auto; gap: 4px 12px; align-items: center;
+  padding: 10px 12px; border-radius: 12px; background: var(--bg-deep); border: 1px solid var(--border-glass);
+}
+.ranking li.yo { border-color: var(--accent-neon); background: var(--fondo-yo); }
+.ranking .puesto { font-weight: 900; color: var(--accent-cyan); font-family: 'Montserrat', sans-serif; }
+.ranking li:nth-child(-n+3) .puesto { color: var(--oro); }
+.ranking .nombre { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranking .puntos { font-weight: 900; color: var(--accent-neon); font-family: 'Montserrat', sans-serif; }
+.ranking .record { grid-column: 2 / -1; font-size: 11px; color: var(--text-muted); }
+
+@media (min-width: 560px) {
+  .juegos { grid-template-columns: repeat(3, 1fr); }
+  .ranking .record { grid-column: auto; }
+  .ranking li:not(.vacio) { grid-template-columns: 32px 1fr auto auto; }
+}
+@media (min-width: 900px) {
+  main { gap: 32px; }
+}
+
+/* Celulares: sin desenfoque (como el resto de la tienda) */
+.ligero .tarjeta, .ligero .barra { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--surface-solida); }

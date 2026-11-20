@@ -5,7 +5,9 @@
 // sala, se elige puesto y clase, y en el combate se manda la acción elegida; lo que pasa (ev) se anima.
 // En los ataques sale una flecha que va y viene: mientras más cerca del centro la detengas, más daño (p: 0 a 1).
 // Entrada: ?c=<código> (solo el del administrador, desde el panel → "Crear partida", que agrega &nueva=1) para
-// CREAR una sala, o ?s=<sala> (enlace que comparte el creador) para entrar a ella. Los personajes son pixel art dibujado aquí mismo (sin imágenes).
+// CREAR una sala, o ?s=<sala> (enlace que comparte el creador) para entrar a ella.
+// Arena (con sesión de Google, js/sesion.js; ver juego-servidor/ARENA.md): ?a=<partida> = partida del torneo
+// (mejor de 3) y ?cola=1 = duelo rápido (la cola empareja y pasa a ?s=<sala>). Los personajes son pixel art dibujado aquí mismo (sin imágenes).
 // =========================================================================
 (function () {
   'use strict';
@@ -32,6 +34,11 @@
   if (CODIGO) guardar('duelo_enlace', CODIGO);
   else CODIGO = leer('duelo_enlace') || leer('ultimo_enlace') || '';
   let salaId = /^[a-z2-9]{10}$/.test(parametros.get('s') || '') ? parametros.get('s') : '';
+  const partidaId = /^[a-z2-9]{10}$/.test(parametros.get('a') || '') ? parametros.get('a') : '';
+  let enCola = parametros.get('cola') === '1' && !salaId;
+  let jwt = '';                                  // sesión de Google (torneo y duelo rápido)
+  let cambioSala = false;                        // la cola nos emparejó: al cerrarse, entrar a la sala
+  const ENTRAR_GOOGLE = '/perfil.html?volver=' + encodeURIComponent('/arena.html') + '&entrar=1';
 
   const EQUIPOS = ['Rojo', 'Azul'];
   const FILAS = ['Adelante', 'Atrás'];
@@ -185,8 +192,35 @@
   function aviso(texto) { $('avisoInicio').textContent = texto || ''; }
   function botonEntrar(texto, activo) { const b = $('btnEntrar'); b.textContent = texto; b.disabled = !activo; }
 
+  // Token de la sesión de Google de la tienda (js/sesion.js). En local, una sesión de prueba (LOCAL=1 en el servidor).
+  async function sesionJwt() {
+    if (LOCAL) {
+      let u = leerSesion('duelo_prueba_usuario');
+      if (!u) { u = crypto.randomUUID(); guardarSesion('duelo_prueba_usuario', u); }
+      return `prueba:${u}:${nombre()}`;
+    }
+    try { return (window.Sesion && (await window.Sesion.token())) || ''; } catch (e) { return ''; }
+  }
+
   async function preparar() {
     mostrar('pantallaInicio');
+    if (partidaId || enCola) {
+      $('campoNombre').hidden = !LOCAL;
+      $('textoInicio').innerHTML = partidaId
+        ? 'Tu partida del <strong>torneo</strong> de Duelo de Acero, al mejor de 3 combates.'
+        : '<strong>Duelo rápido</strong>: te buscamos un rival. Si no hay nadie en 20 segundos, juegas contra un bot.';
+      botonEntrar('Revisando tu sesión…', false);
+      jwt = await sesionJwt();
+      if (!jwt) {
+        $('textoInicio').innerHTML += '<br><br>Para jugar, inicia sesión con Google en la tienda.';
+        botonEntrar('Iniciar sesión con Google', true);
+        $('formEntrar').dataset.login = '1';
+        return;
+      }
+      botonEntrar(partidaId ? 'Entrar a la partida' : 'Buscar rival', true);
+      if (!LOCAL || $('nombre').value) entrar();
+      return;
+    }
     if (salaId) {
       $('textoInicio').innerHTML = `Te invitaron a una sala de <strong>Duelo de Acero</strong>: combate por turnos con ${ARMAS}.`;
       botonEntrar('Entrar a la sala', true);
@@ -219,26 +253,34 @@
     aviso('No se pudo revisar el enlace. Revisa tu conexión e inténtalo.');
   }
 
-  $('formEntrar').addEventListener('submit', (e) => { e.preventDefault(); entrar(); });
+  $('formEntrar').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if ($('formEntrar').dataset.login) { location.href = ENTRAR_GOOGLE; return; }
+    entrar();
+  });
   function entrar() {
     if (entrado) return;
     entrado = true;
     guardar('duelo_nombre', nombre());
     sonido.iniciar();
-    crear = !salaId;
+    crear = !salaId && !partidaId && !enCola;
     if (salaId) tok = leerSesion(tokKey(salaId));
     botonEntrar('Conectando…', false);
     aviso('');
     conectar();
   }
 
-  function conectar() {
-    const url = crear
-      ? `${BASE.replace(/^http/, 'ws')}/ws?c=${encodeURIComponent(CODIGO)}&crear=1`
-      : `${BASE.replace(/^http/, 'ws')}/ws?s=${salaId}`;
+  async function conectar() {
+    const raiz = BASE.replace(/^http/, 'ws');
+    const url = enCola ? `${raiz}/cola`
+      : partidaId ? `${raiz}/ws?a=${partidaId}`
+        : crear ? `${raiz}/ws?c=${encodeURIComponent(CODIGO)}&crear=1`
+          : `${raiz}/ws?s=${salaId}`;
+    // La sesión se renueva sola (js/sesion.js); en las salas del administrador no hace falta
+    if (enCola || partidaId || !crear) jwt = (await sesionJwt()) || jwt;
     try { ws = new WebSocket(url); } catch (e) { reconectar(); return; }
     const este = ws;
-    ws.addEventListener('open', () => { reintento = 0; mandar({ t: 'hola', n: nombre(), tok: tok || undefined }); });
+    ws.addEventListener('open', () => { reintento = 0; mandar({ t: 'hola', n: nombre(), tok: tok || undefined, jwt: jwt || undefined }); });
     ws.addEventListener('message', (e) => {
       let m;
       try { m = JSON.parse(e.data); } catch (err) { return; }
@@ -248,6 +290,7 @@
       if (ws !== este) return;
       ws = null;
       if (fatal) return;
+      if (cambioSala) { cambioSala = false; conectar(); return; }
       reconectar();
     });
   }
@@ -284,6 +327,22 @@
 
   function recibir(m) {
     if (m.t === 'error') { fallo(m.m); return; }
+    if (m.t === 'pi') { mandar({ t: 'pa', k: m.k }); return; }
+    if (m.t === 'flecha') { if (flecha && flecha.pendiente && flecha.h === m.h) abrirFlecha(m.pasada); return; }
+    // Cola del duelo rápido
+    if (m.t === 'esperando') {
+      botonEntrar(m.gente > 1 ? `Buscando rival… (${m.gente} buscando)` : 'Buscando rival…', false);
+      aviso('Si nadie aparece en 20 segundos, juegas contra un bot.');
+      return;
+    }
+    if (m.t === 'emparejado') {
+      salaId = m.s;
+      enCola = false;
+      cambioSala = true;
+      history.replaceState(null, '', `${location.pathname}?s=${salaId}`);
+      botonEntrar(m.bot ? 'Contra un bot…' : '¡Rival encontrado!', false);
+      return;
+    }
     if (m.t === 'yo') {
       yo = m.id;
       tok = m.tok;
@@ -291,7 +350,7 @@
       return;
     }
     if (m.t !== 's') return;
-    if (m.sala && m.sala !== salaId) {
+    if (m.sala && m.sala !== salaId && m.tipo !== 'arena') {
       salaId = m.sala;
       crear = false;          // si se reconecta, entra a ESTA sala
       history.replaceState(null, '', `${location.pathname}?s=${salaId}`);
@@ -307,9 +366,12 @@
       pintarSala();
       return;
     }
-    if (!antes || antes.fase === 'sala') { reiniciarCombate(); mostrar('pantallaCombate'); }
+    if (!antes || antes.fase === 'sala' || (antes.fase === 'entre' && m.fase === 'combate')) { reiniciarCombate(); mostrar('pantallaCombate'); }
+    if (m.fase !== 'entre') $('capaEntre').hidden = true;
+    if (!m.c) { mostrarFin(0); return; }             // ganó por ausencia: no hubo combate
     actualizarCombate(m);
     if (m.ev) animar(m.ev);
+    if (m.fase === 'entre') mostrarEntre(antes && antes.fase === 'combate' ? 1600 : 0);
     if (m.fase === 'fin') mostrarFin(antes && antes.fase === 'combate' ? 1600 : 0);
   }
 
@@ -319,6 +381,9 @@
   const nombreAnfitrion = () => { const a = est.jug.find((j) => j.id === est.anf); return a ? a.n : 'el anfitrión'; };
 
   function pintarSala() {
+    const libreSala = est.tipo === 'libre';
+    $('invitar').hidden = !libreSala;
+    $('bloqueModo').hidden = !libreSala;
     const enlace = `${location.origin}${location.pathname}?s=${est.sala}`;
     $('enlaceSala').value = enlace;
     $('btnWhatsapp').href = `https://wa.me/?text=${encodeURIComponent('¡Ven a jugar Duelo de Acero conmigo! Entra a mi sala: ' + enlace)}`;
@@ -343,7 +408,8 @@
 
     const yoJ = miJugador();
     const sentado = yoJ && yoJ.p >= 0;
-    $('notaClases').textContent = sentado ? 'Tu compañero y los rivales ven tu clase. Puedes cambiarla hasta que empiece.' : 'Siéntate en un puesto para elegir clase.';
+    $('notaClases').textContent = !sentado ? (libreSala ? 'Siéntate en un puesto para elegir clase.' : 'Estás mirando: esta partida es de otros jugadores.')
+      : libreSala ? 'Tu compañero y los rivales ven tu clase. Puedes cambiarla hasta que empiece.' : 'Los rivales ven tu clase. Puedes cambiarla hasta que empiece y entre combates.';
     document.querySelectorAll('.clase').forEach((b) => {
       b.disabled = !sentado;
       b.classList.toggle('elegida', !!sentado && b.dataset.k === yoJ.k);
@@ -356,15 +422,26 @@
     $('textoGente').textContent = mirando.length ? `Mirando: ${mirando.map((j) => j.n).join(', ')}` : '';
     const libres = (uno ? [0, 2] : [0, 1, 2, 3]).filter((p) => !jugadorEn(p)).length;
     const soyAnf = est.anf === yo;
-    $('btnEmpezar').hidden = !soyAnf;
+    $('btnEmpezar').hidden = !soyAnf || !libreSala;
     $('btnEmpezar').disabled = false;
     $('btnEmpezar').textContent = libres ? `Empezar partida (${libres} ${libres === 1 ? 'bot' : 'bots'})` : 'Empezar partida';
-    $('textoEsperando').textContent = soyAnf ? '' : `Esperando a que ${nombreAnfitrion()} empiece la partida…`;
+    if (est.tipo === 'arena') {
+      const faltan = est.jug.filter((j) => j.ins && !j.on).map((j) => j.n);
+      $('textoEsperando').textContent = `Al mejor de 3. Empieza sola a las ${horaVe(est.hora)} (o desde 5 minutos antes si ya están todos). `
+        + (faltan.length ? `Falta: ${faltan.join(', ')}. Si a las ${horaVe(est.hora + 600000)} un equipo no entró, el otro gana por ausencia.` : '¡Están todos!');
+    } else if (est.tipo === 'ranking') {
+      $('textoEsperando').textContent = 'Esperando a que tu rival entre…';
+    } else if (est.tipo === 'bot') {
+      $('textoEsperando').textContent = 'Preparando el combate…';
+    } else {
+      $('textoEsperando').textContent = soyAnf ? '' : `Esperando a que ${nombreAnfitrion()} empiece la partida…`;
+    }
   }
+  const horaVe = (ms) => new Date(ms).toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Caracas' });
 
   function tarjetaPuesto(p, equipo) {
     const j = jugadorEn(p);
-    const libre = !j;
+    const libre = !j && est.tipo === 'libre';
     const caja = el(libre ? 'button' : 'div', 'puesto' + (libre ? '' : ' ocupado') + (j && j.id === yo ? ' mio' : ''));
     if (libre) {
       caja.type = 'button';
@@ -382,8 +459,10 @@
       if (!j.on) info.append(' · ', el('span', 'fuera', 'sin conexión'));
       caja.append(info);
       if (j.id === est.anf) caja.append(el('span', 'etiqueta-anf', 'ANFITRIÓN'));
-    } else {
+    } else if (libre) {
       caja.append(el('span', 'puesto-nombre', 'Libre'), el('span', 'puesto-libre', 'Sentarme aquí'));
+    } else {
+      caja.append(el('span', 'puesto-nombre', 'Bot'));
     }
     return caja;
   }
@@ -703,13 +782,14 @@
     const actor = c.t >= 0 ? c.l[c.t] : null;
     const t = $('textoTurno');
     t.replaceChildren();
-    if (m.fase === 'fin') t.textContent = 'Combate terminado';
+    if (m.fase !== 'combate') t.textContent = 'Combate terminado';
     else if (!actor) t.textContent = `Ronda ${c.r}`;
     else if (actor.j === yo) t.append(el('span', 'tu-turno', '¡Tu turno!'), ` · Ronda ${c.r}`);
     else {
       const jug = actor.j && m.jug.find((j) => j.id === actor.j);
       t.append('Turno de ', el('span', actor.e ? 'azul' : 'rojo', actor.n), !actor.j ? ' (bot)' : jug && !jug.on ? ' (sin conexión, juega solo)' : '', ` · Ronda ${c.r}`);
     }
+    if (m.serie && m.serie.meta > 1) t.append(el('span', 'serie', ` · Combate ${m.serie.num} · ${m.serie.gan[0]}-${m.serie.gan[1]}`));
     finTurno = m.queda > 0 ? performance.now() + m.queda : 0;
     $('reloj').hidden = !finTurno;
     pintarAcciones();
@@ -807,17 +887,21 @@
     const { h } = elegida;
     const k = est.c.l[est.c.t].k;
     if (infoDe(k, h).dano) {
-      // Ataque: primero la flecha; el daño depende de dónde la detenga
-      abrirFlecha(h, (p) => enviar(h, o, p));
+      // Ataque: primero la flecha (el servidor anota cuándo empezó); el daño depende de dónde la detenga
+      flecha = { pendiente: true, h, o, fin: false };
+      mandar({ t: 'flecha', h });
+      verFlechaEsperando(h);
       pintarAcciones();
+      // Si la respuesta no llega, se abre igual (el servidor la mide desde que recibió el pedido)
+      setTimeout(() => { if (flecha && flecha.pendiente && flecha.h === h) abrirFlecha(PASADA_MS[h] || 800); }, 2500);
     } else {
       enviar(h, o);
     }
   }
 
-  function enviar(h, o, p) {
+  function enviar(h, o, ms) {
     if (!esMiTurno()) return;
-    mandar({ t: 'accion', h, o, p });
+    mandar({ t: 'accion', h, o, ms });
     enviado = true;
     elegida = null;
     pintarAcciones();
@@ -828,10 +912,11 @@
   // ---------------- Flecha de precisión (estilo barra de ataque) ----------------
   // Va y viene sobre la barra; en el golpe fuerte va más rápido. Si no la detienes en 3 pasadas, se detiene
   // sola donde esté. p = 1 en el centro, 0 en los bordes.
-  const PASADA_MS = { r: 950, f: 620 };          // lo que tarda en cruzar la barra (habilidades: 800)
-  let flecha = null;                             // { t0, pasada, listo, fin }
-  function abrirFlecha(h, listo) {
-    flecha = { t0: performance.now(), pasada: PASADA_MS[h] || 800, listo, fin: false };
+  const PASADA_MS = { r: 950, f: 620 };          // lo que tarda en cruzar la barra (habilidades: 800); la manda el servidor
+  let flecha = null;                             // { pendiente, h, o, t0, pasada, fin }
+  function abrirFlecha(pasada) {
+    const h = flecha.h;
+    Object.assign(flecha, { pendiente: false, t0: performance.now(), pasada: pasada || PASADA_MS[h] || 800 });
     $('flechaResultado').textContent = '';
     $('flechaTitulo').textContent = h === 'f' ? '¡Golpe fuerte! Detén la flecha en el centro' : '¡Detén la flecha en el centro!';
     $('flecha').hidden = false;
@@ -846,16 +931,17 @@
     return { x: ida < 1 ? ida : 2 - ida, vueltas: t };
   }
   function moverFlecha(ahora) {
-    if (!flecha || flecha.fin) return;
+    if (!flecha || flecha.fin || flecha.pendiente) return;
     const { x, vueltas } = posFlecha(ahora);
     $('flechaMarca').style.left = `${x * 100}%`;
     if (vueltas >= 3) { detenerFlecha(); return; }
     requestAnimationFrame(moverFlecha);
   }
   function detenerFlecha() {
-    if (!flecha || flecha.fin) return;
+    if (!flecha || flecha.fin || flecha.pendiente) return;
     flecha.fin = true;
-    const { x } = posFlecha(performance.now());
+    const ahora = performance.now();
+    const { x } = posFlecha(ahora);
     $('flechaMarca').style.left = `${x * 100}%`;
     const p = Math.max(0, 1 - Math.abs(x - 0.5) * 2);
     const m = multFlecha(p).toFixed(1).replace('.', ',');
@@ -864,7 +950,7 @@
     $('btnFlecha').disabled = true;
     sonido.tocar(p >= 0.95 ? 'critico' : 'clic', p >= 0.95 ? 0.6 : 0.8);
     if (p >= 0.95 && navigator.vibrate) navigator.vibrate(80);
-    flecha.listo(Math.round(p * 1000) / 1000);
+    enviar(flecha.h, flecha.o, Math.round(Math.min(ahora - flecha.t0, flecha.pasada * 3)));
     setTimeout(cerrarFlecha, 700);
   }
   function cerrarFlecha() {
@@ -874,6 +960,13 @@
     if (est && est.c) pintarAcciones();
   }
   $('flecha').addEventListener('pointerdown', (e) => { e.preventDefault(); detenerFlecha(); });
+  // Mientras espera la respuesta del servidor, la barra se ve pero la flecha no corre
+  function verFlechaEsperando(h) {
+    $('flechaResultado').textContent = '';
+    $('flechaTitulo').textContent = h === 'f' ? '¡Golpe fuerte! Detén la flecha en el centro' : '¡Detén la flecha en el centro!';
+    $('flechaMarca').style.left = '0%';
+    $('flecha').hidden = false;
+  }
   document.addEventListener('keydown', (e) => {
     if (flecha && !flecha.fin && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); detenerFlecha(); }
   });
@@ -1023,12 +1116,49 @@
     a.hidden = !texto;
   }
 
+  // ---------------- Entre combates (serie del torneo) ----------------
+  let relojEntre = null;
+  function mostrarEntre(espera) {
+    clearTimeout(relojEntre);
+    relojEntre = setTimeout(() => {
+      if (!est || est.fase !== 'entre') return;
+      const s = est.serie;
+      const fin = performance.now() + Math.max(0, s.siguiente - est.ahora);
+      const c = est.c;
+      $('tituloEntre').textContent = c && c.g === 2 ? 'Empate: se repite el combate' : `Combate para el equipo ${EQUIPOS[c.g]}`;
+      $('marcadorEntre').replaceChildren(el('span', 'rojo', String(s.gan[0])), ' – ', el('span', 'azul', String(s.gan[1])));
+      const yoJ = miJugador();
+      const cajas = $('clasesEntre');
+      cajas.replaceChildren();
+      if (yoJ && yoJ.p >= 0) {
+        for (const [k, info] of Object.entries(clases)) {
+          const b = el('button', 'btn-clase-mini' + (yoJ.k === k ? ' elegida' : ''), info.nombre);
+          b.type = 'button';
+          b.setAttribute('aria-pressed', String(yoJ.k === k));
+          b.addEventListener('click', () => { sonido.tocar('clic'); mandar({ t: 'clase', k }); });
+          cajas.append(b);
+        }
+      }
+      const pintar = () => {
+        if (!est || est.fase !== 'entre') return;
+        const seg = Math.max(0, Math.ceil((fin - performance.now()) / 1000));
+        $('textoEntre').textContent = `Gana quien llegue a ${s.meta}. Siguiente combate en ${seg} s.${yoJ && yoJ.p >= 0 ? ' Puedes cambiar de clase:' : ''}`;
+        if (seg > 0) relojEntre = setTimeout(pintar, 250);
+      };
+      pintar();
+      $('capaEntre').hidden = false;
+    }, espera);
+  }
+
   // ---------------- Fin ----------------
   function mostrarFin(espera) {
     if (finMostrado) return;
     finMostrado = true;
     setTimeout(() => {
       if (!est || est.fase !== 'fin') return;
+      if (est.tipo !== 'libre') { finSerie(); return; }
+      $('btnArena').hidden = true;
+      $('tablaFin').closest('table').hidden = false;
       const c = est.c;
       const i = miLuchador();
       const miEquipo = i >= 0 ? c.l[i].e : null;
@@ -1057,6 +1187,53 @@
       $('capaFin').hidden = false;
     }, espera);
   }
+
+  // Fin de una serie del torneo o de un duelo rápido
+  function finSerie() {
+    const s = est.serie;
+    const g = s.fin ? s.fin.ganador : 2;
+    const yoJ = miJugador();
+    const miEquipo = yoJ && yoJ.p >= 0 ? (yoJ.p >= 2 ? 1 : 0) : null;
+    const titulo = $('tituloFin');
+    titulo.className = '';
+    if (g === 2) titulo.textContent = 'Sin ganador';
+    else if (miEquipo === null) titulo.textContent = `Ganó el equipo ${EQUIPOS[g]}`;
+    else if (g === miEquipo) { titulo.textContent = '¡Ganaste!'; titulo.className = 'gana'; sonido.tocar('ganar'); }
+    else { titulo.textContent = 'Perdiste'; titulo.className = 'pierde'; sonido.tocar('perder', 0.7); }
+    const marcador = s.fin && s.fin.motivo ? s.fin.motivo : `Marcador: ${s.gan[0]} – ${s.gan[1]}.`;
+    let texto = marcador;
+    if (est.tipo === 'arena') {
+      if (g === 2) texto += ' Cada uno recibe su paquete de vuelta.';
+      else if (g === miEquipo) texto += ' 🏆 Tu premio va en camino a tu cuenta del juego: te avisamos cuando llegue.';
+      else if (miEquipo !== null) texto += ' Gracias por jugar: la próxima es tuya.';
+    } else if (est.tipo === 'ranking' && miEquipo !== null) {
+      texto = g === miEquipo ? '+25 puntos en el ranking de la semana.' : '−10 puntos en el ranking de la semana.';
+    } else if (est.tipo === 'bot') {
+      texto = 'Contra un bot no se ganan puntos. ¡Busca un rival de verdad!';
+    }
+    $('textoFin').textContent = texto;
+    const c = est.c;
+    const tabla = $('tablaFin').closest('table');
+    tabla.hidden = !c;
+    if (c) {
+      const cuerpo = $('tablaFin');
+      cuerpo.replaceChildren();
+      [...c.l].sort((a, b) => b.dano - a.dano).forEach((x) => {
+        const tr = el('tr', x.j === yo ? 'yo' : '');
+        const td = el('td');
+        td.append(el('span', x.e ? 'azul' : 'rojo', x.n), ` · ${clases[x.k].nombre}${x.j ? '' : ' (bot)'}`);
+        tr.append(td, el('td', '', String(x.dano)), el('td', '', String(x.cura || 0)), el('td', '', String(x.bajas)));
+        cuerpo.append(tr);
+      });
+    }
+    $('btnOtra').hidden = true;
+    $('btnArena').hidden = false;
+    $('notaOtra').textContent = '';
+    const otra = $('btnOtraCola');
+    otra.hidden = est.tipo === 'arena';
+    $('capaFin').hidden = false;
+  }
+  $('btnOtraCola').addEventListener('click', () => { location.href = `${location.pathname}?cola=1`; });
 
   preparar();
 })();

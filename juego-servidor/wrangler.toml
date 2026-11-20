@@ -14,6 +14,23 @@ directory = "../public/juego"
 name = "SALA"
 class_name = "Sala"
 
+# Cola del duelo rápido de la Arena (una sola)
+[[durable_objects.bindings]]
+name = "COLA"
+class_name = "Cola"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Sala"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Cola"]
+
+# API de la tienda para la Arena (el secreto va aparte: npx wrangler secret put ARENA_SECRETO)
+[vars]
+ARENA_API = "https://www.levelupstore.online/api/juego"
+
+# Cada minuto: vencimientos, avisos y premios de la Arena (Cron Triggers, incluidos en el plan gratis)
+[triggers]
+crons = ["* * * * *"]

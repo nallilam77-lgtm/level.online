@@ -51,13 +51,24 @@ Una sala se borra si se queda 2 minutos sin nadie conectado; su enlace deja de s
 
 Sonidos: Kenney (CC0, `public/juego/sonidos/LICENCIA-kenney.txt`).
 
+## Arena (para clientes)
+
+Duelo rápido, ranking semanal y torneo pagado con premio en diamantes: ver **ARENA.md** (reglas, piezas y
+seguridad). Tipos de sala en `src/sala.js` ('libre' = las del administrador, 'arena', 'ranking', 'bot'), cola del
+duelo rápido en `src/cola.js`, sesión de Google y avisos a la tienda en `src/sesion.js`. El Worker tiene un cron
+(cada minuto, `wrangler.toml`) que llama a la tienda (`ARENA_API`) con el secreto `ARENA_SECRETO`.
+
+La flecha la mide el servidor (el navegador pide `{ t: 'flecha', h }` y luego manda los ms que vio, aceptados
+dentro del margen de su ping).
+
 ## Probar en tu computadora
 
 ```
 cd juego-servidor
 npm install        # solo la primera vez
 npm run dev        # abre http://localhost:8787 (en local no pide código)
-npm run prueba     # (con npm run dev corriendo) simula partidas y prueba una sala con dos jugadores
+npm run prueba     # (con npm run dev:arena corriendo) simula partidas, prueba una sala y la Arena
+npm run dev:arena  # como dev, con una tienda simulada en el puerto 8790 (la levanta prueba/arena.mjs)
 ```
 
 Para jugar entre varios en local: crea la sala en una pestaña y abre el enlace de la sala en otras.
@@ -72,8 +83,9 @@ revisa el código con `juego_entrar()` (solo acepta el del dueño) en `/acceso` 
 ## Publicar (Cloudflare, plan gratis)
 
 1. `npx wrangler login` (abre tu cuenta de Cloudflare).
-2. Las dos variables (una sola vez): `npx wrangler secret put SUPABASE_URL` y `npx wrangler secret put SUPABASE_KEY`
-   (la URL del proyecto y la clave pública "anon"/publishable de Supabase).
+2. Las variables (una sola vez): `npx wrangler secret put SUPABASE_URL` y `npx wrangler secret put SUPABASE_KEY`
+   (la URL del proyecto y la clave pública "anon"/publishable de Supabase), y `npx wrangler secret put ARENA_SECRETO`
+   (el mismo valor que el secreto `arena_secreto` de Supabase Vault).
 3. `npm run deploy` (también crea `juego.levelupstore.online`, por `routes` en wrangler.toml).
 
 Plan gratis: los mensajes cuentan como peticiones (20 mensajes = 1 petición, tope de 100.000 por día). Al ser por

@@ -270,3 +270,8 @@ Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creado
 **Síntoma**: "no me aparecen los datos de pago ni el botón Ya le pagué" en Panel → Creadores.
 **Causa**: la tarjeta nueva de inscripciones traía su propia lista de creadores (sin datos de pago ni botones) y estaba ARRIBA de la lista "Códigos"; el administrador miraba esa.
 **Regla**: un dato nuevo de algo que ya tiene su lista va DENTRO de esa lista (aquí: la semana en cada tarjeta de código, `semanaPorCodigo`), no en una lista aparte. Y al mover bloques de admin.html, buscar el título dentro de su `<section>`: "Códigos" existe también en Canjes.
+
+## 19. Un archivo nuevo en `api/` rompe el despliegue (2026-11-20)
+
+**Síntoma**: Vercel no publica ("No more than 12 Serverless Functions can be added to a Deployment on the Hobby plan").
+**Regla**: `api/` ya tiene 12 funciones (el máximo del plan gratis). Lo nuevo va como `accion` dentro de una existente (`api/juego.js` despacha a `_lib/…` con import dinámico: canjes, revisión, pagos, Arena). Nunca crear `api/<nuevo>.js` sin quitar otra.

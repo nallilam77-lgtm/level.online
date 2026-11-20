@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --port 8787 --var LOCAL:1",
+    "dev:arena": "wrangler dev --port 8787 --var LOCAL:1 --var ARENA_API:http://127.0.0.1:8790/api --var ARENA_SECRETO:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --test-scheduled",
     "deploy": "wrangler deploy",
-    "prueba": "node prueba/combate.mjs && node prueba/sala.mjs"
+    "prueba": "node prueba/combate.mjs && node prueba/sala.mjs && node prueba/arena.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

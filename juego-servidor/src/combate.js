@@ -92,6 +92,18 @@ const entre = (x, a, b) => Math.min(b, Math.max(a, x));
 // Multiplicador de daño según dónde se detuvo la flecha: 0,4 (en el borde) a 1,35; en el centro, 1,5
 export const multFlecha = (p) => (p >= 0.95 ? 1.5 : 0.4 + 0.95 * entre(p, 0, 1));
 
+// ¿La acción h de la clase k usa la flecha? (ataques y habilidades de daño)
+export const usaFlecha = (k, h) => h === 'r' || h === 'f' || (typeof h === 'number' && !!(CLASES[k] && CLASES[k].hab[h] && CLASES[k].hab[h].dano));
+// Lo que tarda la flecha en cruzar la barra (ms): el golpe fuerte va más rápido
+export const pasadaFlecha = (h) => (h === 'r' ? 950 : h === 'f' ? 620 : 800);
+// Dónde quedó la flecha tras ms milisegundos (va y viene; se detiene sola a las 3 pasadas) → p de 0 a 1
+export function pFlecha(ms, pasada) {
+  const t = Math.min(Math.max(0, ms) / pasada, 3);
+  const ida = t % 2;
+  const x = t >= 3 ? 1 : ida < 1 ? ida : 2 - ida;
+  return Math.max(0, 1 - Math.abs(x - 0.5) * 2);
+}
+
 // Lo que la página necesita para mostrar las clases (sin funciones)
 export function infoClases() {
   const info = {};
@@ -102,7 +114,7 @@ export function infoClases() {
       attr: { fuerza: pct(c.fuerza), defensa: pct(c.defensa), esquiva: pct(c.esquiva), precision: pct(c.precision), critico: pct(c.critico) },
       pasiva: c.pasiva,
       rapido: { n: 'Ataque rápido', obj: c.alcance, dano: true, d: `${Math.round(RAPIDO * c.fuerza)} de daño. Casi nunca se esquiva.${llega}` },
-      fuerte: { n: 'Golpe fuerte', obj: c.alcance, dano: true, d: `${Math.round(FUERTE * c.fuerza)} de daño, pero el rival lo puede esquivar.${llega}` },
+      fuerte: { n: 'Golpe fuerte', obj: c.alcance, dano: true, d: `${Math.round(FUERTE * c.fuerza)} de daño. El rival lo puede esquivar.${llega}` },
       hab: c.hab.map(({ n, cd, obj, d, dano }) => ({ n, cd, obj, d, dano: !!dano })),
     };
   }

@@ -7,14 +7,19 @@
 // mientras la sala exista (sala.js la borra si se queda vacía).
 //   GET /acceso?c=…        → { ok } para que la página diga "enlace no válido" antes de conectarse
 //   GET /ws?c=…&crear=1    → sala nueva (Durable Object con nombre al azar); quien la abre es el anfitrión
-//   GET /ws?s=<sala>       → entrar a una sala que ya existe
+//   GET /ws?s=<sala>       → entrar a una sala que ya existe (también las del duelo rápido, que arma la cola)
+//   GET /ws?a=<partida>    → sala de una partida del torneo pagado (Arena; con sesión de Google, ver ARENA.md)
+//   GET /cola              → cola del duelo rápido (cola.js)
+// Cada minuto (cron de wrangler.toml) avisa a la tienda: /api/juego?accion=arena_tic (vencimientos, avisos, premios).
 // En local (localhost) no pide código. Lo demás: los archivos de public/juego (solo para probar en local;
 // en la tienda la página la sirve Vercel en /juego/).
 //
-// Variables (wrangler secret put): SUPABASE_URL y SUPABASE_KEY (la clave pública "anon" de Supabase).
+// Variables (wrangler secret put): SUPABASE_URL y SUPABASE_KEY (la clave pública "anon" de Supabase) y
+// ARENA_SECRETO (el mismo "arena_secreto" de Supabase Vault). ARENA_API (wrangler.toml): la API de la tienda.
 // =========================================================================
 
 export { Sala } from './sala.js';
+export { Cola } from './cola.js';
 
 const ORIGENES = ['https://www.levelupstore.online', 'https://levelupstore.online'];
 const ES_LOCAL = /^(localhost|127\.0\.0\.1)$/;
@@ -72,11 +77,23 @@ export default {
       });
     }
 
+    if (url.pathname === '/cola') {
+      if (!origenPermitido(origen, url)) return new Response('Origen no permitido', { status: 403 });
+      return env.COLA.get(env.COLA.idFromName('cola')).fetch(request);
+    }
+
     if (url.pathname === '/ws') {
       if (!origenPermitido(origen, url)) return new Response('Origen no permitido', { status: 403 });
       const r = new Request(request);
       r.headers.delete('X-Crear');
+      r.headers.delete('X-Arena-Sala');
       let nombre;
+      const partida = url.searchParams.get('a');
+      if (partida) {
+        if (!SALA_VALIDA.test(partida)) return new Response('Partida no válida', { status: 400 });
+        r.headers.set('X-Arena-Sala', partida);
+        return env.SALA.get(env.SALA.idFromName('arena-' + partida)).fetch(r);
+      }
       if (url.searchParams.get('crear') === '1') {
         if (!local) {
           const ok = await codigoValido(codigo, env);
@@ -94,5 +111,13 @@ export default {
       return env.SALA.get(env.SALA.idFromName('sala-' + nombre)).fetch(r);
     }
     return new Response('No encontrado', { status: 404 });
+  },
+
+  // Cada minuto: la tienda vence partidas, manda avisos y entrega premios (api/_lib/arena.js → tic)
+  async scheduled(evento, env, ctx) {
+    if (!env.ARENA_API || !env.ARENA_SECRETO) return;
+    ctx.waitUntil(fetch(`${env.ARENA_API}?accion=arena_tic`, { method: 'POST', headers: { 'X-Arena': env.ARENA_SECRETO } })
+      .then((r) => { if (!r.ok) console.error('arena_tic: HTTP ' + r.status); })
+      .catch((e) => console.error('arena_tic:', e.message)));
   },
 };

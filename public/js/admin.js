@@ -117,6 +117,7 @@
     if (b.dataset.seccion === 'precios') cargarPrecios();
     if (b.dataset.seccion === 'roblox') cargarRoblox();
     if (b.dataset.seccion === 'canjes') cargarCanjes();
+    if (b.dataset.seccion === 'arena') cargarArena();
     if (b.dataset.seccion === 'manuales') cargarManuales();
     if (b.dataset.seccion === 'revision') { cargarRevision(); cargarRuleta().catch(() => {}); }
     if (b.dataset.seccion === 'pagos') cargarPagos();
@@ -1877,6 +1878,87 @@
   // Códigos de regalo: crear (admin_canjes_crear), ver quién canjeó y borrar los libres (admin_canje_borrar)
   const ESTADO_CANJE = { libre: ['Libre', 'etiqueta--en_proceso'], entregando: ['En camino', 'etiqueta--pendiente'],
     entregado: ['Entregado', 'etiqueta--completado'], revisar: ['Por revisar', 'etiqueta--problema'] };
+  // ---------------------------------------------------------------- Arena (torneo pagado)
+  // admin_arena (supabase/arena.sql): partidas con sus jugadores y entregas. Configuración: configuracion "arena"
+  // (publico) { activo, paquetes: { freefire, bloodstrike, mobilelegends } }.
+  const ESTADO_ARENA = {
+    esperando: ['Esperando rival', 'etiqueta--pendiente'], lista: ['Lista', 'etiqueta--en_proceso'], jugando: ['Jugando', 'etiqueta--en_proceso'],
+    terminada: ['Terminada', 'etiqueta--completado'], cancelada: ['Sin rival', 'etiqueta--reembolsado'], revisar: ['Revisar', 'etiqueta--en_revision'],
+  };
+  const ENTREGA_ARENA = { pendiente: 'por enviar', entregando: 'enviando…', entregado: 'entregado ✅', revisar: '⚠️ por revisar' };
+  let configArena = { activo: true, paquetes: {} };
+  async function cargarArena() {
+    const lista = $('listaArena');
+    const [{ data, error }, conf] = await Promise.all([
+      cliente.rpc('admin_arena', { p_limite: 100 }),
+      cliente.from('configuracion').select('valor').eq('clave', 'arena').maybeSingle(),
+    ]);
+    if (conf && conf.data && conf.data.valor) configArena = conf.data.valor;
+    $('arenaActivo').checked = configArena.activo !== false;
+    $('arenaFreefire').value = (configArena.paquetes || {}).freefire || '';
+    $('arenaBloodstrike').value = (configArena.paquetes || {}).bloodstrike || '';
+    $('arenaMobilelegends').value = (configArena.paquetes || {}).mobilelegends || '';
+    if (error) { console.error(error); lista.replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/arena.sql?')); return; }
+    const partidas = data || [];
+    const insc = partidas.flatMap((p) => p.jugadores || []);
+    const revisar = insc.filter((i) => i.entrega === 'revisar').length + partidas.filter((p) => p.estado === 'revisar').length;
+    $('kpiArenaEsperando').textContent = partidas.filter((p) => p.estado === 'esperando').length;
+    $('kpiArenaListas').textContent = partidas.filter((p) => p.estado === 'lista' || p.estado === 'jugando').length;
+    $('kpiArenaCobrado').textContent = bs(insc.reduce((s, i) => s + (Number(i.monto) || 0), 0));
+    $('kpiArenaRevisar').textContent = revisar;
+    $('contadorArena').hidden = !revisar;
+    $('contadorArena').textContent = revisar;
+    lista.replaceChildren();
+    if (!partidas.length) { lista.append(el('li', 'vacio', 'Todavía nadie se ha inscrito.')); return; }
+    partidas.forEach((p) => {
+      const [texto, clase] = ESTADO_ARENA[p.estado] || [p.estado, ''];
+      const { li, cuerpo } = filaCompacta({ clave: 'arena:' + p.id, hora: horaCorta(p.creada),
+        titulo: `${p.modo === '2v2' ? '2 vs 2' : '1 vs 1'} · ${JUEGOS[p.juego] || p.juego} · ${p.paquete}`, monto: `${bs(p.precio)} Bs`, etiqueta: texto, claseEtiqueta: clase });
+      cuerpo.append(el('span', '', `Partida ${p.id} · creada ${fecha(p.creada)}${p.hora ? ` · hora ${fecha(p.hora)}` : ` · vence ${fecha(p.vence)}`}`));
+      if (p.ganador !== null && p.ganador !== undefined) cuerpo.append(el('span', '', `Resultado: ${p.ganador === 2 ? 'sin ganador' : `ganó ${p.ganador ? 'Azul' : 'Rojo'}`} ${p.marcador || ''}${p.motivo ? ` · ${p.motivo}` : ''}`));
+      else if (p.motivo) cuerpo.append(el('span', '', p.motivo));
+      (p.jugadores || []).forEach((j) => {
+        cuerpo.append(el('span', 'precio-detalle', `${j.puesto >= 2 ? 'Azul' : 'Rojo'} · ${j.nombre}${j.nick ? ` (${j.nick})` : ''} · ID ${j.id_jugador}${j.zona ? ` (${j.zona})` : ''} · ${j.correo || 'sin correo'} · ref. …${String(j.referencia || '').slice(-5)} · ${bs(j.monto)} Bs`
+          + `${j.resultado ? ` · ${j.resultado === 'gano' ? '🏆 ganó' : j.resultado === 'perdio' ? 'perdió' : 'devolución'}` : ''}${j.entrega ? ` · ${ENTREGA_ARENA[j.entrega] || j.entrega}` : ''}${j.entrega_nota && j.entrega !== 'entregado' ? ` (${j.entrega_nota})` : ''}`));
+        if (j.entrega === 'revisar') {
+          const acciones = el('div', 'acciones-cuenta');
+          acciones.append(
+            boton('🔁 Enviar de nuevo', 'btn-ver', async (b) => {
+              if (!confirm(`¿Enviar de nuevo a ${j.nombre} (ID ${j.id_jugador})? Hazlo solo si en Central One NO llegó.`)) return;
+              b.disabled = true;
+              const { error: e } = await cliente.rpc('admin_arena_reintentar', { p_id: j.id });
+              if (e) { b.disabled = false; alert(textoError(e, 'No se pudo.')); return; }
+              b.textContent = 'Se envía en el próximo minuto';
+            }),
+            boton('✅ Ya lo entregué', 'btn-ver', async (b) => {
+              if (!confirm(`¿Marcar como entregado el paquete de ${j.nombre}?`)) return;
+              b.disabled = true;
+              const { error: e } = await cliente.rpc('admin_arena_entregada', { p_id: j.id });
+              if (e) { b.disabled = false; alert(textoError(e, 'No se pudo.')); return; }
+              cargarArena();
+            }),
+          );
+          cuerpo.append(acciones);
+        }
+      });
+      lista.append(li);
+    });
+  }
+  $('actualizarArena').addEventListener('click', () => cargarArena());
+  $('formArena').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const valor = {
+      activo: $('arenaActivo').checked,
+      paquetes: Object.fromEntries([['freefire', 'arenaFreefire'], ['bloodstrike', 'arenaBloodstrike'], ['mobilelegends', 'arenaMobilelegends']]
+        .map(([k, id]) => [k, $(id).value.trim()]).filter(([, v]) => v)),
+    };
+    $('btnArena').disabled = true;
+    const { error } = await cliente.from('configuracion').upsert({ clave: 'arena', valor, publico: true, actualizado: new Date().toISOString() }, { onConflict: 'clave' });
+    $('btnArena').disabled = false;
+    $('mensajeArena').textContent = error ? textoError(error, 'No se pudo guardar.') : '✅ Guardado. La Arena lo toma en menos de un minuto.';
+    if (!error) configArena = valor;
+  });
+
   async function cargarCanjes() {
     const lista = $('listaCanjes');
     const [{ data, error }, paquetes] = await Promise.all([

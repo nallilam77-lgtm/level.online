@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=57" defer></script>
+  <script src="/js/admin.js?v=58" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -67,6 +67,7 @@
           <div class="grupo-botones">
             <button type="button" role="tab" data-seccion="cuentas" aria-selected="false">Cuentas</button>
             <button type="button" role="tab" data-seccion="juego" aria-selected="false">Minijuego</button>
+            <button type="button" role="tab" data-seccion="arena" aria-selected="false">Arena <span class="contador-pestana" id="contadorArena" hidden></span></button>
           </div>
         </div>
         <div class="grupo-pestanas" role="group" aria-label="Sistema">
@@ -455,6 +456,41 @@
             <textarea id="canjesTexto" rows="6" readonly></textarea>
             <button type="button" class="btn-ver" id="btnCopiarCanjes">📋 Copiar todos</button>
           </div>
+        </div>
+      </section>
+
+      <!-- ARENA: torneo pagado de Duelo de Acero (supabase/arena.sql, juego-servidor/ARENA.md) -->
+      <section class="seccion" id="seccion-arena" hidden>
+        <div class="tarjeta">
+          <div class="fila-titulo">
+            <h2>Torneo de la Arena</h2>
+            <button type="button" class="btn-ver" id="actualizarArena">Actualizar</button>
+          </div>
+          <p class="nota">Los clientes se inscriben en <a class="enlace-wa" href="/arena.html" target="_blank" rel="noopener">levelupstore.online/arena.html</a> pagando el paquete de su juego. El ganador recibe el doble del paquete por Central One; sin rival en 24 h o si no entra nadie, cada uno recibe su paquete. Las entregas que Central One rechaza quedan aquí <strong>por revisar</strong>.</p>
+          <div class="kpis">
+            <div class="kpi"><small>Esperando rival</small><strong id="kpiArenaEsperando">–</strong></div>
+            <div class="kpi"><small>Listas / jugando</small><strong id="kpiArenaListas">–</strong></div>
+            <div class="kpi"><small>Cobrado (Bs)</small><strong id="kpiArenaCobrado">–</strong></div>
+            <div class="kpi kpi--aviso"><small>Entregas por revisar</small><strong id="kpiArenaRevisar">–</strong></div>
+          </div>
+          <form class="formulario" id="formArena" novalidate>
+            <label class="interruptor">
+              <input type="checkbox" id="arenaActivo">
+              <span><strong>Torneo abierto</strong><small>Apagado, nadie puede inscribirse (las partidas ya pagadas siguen).</small></span>
+            </label>
+            <div class="dos-campos">
+              <label class="campo">Inscripción Free Fire<input type="text" id="arenaFreefire" maxlength="60" placeholder="110 Diamantes" autocomplete="off"></label>
+              <label class="campo">Inscripción Blood Strike<input type="text" id="arenaBloodstrike" maxlength="60" placeholder="105 Oro" autocomplete="off"></label>
+            </div>
+            <label class="campo">Inscripción Mobile Legends<input type="text" id="arenaMobilelegends" maxlength="60" placeholder="86 Diamantes" autocomplete="off"></label>
+            <p class="nota">Nombre exacto del paquete en Precios (vacío = ese juego no aparece). El precio de la inscripción es el de ese paquete.</p>
+            <button type="submit" class="btn btn--chico" id="btnArena">Guardar</button>
+            <p class="mensaje-form" id="mensajeArena" role="status"></p>
+          </form>
+        </div>
+        <div class="tarjeta">
+          <h2>Partidas</h2>
+          <ul class="pedidos" id="listaArena"><li class="vacio">Cargando…</li></ul>
         </div>
       </section>
 
