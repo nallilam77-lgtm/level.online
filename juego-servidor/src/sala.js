@@ -5,6 +5,9 @@
 //             puestos fijos, empieza sola, mejor de 3, y avisa el resultado a la tienda (premio).
 //   'ranking' duelo rápido entre dos clientes (la crea la cola, cola.js): un combate; el resultado da puntos.
 //   'bot'     duelo rápido contra un bot (nadie más en la cola): un combate, sin puntos.
+//   'fichas'  duelo por fichas entre dos clientes (cola ?modo=fichas): mejor de 3; al empezar se cobran 2 fichas
+//             a cada uno (por la tienda, todos o ninguno) y al terminar el ganador recibe el doble.
+//   'fichas_bot'  igual, contra un bot experto (nadie más en la cola): si gana el cliente, recibe el doble.
 //
 // Fases: 'sala' (eligen clase; en 'libre' también puesto) → 'combate' → ('entre' combates de la serie) → 'fin'.
 // Si se cae alguien en pleno combate, su luchador juega solo hasta que vuelva (mismo `tok` o misma sesión).
@@ -26,7 +29,7 @@
 // =========================================================================
 
 import { Combate, NOMBRES_CLASES, infoClases, usaFlecha, pasadaFlecha, pFlecha } from './combate.js';
-import { usuarioDe, avisarTienda, partidaDe } from './sesion.js';
+import { usuarioDe, avisarTienda, partidaDe, pedirTienda } from './sesion.js';
 
 const MAX_CONEXIONES = 12;           // 4 jugadores + quienes miran
 const MAX_MENSAJES_SEG = 10;
@@ -42,6 +45,7 @@ const EMPIEZA_ANTES_MS = 5 * 60_000; // y empieza sola si están todos desde 5 m
 const AUSENCIA_MS = 10 * 60_000;     // a la hora + 10 min empieza con los que haya
 const RANKING_ESPERA_MS = 45_000;    // duelo rápido: si el rival no entra en 45 s, se cancela
 const RTT_MAX = 400;
+const NOMBRES_EXPERTO = ['Maestro Kael', 'Maestra Vega', 'Maestro Draco', 'Maestra Nyx'];
 const NOMBRES_BOT = ['Bot Rayo', 'Bot Toro', 'Bot Sombra', 'Bot Hierro', 'Bot Lobo', 'Bot Puma', 'Bot Trueno', 'Bot Cobra'];
 const CLASE_INICIAL = ['guerrero', 'clerigo', 'barbaro', 'asesino'];
 const PUESTOS = { '2v2': [0, 1, 2, 3], '1v1': [0, 2] };
@@ -147,7 +151,7 @@ export class Sala {
     this.tipo = tipo;
     this.id = id;
     this.modo = modo;
-    this.serie = { meta: tipo === 'arena' ? 2 : 1, gan: [0, 0], num: 1, fin: null };
+    this.serie = { meta: tipo === 'arena' || tipo === 'fichas' || tipo === 'fichas_bot' ? 2 : 1, gan: [0, 0], num: 1, fin: null };
     (jugadores || []).forEach((x, i) => {
       const j = { id: 'j' + this.siguienteId++, n: limpiarNombre(x.nombre), tok: azarHex(16), usuario: x.usuario, con: null,
         p: Number(x.puesto), k: CLASE_INICIAL[Number(x.puesto)] || 'guerrero', salidaReloj: null, inscrito: true };
@@ -312,8 +316,12 @@ export class Sala {
       this.difundir();
     }
     if (!this.conexiones.size && !this.relojVacia) {
-      // Torneo en curso: la serie sigue aunque no mire nadie (los luchadores juegan solos) hasta terminar
-      this.relojVacia = setTimeout(() => { if (this.tipo !== 'arena' || this.fase === 'fin' || this.fase === 'sala') this.reiniciar(); }, SIN_NADIE_MS);
+      // Serie con algo en juego (torneo o fichas): sigue aunque no mire nadie (los luchadores juegan solos) hasta terminar
+      this.relojVacia = setTimeout(() => {
+        const serie = this.tipo === 'arena' || this.tipo === 'fichas' || this.tipo === 'fichas_bot';
+        if (!serie || this.fase === 'fin' || this.fase === 'sala') this.reiniciar();
+        else if (this.conexiones.size === 0) this.relojVacia = null;      // sigue sola hasta terminar; al final se borra
+      }, SIN_NADIE_MS);
     }
   }
 
@@ -348,9 +356,10 @@ export class Sala {
     const todos = inscritos.every((j) => j.con);
     const alguno = inscritos.some((j) => j.con);
     const ahora = Date.now();
-    if (this.tipo === 'bot') {
+    if (this.cobrando) return;
+    if (this.tipo === 'bot' || this.tipo === 'fichas_bot') {
       if (alguno) this.empezarSerie();
-    } else if (this.tipo === 'ranking') {
+    } else if (this.tipo === 'ranking' || this.tipo === 'fichas') {
       if (todos) this.empezarSerie();
       else if (ahora - this.creadaEn > RANKING_ESPERA_MS) {
         for (const con of this.conexiones) this.enviar(con, { t: 'error', m: 'Tu rival no entró. Vuelve a la Arena y busca otro.' });
@@ -362,8 +371,29 @@ export class Sala {
     }
   }
 
-  empezarSerie() {
+  async empezarSerie() {
     if (this.relojInicio) { clearInterval(this.relojInicio); this.relojInicio = null; }
+    if (this.tipo === 'fichas' || this.tipo === 'fichas_bot') {
+      // Se cobran las fichas antes del primer combate (todos o ninguno)
+      this.cobrando = true;
+      const inscritos = [...this.jugadores.values()].filter((j) => j.inscrito);
+      const r = await pedirTienda(this.env, { tipo: 'fichas_cobrar', sala: this.id, modo: this.tipo === 'fichas' ? 'persona' : 'bot',
+        jugadores: inscritos.map((j) => ({ usuario: j.usuario, nombre: j.n })) });
+      this.cobrando = false;
+      if (!r || !r.ok) {
+        const faltan = r && Array.isArray(r.faltan) ? r.faltan : [];
+        for (const j of inscritos) {
+          if (!j.con) continue;
+          const m = !r ? 'No pudimos cobrar las fichas ahora. Intenta de nuevo en un momento (no se te cobró nada).'
+            : faltan.includes(j.usuario) ? 'No tienes fichas suficientes: el duelo cuesta 2. Recarga para ganar fichas.'
+              : 'Tu rival no tiene fichas suficientes. Busca otro duelo (no se te cobró nada).';
+          this.enviar(j.con, { t: 'error', m });
+        }
+        this.reiniciar();
+        return;
+      }
+      this.serie.costo = r.costo || 2;
+    }
     if (this.tipo === 'arena') {
       // Ausencia: equipo sin nadie conectado pierde; si no hay nadie de ningún lado, no gana nadie
       const presentes = [0, 1].map((e) => [...this.jugadores.values()].some((j) => j.inscrito && j.con && (j.p >= 2 ? 1 : 0) === e));
@@ -388,7 +418,10 @@ export class Sala {
     const luchadores = PUESTOS[this.modo].map((p) => {
       const j = this.ocupante(p);
       const lugar = { e: p < 2 ? 0 : 1, f: this.modo === '1v1' ? 0 : p % 2 };
-      return j ? { n: j.n, k: j.k, jid: j.id, ...lugar } : { n: bot(), k: NOMBRES_CLASES[Math.floor(Math.random() * NOMBRES_CLASES.length)], jid: null, ...lugar };
+      if (j) return { n: j.n, k: j.k, jid: j.id, ...lugar };
+      const experto = this.tipo === 'fichas_bot';
+      if (experto && !this.nombreExperto) this.nombreExperto = NOMBRES_EXPERTO[Math.floor(Math.random() * NOMBRES_EXPERTO.length)];
+      return { n: experto ? this.nombreExperto : bot(), k: NOMBRES_CLASES[Math.floor(Math.random() * NOMBRES_CLASES.length)], jid: null, experto, ...lugar };
     });
     this.fase = 'combate';
     this.flecha = null;
@@ -463,9 +496,14 @@ export class Sala {
     this.fase = 'fin';
     this.serie.fin = { ganador, motivo: motivo || undefined };
     this.difundir(ev);
+    if (!this.conexiones.size && !this.relojVacia) this.relojVacia = setTimeout(() => this.reiniciar(), SIN_NADIE_MS);
     const marcador = motivo && ganador !== 2 ? 'W.O.' : `${this.serie.gan[0]}-${this.serie.gan[1]}`;
     if (this.tipo === 'arena') {
       avisarTienda(this.env, { tipo: 'resultado', partida: this.id, ganador, marcador, motivo: motivo || '' });
+    } else if (this.tipo === 'fichas' || this.tipo === 'fichas_bot') {
+      // Ganador: el cliente de ese lado (contra el bot, el lado 1 es el bot → null). Empate imposible aquí.
+      const lado = [...this.jugadores.values()].find((j) => j.inscrito && (j.p >= 2 ? 1 : 0) === ganador);
+      avisarTienda(this.env, { tipo: 'fichas_resultado', sala: this.id, ganador: lado ? lado.usuario : null });
     } else if (this.tipo === 'ranking' && ganador !== 2) {
       const lado = (e) => [...this.jugadores.values()].find((j) => j.inscrito && (j.p >= 2 ? 1 : 0) === e);
       const a = lado(ganador), b = lado(1 - ganador);

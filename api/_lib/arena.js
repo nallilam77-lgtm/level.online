@@ -9,7 +9,9 @@
 //   (mis partidas y el ranking los lee la página directo de Supabase: arena_mias / arena_ranking_semana)
 // Para el Worker del juego (cabecera X-Arena con el secreto de arena-secretos.js):
 //   GET  /api/juego?accion=arena_sala&id=…  → la partida y sus jugadores
-//   POST /api/juego?accion=arena_evento     { tipo: 'empezo' | 'resultado' | 'ranking', … }
+//   POST /api/juego?accion=arena_evento     { tipo: 'empezo' | 'resultado' | 'ranking' | 'fichas_cobrar' | 'fichas_resultado', … }
+//     Duelos por fichas (desde 2026-11-20): la sala pide cobrar COSTO_DUELO fichas a cada jugador al empezar
+//     (todos o ninguno) y al terminar paga el doble al ganador (null = ganó el bot experto: nadie cobra).
 //   POST /api/juego?accion=arena_tic        (cada minuto, desde el cron del Worker): vencimientos, avisos y entregas
 //
 // Cobro de la inscripción: las mismas reglas que la tienda (COMMON_MISTAKES 2c). El pago se toma con
@@ -26,6 +28,7 @@ import { avisar, llavePublicaPush } from './push.js';
 import { esDelWorker } from './arena-secretos.js';
 
 const MODOS = new Set(['1v1', '2v2']);
+const COSTO_DUELO = 2;               // fichas por duelo; el ganador se lleva el doble
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SALA = /^[a-z2-9]{10}$/;
 const NO_DISPONIBLE = 'El torneo no está disponible en este momento. Intenta más tarde.';
@@ -224,6 +227,19 @@ export async function evento(req, res) {
       });
       return res.status(200).json({ status: 'success', ...r });
     }
+    if (b.tipo === 'fichas_cobrar' && SALA.test(String(b.sala)) && ['persona', 'bot'].includes(b.modo)
+      && Array.isArray(b.jugadores) && b.jugadores.length >= 1 && b.jugadores.length <= 4 && b.jugadores.every((j) => UUID.test(String(j && j.usuario)))) {
+      const r = await rpc('arena_fichas_cobrar', {
+        p_sala: b.sala, p_tipo: b.modo, p_usuarios: b.jugadores.map((j) => j.usuario),
+        p_nombres: b.jugadores.map((j) => limpiarNombre(j.nombre) || 'Jugador'), p_costo: COSTO_DUELO,
+      });
+      return res.status(200).json({ status: 'success', costo: COSTO_DUELO, ...r });
+    }
+    if (b.tipo === 'fichas_resultado' && SALA.test(String(b.sala)) && (b.ganador === null || UUID.test(String(b.ganador)))) {
+      const r = await rpc('arena_fichas_resultado', { p_sala: b.sala, p_ganador: b.ganador });
+      if (r && r.ok) console.info(`🎟️ arena: duelo ${b.sala} → ${b.ganador ? `+${r.premio} fichas` : 'ganó el bot'}`);
+      return res.status(200).json({ status: 'success', ...r });
+    }
     return res.status(400).json({ status: 'error' });
   } catch (error) {
     console.error(`⚠️ arena/evento ${b.tipo}:`, error.message);
@@ -254,6 +270,13 @@ export async function tic(req, res) {
     }));
   } catch (error) {
     console.error('⚠️ arena/tic:', error.message);
+  }
+  // Duelos por fichas que nunca dieron resultado (la sala se cayó): se devuelven
+  try {
+    const n = await rpc('arena_fichas_vencer', {});
+    if (n > 0) console.warn(`🎟️ arena: ${n} duelo(s) por fichas sin resultado: fichas devueltas`);
+  } catch (error) {
+    console.error('⚠️ arena/tic (fichas):', error.message);
   }
   const entregas = await hacerEntregas(limite);
   return res.status(200).json({ status: 'success', avisos, entregas });

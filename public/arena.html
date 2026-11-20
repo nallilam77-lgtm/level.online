@@ -9,7 +9,7 @@
   </script>
   <!-- Tienda en mantenimiento (admin.html → Ajustes): lleva a /mantenimiento.html mientras esté encendido -->
   <script src="/js/mantenimiento.js?v=1" async></script>
-  <meta name="description" content="Arena de Level Up: juega Duelo de Acero, sube en el ranking semanal y gana diamantes en torneos 1 vs 1 y 2 vs 2.">
+  <meta name="description" content="Arena de Level Up: juega Duelo de Acero, apuesta tus fichas de recarga contra otros jugadores y sube en el ranking semanal.">
   <meta name="theme-color" content="#0f172a">
   <title>Arena - Level Up</title>
   <link rel="canonical" href="https://www.levelupstore.online/arena.html">
@@ -20,11 +20,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/arena.css?v=1">
+  <link rel="stylesheet" href="css/arena.css?v=2">
   <!-- Arena de Duelo de Acero: juego-servidor/ARENA.md, api/_lib/arena.js, supabase/arena.sql -->
   <script src="/js/sesion.js?v=6" defer></script>
   <script src="/js/datos-pago.js?v=6" defer></script>
-  <script src="/js/arena.js?v=1" defer></script>
+  <script src="/js/arena.js?v=2" defer></script>
   <script src="/js/instalar-app.js?v=1" defer></script>
   <script src="/js/version-nueva.js?v=2" defer></script>
 </head>
@@ -39,7 +39,7 @@
     <header class="encabezado">
       <p class="antetitulo">Duelo de Acero</p>
       <h1>Arena ⚔️</h1>
-      <p class="bajada">Combates por turnos con espadas, hachas, lanzas, dagas y mazas. Juega gratis, sube en el <strong>ranking</strong> o entra al <strong>torneo</strong> y gana diamantes.</p>
+      <p class="bajada">Combates por turnos con espadas, hachas, lanzas, dagas y mazas. Juega gratis, sube en el <strong>ranking</strong> o pon en juego tus <strong>fichas</strong> y quédate con las de tu rival.</p>
     </header>
 
     <!-- Sin sesión -->
@@ -59,6 +59,17 @@
       <ul class="lista-partidas" id="listaMias"></ul>
     </section>
 
+    <!-- Duelo por fichas (las fichas que dan las recargas) -->
+    <section class="tarjeta tarjeta--fichas" aria-labelledby="tituloFichas">
+      <div class="fila-titulo">
+        <h2 id="tituloFichas">Duelo por fichas 🎟️</h2>
+        <span class="saldo" id="saldoFichas" hidden></span>
+      </div>
+      <p class="nota">Cada duelo cuesta <strong>2 fichas</strong> y se juega al <strong>mejor de 3</strong>. Si ganas, te llevas las 2 fichas de tu rival (recibes 4). Si no hay nadie buscando en 20 segundos, peleas contra un <strong>bot experto</strong>: gánale y también recibes 4.</p>
+      <a class="btn" id="btnFichas" href="/juego/?cola=fichas">Jugar por 2 fichas</a>
+      <p class="nota" id="notaFichas">Las fichas se ganan con cada recarga que haces con tu sesión iniciada.</p>
+    </section>
+
     <!-- Duelo rápido -->
     <section class="tarjeta" aria-labelledby="tituloRapido">
       <h2 id="tituloRapido">Duelo rápido · gratis</h2>
@@ -67,7 +78,7 @@
     </section>
 
     <!-- Torneo pagado -->
-    <section class="tarjeta" id="bloqueTorneo" aria-labelledby="tituloTorneo">
+    <section class="tarjeta" id="bloqueTorneo" aria-labelledby="tituloTorneo" hidden>
       <h2 id="tituloTorneo">Torneo · gana diamantes</h2>
       <p class="nota" id="notaTorneo">Cargando…</p>
       <form class="formulario" id="formTorneo" novalidate hidden>

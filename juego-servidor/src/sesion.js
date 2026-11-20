@@ -50,6 +50,19 @@ export function avisarTienda(env, cuerpo, intento = 0) {
   });
 }
 
+/** Evento que necesita respuesta (cobrar fichas): el JSON de la tienda, o null si no respondió. Sin reintentos. */
+export async function pedirTienda(env, cuerpo) {
+  if (!env.ARENA_API || !env.ARENA_SECRETO) return null;
+  try {
+    const r = await fetch(`${env.ARENA_API}?accion=arena_evento`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Arena': env.ARENA_SECRETO }, body: JSON.stringify(cuerpo),
+    });
+    return r.ok ? await r.json() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 /** La partida del torneo y sus jugadores (Vercel → Supabase). null si no se pudo preguntar. */
 export async function partidaDe(env, id) {
   if (!env.ARENA_API || !env.ARENA_SECRETO) return null;

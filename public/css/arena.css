@@ -81,6 +81,10 @@ main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; display: grid;
 }
 .btn-sec:hover { box-shadow: var(--shadow-glow-hover); }
 
+/* Duelo por fichas */
+.tarjeta--fichas { border-color: var(--oro); }
+.saldo { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--oro); padding: 6px 12px; border-radius: 999px; border: 1px solid var(--oro); background: var(--fondo-aviso); }
+
 /* Formulario del torneo */
 .formulario { display: grid; gap: 16px; }
 .opciones-grupo { border: 0; display: grid; gap: 8px; }

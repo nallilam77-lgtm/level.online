@@ -97,7 +97,7 @@ create policy "admin ve las inscripciones de la arena" on public.arena_inscripci
 
 -- Configuración pública (la lee arena.html): torneo encendido y paquete de inscripción por juego
 insert into public.configuracion (clave, valor, publico, actualizado)
-values ('arena', '{"activo": true, "paquetes": {"freefire": "110 Diamantes", "bloodstrike": "105 Oro", "mobilelegends": "86 Diamantes"}}'::jsonb, true, now())
+values ('arena', '{"activo": false, "paquetes": {"freefire": "110 Diamantes", "bloodstrike": "105 Oro", "mobilelegends": "86 Diamantes"}}'::jsonb, true, now())
 on conflict (clave) do nothing;
 
 -- ---------------------------------------------------------------------
@@ -516,3 +516,141 @@ grant execute on function public.admin_arena(integer), public.admin_arena_reinte
 --   select vault.create_secret('<llave privada VAPID>', 'vapid_privada');
 -- (npx web-push generate-vapid-keys da el par de llaves VAPID.)
 -- =====================================================================
+
+-- =====================================================================
+-- DUELOS POR FICHAS (desde 2026-11-20, pedido del dueño: "por ahora con fichas")
+-- Cada duelo (mejor de 3) cuesta p_costo fichas (2) a cada jugador; se cobran al EMPEZAR (la sala del Worker
+-- pide arena_fichas_cobrar por Vercel). El ganador recibe el doble (las suyas + las del rival). Contra el bot
+-- experto (nadie en la cola), ganar también da el doble. Duelos cobrados sin resultado en 90 min: se devuelven.
+-- Movimientos en juego_movimientos con id_pedido "duelo:<sala>:<usuario>" (un cobro/premio por duelo y jugador).
+-- =====================================================================
+alter table public.juego_movimientos drop constraint if exists juego_movimientos_motivo_check;
+alter table public.juego_movimientos add constraint juego_movimientos_motivo_check
+  check (motivo in ('recarga', 'reembolso', 'partida', 'ajuste', 'duelo', 'duelo_premio', 'duelo_devolucion'));
+
+create table if not exists public.arena_duelos_fichas (
+  sala      text primary key,
+  tipo      text not null check (tipo in ('persona', 'bot')),
+  usuarios  uuid[] not null,
+  nombres   text[] not null,
+  costo     integer not null check (costo > 0),
+  estado    text not null default 'cobrado' check (estado in ('cobrado', 'terminado', 'devuelto')),
+  ganador   uuid,                                          -- null = ganó el bot
+  creado    timestamptz not null default now(),
+  terminado timestamptz
+);
+create index if not exists arena_duelos_fichas_estado on public.arena_duelos_fichas (estado, creado);
+alter table public.arena_duelos_fichas enable row level security;
+revoke all on public.arena_duelos_fichas from anon, authenticated;
+grant select on public.arena_duelos_fichas to authenticated;
+drop policy if exists "admin ve los duelos por fichas" on public.arena_duelos_fichas;
+create policy "admin ve los duelos por fichas" on public.arena_duelos_fichas for select to authenticated using ((select public.es_admin()));
+
+-- Cobra a todos o a nadie. { ok, fichas: { usuario: saldo } } o { ok: false, faltan: [usuarios sin fichas] }.
+-- Repetir con la misma sala no cobra otra vez.
+create or replace function public.arena_fichas_cobrar(p_sala text, p_tipo text, p_usuarios uuid[], p_nombres text[], p_costo integer)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_u uuid;
+  v_faltan uuid[] := '{}';
+  v_saldos jsonb := '{}'::jsonb;
+  v_f integer;
+begin
+  if exists (select 1 from arena_duelos_fichas where sala = p_sala) then
+    return jsonb_build_object('ok', true, 'repetido', true);
+  end if;
+  if p_costo is null or p_costo < 1 or coalesce(array_length(p_usuarios, 1), 0) not between 1 and 4 then
+    raise exception 'duelo no válido' using errcode = '22023';
+  end if;
+  foreach v_u in array p_usuarios loop
+    insert into juego_fichas (usuario) values (v_u) on conflict (usuario) do nothing;
+  end loop;
+  -- Bloquea los saldos en orden (dos duelos a la vez no se cruzan)
+  perform 1 from juego_fichas where usuario = any(p_usuarios) order by usuario for update;
+  foreach v_u in array p_usuarios loop
+    select fichas into v_f from juego_fichas where usuario = v_u;
+    if v_f < p_costo then v_faltan := v_faltan || v_u; end if;
+  end loop;
+  if array_length(v_faltan, 1) > 0 then
+    return jsonb_build_object('ok', false, 'faltan', to_jsonb(v_faltan));
+  end if;
+  insert into arena_duelos_fichas (sala, tipo, usuarios, nombres, costo) values (p_sala, p_tipo, p_usuarios, p_nombres, p_costo);
+  foreach v_u in array p_usuarios loop
+    update juego_fichas set fichas = fichas - p_costo, actualizado = now() where usuario = v_u returning fichas into v_f;
+    insert into juego_movimientos (usuario, cambio, motivo, id_pedido) values (v_u, -p_costo, 'duelo', 'duelo:' || p_sala || ':' || v_u);
+    v_saldos := v_saldos || jsonb_build_object(v_u::text, v_f);
+  end loop;
+  return jsonb_build_object('ok', true, 'fichas', v_saldos);
+end;
+$$;
+
+-- Resultado: el ganador (null = el bot) recibe el doble del costo. Solo cuenta una vez.
+create or replace function public.arena_fichas_resultado(p_sala text, p_ganador uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  d arena_duelos_fichas%rowtype;
+  v_f integer;
+begin
+  update arena_duelos_fichas set estado = 'terminado', ganador = p_ganador, terminado = now()
+   where sala = p_sala and estado = 'cobrado' and (p_ganador is null or p_ganador = any(usuarios))
+   returning * into d;
+  if not found then return jsonb_build_object('ok', false); end if;
+  if p_ganador is not null then
+    update juego_fichas set fichas = fichas + d.costo * 2, actualizado = now() where usuario = p_ganador returning fichas into v_f;
+    insert into juego_movimientos (usuario, cambio, motivo, id_pedido) values (p_ganador, d.costo * 2, 'duelo_premio', 'duelo:' || p_sala || ':' || p_ganador);
+  end if;
+  return jsonb_build_object('ok', true, 'premio', case when p_ganador is null then 0 else d.costo * 2 end, 'fichas', v_f);
+end;
+$$;
+
+-- Cada minuto (arena tic): duelos cobrados hace más de 90 min sin resultado → se devuelven las fichas
+create or replace function public.arena_fichas_vencer()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  d record;
+  v_u uuid;
+  n integer := 0;
+begin
+  for d in update arena_duelos_fichas set estado = 'devuelto', terminado = now()
+            where estado = 'cobrado' and creado < now() - interval '90 minutes' returning * loop
+    foreach v_u in array d.usuarios loop
+      update juego_fichas set fichas = fichas + d.costo, actualizado = now() where usuario = v_u;
+      insert into juego_movimientos (usuario, cambio, motivo, id_pedido) values (v_u, d.costo, 'duelo_devolucion', 'duelo:' || d.sala || ':' || v_u)
+        on conflict do nothing;
+    end loop;
+    n := n + 1;
+  end loop;
+  return n;
+end;
+$$;
+
+-- Para arena.html (con sesión): mis fichas
+create or replace function public.arena_mis_fichas()
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$ select coalesce((select fichas from juego_fichas where usuario = auth.uid()), 0) $$;
+
+revoke execute on function public.arena_fichas_cobrar(text, text, uuid[], text[], integer), public.arena_fichas_resultado(text, uuid),
+  public.arena_fichas_vencer() from public, anon, authenticated;
+grant execute on function public.arena_fichas_cobrar(text, text, uuid[], text[], integer), public.arena_fichas_resultado(text, uuid),
+  public.arena_fichas_vencer() to service_role;
+revoke execute on function public.arena_mis_fichas() from public, anon;
+grant execute on function public.arena_mis_fichas() to authenticated;
+
+-- Por ahora el torneo con Bs queda apagado (se enciende en admin.html → Arena)
+update public.configuracion set valor = jsonb_set(valor, '{activo}', 'false') where clave = 'arena' and (valor->>'activo') is distinct from 'false';

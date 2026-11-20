@@ -4,6 +4,7 @@
 //   - Torneo con un solo jugador presente a la hora + 10 min → gana por ausencia (W.O.).
 //   - Un intruso sin sesión no entra; uno con sesión pero no inscrito solo mira.
 //   - Duelo rápido: dos en la cola → sala con puntos → la tienda recibe "ranking". Uno solo → bot a los 20 s.
+//   - Duelo por fichas: se cobra al empezar (sin fichas no empieza), mejor de 3, el ganador cobra; solo → bot experto.
 import http from 'node:http';
 
 const BASE = process.env.BASE || 'ws://localhost:8787';
@@ -16,6 +17,7 @@ const ok = (cond, texto) => { console.log(`${cond ? '✅' : '❌'} ${texto}`); i
 // ---------- Tienda simulada (api/juego?accion=arena_*) ----------
 const partidas = new Map();
 const eventos = [];
+const saldos = new Map();            // fichas de la tienda simulada
 http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (req.headers['x-arena'] !== SECRETO) { res.writeHead(403); res.end(); return; }
@@ -26,7 +28,18 @@ http.createServer((req, res) => {
   }
   let cuerpo = '';
   req.on('data', (d) => { cuerpo += d; });
-  req.on('end', () => { eventos.push(JSON.parse(cuerpo)); res.writeHead(200); res.end('{"status":"success"}'); });
+  req.on('end', () => {
+    const e = JSON.parse(cuerpo);
+    eventos.push(e);
+    let r = { status: 'success' };
+    if (e.tipo === 'fichas_cobrar') {
+      const faltan = e.jugadores.filter((j) => (saldos.get(j.usuario) || 0) < 2).map((j) => j.usuario);
+      if (faltan.length) r = { status: 'success', ok: false, faltan };
+      else { e.jugadores.forEach((j) => saldos.set(j.usuario, saldos.get(j.usuario) - 2)); r = { status: 'success', ok: true, costo: 2 }; }
+    }
+    if (e.tipo === 'fichas_resultado' && e.ganador) saldos.set(e.ganador, saldos.get(e.ganador) + 4);
+    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r));
+  });
 }).listen(8790);
 
 // ---------- Un cliente que juega solo ----------
@@ -56,25 +69,28 @@ function cliente(nombre, url, jwt) {
   return c;
 }
 const jwt = (u, n) => `prueba:${u}:${n}`;
+// Partidas nuevas en cada corrida (las salas terminadas siguen vivas un rato en el servidor local)
+const idSala = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
+const P1 = idSala(), P2 = idSala(), P3 = idSala();
 const terminar = async (c, s = 300) => { for (let i = 0; i < s && !(c.est && c.est.fase === 'fin'); i++) await espera(1000); };
 
 // ---------- 1. Torneo 1 vs 1, mejor de 3 ----------
 const ana = uuid(), beto = uuid();
-partidas.set('aaaaaaaaaa', { id: 'aaaaaaaaaa', modo: '1v1', estado: 'lista', hora: new Date(Date.now() + 60000).toISOString(),
+partidas.set(P1, { id: P1, modo: '1v1', estado: 'lista', hora: new Date(Date.now() + 60000).toISOString(),
   jugadores: [{ usuario: ana, nombre: 'Ana', puesto: 0 }, { usuario: beto, nombre: 'Beto', puesto: 2 }] });
-const intruso = cliente('Intruso', `${BASE}/ws?a=aaaaaaaaaa`, 'basura');
-const a = cliente('Ana', `${BASE}/ws?a=aaaaaaaaaa`, jwt(ana, 'Ana'));
+const intruso = cliente('Intruso', `${BASE}/ws?a=${P1}`, 'basura');
+const a = cliente('Ana', `${BASE}/ws?a=${P1}`, jwt(ana, 'Ana'));
 await espera(800);
 ok(intruso.errores.length === 1, 'Sin sesión no entra: ' + intruso.errores[0]);
 ok(a.est && a.est.fase === 'sala' && a.est.tipo === 'arena', 'Ana entra a la sala del torneo y espera');
-const mira = cliente('Mirón', `${BASE}/ws?a=aaaaaaaaaa`, jwt(uuid(), 'Miron'));
-const b = cliente('Beto', `${BASE}/ws?a=aaaaaaaaaa`, jwt(beto, 'Beto'));
+const mira = cliente('Mirón', `${BASE}/ws?a=${P1}`, jwt(uuid(), 'Miron'));
+const b = cliente('Beto', `${BASE}/ws?a=${P1}`, jwt(beto, 'Beto'));
 await espera(4500);
 ok(a.est.fase === 'combate', 'Con los dos dentro empieza solo (fase: ' + a.est.fase + ')');
 ok(mira.est && mira.est.jug.find((j) => j.id === mira.id).p === -1, 'El no inscrito solo mira');
-ok(eventos.some((e) => e.tipo === 'empezo' && e.partida === 'aaaaaaaaaa'), 'La tienda supo que empezó');
+ok(eventos.some((e) => e.tipo === 'empezo' && e.partida === P1), 'La tienda supo que empezó');
 await terminar(a);
-const res1 = eventos.find((e) => e.tipo === 'resultado' && e.partida === 'aaaaaaaaaa');
+const res1 = eventos.find((e) => e.tipo === 'resultado' && e.partida === P1);
 ok(a.est.fase === 'fin' && a.est.serie.fin && res1, `Serie terminada: ganó ${['Rojo (Ana)', 'Azul (Beto)'][res1 && res1.ganador]} ${res1 && res1.marcador}`);
 ok(res1 && /^2-[01]$|^[01]-2$/.test(res1.marcador), 'Al mejor de 3 (marcador ' + (res1 && res1.marcador) + ')');
 ok(a.perfectos + b.perfectos > 0, `La flecha en el centro cuenta como perfecta (${a.perfectos + b.perfectos} perfectos)`);
@@ -82,17 +98,17 @@ ok(a.perfectos + b.perfectos > 0, `La flecha en el centro cuenta como perfecta (
 
 // ---------- 2. Ausencia ----------
 const carla = uuid();
-partidas.set('bbbbbbbbbb', { id: 'bbbbbbbbbb', modo: '1v1', estado: 'lista', hora: new Date(Date.now() - 11 * 60000).toISOString(),
+partidas.set(P2, { id: P2, modo: '1v1', estado: 'lista', hora: new Date(Date.now() - 11 * 60000).toISOString(),
   jugadores: [{ usuario: uuid(), nombre: 'Falta', puesto: 0 }, { usuario: carla, nombre: 'Carla', puesto: 2 }] });
-const cc = cliente('Carla', `${BASE}/ws?a=bbbbbbbbbb`, jwt(carla, 'Carla'));
+const cc = cliente('Carla', `${BASE}/ws?a=${P2}`, jwt(carla, 'Carla'));
 await espera(4000);
-const res2 = eventos.find((e) => e.tipo === 'resultado' && e.partida === 'bbbbbbbbbb');
+const res2 = eventos.find((e) => e.tipo === 'resultado' && e.partida === P2);
 ok(res2 && res2.ganador === 1 && res2.marcador === 'W.O.', 'Rival ausente: gana Carla por W.O.');
 cc.ws.close();
 
 // ---------- 3. Sala que aún no abre ----------
-partidas.set('cccccccccc', { id: 'cccccccccc', modo: '1v1', estado: 'lista', hora: new Date(Date.now() + 60 * 60000).toISOString(), jugadores: [] });
-const temprano = cliente('Temprano', `${BASE}/ws?a=cccccccccc`, jwt(uuid(), 'T'));
+partidas.set(P3, { id: P3, modo: '1v1', estado: 'lista', hora: new Date(Date.now() + 60 * 60000).toISOString(), jugadores: [] });
+const temprano = cliente('Temprano', `${BASE}/ws?a=${P3}`, jwt(uuid(), 'T'));
 await espera(800);
 ok(/abre 10 minutos antes/.test(temprano.errores[0] || ''), 'Antes de tiempo: ' + temprano.errores[0]);
 
@@ -112,6 +128,44 @@ ok(rk && [dani, eva].includes(rk.ganador.usuario) && rk.ganador.usuario !== rk.p
 const solo = cliente('Solo', `${BASE}/cola`, jwt(uuid(), 'Solo'));
 await espera(21500);
 ok(solo.emparejado && solo.emparejado.bot, 'Solo en la cola: a los 20 s, contra un bot');
+
+// ---------- 5. Duelo por fichas ----------
+const fede = uuid(), gabi = uuid(), pobre = uuid();
+saldos.set(fede, 5); saldos.set(gabi, 2); saldos.set(pobre, 1);
+const f1 = cliente('Fede', `${BASE}/cola?modo=fichas`, jwt(fede, 'Fede'));
+await espera(400);
+const f2 = cliente('Pobre', `${BASE}/cola?modo=fichas`, jwt(pobre, 'Pobre'));
+await espera(900);
+ok(f1.emparejado && f2.emparejado && f1.emparejado.s === f2.emparejado.s, 'La cola de fichas los empareja');
+const fa = cliente('Fede', `${BASE}/ws?s=${f1.emparejado.s}`, jwt(fede, 'Fede'));
+const fb = cliente('Pobre', `${BASE}/ws?s=${f2.emparejado.s}`, jwt(pobre, 'Pobre'));
+await espera(2500);
+ok(/No tienes fichas/.test(fb.errores[0] || '') && /rival no tiene fichas/.test(fa.errores[0] || ''), 'Sin fichas no empieza: ' + fb.errores[0]);
+ok(saldos.get(fede) === 5 && saldos.get(pobre) === 1, 'A nadie se le cobró');
+const g1 = cliente('Fede', `${BASE}/cola?modo=fichas`, jwt(fede, 'Fede'));
+await espera(400);
+const g2 = cliente('Gabi', `${BASE}/cola?modo=fichas`, jwt(gabi, 'Gabi'));
+await espera(900);
+const ga = cliente('Fede', `${BASE}/ws?s=${g1.emparejado.s}`, jwt(fede, 'Fede'));
+const gb = cliente('Gabi', `${BASE}/ws?s=${g2.emparejado.s}`, jwt(gabi, 'Gabi'));
+await espera(2500);
+ok(ga.est && ga.est.fase === 'combate' && saldos.get(fede) === 3 && saldos.get(gabi) === 0, 'Empieza y cobra 2 a cada uno');
+await terminar(ga);
+const rf = eventos.find((x) => x.tipo === 'fichas_resultado' && x.sala === g1.emparejado.s);
+ok(rf && [fede, gabi].includes(rf.ganador) && /^2-[01]$|^[01]-2$/.test(`${ga.est.serie.gan[0]}-${ga.est.serie.gan[1]}`),
+  `Mejor de 3 (${ga.est.serie.gan[0]}-${ga.est.serie.gan[1]}): el ganador cobra → Fede ${saldos.get(fede)}, Gabi ${saldos.get(gabi)}`);
+ok(saldos.get(fede) + saldos.get(gabi) === 7, 'Las fichas no se crean ni se pierden entre personas (5 + 2 = 7)');
+[ga, gb].forEach((c) => c.ws.close());
+const sola = cliente('Fede', `${BASE}/cola?modo=fichas`, jwt(fede, 'Fede'));
+await espera(21500);
+ok(sola.emparejado && sola.emparejado.bot, 'Solo en la cola de fichas: contra el bot experto');
+const sb = cliente('Fede', `${BASE}/ws?s=${sola.emparejado.s}`, jwt(fede, 'Fede'));
+await espera(2500);
+ok(sb.est && sb.est.c && /^Maestr/.test(sb.est.c.l[1].n), 'El rival es un bot experto: ' + (sb.est && sb.est.c && sb.est.c.l[1].n));
+await terminar(sb);
+const rb = eventos.find((x) => x.tipo === 'fichas_resultado' && x.sala === sola.emparejado.s);
+ok(rb && (rb.ganador === fede || rb.ganador === null), `Contra el bot: ${rb && rb.ganador ? 'ganó Fede (+4)' : 'ganó el bot'}`);
+sb.ws.close();
 
 console.log(fallas ? `\n${fallas} prueba(s) fallaron` : '\nTodo bien');
 process.exit(fallas ? 1 : 0);

@@ -7,7 +7,8 @@
 // Entrada: ?c=<código> (solo el del administrador, desde el panel → "Crear partida", que agrega &nueva=1) para
 // CREAR una sala, o ?s=<sala> (enlace que comparte el creador) para entrar a ella.
 // Arena (con sesión de Google, js/sesion.js; ver juego-servidor/ARENA.md): ?a=<partida> = partida del torneo
-// (mejor de 3) y ?cola=1 = duelo rápido (la cola empareja y pasa a ?s=<sala>). Los personajes son pixel art dibujado aquí mismo (sin imágenes).
+// (mejor de 3), ?cola=1 = duelo rápido gratis y ?cola=fichas = duelo por 2 fichas (mejor de 3; sin rival, bot
+// experto). La cola empareja y pasa a ?s=<sala>. Los personajes son pixel art dibujado aquí mismo (sin imágenes).
 // =========================================================================
 (function () {
   'use strict';
@@ -35,7 +36,8 @@
   else CODIGO = leer('duelo_enlace') || leer('ultimo_enlace') || '';
   let salaId = /^[a-z2-9]{10}$/.test(parametros.get('s') || '') ? parametros.get('s') : '';
   const partidaId = /^[a-z2-9]{10}$/.test(parametros.get('a') || '') ? parametros.get('a') : '';
-  let enCola = parametros.get('cola') === '1' && !salaId;
+  const modoCola = parametros.get('cola') === 'fichas' ? 'fichas' : 'gratis';
+  let enCola = ['1', 'fichas'].includes(parametros.get('cola')) && !salaId;
   let jwt = '';                                  // sesión de Google (torneo y duelo rápido)
   let cambioSala = false;                        // la cola nos emparejó: al cerrarse, entrar a la sala
   const ENTRAR_GOOGLE = '/perfil.html?volver=' + encodeURIComponent('/arena.html') + '&entrar=1';
@@ -189,7 +191,7 @@
   }
 
   // ---------------- Entrada ----------------
-  function aviso(texto) { $('avisoInicio').textContent = texto || ''; }
+  function aviso(texto, info) { $('avisoInicio').textContent = texto || ''; $('avisoInicio').classList.toggle('panel-aviso--info', !!info); }
   function botonEntrar(texto, activo) { const b = $('btnEntrar'); b.textContent = texto; b.disabled = !activo; }
 
   // Token de la sesión de Google de la tienda (js/sesion.js). En local, una sesión de prueba (LOCAL=1 en el servidor).
@@ -208,7 +210,9 @@
       $('campoNombre').hidden = !LOCAL;
       $('textoInicio').innerHTML = partidaId
         ? 'Tu partida del <strong>torneo</strong> de Duelo de Acero, al mejor de 3 combates.'
-        : '<strong>Duelo rápido</strong>: te buscamos un rival. Si no hay nadie en 20 segundos, juegas contra un bot.';
+        : modoCola === 'fichas'
+          ? '<strong>Duelo por 2 fichas</strong>, al mejor de 3. Si ganas, te llevas las fichas de tu rival. Si nadie aparece en 20 segundos, juegas contra un <strong>bot experto</strong>.'
+          : '<strong>Duelo rápido</strong>: te buscamos un rival. Si no hay nadie en 20 segundos, juegas contra un bot.';
       botonEntrar('Revisando tu sesión…', false);
       jwt = await sesionJwt();
       if (!jwt) {
@@ -272,7 +276,7 @@
 
   async function conectar() {
     const raiz = BASE.replace(/^http/, 'ws');
-    const url = enCola ? `${raiz}/cola`
+    const url = enCola ? `${raiz}/cola${modoCola === 'fichas' ? '?modo=fichas' : ''}`
       : partidaId ? `${raiz}/ws?a=${partidaId}`
         : crear ? `${raiz}/ws?c=${encodeURIComponent(CODIGO)}&crear=1`
           : `${raiz}/ws?s=${salaId}`;
@@ -332,7 +336,7 @@
     // Cola del duelo rápido
     if (m.t === 'esperando') {
       botonEntrar(m.gente > 1 ? `Buscando rival… (${m.gente} buscando)` : 'Buscando rival…', false);
-      aviso('Si nadie aparece en 20 segundos, juegas contra un bot.');
+      aviso(modoCola === 'fichas' ? 'Si nadie aparece en 20 segundos, juegas contra un bot experto.' : 'Si nadie aparece en 20 segundos, juegas contra un bot.', true);
       return;
     }
     if (m.t === 'emparejado') {
@@ -340,7 +344,7 @@
       enCola = false;
       cambioSala = true;
       history.replaceState(null, '', `${location.pathname}?s=${salaId}`);
-      botonEntrar(m.bot ? 'Contra un bot…' : '¡Rival encontrado!', false);
+      botonEntrar(m.bot ? (modoCola === 'fichas' ? 'Contra un bot experto…' : 'Contra un bot…') : '¡Rival encontrado!', false);
       return;
     }
     if (m.t === 'yo') {
@@ -431,7 +435,9 @@
         + (faltan.length ? `Falta: ${faltan.join(', ')}. Si a las ${horaVe(est.hora + 600000)} un equipo no entró, el otro gana por ausencia.` : '¡Están todos!');
     } else if (est.tipo === 'ranking') {
       $('textoEsperando').textContent = 'Esperando a que tu rival entre…';
-    } else if (est.tipo === 'bot') {
+    } else if (est.tipo === 'fichas') {
+      $('textoEsperando').textContent = 'Duelo por 2 fichas, al mejor de 3. Se cobran cuando entren los dos.';
+    } else if (est.tipo === 'fichas_bot' || est.tipo === 'bot') {
       $('textoEsperando').textContent = 'Preparando el combate…';
     } else {
       $('textoEsperando').textContent = soyAnf ? '' : `Esperando a que ${nombreAnfitrion()} empiece la partida…`;
@@ -1210,6 +1216,10 @@
       texto = g === miEquipo ? '+25 puntos en el ranking de la semana.' : '−10 puntos en el ranking de la semana.';
     } else if (est.tipo === 'bot') {
       texto = 'Contra un bot no se ganan puntos. ¡Busca un rival de verdad!';
+    } else if (est.tipo === 'fichas' && miEquipo !== null) {
+      texto += g === miEquipo ? ' 🎟️ Recibes 4 fichas: las tuyas y las 2 de tu rival.' : ' Perdiste tus 2 fichas.';
+    } else if (est.tipo === 'fichas_bot' && miEquipo !== null) {
+      texto += g === miEquipo ? ' 🎟️ ¡Le ganaste al bot experto! Recibes 4 fichas.' : ' El bot experto ganó: perdiste tus 2 fichas.';
     }
     $('textoFin').textContent = texto;
     const c = est.c;
@@ -1231,9 +1241,10 @@
     $('notaOtra').textContent = '';
     const otra = $('btnOtraCola');
     otra.hidden = est.tipo === 'arena';
+    otra.textContent = est.tipo.startsWith('fichas') ? 'Jugar otra vez (2 fichas)' : 'Buscar otro rival';
     $('capaFin').hidden = false;
   }
-  $('btnOtraCola').addEventListener('click', () => { location.href = `${location.pathname}?cola=1`; });
+  $('btnOtraCola').addEventListener('click', () => { location.href = `${location.pathname}?cola=${est && est.tipo.startsWith('fichas') ? 'fichas' : '1'}`; });
 
   preparar();
 })();

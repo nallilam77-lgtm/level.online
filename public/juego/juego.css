@@ -168,6 +168,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .panel-texto strong { color: var(--text-main); }
 .panel-aviso { margin: 0; font-size: 13px; color: var(--danger); }
 .panel-aviso:empty { display: none; }
+.panel-aviso--info { color: var(--text-muted); }
 
 .campo { display: grid; gap: 8px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .campo input, .enlace input {

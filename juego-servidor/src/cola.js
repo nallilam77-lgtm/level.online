@@ -5,6 +5,8 @@
 // una sala 'ranking' (1 vs 1, el resultado da puntos) y les manda { t: 'emparejado', s: <sala> }. Si en
 // 20 s no aparece nadie, arma una sala 'bot' (contra la máquina, sin puntos) y manda { t: 'emparejado', s, bot: true }.
 // Mientras espera recibe { t: 'esperando', gente: <cuántos buscan> }.
+// /cola?modo=fichas: duelo por fichas (mejor de 3, cuesta 2 fichas que se cobran al empezar): salas 'fichas'
+// o, sin nadie en 20 s, 'fichas_bot' (contra un bot experto). Cada modo tiene su propia fila de espera.
 // =========================================================================
 import { usuarioDe } from './sesion.js';
 
@@ -15,11 +17,13 @@ const nuevaSala = () => [...crypto.getRandomValues(new Uint8Array(10))].map((b) 
 export class Cola {
   constructor(state, env) {
     this.env = env;
-    this.esperando = new Map();     // usuario → { ws, usuario, nombre, reloj }
+    this.colas = { gratis: new Map(), fichas: new Map() };   // modo → (usuario → { ws, usuario, nombre, reloj })
   }
 
   async fetch(request) {
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Solo WebSocket', { status: 426 });
+    const modo = new URL(request.url).searchParams.get('modo') === 'fichas' ? 'fichas' : 'gratis';
+    const esperando = this.colas[modo];
     const [cliente, ws] = Object.values(new WebSocketPair());
     ws.accept();
     let yo = null;
@@ -33,35 +37,35 @@ export class Cola {
       if (!s) { enviar({ t: 'error', m: 'Inicia sesión con Google para jugar.' }); try { ws.close(1008, 'sin sesión'); } catch (err) { /* */ } return; }
       yo = { ws, usuario: s.usuario, nombre: s.nombre, reloj: null };
       // La misma cuenta en otra pestaña: se queda la nueva
-      const viejo = this.esperando.get(s.usuario);
+      const viejo = esperando.get(s.usuario);
       if (viejo) { clearTimeout(viejo.reloj); try { viejo.ws.close(1000, 'otra pestaña'); } catch (err) { /* */ } }
-      this.esperando.delete(s.usuario);
-      const rival = [...this.esperando.values()][0];
+      esperando.delete(s.usuario);
+      const rival = [...esperando.values()][0];
       if (rival) {
-        this.esperando.delete(rival.usuario);
+        esperando.delete(rival.usuario);
         clearTimeout(rival.reloj);
-        await this.armar('ranking', [rival, yo]);
+        await this.armar(modo === 'fichas' ? 'fichas' : 'ranking', [rival, yo]);
         return;
       }
-      this.esperando.set(s.usuario, yo);
+      esperando.set(s.usuario, yo);
       yo.reloj = setTimeout(() => {
-        if (this.esperando.get(yo.usuario) !== yo) return;
-        this.esperando.delete(yo.usuario);
-        this.armar('bot', [yo]);
+        if (esperando.get(yo.usuario) !== yo) return;
+        esperando.delete(yo.usuario);
+        this.armar(modo === 'fichas' ? 'fichas_bot' : 'bot', [yo]);
       }, ESPERA_BOT_MS);
-      this.contar();
+      this.contar(esperando);
     });
     const fuera = () => {
-      if (yo && this.esperando.get(yo.usuario) === yo) { clearTimeout(yo.reloj); this.esperando.delete(yo.usuario); this.contar(); }
+      if (yo && esperando.get(yo.usuario) === yo) { clearTimeout(yo.reloj); esperando.delete(yo.usuario); this.contar(esperando); }
     };
     ws.addEventListener('close', fuera);
     ws.addEventListener('error', fuera);
     return new Response(null, { status: 101, webSocket: cliente });
   }
 
-  contar() {
-    const d = JSON.stringify({ t: 'esperando', gente: this.esperando.size });
-    for (const x of this.esperando.values()) try { x.ws.send(d); } catch (e) { /* */ }
+  contar(esperando) {
+    const d = JSON.stringify({ t: 'esperando', gente: esperando.size });
+    for (const x of esperando.values()) try { x.ws.send(d); } catch (e) { /* */ }
   }
 
   async armar(tipo, jugadores) {
@@ -74,7 +78,7 @@ export class Cola {
       return;
     }
     for (const x of jugadores) {
-      try { x.ws.send(JSON.stringify({ t: 'emparejado', s, bot: tipo === 'bot' || undefined })); x.ws.close(1000, 'emparejado'); } catch (e) { /* se fue: su rival lo espera 45 s */ }
+      try { x.ws.send(JSON.stringify({ t: 'emparejado', s, bot: tipo === 'bot' || tipo === 'fichas_bot' || undefined })); x.ws.close(1000, 'emparejado'); } catch (e) { /* se fue: su rival lo espera 45 s */ }
     }
   }
 }

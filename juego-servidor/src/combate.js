@@ -129,7 +129,7 @@ export class Combate {
       const k = CLASES[x.k] ? x.k : 'guerrero';
       const c = CLASES[k];
       return {
-        i, n: x.n, k, jid: x.jid || null,
+        i, n: x.n, k, jid: x.jid || null, experto: !!x.experto,
         e: x.e ?? (i < 2 ? 0 : 1), f: x.f ?? i % 2, v: c.vida, m: c.vida, vel: c.vel,
         cd: [0, 0, 0], at: false, pr: 0, mu: -1, fu: 0, ve: null, ev: false, gu: false,
         dano: 0, cura: 0, bajas: 0, desempate: azar(),
@@ -408,8 +408,8 @@ export class Combate {
       const o = this.opciones(x).find((op) => op.h === 'r').o;
       return ['r', this.masDebil(o), 0.3];
     }
-    // Los bots detienen la flecha al azar (a veces en el centro)
-    const p = this.azar() < 0.12 ? 1 : 0.35 + this.azar() * 0.6;
+    // Los bots detienen la flecha al azar (a veces en el centro); el experto, casi siempre cerca del centro
+    const p = x.experto ? (this.azar() < 0.35 ? 1 : 0.75 + this.azar() * 0.25) : (this.azar() < 0.12 ? 1 : 0.35 + this.azar() * 0.6);
     const [h, o] = this.decidir(x);
     return [h, o, p];
   }
@@ -425,7 +425,7 @@ export class Combate {
       const esq = this.probEsquiva(x, this.l[o], 'fuerte');
       return [esq < 0.5 && this.azar() > 0.2 ? 'f' : 'r', o];
     };
-    if (this.azar() < 0.15) return ataque();
+    if (this.azar() < (x.experto ? 0.04 : 0.15)) return ataque();
 
     const enemigos = this.vivos(1 - x.e);
     const aliado = this.vivos(x.e).find((y) => y !== x);

@@ -29,12 +29,15 @@
   // ------------------------------------------------------------------ inicio
   async function iniciar() {
     $('bloqueSesion').hidden = conSesion();
-    $('btnRapido').addEventListener('click', (e) => { if (!conSesion()) { e.preventDefault(); $('bloqueSesion').hidden = false; $('bloqueSesion').scrollIntoView({ behavior: 'smooth' }); } });
+    const pedirSesion = (e) => { if (!conSesion()) { e.preventDefault(); $('bloqueSesion').hidden = false; $('bloqueSesion').scrollIntoView({ behavior: 'smooth' }); } };
+    $('btnRapido').addEventListener('click', pedirSesion);
+    $('btnFichas').addEventListener('click', (e) => { pedirSesion(e); if ($('btnFichas').classList.contains('desactivado')) e.preventDefault(); });
     const d = window.Sesion && window.Sesion.datos();
     if (d && d.nombre) $('nombreArena').value = (localStorage.getItem('duelo_nombre') || d.nombre.split(' ')[0]).slice(0, 14);
     cargarRanking();
     cargarConfig();
-    if (conSesion()) { cargarMias(); setInterval(() => { if (document.visibilityState === 'visible') cargarMias(); }, 30000); prepararAvisos(); }
+    if (conSesion()) { cargarFichas(); cargarMias(); setInterval(() => { if (document.visibilityState === 'visible') cargarMias(); }, 30000); }
+    window.addEventListener('pageshow', () => { if (conSesion()) cargarFichas(); });
   }
 
   // ------------------------------------------------------------------ torneo
@@ -47,7 +50,9 @@
       $('notaTorneo').textContent = 'El torneo no está disponible en este momento. Vuelve más tarde.';
       return;
     }
-    if (!config.activo) { $('notaTorneo').textContent = 'El torneo está cerrado por ahora. Mientras, juega duelos rápidos y sube en el ranking.'; return; }
+    if (!config.activo) return;                    // torneo con Bs apagado (admin.html → Arena): no se muestra
+    $('bloqueTorneo').hidden = false;
+    if (conSesion()) prepararAvisos();
     $('notaTorneo').textContent = 'Paga la inscripción y te emparejamos con un rival del mismo modo y juego. El que gane se lleva el doble.';
     const caja = $('juegos');
     caja.replaceChildren(...config.juegos.map((j) => {
@@ -168,8 +173,8 @@
     const { data, error } = await c.rpc('arena_mias');
     if (error) return;
     const lista = $('listaMias');
-    $('bloqueMias').hidden = false;
-    if (!data || !data.length) { lista.replaceChildren(el('li', 'vacio', 'Todavía no te has inscrito en un torneo.')); return; }
+    $('bloqueMias').hidden = !(data && data.length);
+    if (!data || !data.length) return;
     lista.replaceChildren(...data.map(tarjetaPartida));
   }
 
@@ -213,6 +218,24 @@
     return 'Devuelta';
   }
   const entregaTexto = (e) => (e === 'entregado' ? 'entregado ✅' : e === 'revisar' ? 'en revisión (te escribimos)' : 'enviándose…');
+
+  // ------------------------------------------------------------------ fichas
+  const COSTO_DUELO = 2;
+  async function cargarFichas() {
+    const c = await cliente();
+    if (!c) return;
+    const { data, error } = await c.rpc('arena_mis_fichas');
+    if (error) return;
+    const fichas = Number(data) || 0;
+    $('saldoFichas').hidden = false;
+    $('saldoFichas').textContent = `Tienes ${fichas} ${fichas === 1 ? 'ficha' : 'fichas'}`;
+    const alcanza = fichas >= COSTO_DUELO;
+    $('btnFichas').classList.toggle('desactivado', !alcanza);
+    $('btnFichas').setAttribute('aria-disabled', String(!alcanza));
+    $('notaFichas').textContent = alcanza
+      ? 'Las fichas se ganan con cada recarga que haces con tu sesión iniciada.'
+      : `Necesitas ${COSTO_DUELO} fichas. Haz una recarga con tu sesión iniciada y gana fichas.`;
+  }
 
   // ------------------------------------------------------------------ ranking
   async function cargarRanking() {

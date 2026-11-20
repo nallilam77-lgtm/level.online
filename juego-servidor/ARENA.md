@@ -1,6 +1,21 @@
 # Arena de Level Up (Duelo de Acero para clientes)
 
-Sección pública de la tienda (`/arena.html`) para clientes con sesión de Google. Tres partes:
+Sección pública de la tienda (`/arena.html`) para clientes con sesión de Google.
+
+**Desde 2026-11-20 (pedido del dueño: "por ahora con fichas")** lo que está abierto es:
+
+- **Duelo por fichas**: cuesta **2 fichas** (las que dan las recargas, `juego_fichas`) y se juega al **mejor de 3**.
+  La cola (`/cola?modo=fichas`) empareja 1 vs 1; sin nadie en 20 s, contra un **bot experto** (detiene la flecha
+  casi siempre cerca del centro y casi no ataca al azar: le gana al bot normal ~83 % y a una persona buena ~55 %).
+  Las fichas se cobran al EMPEZAR (la sala pide `fichas_cobrar`; todos o ninguno; sin fichas no empieza) y el
+  ganador recibe el **doble** (4: las suyas y las del rival; contra el bot experto también). Si la sala se cae y
+  nunca da resultado, a los 90 min se devuelven (`arena_fichas_vencer`, en el tic). Supabase: `arena_duelos_fichas`
+  y movimientos `duelo` / `duelo_premio` / `duelo_devolucion` en `juego_movimientos`.
+- **Duelo rápido** gratis y **ranking semanal**.
+- El **torneo pagado con Bs** (abajo) está hecho pero **apagado** (`configuracion` "arena" → activo false;
+  se enciende en admin.html → Arena). Con él apagado, arena.html no lo muestra.
+
+Las tres partes originales:
 
 1. **Duelo rápido** (gratis): "Buscar rival" empareja 1 vs 1 con otro cliente conectado; si en 20 s no hay
    nadie, juega contra un bot (sin puntos).
