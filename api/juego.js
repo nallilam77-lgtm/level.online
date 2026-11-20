@@ -32,6 +32,8 @@ export default async function handler(req, res) {
     if (req.query.accion === 'revision_rehacer') return (await import('./_lib/revision.js')).rehacerRevision(req, res);
     // Arena de Duelo de Acero (_lib/arena.js; aquí y no en un archivo propio: el plan de Vercel admite 12 funciones)
     if (Object.hasOwn(ACCIONES_ARENA, req.query.accion)) return (await import('./_lib/arena.js'))[ACCIONES_ARENA[req.query.accion]](req, res);
+    // Panel → Resumen: respuesta COMPLETA de Central One al verificar un ID (solo administrador; _lib/validador.js)
+    if (req.query.accion === 'verificar_crudo') return verificarCrudo(req, res);
     // Panel → Precios: un pedido que espera stock se cambia por otro paquete (solo administrador; _lib/esperas.js)
     if (req.query.accion === 'espera_cambiar') return (await import('./_lib/esperas.js')).cambiarEspera(req, res);
     const juego = await cargarJuego(req.query.juego);
@@ -51,5 +53,24 @@ export default async function handler(req, res) {
     // Fallo al cargar el módulo del juego u otro error no controlado por la acción
     console.error(`Error en api/juego (${req.query.juego}/${req.query.accion}):`, error.message);
     return res.status(500).json({ status: "error", message: "Falla interna del servidor." });
+  }
+}
+
+async function verificarCrudo(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'POST') return res.status(405).json({ status: 'error', message: 'Método no permitido' });
+  const { esAdminToken } = await import('./_lib/supabase.js');
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  if (!(await esAdminToken(token))) return res.status(403).json({ status: 'error', message: 'Solo el administrador.' });
+  const juego = String(req.body?.juego || '');
+  const id = String(req.body?.id ?? '').trim();
+  const zona = String(req.body?.zona ?? '').trim();
+  if (!/^\d{3,20}$/.test(id) || (zona && !/^\d{1,8}$/.test(zona))) return res.status(400).json({ status: 'error', message: 'Escribe el ID (y la Zona ID) solo con números.' });
+  try {
+    const r = await (await import('./_lib/validador.js')).validarCrudo(juego, id, zona);
+    if (r.error) return res.status(400).json({ status: 'error', message: r.error });
+    return res.status(200).json({ status: 'success', ...r });
+  } catch (error) {
+    return res.status(503).json({ status: 'error', message: `Central One no respondió: ${error.name === 'TimeoutError' ? 'tiempo agotado' : error.message}` });
   }
 }

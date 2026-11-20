@@ -234,3 +234,10 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .pestanas button:
 
 /* Enlaces con aspecto de botón (p. ej. "Mandar por WhatsApp" en Minijuego → Último en Pie) */
 a.btn-ver { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+
+/* Respuesta completa de Central One al verificar un ID (Resumen) */
+.respuesta-cruda {
+  margin: 0; padding: 16px; max-height: 420px; overflow: auto; border-radius: 12px;
+  background: var(--bg-deep); border: 1px solid var(--border-glass); color: var(--accent-cyan);
+  font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+}

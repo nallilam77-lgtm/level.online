@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/sesion.css?v=1">
-  <link rel="stylesheet" href="css/admin.css?v=25">
+  <link rel="stylesheet" href="css/admin.css?v=26">
   <!-- Panel en Supabase (desde 2026-11-13; el de Firebase se quitó): entra con Google y solo si la cuenta
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=61" defer></script>
+  <script src="/js/admin.js?v=62" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -94,6 +94,28 @@
           </div>
           <p class="nota" id="notaVigilante">Revisa cada minuto los pagos y las recargas: pagos sin usar, pagos marcados a mano con alguien esperando, recargas dobles, en revisión o sin confirmar. Lo que se resuelve solo desaparece solo.</p>
           <ul class="pedidos" id="listaVigilante"><li class="vacio">Cargando…</li></ul>
+        </div>
+
+        <!-- Respuesta completa de Central One al verificar un ID (api/juego.js?accion=verificar_crudo) -->
+        <div class="tarjeta">
+          <h2>🔍 Qué responde Central One al verificar un ID</h2>
+          <p class="nota">La misma consulta que hace la tienda al tocar "Verificar", pero te muestra <strong>todo</strong> lo que contesta Central One. No compra nada ni toca el saldo.</p>
+          <form class="formulario" id="formCrudo" novalidate>
+            <div class="dos-campos">
+              <label class="campo">Juego
+                <select id="crudoJuego">
+                  <option value="freefire">Free Fire</option>
+                  <option value="bloodstrike">Blood Strike</option>
+                  <option value="mobilelegends">Mobile Legends</option>
+                </select>
+              </label>
+              <label class="campo">ID del jugador<input type="text" id="crudoId" inputmode="numeric" maxlength="20" autocomplete="off" placeholder="Ej. 123456789"></label>
+            </div>
+            <label class="campo" id="crudoCampoZona" hidden>Zona ID<input type="text" id="crudoZona" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+            <button type="submit" class="btn btn--chico" id="btnCrudo">Consultar</button>
+            <p class="mensaje-form" id="mensajeCrudo" role="status"></p>
+          </form>
+          <pre class="respuesta-cruda" id="salidaCrudo" hidden></pre>
         </div>
 
         <div class="tarjeta alarma-referencias" id="alarmaReferencias" role="alert" hidden>
