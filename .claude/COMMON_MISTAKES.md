@@ -275,3 +275,9 @@ Los códigos viven en Supabase (`codigos`) y se manejan en admin.html → Creado
 
 **Síntoma**: Vercel no publica ("No more than 12 Serverless Functions can be added to a Deployment on the Hobby plan").
 **Regla**: `api/` ya tiene 12 funciones (el máximo del plan gratis). Lo nuevo va como `accion` dentro de una existente (`api/juego.js` despacha a `_lib/…` con import dinámico: canjes, revisión, pagos, Arena). Nunca crear `api/<nuevo>.js` sin quitar otra.
+
+## 20. Un pago que da dos recargas al soltar sin referencia (2026-11-20)
+
+**Síntoma**: el cliente recargó con el pago real (llegó tarde por la macro) y después se soltó su solicitud de "Revisar pagos" SIN referencia completa: dos recargas por un pago (ID 8081285854, 110 Diamantes, 19-20/11).
+**Causa**: la revisión antes de soltar solo miraba la tabla `pagos`, y la limpieza diaria ya había pasado el pago usado a `pagos_usados`.
+**Regla**: toda revisión de "¿ya llegó/se usó un pago con estos 5 números?" mira `pagos` **y** `pagos_usados` **y** las `recargas` hechas con esos 5 números (`_lib/pagos-manual.js`). Y en el panel: si la macro trae el pago de alguien que espera en "Revisar pagos", NO marcarlo usado a mano: soltar la solicitud con esa referencia completa. El vigilante (`supabase/vigilante.sql`) avisa de ambos casos.
