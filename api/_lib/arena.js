@@ -12,6 +12,7 @@
 //   POST /api/juego?accion=arena_evento     { tipo: 'empezo' | 'resultado' | 'ranking' | 'fichas_cobrar' | 'fichas_resultado', … }
 //     Duelos por fichas (desde 2026-11-20): la sala pide cobrar COSTO_DUELO fichas a cada jugador al empezar
 //     (todos o ninguno) y al terminar paga el doble al ganador (null = ganó el bot experto: nadie cobra).
+//     'fichas_saldo' { usuario }: la cola de fichas revisa que alcance antes de emparejar.
 //   POST /api/juego?accion=arena_tic        (cada minuto, desde el cron del Worker): vencimientos, avisos y entregas
 //
 // Cobro de la inscripción: las mismas reglas que la tienda (COMMON_MISTAKES 2c). El pago se toma con
@@ -234,6 +235,10 @@ export async function evento(req, res) {
         p_nombres: b.jugadores.map((j) => limpiarNombre(j.nombre) || 'Jugador'), p_costo: COSTO_DUELO,
       });
       return res.status(200).json({ status: 'success', costo: COSTO_DUELO, ...r });
+    }
+    if (b.tipo === 'fichas_saldo' && UUID.test(String(b.usuario))) {
+      const filas = await leer('juego_fichas', { usuario: b.usuario }, 'fichas');
+      return res.status(200).json({ status: 'success', fichas: Number(filas && filas[0] && filas[0].fichas) || 0, costo: COSTO_DUELO });
     }
     if (b.tipo === 'fichas_resultado' && SALA.test(String(b.sala)) && (b.ganador === null || UUID.test(String(b.ganador)))) {
       const r = await rpc('arena_fichas_resultado', { p_sala: b.sala, p_ganador: b.ganador });

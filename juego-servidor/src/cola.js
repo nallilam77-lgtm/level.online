@@ -8,7 +8,7 @@
 // /cola?modo=fichas: duelo por fichas (mejor de 3, cuesta 2 fichas que se cobran al empezar): salas 'fichas'
 // o, sin nadie en 20 s, 'fichas_bot' (contra un bot experto). Cada modo tiene su propia fila de espera.
 // =========================================================================
-import { usuarioDe } from './sesion.js';
+import { usuarioDe, pedirTienda } from './sesion.js';
 
 const ESPERA_BOT_MS = 20000;
 const LETRAS = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -35,6 +35,16 @@ export class Cola {
       if (!m || m.t !== 'hola') return;
       const s = await usuarioDe(this.env, m.jwt);
       if (!s) { enviar({ t: 'error', m: 'Inicia sesión con Google para jugar.' }); try { ws.close(1008, 'sin sesión'); } catch (err) { /* */ } return; }
+      // Cola de fichas: solo quien tiene para pagar (si la tienda no responde, entra igual: el cobro al empezar decide)
+      if (modo === 'fichas') {
+        const r = await pedirTienda(this.env, { tipo: 'fichas_saldo', usuario: s.usuario });
+        if (r && typeof r.fichas === 'number' && r.fichas < (r.costo || 2)) {
+          enviar({ t: 'error', m: `No tienes fichas suficientes: el duelo cuesta ${r.costo || 2} y tienes ${r.fichas}. Recarga con tu sesión iniciada para ganar fichas.` });
+          try { ws.close(1008, 'sin fichas'); } catch (err) { /* */ }
+          return;
+        }
+        if (ws.readyState !== 1) return;          // se fue mientras se revisaba
+      }
       yo = { ws, usuario: s.usuario, nombre: s.nombre, reloj: null };
       // La misma cuenta en otra pestaña: se queda la nueva
       const viejo = esperando.get(s.usuario);

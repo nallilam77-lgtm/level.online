@@ -117,7 +117,7 @@
     if (b.dataset.seccion === 'precios') cargarPrecios();
     if (b.dataset.seccion === 'roblox') cargarRoblox();
     if (b.dataset.seccion === 'canjes') cargarCanjes();
-    if (b.dataset.seccion === 'arena') cargarArena();
+    if (b.dataset.seccion === 'arena') { cargarArena(); cargarDuelos(); }
     if (b.dataset.seccion === 'manuales') cargarManuales();
     if (b.dataset.seccion === 'revision') { cargarRevision(); cargarRuleta().catch(() => {}); }
     if (b.dataset.seccion === 'pagos') cargarPagos();
@@ -1944,7 +1944,33 @@
       lista.append(li);
     });
   }
-  $('actualizarArena').addEventListener('click', () => cargarArena());
+  // Duelos por fichas (arena_duelos_fichas): los últimos 100
+  async function cargarDuelos() {
+    const lista = $('listaDuelos');
+    const { data, error } = await cliente.from('arena_duelos_fichas').select('sala,tipo,nombres,usuarios,costo,estado,ganador,creado,terminado')
+      .order('creado', { ascending: false }).limit(100);
+    if (error) { console.error(error); lista.replaceChildren(el('li', 'vacio', 'No se pudo cargar.')); return; }
+    const hoy = iniciosVE().dia;
+    const deHoy = data.filter((d) => new Date(d.creado) >= hoy);
+    $('kpiDuelosHoy').textContent = deHoy.length;
+    $('kpiDuelosBot').textContent = deHoy.filter((d) => d.tipo === 'bot').length;
+    $('kpiDuelosCobradas').textContent = deHoy.reduce((s, d) => s + d.costo * d.usuarios.length, 0);
+    $('kpiDuelosPagadas').textContent = deHoy.reduce((s, d) => s + (d.estado === 'terminado' && d.ganador ? d.costo * 2 : d.estado === 'devuelto' ? d.costo * d.usuarios.length : 0), 0);
+    lista.replaceChildren();
+    if (!data.length) { lista.append(el('li', 'vacio', 'Todavía no hay duelos por fichas.')); return; }
+    const ESTADO = { cobrado: ['Jugando', 'etiqueta--en_proceso'], terminado: ['Terminado', 'etiqueta--completado'], devuelto: ['Devuelto', 'etiqueta--reembolsado'] };
+    data.forEach((d) => {
+      const nombreDe = (u) => d.nombres[d.usuarios.indexOf(u)] || 'Jugador';
+      const rival = d.tipo === 'bot' ? 'bot experto' : nombreDe(d.usuarios[1]);
+      const [texto, clase] = ESTADO[d.estado] || [d.estado, ''];
+      const resultado = d.estado !== 'terminado' ? '' : d.ganador ? `ganó ${nombreDe(d.ganador)} (+${d.costo * 2})` : 'ganó el bot';
+      const { li, cuerpo } = filaCompacta({ clave: 'duelo:' + d.sala, hora: horaCorta(d.creado), titulo: `${nombreDe(d.usuarios[0])} vs ${rival}`,
+        monto: resultado, etiqueta: texto, claseEtiqueta: clase });
+      cuerpo.append(el('span', '', `Sala ${d.sala} · ${fecha(d.creado)} · ${d.costo} fichas cada uno${d.terminado ? ` · terminó ${fecha(d.terminado)}` : ''}`));
+      lista.append(li);
+    });
+  }
+  $('actualizarArena').addEventListener('click', () => { cargarArena(); cargarDuelos(); });
   $('formArena').addEventListener('submit', async (e) => {
     e.preventDefault();
     const valor = {

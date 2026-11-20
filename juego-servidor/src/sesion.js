@@ -56,6 +56,7 @@ export async function pedirTienda(env, cuerpo) {
   try {
     const r = await fetch(`${env.ARENA_API}?accion=arena_evento`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Arena': env.ARENA_SECRETO }, body: JSON.stringify(cuerpo),
+      signal: AbortSignal.timeout(12000),
     });
     return r.ok ? await r.json() : null;
   } catch (e) {
@@ -67,7 +68,7 @@ export async function pedirTienda(env, cuerpo) {
 export async function partidaDe(env, id) {
   if (!env.ARENA_API || !env.ARENA_SECRETO) return null;
   try {
-    const r = await fetch(`${env.ARENA_API}?accion=arena_sala&id=${id}`, { headers: { 'X-Arena': env.ARENA_SECRETO } });
+    const r = await fetch(`${env.ARENA_API}?accion=arena_sala&id=${id}`, { headers: { 'X-Arena': env.ARENA_SECRETO }, signal: AbortSignal.timeout(10000) });
     if (!r.ok) return null;
     const d = await r.json();
     return d && d.partida ? d.partida : (d && d.status === 'success' ? false : null);

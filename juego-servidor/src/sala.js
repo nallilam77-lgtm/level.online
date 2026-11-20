@@ -44,7 +44,8 @@ const ABRE_ANTES_MS = 10 * 60_000;   // la sala del torneo abre 10 min antes de 
 const EMPIEZA_ANTES_MS = 5 * 60_000; // y empieza sola si están todos desde 5 min antes
 const AUSENCIA_MS = 10 * 60_000;     // a la hora + 10 min empieza con los que haya
 const RANKING_ESPERA_MS = 45_000;    // duelo rápido: si el rival no entra en 45 s, se cancela
-const RTT_MAX = 400;
+const RTT_MAX = 300;                 // margen máximo de la flecha por ping (quien finja un ping alto no gana más que esto)
+const ABANDONO_MS = 30000;           // serie con algo en juego sin nadie conectado: a los 30 s la máquina la termina
 const NOMBRES_EXPERTO = ['Maestro Kael', 'Maestra Vega', 'Maestro Draco', 'Maestra Nyx'];
 const NOMBRES_BOT = ['Bot Rayo', 'Bot Toro', 'Bot Sombra', 'Bot Hierro', 'Bot Lobo', 'Bot Puma', 'Bot Trueno', 'Bot Cobra'];
 const CLASE_INICIAL = ['guerrero', 'clerigo', 'barbaro', 'asesino'];
@@ -63,7 +64,7 @@ export class Sala {
   }
 
   reiniciar() {
-    for (const r of ['reloj', 'relojVacia', 'relojInicio']) if (this[r]) { clearTimeout(this[r]); clearInterval(this[r]); }
+    for (const r of ['reloj', 'relojVacia', 'relojInicio', 'relojAbandono']) if (this[r]) { clearTimeout(this[r]); clearInterval(this[r]); }
     if (this.conexiones) for (const con of this.conexiones) try { con.ws.close(1000, 'sala cerrada'); } catch (e) { /* */ }
     this.creada = false;
     this.tipo = 'libre';
@@ -77,6 +78,9 @@ export class Sala {
     this.reloj = null;             // turno / pausa del combate / espera entre combates
     this.relojVacia = null;
     this.relojInicio = null;       // 'arena'/'ranking': revisa si ya puede empezar
+    this.relojAbandono = null;     // serie abandonada: la termina la máquina
+    this.cobrando = false;
+    this.nombreExperto = '';
     this.limite = 0;               // cuándo se acaba el turno (ms)
     this.siguienteId = 1;
     this.seq = 0;
@@ -120,6 +124,7 @@ export class Sala {
     const con = { ws: servidor, jid: null, creador: crear, mensajes: 0, desde: Date.now(), rtt: 250 };
     this.conexiones.add(con);
     if (this.relojVacia) { clearTimeout(this.relojVacia); this.relojVacia = null; }
+    if (this.relojAbandono) { clearTimeout(this.relojAbandono); this.relojAbandono = null; }
     servidor.addEventListener('message', (e) => this.recibir(con, e.data));
     servidor.addEventListener('close', () => this.salir(con));
     servidor.addEventListener('error', () => this.salir(con));
@@ -315,13 +320,44 @@ export class Sala {
       }
       this.difundir();
     }
-    if (!this.conexiones.size && !this.relojVacia) {
-      // Serie con algo en juego (torneo o fichas): sigue aunque no mire nadie (los luchadores juegan solos) hasta terminar
-      this.relojVacia = setTimeout(() => {
-        const serie = this.tipo === 'arena' || this.tipo === 'fichas' || this.tipo === 'fichas_bot';
-        if (!serie || this.fase === 'fin' || this.fase === 'sala') this.reiniciar();
-        else if (this.conexiones.size === 0) this.relojVacia = null;      // sigue sola hasta terminar; al final se borra
-      }, SIN_NADIE_MS);
+    if (!this.conexiones.size) {
+      // Serie con algo en juego (torneo o fichas) y ya nadie mira: si en 30 s no vuelve nadie, la máquina juega lo
+      // que falta al instante y se reporta el resultado. Cloudflare borra de memoria una sala sin conexiones al
+      // minuto o dos (los relojes no la mantienen viva): esperar a que los bots jueguen a su ritmo perdería el
+      // resultado y, en fichas, dejaría a quien iba perdiendo recuperarlas cerrando la página.
+      if (this.conApuesta() && (this.fase === 'combate' || this.fase === 'entre') && !this.relojAbandono) {
+        this.relojAbandono = setTimeout(() => this.resolverAbandono(), ABANDONO_MS);
+      }
+      if (!this.relojVacia) {
+        this.relojVacia = setTimeout(() => {
+          this.relojVacia = null;
+          if (this.conexiones.size) return;
+          if (!this.conApuesta() || this.fase === 'fin' || this.fase === 'sala') this.reiniciar();
+        }, SIN_NADIE_MS);
+      }
+    }
+  }
+
+  conApuesta() { return this.tipo === 'arena' || this.tipo === 'fichas' || this.tipo === 'fichas_bot'; }
+
+  // Nadie volvió: los luchadores juegan solos, sin pausas, hasta terminar la serie (terminarSerie avisa a la tienda)
+  resolverAbandono() {
+    this.relojAbandono = null;
+    if (this.conexiones.size || (this.fase !== 'combate' && this.fase !== 'entre')) return;
+    for (let combates = 0; combates < 12 && this.fase !== 'fin'; combates++) {
+      if (this.fase === 'entre') this.empezar();
+      if (this.reloj) { clearTimeout(this.reloj); this.reloj = null; }
+      const c = this.combate;
+      if (c.turno < 0 && c.ganador === null) c.siguienteTurno();
+      for (let pasos = 0; c.ganador === null && pasos < 3000; pasos++) {
+        if (c.turno >= 0) {
+          const [h, o, p] = c.automatica(false);
+          if (!c.accion(c.turno, h, o, p)) c.accion(c.turno, 'r', c.opciones().find((x) => x.h === 'r').o[0], 0.3);
+        }
+        if (c.ganador === null) c.siguienteTurno();
+      }
+      this.terminar();
+      if (this.reloj) { clearTimeout(this.reloj); this.reloj = null; }
     }
   }
 
@@ -384,7 +420,7 @@ export class Sala {
         const faltan = r && Array.isArray(r.faltan) ? r.faltan : [];
         for (const j of inscritos) {
           if (!j.con) continue;
-          const m = !r ? 'No pudimos cobrar las fichas ahora. Intenta de nuevo en un momento (no se te cobró nada).'
+          const m = !r ? 'No pudimos cobrar las fichas ahora. Intenta de nuevo en un momento (si se te descontaron, vuelven solas en menos de 2 horas).'
             : faltan.includes(j.usuario) ? 'No tienes fichas suficientes: el duelo cuesta 2. Recarga para ganar fichas.'
               : 'Tu rival no tiene fichas suficientes. Busca otro duelo (no se te cobró nada).';
           this.enviar(j.con, { t: 'error', m });

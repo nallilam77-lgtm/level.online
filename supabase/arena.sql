@@ -129,6 +129,7 @@ create or replace function public.arena_hora(p_desde timestamptz)
 returns timestamptz
 language plpgsql
 stable
+set search_path = public
 as $$
 declare
   v timestamp := p_desde at time zone 'America/Caracas';
@@ -145,6 +146,7 @@ create or replace function public.arena_semana()
 returns date
 language sql
 stable
+set search_path = public
 as $$ select date_trunc('week', now() at time zone 'America/Caracas')::date $$;
 
 -- ---------------------------------------------------------------------

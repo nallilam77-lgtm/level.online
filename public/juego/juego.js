@@ -40,6 +40,7 @@
   let enCola = ['1', 'fichas'].includes(parametros.get('cola')) && !salaId;
   let jwt = '';                                  // sesión de Google (torneo y duelo rápido)
   let cambioSala = false;                        // la cola nos emparejó: al cerrarse, entrar a la sala
+  let deArena = false;                           // la sala es de la Arena (para ofrecer volver si algo falla)
   const ENTRAR_GOOGLE = '/perfil.html?volver=' + encodeURIComponent('/arena.html') + '&entrar=1';
 
   const EQUIPOS = ['Rojo', 'Azul'];
@@ -260,6 +261,7 @@
   $('formEntrar').addEventListener('submit', (e) => {
     e.preventDefault();
     if ($('formEntrar').dataset.login) { location.href = ENTRAR_GOOGLE; return; }
+    if ($('formEntrar').dataset.arena) { location.href = '/arena.html'; return; }
     entrar();
   });
   function entrar() {
@@ -321,6 +323,12 @@
     $('btnEntrar').hidden = true;
     $('textoInicio').textContent = '';
     aviso(texto);
+    // Venía de la Arena (torneo, duelo rápido o por fichas): que pueda volver
+    if (partidaId || parametros.get('cola') || deArena) {
+      $('btnEntrar').hidden = false;
+      botonEntrar('Volver a la Arena', true);
+      $('formEntrar').dataset.arena = '1';
+    }
   }
 
   function mandar(m) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); }
@@ -363,6 +371,7 @@
     avisoCentro('');
     const antes = est;
     est = m;
+    if (m.tipo && m.tipo !== 'libre') deArena = true;
     if (m.fase === 'sala') {
       finMostrado = false;
       $('capaFin').hidden = true;

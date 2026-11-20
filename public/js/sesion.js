@@ -159,7 +159,7 @@
   async function revisarTelefono() {
     try {
       const d = datos();
-      if (!d || !d.id || /^\/admin(\.html)?$/.test(location.pathname)) return;
+      if (!d || !d.id || /^\/admin(\.html)?$/.test(location.pathname) || /^\/juego\//.test(location.pathname)) return;
       if (localStorage.getItem(CLAVE_TELEFONO_LISTO) === d.id) return;
       if (sessionStorage.getItem(CLAVE_TELEFONO_DESPUES) || sessionStorage.getItem(CLAVE_TELEFONO_REVISADO) === d.id) return;
       const c = await configuracion();

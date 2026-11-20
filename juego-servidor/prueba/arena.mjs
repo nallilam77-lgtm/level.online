@@ -38,6 +38,7 @@ http.createServer((req, res) => {
       else { e.jugadores.forEach((j) => saldos.set(j.usuario, saldos.get(j.usuario) - 2)); r = { status: 'success', ok: true, costo: 2 }; }
     }
     if (e.tipo === 'fichas_resultado' && e.ganador) saldos.set(e.ganador, saldos.get(e.ganador) + 4);
+    if (e.tipo === 'fichas_saldo') r = { status: 'success', fichas: saldos.get(e.usuario) || 0, costo: 2 };
     res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r));
   });
 }).listen(8790);
@@ -132,16 +133,10 @@ ok(solo.emparejado && solo.emparejado.bot, 'Solo en la cola: a los 20 s, contra 
 // ---------- 5. Duelo por fichas ----------
 const fede = uuid(), gabi = uuid(), pobre = uuid();
 saldos.set(fede, 5); saldos.set(gabi, 2); saldos.set(pobre, 1);
-const f1 = cliente('Fede', `${BASE}/cola?modo=fichas`, jwt(fede, 'Fede'));
-await espera(400);
 const f2 = cliente('Pobre', `${BASE}/cola?modo=fichas`, jwt(pobre, 'Pobre'));
 await espera(900);
-ok(f1.emparejado && f2.emparejado && f1.emparejado.s === f2.emparejado.s, 'La cola de fichas los empareja');
-const fa = cliente('Fede', `${BASE}/ws?s=${f1.emparejado.s}`, jwt(fede, 'Fede'));
-const fb = cliente('Pobre', `${BASE}/ws?s=${f2.emparejado.s}`, jwt(pobre, 'Pobre'));
-await espera(2500);
-ok(/No tienes fichas/.test(fb.errores[0] || '') && /rival no tiene fichas/.test(fa.errores[0] || ''), 'Sin fichas no empieza: ' + fb.errores[0]);
-ok(saldos.get(fede) === 5 && saldos.get(pobre) === 1, 'A nadie se le cobró');
+ok(/No tienes fichas suficientes/.test(f2.errores[0] || '') && !f2.emparejado, 'Sin fichas no entra a la cola: ' + f2.errores[0]);
+ok(saldos.get(pobre) === 1, 'A nadie se le cobró');
 const g1 = cliente('Fede', `${BASE}/cola?modo=fichas`, jwt(fede, 'Fede'));
 await espera(400);
 const g2 = cliente('Gabi', `${BASE}/cola?modo=fichas`, jwt(gabi, 'Gabi'));
@@ -166,6 +161,21 @@ await terminar(sb);
 const rb = eventos.find((x) => x.tipo === 'fichas_resultado' && x.sala === sola.emparejado.s);
 ok(rb && (rb.ganador === fede || rb.ganador === null), `Contra el bot: ${rb && rb.ganador ? 'ganó Fede (+4)' : 'ganó el bot'}`);
 sb.ws.close();
+
+// ---------- 6. Duelo abandonado: nadie vuelve en 30 s → la máquina lo termina y se reporta ----------
+const huye = uuid();
+saldos.set(huye, 4);
+const h1 = cliente('Huye', `${BASE}/cola?modo=fichas`, jwt(huye, 'Huye'));
+await espera(21500);
+const hs = h1.emparejado && h1.emparejado.s;
+const h2 = cliente('Huye', `${BASE}/ws?s=${hs}`, jwt(huye, 'Huye'));
+h2.jugar = false;
+await espera(2500);
+ok(saldos.get(huye) === 2 && h2.est && h2.est.fase === 'combate', 'Empezó contra el bot y cobró 2');
+h2.ws.close();
+await espera(34000);
+const rh = eventos.find((x) => x.tipo === 'fichas_resultado' && x.sala === hs);
+ok(!!rh, `Abandonado: a los 30 s la máquina terminó la serie y avisó (${rh ? (rh.ganador ? 'ganó el jugador' : 'ganó el bot') : 'sin aviso'})`);
 
 console.log(fallas ? `\n${fallas} prueba(s) fallaron` : '\nTodo bien');
 process.exit(fallas ? 1 : 0);

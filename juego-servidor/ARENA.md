@@ -11,6 +11,11 @@ Sección pública de la tienda (`/arena.html`) para clientes con sesión de Goog
   ganador recibe el **doble** (4: las suyas y las del rival; contra el bot experto también). Si la sala se cae y
   nunca da resultado, a los 90 min se devuelven (`arena_fichas_vencer`, en el tic). Supabase: `arena_duelos_fichas`
   y movimientos `duelo` / `duelo_premio` / `duelo_devolucion` en `juego_movimientos`.
+  La cola de fichas revisa el saldo antes de emparejar (`fichas_saldo`): sin 2 fichas no entra.
+  **Abandono** (revisión 2026-11-20): si en una serie con algo en juego (fichas o torneo) no queda nadie conectado
+  30 s, la máquina juega lo que falta al instante y se reporta el resultado. Cloudflare borra de memoria una sala
+  sin conexiones al minuto o dos (los relojes no la mantienen viva); sin esto, quien iba perdiendo podía cerrar la
+  página y recuperar sus fichas a los 90 min.
 - **Duelo rápido** gratis y **ranking semanal**.
 - El **torneo pagado con Bs** (abajo) está hecho pero **apagado** (`configuracion` "arena" → activo false;
   se enciende en admin.html → Arena). Con él apagado, arena.html no lo muestra.

@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=58" defer></script>
+  <script src="/js/admin.js?v=59" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -489,7 +489,18 @@
           </form>
         </div>
         <div class="tarjeta">
-          <h2>Partidas</h2>
+          <h2>Duelos por fichas</h2>
+          <p class="nota">Cada duelo cobra 2 fichas a cada jugador al empezar; el ganador recibe 4 (contra el bot experto también). Los que no terminan se devuelven solos a los 90 minutos.</p>
+          <div class="kpis">
+            <div class="kpi"><small>Duelos hoy</small><strong id="kpiDuelosHoy">–</strong></div>
+            <div class="kpi"><small>Contra el bot</small><strong id="kpiDuelosBot">–</strong></div>
+            <div class="kpi"><small>Fichas cobradas hoy</small><strong id="kpiDuelosCobradas">–</strong></div>
+            <div class="kpi"><small>Fichas pagadas hoy</small><strong id="kpiDuelosPagadas">–</strong></div>
+          </div>
+          <ul class="pedidos" id="listaDuelos"><li class="vacio">Cargando…</li></ul>
+        </div>
+        <div class="tarjeta">
+          <h2>Partidas del torneo con Bs</h2>
           <ul class="pedidos" id="listaArena"><li class="vacio">Cargando…</li></ul>
         </div>
       </section>
