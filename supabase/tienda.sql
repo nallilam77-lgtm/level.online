@@ -439,3 +439,24 @@ end;
 $$;
 revoke execute on function public.admin_cuentas(integer) from public, anon;
 grant execute on function public.admin_cuentas(integer) to authenticated, service_role;
+
+-- Correo (Gmail) de la cuenta con que se hizo cada pedido: el panel lo muestra en Pedidos. Solo administradores.
+create or replace function public.admin_correos(p_ids uuid[])
+returns table (id uuid, correo text)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not ((select auth.role()) is null or (select auth.role()) = 'service_role' or (select es_admin())) then
+    raise exception 'solo administradores' using errcode = '42501';
+  end if;
+  if coalesce(array_length(p_ids, 1), 0) > 1000 then
+    raise exception 'demasiadas cuentas' using errcode = '22023';
+  end if;
+  return query select u.id, u.email::text from auth.users u where u.id = any(p_ids);
+end;
+$$;
+revoke execute on function public.admin_correos(uuid[]) from public, anon;
+grant execute on function public.admin_correos(uuid[]) to authenticated, service_role;

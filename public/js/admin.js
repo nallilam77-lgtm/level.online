@@ -358,6 +358,18 @@
     fix_and_retry: 'corrige el dato y vuelve a comprar', do_not_retry: 'no la reintentes: cambia el producto o devuelve el pago',
     retry_later: 'reintenta más tarde', contact_support: 'escribe a soporte de Central One con el reference_code',
   };
+  // Correo de la cuenta con que se hizo cada pedido (admin_correos, supabase/tienda.sql): id de usuario → correo
+  const correos = new Map();
+  async function cargarCorreos(lista) {
+    const faltan = [...new Set((lista || []).map((p) => p.usuario).filter((u) => u && !correos.has(u)))];
+    for (let i = 0; i < faltan.length; i += 500) {
+      const { data, error } = await cliente.rpc('admin_correos', { p_ids: faltan.slice(i, i + 500) });
+      if (error) { console.error(error); return; }
+      for (const f of data || []) correos.set(f.id, f.correo);
+    }
+  }
+  const correoDe = (p) => (p.usuario ? correos.get(p.usuario) || 'con cuenta' : 'sin cuenta');
+
   function tarjetaPedido(p, nuevo, abrir) {
     const { li, cuerpo } = filaCompacta({
       clave: 'pedido:' + p.id_pedido, hora: horaCorta(p.creado), titulo: `${JUEGOS[p.juego] || p.juego} · ${p.paquete}`,
@@ -367,7 +379,7 @@
     cuerpo.append(
       el('span', '', `Cuenta: ${p.cuenta}`),
       el('span', '', `${p.precio ? `${bs(p.precio)} Bs` : 'Sin precio'}${p.referencia ? ` · ref. …${p.referencia}` : ''}`),
-      el('span', '', `${fecha(p.creado)}${p.usuario ? ' · con cuenta' : ' · sin cuenta'}`),
+      el('span', '', `${fecha(p.creado)} · ${correoDe(p)}`),
       el('span', '', `Pedido ${p.id_pedido}`),
     );
     if (p.motivo_fallo) {
@@ -382,7 +394,7 @@
     const lista = $('listaPedidos');
     lista.replaceChildren();
     const visibles = pedidos.filter((p) => (!filtro || p.estado === filtro)
-      && (!texto || [p.cuenta, p.paquete, p.referencia, p.id_pedido, JUEGOS[p.juego]].join(' ').toLowerCase().includes(texto)));
+      && (!texto || [p.cuenta, p.paquete, p.referencia, p.id_pedido, JUEGOS[p.juego], correos.get(p.usuario)].join(' ').toLowerCase().includes(texto)));
     $('cuentaPedidos').textContent = `${visibles.length} ${visibles.length === 1 ? 'pedido' : 'pedidos'}`;
     if (!visibles.length) { lista.append(el('li', 'vacio', 'No hay pedidos con ese filtro.')); return; }
     // Buscando con pocos resultados: se abren solos
@@ -403,6 +415,7 @@
         if (desde) q = q.gte('creado', desde.toISOString());
         return q;
       });
+      await cargarCorreos(pedidos);
     } catch (error) {
       console.error(error);
       $('cuentaPedidos').textContent = '';
@@ -425,6 +438,7 @@
         const i = pedidos.findIndex((p) => p.id_pedido === n.id_pedido);
         if (i >= 0) pedidos[i] = Object.assign({}, pedidos[i], n); else pedidos.unshift(n);
         pintarPedidos(n.id_pedido);
+        if (n.usuario && !correos.has(n.usuario)) cargarCorreos([n]).then(() => pintarPedidos(n.id_pedido)).catch(() => {});
         cargarResumen();
         // Pedido nuevo de una tienda manual: la pestaña Manuales (y su contador) se pone al día
         if (MANUALES.has(n.juego)) cargarManuales().catch(() => {});
@@ -605,6 +619,7 @@
       .select('id_pedido,juego,cuenta,paquete,precio,referencia,estado,creado,usuario')
       .eq('usuario', id).order('creado', { ascending: false }).limit(20);
     boton.disabled = false;
+    if (!error) await cargarCorreos(data);
     const sub = el('ul', 'pedidos recargas-cuenta');
     if (error) sub.append(el('li', 'vacio', 'No se pudieron cargar.'));
     else if (!data || !data.length) sub.append(el('li', 'vacio', 'Sin recargas con esta cuenta.'));
@@ -857,6 +872,7 @@
       .select('id_pedido,juego,cuenta,paquete,precio,referencia,estado,creado,usuario')
       .eq('codigo_descuento', codigo).order('creado', { ascending: false }).limit(20);
     b.disabled = false;
+    if (!error) await cargarCorreos(data);
     const sub = el('ul', 'pedidos recargas-cuenta');
     if (error) sub.append(el('li', 'vacio', 'No se pudieron cargar.'));
     else if (!data || !data.length) sub.append(el('li', 'vacio', 'Sus ventas anteriores al 13/11/2026 están en la hoja (movimientos_descuentos).'));
