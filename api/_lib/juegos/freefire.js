@@ -671,6 +671,10 @@ export async function recargar(req, res) {
       await registrarFallo(clavesLimite);
       return res.status(400).json({ status: "error", message: "Paquete inválido o manipulado." });
     }
+    // Pausado en el panel (se ve "Agotado"): no se vende, ni con la página vieja abierta. Antes de tocar el pago.
+    if (paqueteGsheet.pausado) {
+      return res.status(409).json({ status: "error", agotado: true, message: "😕 Ese producto está agotado por ahora. Elige otro o vuelve en un rato." });
+    }
     // Precio de Supabase (_lib/precios.js): precioCobro = el garantizado si Central One cambió el costo hace poco
     const precioLista = paqueteGsheet.precioCobro > 0 ? paqueteGsheet.precioCobro : limpiarMontoVES(paqueteGsheet.precio);
 

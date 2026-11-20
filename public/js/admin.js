@@ -1253,6 +1253,7 @@
     etiquetas.append(el('span', 'etiqueta ' + (p.precio_manual !== null ? 'etiqueta--pendiente' : 'etiqueta--completado'), p.precio_manual !== null ? 'A mano' : 'Automático'));
     if (!p.en_stock) etiquetas.append(el('span', 'etiqueta etiqueta--problema', 'Sin stock'));
     if (!p.activo) etiquetas.append(el('span', 'etiqueta etiqueta--reembolsado', 'Oculto'));
+    if (p.pausado) etiquetas.append(el('span', 'etiqueta etiqueta--problema', '⏸️ Pausado (Agotado)'));
     if (p.stock !== null && p.stock !== undefined) etiquetas.append(el('span', 'etiqueta ' + (p.stock - 2 - (p.apartados || 0) > 0 ? 'etiqueta--en_proceso' : 'etiqueta--problema'), `Quedan ${p.stock}${p.apartados ? ` · ${p.apartados} apartado${p.apartados === 1 ? '' : 's'}` : ''}`));
     cabeza.append(el('strong', '', p.paquete + (p.cantidad > 1 ? ` (×${p.cantidad})` : '')), etiquetas);
     li.append(cabeza);
@@ -1281,6 +1282,13 @@
     acciones.append(subir, bajar,
       boton('Editar', 'btn-ver', () => editarPrecio(p, li)),
       boton(p.activo ? 'Ocultar' : 'Mostrar', 'btn-ver', (b) => guardarPrecio(p, { activo: !p.activo }, b)),
+      // Pausar: se sigue viendo pero dice "Agotado" y no se puede comprar (supabase/pausar.sql). Solo Free Fire lo muestra así.
+      ...($('juegoPrecios').value === 'freefire' || p.pausado ? [boton(p.pausado ? '▶️ Volver a vender' : '⏸️ Pausar (Agotado)', 'btn-ver', async (b) => {
+        b.disabled = true;
+        const { error } = await cliente.rpc('admin_precio_pausar', { p_id: p.id, p_pausado: !p.pausado });
+        if (error) { b.disabled = false; alert(textoError(error, 'No se pudo. Intenta de nuevo.')); return; }
+        cargarPrecios();
+      })] : []),
       boton('Quitar', 'btn-ver btn-ver--peligro', (b) => quitarPrecio(p, b)));
     li.append(acciones);
     return li;

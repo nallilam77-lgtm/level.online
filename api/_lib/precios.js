@@ -139,9 +139,10 @@ export async function conPreciosSupabase(juego, datos) {
   // Lo demás, como siempre: sin stock no sale.
   // Por ahora solo Free Fire (su página sabe mostrar "Quedan X" / "Agotado" y su compra deja el pedido en espera)
   const { quedanDe: quedanFila } = await import('./esperas.js');
-  const quedanDe = (f) => (juego === 'freefire' ? quedanFila(f) : null);
+  // Pausado en el panel (supabase/pausar.sql): en Free Fire se ve "Agotado" aunque haya stock; en los demás no sale
+  const quedanDe = (f) => (juego !== 'freefire' ? null : f.pausado ? 0 : quedanFila(f));
   const catalogo = filas
-    .filter((f) => f.activo && Number(f.precio) > 0 && (f.en_stock || quedanDe(f) !== null))
+    .filter((f) => f.activo && Number(f.precio) > 0 && (juego === 'freefire' || !f.pausado) && (f.en_stock || quedanDe(f) !== null))
     .map((f) => ({
       ...(deLaHoja.get(String(f.paquete).trim()) || {}),
       diamantes: f.paquete,
@@ -152,6 +153,7 @@ export async function conPreciosSupabase(juego, datos) {
       producto: f.producto ? (f.cantidad > 1 ? `${f.cantidad}x${f.producto}` : f.producto) : '',
       ...(f.seccion && { seccion: f.seccion }),
       ...(quedanDe(f) !== null && { limitado: true, quedan: quedanDe(f), ...(quedanDe(f) <= 0 && { agotado: true }) }),
+      ...(f.pausado && { pausado: true }),
     }));
   // Supabase sin paquetes de este juego: mejor la hoja que una tienda vacía
   if (!catalogo.length) {
