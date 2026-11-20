@@ -1057,6 +1057,98 @@
     const vistos = (data.paquetes || []).map((p) => p.visto).filter(Boolean).sort();
     $('estadoCatalogo').textContent = vistos.length ? `Costos de Central One leídos ${hace(vistos[vistos.length - 1])}.` : '';
     pintarPrecios();
+    pintarSecciones(data.secciones || []);
+    pintarEsperas(data.esperas || []);
+  }
+
+  // Secciones del juego con su % (vacío = el general). admin_seccion_guardar de supabase/secciones.sql
+  function pintarSecciones(secciones) {
+    $('tarjetaSecciones').hidden = !secciones.length;
+    const lista = $('listaSecciones');
+    lista.replaceChildren();
+    const general = preciosDatos && preciosDatos.ganancia !== null ? Number(preciosDatos.ganancia) : null;
+    secciones.forEach((s) => {
+      const li = el('li', 'pedido');
+      const form = el('form', 'formulario');
+      form.noValidate = true;
+      const inTitulo = el('input'); inTitulo.type = 'text'; inTitulo.maxLength = 40; inTitulo.value = s.titulo;
+      const inPct = el('input'); inPct.type = 'number'; inPct.inputMode = 'decimal'; inPct.min = '0'; inPct.max = '300'; inPct.step = '0.1';
+      inPct.value = s.ganancia !== null ? String(Number(s.ganancia)) : '';
+      inPct.placeholder = general !== null ? `Vacío = general (${general} %)` : 'Vacío = general';
+      const etiqueta = (texto, input) => { const l = el('label', 'campo', texto); l.append(input); return l; };
+      const filas = el('div', 'dos-campos');
+      filas.append(etiqueta('Nombre en la tienda', inTitulo), etiqueta('Ganancia de esta sección (%)', inPct));
+      const msg = el('p', 'mensaje-form'); msg.setAttribute('role', 'status');
+      const guardarB = el('button', 'btn btn--chico', 'Guardar'); guardarB.type = 'submit';
+      const usados = ((preciosDatos && preciosDatos.paquetes) || []).filter((p) => p.seccion === s.clave).length;
+      form.append(el('strong', '', `${s.titulo} · ${usados} paquete${usados === 1 ? '' : 's'} · ganancia ${s.ganancia !== null ? `${Number(s.ganancia)} %` : `general (${general ?? '—'} %)`}`), filas, guardarB, msg);
+      form.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const pct = inPct.value.trim();
+        if (pct !== '' && !(Number(pct) >= 0 && Number(pct) <= 300)) { msg.textContent = 'El % va de 0 a 300 (o vacío para usar el general).'; return; }
+        guardarB.disabled = true;
+        const { error } = await cliente.rpc('admin_seccion_guardar', { p_juego: $('juegoPrecios').value, p_clave: s.clave, p_titulo: inTitulo.value.trim(), p_ganancia: pct === '' ? null : Number(pct) });
+        guardarB.disabled = false;
+        if (error) { msg.textContent = textoError(error, 'No se pudo guardar.'); return; }
+        cargarPrecios();
+      });
+      li.append(form);
+      lista.append(li);
+    });
+  }
+
+  // Pedidos que esperan stock: devolver el dinero (se anota) o cambiarlos por otro paquete (Vercel lo entrega)
+  const ESTADO_ESPERA = { esperando: ['Esperando stock', 'etiqueta--en_proceso'], entregando: ['Entregando…', 'etiqueta--en_proceso'], entregado: ['Entregado solo', 'etiqueta--completado'],
+    vencido: ['24 h sin stock', 'etiqueta--problema'], reembolsado: ['Dinero devuelto', 'etiqueta--reembolsado'], cambiado: ['Cambiado', 'etiqueta--completado'] };
+  function pintarEsperas(esperas) {
+    $('tarjetaEsperas').hidden = !esperas.length;
+    const pendientes = esperas.filter((e) => ['esperando', 'entregando', 'vencido'].includes(e.estado)).length;
+    $('contadorEsperas').textContent = pendientes || '';
+    $('contadorEsperas').hidden = !pendientes;
+    const lista = $('listaEsperas');
+    lista.replaceChildren();
+    esperas.forEach((e) => {
+      const [texto, clase] = ESTADO_ESPERA[e.estado] || [e.estado, ''];
+      const { li, cuerpo } = filaCompacta({ clave: 'espera:' + e.id_pedido, hora: horaCorta(e.creado), titulo: `${e.paquete} → ID ${e.id_jugador}`,
+        monto: e.monto ? `${bs(e.monto)} Bs` : '', etiqueta: texto, claseEtiqueta: clase, abrir: e.estado === 'vencido' });
+      cuerpo.append(el('span', '', `Pedido ${e.id_pedido} · ref. ${e.referencias || '—'} · pagó ${fecha(e.creado)} · vence ${fecha(e.vence)}`));
+      if (e.nota) cuerpo.append(el('span', 'precio-detalle', e.nota));
+      if (['esperando', 'vencido'].includes(e.estado)) {
+        const acciones = el('div', 'acciones-cuenta');
+        const sel = el('select');
+        sel.setAttribute('aria-label', 'Paquete para cambiar');
+        ((preciosDatos && preciosDatos.paquetes) || []).filter((p) => p.activo && p.producto && p.seccion !== 'evo').forEach((p) => {
+          const o = el('option', '', `${p.paquete}${p.precio ? ` (${bs(p.precio)} Bs)` : ''}`); o.value = p.paquete; sel.append(o);
+        });
+        acciones.append(
+          boton('💸 Ya devolví el dinero', 'btn-ver', async (b) => {
+            if (!confirm(`¿Ya le devolviste ${e.monto ? bs(e.monto) + ' Bs' : 'el dinero'} por Pago Móvil al cliente del pedido ${e.id_pedido}?`)) return;
+            b.disabled = true;
+            const { error } = await cliente.rpc('admin_espera_reembolsar', { p_id: e.id_pedido, p_nota: null });
+            if (error) { b.disabled = false; alert(textoError(error, 'No se pudo anotar.')); return; }
+            cargarPrecios();
+          }),
+          sel,
+          boton('🔁 Cambiar por este', 'btn-ver', async (b) => {
+            if (!sel.value || !confirm(`¿Entregar ${sel.value} al ID ${e.id_jugador} en lugar de ${e.paquete}?`)) return;
+            b.disabled = true;
+            b.textContent = 'Entregando…';
+            try {
+              const { data: s } = await cliente.auth.getSession();
+              const res = await fetch('/api/juego?accion=espera_cambiar', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ((s && s.session && s.session.access_token) || '') },
+                body: JSON.stringify({ idPedido: e.id_pedido, paquete: sel.value }),
+              });
+              const r = await res.json();
+              alert(r.message || (r.status === 'success' ? 'Listo.' : 'No se pudo.'));
+            } catch (err) { alert('Sin conexión. Intenta de nuevo.'); }
+            cargarPrecios();
+          }),
+        );
+        cuerpo.append(acciones);
+      }
+      lista.append(li);
+    });
   }
 
   function pintarPrecios() {
@@ -1090,8 +1182,11 @@
     etiquetas.append(el('span', 'etiqueta ' + (p.precio_manual !== null ? 'etiqueta--pendiente' : 'etiqueta--completado'), p.precio_manual !== null ? 'A mano' : 'Automático'));
     if (!p.en_stock) etiquetas.append(el('span', 'etiqueta etiqueta--problema', 'Sin stock'));
     if (!p.activo) etiquetas.append(el('span', 'etiqueta etiqueta--reembolsado', 'Oculto'));
+    if (p.stock !== null && p.stock !== undefined) etiquetas.append(el('span', 'etiqueta ' + (p.stock - 2 - (p.apartados || 0) > 0 ? 'etiqueta--en_proceso' : 'etiqueta--problema'), `Quedan ${p.stock}${p.apartados ? ` · ${p.apartados} apartado${p.apartados === 1 ? '' : 's'}` : ''}`));
     cabeza.append(el('strong', '', p.paquete + (p.cantidad > 1 ? ` (×${p.cantidad})` : '')), etiquetas);
     li.append(cabeza);
+    const sec = ((d.secciones || []).find((s) => s.clave === p.seccion));
+    if (sec) li.append(el('span', 'precio-detalle', `Sección: ${sec.titulo} · ganancia ${p.ganancia !== null ? `${Number(p.ganancia)} %` : '—'}${sec.ganancia === null ? ' (la general)' : ''}`));
     li.append(el('span', 'precio-final', p.precio !== null ? `${bs(p.precio)} Bs` : 'Sin precio (falta dólar, ganancia o costo)'));
     if (p.costo_usd !== null && d.tasa) {
       const costoBs = Number(p.costo_usd) * p.cantidad * Number(d.tasa);
@@ -1126,7 +1221,7 @@
     const { error } = await cliente.rpc('admin_precio_guardar', {
       p_id: p.id, p_juego: $('juegoPrecios').value, p_paquete: v.paquete, p_producto: p.producto || '',
       p_cantidad: Number(v.cantidad), p_precio_manual: v.precio_manual === null || v.precio_manual === '' ? null : Number(v.precio_manual),
-      p_activo: v.activo, p_orden: null,
+      p_activo: v.activo, p_orden: null, p_seccion: v.seccion || null,
     });
     if (error) { if (b) b.disabled = false; return textoError(error, 'No se pudo guardar. Intenta de nuevo.'); }
     cargarPrecios();
@@ -1153,6 +1248,10 @@
     filas.append(campo('Nombre que ve el cliente', inNombre), campo(p.producto ? 'Precio a mano (Bs) · vacío = automático' : 'Precio (Bs)', inPrecio));
     form.append(filas);
     if (p.producto) form.append(campo('Cantidad (cuántos de ese producto se compran)', inCantidad));
+    const secciones = (preciosDatos && preciosDatos.secciones) || [];
+    const inSeccion = el('select');
+    secciones.forEach((s) => { const o = el('option', '', s.titulo); o.value = s.clave; if (s.clave === p.seccion) o.selected = true; inSeccion.append(o); });
+    if (secciones.length) form.append(campo('Sección de la tienda (y su % de ganancia)', inSeccion));
     form.append(campo('Fichas del minijuego que da (vacío = según el precio · 0 = no da)', inFichas));
     form.append(guardar, mensaje);
     form.addEventListener('submit', async (ev) => {
@@ -1167,7 +1266,7 @@
         const { error: e } = await cliente.rpc('admin_precio_fichas', { p_id: p.id, p_fichas: nuevasFichas });
         if (e) { guardar.disabled = false; mensaje.textContent = textoError(e, 'No se pudieron guardar las fichas.'); return; }
       }
-      const fallo = await guardarPrecio(p, { paquete: inNombre.value.trim(), precio_manual: precio === '' ? null : precio, cantidad: inCantidad.value });
+      const fallo = await guardarPrecio(p, { paquete: inNombre.value.trim(), precio_manual: precio === '' ? null : precio, cantidad: inCantidad.value, seccion: secciones.length ? inSeccion.value : null });
       guardar.disabled = false;
       if (fallo) mensaje.textContent = fallo;
     });

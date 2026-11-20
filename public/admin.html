@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=59" defer></script>
+  <script src="/js/admin.js?v=60" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -313,6 +313,20 @@
           </div>
           <p class="nota" id="notaPrecios">Valen para los 4 juegos: todo paquete <strong>sin precio a mano</strong> cuesta <strong>costo de Central One × dólar × (1 + ganancia)</strong>. El dólar es el mismo de Creadores.</p>
           <p class="aviso-precios"><strong>La tienda cobra con estos precios</strong> (Free Fire, Blood Strike, Mobile Legends y Roblox). Lo oculto o sin stock en Central One no sale en la tienda.</p>
+        </div>
+
+        <!-- Pedidos pagados que esperan stock (tokens Evo; supabase/secciones.sql, api/_lib/esperas.js) -->
+        <div class="tarjeta" id="tarjetaEsperas" hidden>
+          <h2>Pedidos esperando stock <span class="contador-pestana" id="contadorEsperas"></span></h2>
+          <p class="nota">Pagaron, pero el producto se agotó en Central One. Se entregan <strong>solos</strong> apenas vuelve el stock (se revisa cada minuto). Si pasan 24 horas, quedan <strong>vencidos</strong>: devuelve el dinero por Pago Móvil y márcalo, o cámbialo por diamantes.</p>
+          <ul class="pedidos" id="listaEsperas"></ul>
+        </div>
+
+        <!-- Secciones del juego con su % de ganancia (precios_secciones) -->
+        <div class="tarjeta" id="tarjetaSecciones" hidden>
+          <h2>Secciones y su ganancia</h2>
+          <p class="nota">Cada sección de la tienda puede tener su propio % de ganancia. Vacío = la ganancia general. Solo cambia los paquetes <strong>sin precio a mano</strong>.</p>
+          <ul class="pedidos" id="listaSecciones"></ul>
         </div>
 
         <div class="tarjeta">

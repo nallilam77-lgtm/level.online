@@ -32,6 +32,8 @@ export default async function handler(req, res) {
     if (req.query.accion === 'revision_rehacer') return (await import('./_lib/revision.js')).rehacerRevision(req, res);
     // Arena de Duelo de Acero (_lib/arena.js; aquí y no en un archivo propio: el plan de Vercel admite 12 funciones)
     if (Object.hasOwn(ACCIONES_ARENA, req.query.accion)) return (await import('./_lib/arena.js'))[ACCIONES_ARENA[req.query.accion]](req, res);
+    // Panel → Precios: un pedido que espera stock se cambia por otro paquete (solo administrador; _lib/esperas.js)
+    if (req.query.accion === 'espera_cambiar') return (await import('./_lib/esperas.js')).cambiarEspera(req, res);
     const juego = await cargarJuego(req.query.juego);
     if (!juego) {
       return res.status(400).json({ status: "error", message: "Juego no válido." });

@@ -7,11 +7,13 @@
 //   Free Fire "ff-<idPedido>" (paquete partido en N pedidos: "-1", "-2"…), Mobile Legends "ml-<idPedido>",
 //   Blood Strike "<idPedido>". Repetir con el MISMO idPedido nunca cobra dos veces en Central One
 //   (devuelve el mismo pedido); para volver a intentar algo rechazado hay que usar otro idPedido.
+// soloEstado: la fila de "recargas" ya existe (pedido en espera, _lib/esperas.js): solo se le cambia el estado al
+// entregarse (un fallo no la toca: sigue "en proceso" esperando). catalogoFresco: el stock leído hace menos de 1 min.
 // idFila: id_pedido de la fila en "recargas" (por defecto idPedido). Un reintento usa "<idFila>-r<N>" como
 // idPedido: el webhook le quita el "-r<N>" y actualiza la misma fila.
 // Devuelve { estado: 'entregado' | 'en_proceso' | 'rechazo' | 'incierto' | 'no_disponible', motivo, ordenes }.
 // =========================================================================
-import { rpc, guardar } from './supabase.js';
+import { rpc, guardar, actualizar } from './supabase.js';
 import { datosParaPedido, crearPedidoCentralOne } from './centralone.js';
 
 const PRODUCTO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -34,7 +36,7 @@ export async function paqueteDe(juego, paquete) {
   };
 }
 
-export async function entregarPaquete({ juego, paquete, idJugador, zona = '', idPedido, idFila = idPedido, nota, tiempoMs = 16000 }) {
+export async function entregarPaquete({ juego, paquete, idJugador, zona = '', idPedido, idFila = idPedido, nota, tiempoMs = 16000, soloEstado = false, catalogoFresco = false }) {
   const datosJuego = JUEGOS_ENTREGA[juego];
   const apiKey = String(datosJuego?.llave() || '').trim();
   if (!datosJuego || !apiKey) return { estado: 'no_disponible', motivo: `Falta la llave de Central One de ${juego}` };
@@ -43,7 +45,7 @@ export async function entregarPaquete({ juego, paquete, idJugador, zona = '', id
   let datos;
   try {
     paq = await paqueteDe(juego, paquete);
-    datos = paq ? await datosParaPedido({ apiKey, productId: paq.productos[0], idJugador, zona: datosJuego.zona ? zona : '' })
+    datos = paq ? await datosParaPedido({ apiKey, productId: paq.productos[0], idJugador, zona: datosJuego.zona ? zona : '', frescoMs: catalogoFresco ? 60_000 : undefined })
       : { error: `"${paquete}" no tiene producto de Central One en Precios de ${datosJuego.nombre}` };
   } catch (error) {
     datos = { error: error.message };
@@ -62,10 +64,12 @@ export async function entregarPaquete({ juego, paquete, idJugador, zona = '', id
     if (r.tipo === 'ok') ordenes.push(r.orden); else falla = r;
   }
 
-  const fila = (estado, texto) => guardar('recargas', {
+  const fila = (estado, texto) => (soloEstado
+    ? (estado === 'en_revision' ? Promise.resolve() : actualizar('recargas', `id_pedido=eq.${encodeURIComponent(idFila)}`, { estado, nota_admin: texto.slice(0, 500), actualizado: new Date().toISOString() }))
+    : guardar('recargas', {
     id_pedido: idFila, usuario: null, juego, cuenta: `ID ${idJugador}${zona ? ` (${zona})` : ''}`, id_jugador: idJugador,
     zona: zona || null, paquete, precio: null, referencia: null, estado, nota_admin: texto.slice(0, 500), actualizado: new Date().toISOString(),
-  }, 'id_pedido').catch((error) => console.error(`⚠️ entrega: no se pudo guardar la recarga ${idPedido}:`, error.message));
+  }, 'id_pedido')).catch((error) => console.error(`⚠️ entrega: no se pudo guardar la recarga ${idPedido}:`, error.message));
 
   if (falla && !ordenes.length && falla.tipo === 'rechazo') {
     await fila('en_revision', `🏆 ${nota}: Central One la rechazó (${falla.motivo})`);

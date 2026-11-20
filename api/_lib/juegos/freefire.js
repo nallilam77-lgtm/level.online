@@ -16,6 +16,7 @@ import { datosParaPedido, crearPedidoCentralOne } from '../centralone.js';
 import { supabaseActivo, rpc, leer } from '../supabase.js';
 import { iniciosVE } from '../semana.js';
 import { pedidoDeEntrega } from '../historial.js';
+import { apartar, usarApartado, guardarEspera } from '../esperas.js';
 
 // Tiempos (maxDuration de api/recargar.js = 180 s en vercel.json). verificar_pago va a Supabase (rápido),
 // así que sus 32 s son holgura. Peor caso con fallo del bot:
@@ -180,6 +181,8 @@ const catalogoDestacado = async () => conDestacados('freefire', await catalogoFr
 export const acciones = {
   precios, verificar, estadisticas, descuento: crearAccionDescuento('Free Fire', catalogoDestacado),
   fidelidad: crearAccionFidelidad('freefire', catalogoDestacado),
+  // Tokens Evo y demás productos de stock contado: apartar una unidad 10 min antes de pagar (_lib/esperas.js)
+  apartar: (req, res) => apartar(req, res, 'freefire'),
 };
 
 // =========================================================================
@@ -269,13 +272,14 @@ const llaveFreeFire = () => (process.env.freefire_nuevo || "").trim();
  *               o pide un dato que la tienda no pregunta). En modo API el pedido va a "sin_codigo".
  * En los modos manual y bot el resultado no se usa (solo cuesta leer el catálogo, en caché 15 min).
  */
-async function prepararCentralOne({ apiKey, producto, id, paquete }) {
+async function prepararCentralOne({ apiKey, producto, id, paquete, limitado = false }) {
   if (!apiKey) return { motivo: 'falta la variable freefire_nuevo en Vercel' };
   const productos = productosDe(producto);
   if (!productos.length) return { motivo: `el paquete "${paquete}" no tiene product_id de Central One en la fila 3 de "precios" (usar 🔄 Traer productos de Central One)` };
   try {
-    const datos = await datosParaPedido({ apiKey, productId: productos[0], idJugador: String(id) });
-    return datos.error ? { motivo: datos.error } : { productos, payload: datos.payload };
+    // Stock contado (tokens Evo): el catálogo de hace menos de 1 min, no el de 15
+    const datos = await datosParaPedido({ apiKey, productId: productos[0], idJugador: String(id), frescoMs: limitado ? 60_000 : undefined });
+    return datos.error ? { motivo: datos.error, sinStock: /no tiene stock/i.test(datos.error) } : { productos, payload: datos.payload };
   } catch (error) {
     return { motivo: `no se pudo preparar el pedido de Central One: ${error.message}` };
   }
@@ -319,7 +323,7 @@ async function productoDelCatalogo(urlScript, clave) {
  */
 async function entregarRecarga(res, {
   URL_GOOGLE_SCRIPT, RAILWAY_SECRET, CENTRALONE_API_KEY, producto, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
-  comprobante, telefono, referencias, scriptV2, cierreIdempotente, opcionesCriticas,
+  comprobante, telefono, referencias, scriptV2, cierreIdempotente, opcionesCriticas, limitado = false,
   utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
 }) {
   // Texto para la hoja y los informes: "ref1" o "ref1 + ref2" (pago completado)
@@ -340,11 +344,24 @@ async function entregarRecarga(res, {
   // Modo API: qué se pediría a Central One. Se comprueba ANTES de obtener_codigo (catálogo, stock y
   // datos que pide el producto): si no se puede, en modo API el pedido va a "sin_codigo" con el motivo,
   // en vez de bloquear el pago por un pedido que Central One iba a rechazar. No se ha gastado nada.
-  const [api, directo] = await Promise.all([prepararCentralOne({ apiKey: CENTRALONE_API_KEY, producto, id, paquete }), centralOneDirecto()]);
+  const [api, directo] = await Promise.all([prepararCentralOne({ apiKey: CENTRALONE_API_KEY, producto, id, paquete, limitado }), centralOneDirecto()]);
+
+  // Stock contado (tokens Evo) agotado con el pago ya verificado: el pedido NO va a revisión, queda esperando
+  // stock y se entrega solo cuando Central One repone (_lib/esperas.js). El pago queda "Usado" (es de este pedido).
+  const dejarEnEspera = async (motivo) => {
+    if (!limitado || !(await guardarEspera({ idPedido, juego: 'freefire', paquete: String(paquete), idJugador: id, referencias: referenciaCompleta, monto: precioReal }))) return null;
+    await marcarPagos();
+    console.warn(`⏳ [${FASES.apiFreeFire}] ${paquete} sin stock (${motivo}): el pedido ${idPedido} queda esperando stock | REF: ${referenciaCompleta}`);
+    return res.status(202).json({
+      status: "error", espera: true,
+      message: "Tu pago está verificado ✅, pero este producto se agotó justo ahora en el proveedor. Tu pedido quedó en espera: te lo enviamos solo apenas haya stock (normalmente en pocas horas, máximo 24). No tienes que hacer nada.",
+    });
+  };
 
   // Central One DIRECTO (interruptor del panel, desde 2026-11-15): la hoja no se toca hasta el cierre
   // (sin candado ni "ocupado"). Si el paquete no se puede pedir, a revisión sin llamar a la API.
   if (directo && !api.productos?.length) {
+    if (api.sinStock) { const enEspera = await dejarEnEspera(api.motivo); if (enEspera) return enEspera; }
     console.error(`❌ [${FASES.apiFreeFire}] no se puede pedir a Central One: ${api.motivo} | REF: ${referenciaCompleta}`);
     await bloquear({
       fase: FASES.apiFreeFire, noAplica: true,
@@ -453,6 +470,11 @@ async function entregarRecarga(res, {
         : resultado;
     }
 
+    // Central One lo rechazó por falta de stock sin haber creado nada: a la espera (producto limitado)
+    if (orden && !ordenes.length && orden.tipo === 'rechazo' && ['insufficient_stock', 'out_of_stock'].includes(orden.codigo)) {
+      const enEspera = await dejarEnEspera(orden.motivo);
+      if (enEspera) return enEspera;
+    }
     if (orden) {
       console.error(`❌ [${FASES.apiFreeFire}] ${orden.motivo} | REF: ${referenciaCompleta}`);
       // Registrar el incidente y LUEGO bloquear el pago (en orden, dentro de bloquearPago)
@@ -750,9 +772,11 @@ export async function recargar(req, res) {
       });
     }
 
+    // El apartado de esta pestaña ya no cuenta (la compra siguió con el pago verificado)
+    usarApartado(req.body?.claveApartado);
     return await entregarRecarga(res, {
       URL_GOOGLE_SCRIPT, RAILWAY_SECRET, CENTRALONE_API_KEY, producto: paqueteGsheet.producto, idPedido, id, paquete, numeroDiamantes, precioReal, desc,
-      comprobante, telefono, referencias: [referenciaCompleta], scriptV2, cierreIdempotente, opcionesCriticas,
+      comprobante, telefono, referencias: [referenciaCompleta], scriptV2, cierreIdempotente, opcionesCriticas, limitado: !!paqueteGsheet.limitado,
       utilidades: { marcarReferencia, registrarEnHoja, informe, bloquearPago, cerrarEnSegundoPlano },
     });
   } catch (error) {

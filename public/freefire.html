@@ -220,6 +220,13 @@
     .diamonds-count { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 22px; color: #ffffff; line-height: 1.1; display: flex; align-items: center; justify-content: center; gap: 4px; }
     .diamonds-count--texto { font-size: 16px; text-align: center; }
     .diamonds-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin: 2px 0 10px; }
+    /* Stock contado (tokens Evo): "Quedan X" y "Agotado" (api/_lib/esperas.js) */
+    .quedan { display: inline-block; margin: -4px 0 8px; font-size: 11px; font-weight: 800; color: var(--game-text); }
+    .quedan.pocos { color: var(--warning); }
+    .product-card.agotado { opacity: 0.5; cursor: not-allowed; filter: grayscale(0.7); }
+    .product-card.agotado .quedan { color: var(--danger); }
+    .apartado-aviso { margin: 12px 0 0; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(var(--game-accent-rgb), 0.45); background: rgba(var(--game-accent-rgb), 0.08); font-size: 13px; font-weight: 700; line-height: 1.45; }
+    .apartado-aviso.vencido { border-color: var(--danger); background: transparent; color: var(--danger); }
     .price-box { display: inline-block; background: rgba(var(--game-accent-rgb), 0.08); border-radius: 50px; padding: 5px 10px; border: 1px solid rgba(var(--game-accent-rgb), 0.25); }
     .price-text { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 14px; color: var(--game-text); letter-spacing: 0.5px; white-space: nowrap; }
 
@@ -848,6 +855,8 @@
           </div>
         </div>
       </div>
+      <!-- Tokens Evo (stock contado): la unidad queda apartada 10 min mientras paga (api/_lib/esperas.js) -->
+      <p class="apartado-aviso" id="avisoApartado" role="status" hidden></p>
       <button type="button" id="btnCopiarDatos" class="btn-copy" onclick="copiarDatosBanco()">📋 Copiar todos los datos</button>
 
       <div class="file-upload-box">
@@ -1027,6 +1036,7 @@
         }
 
         catalogoSinDescuento = data.catalogo;
+        seccionesTienda = Array.isArray(data.secciones) ? data.secciones : [];
         // Si el cliente ya aplicó un código antes de que cargara el catálogo, se mantiene
         if (!descuento.codigo()) renderizarCatalogo(Fidelidad.catalogo() || catalogoSinDescuento);
 
@@ -1058,6 +1068,9 @@
 
     // Dibuja el catálogo. Con descuento, cada paquete trae "precioOriginal" (tachado) y "precio"
     // ya descontado por el servidor. Si había un paquete elegido, se vuelve a elegir con el precio nuevo.
+    // Secciones (precios_secciones de Supabase: diamantes, pases, evo…); sin ellas, las dos de siempre por el nombre
+    let seccionesTienda = [];
+    const seccionDe = (p) => p.seccion || (esTarjeta(p.diamantes) ? 'pases' : 'diamantes');
     function renderizarCatalogo(lista) {
       const container = document.getElementById('catalogContainer');
       // Diamantes de menor a mayor y las tarjetas al final
@@ -1066,11 +1079,16 @@
       const elegido = paqueteSeleccionado ? String(paqueteSeleccionado.diamantes) : null;
 
       container.innerHTML = '';
-      // Dos grupos que se abren y cierran tocándolos; las tarjetas quedan en el mismo orden que catalogoGlobal
-      const grupos = GRUPOS_CATALOGO.map((g) => ({ ...g, lista: paquetes.filter((p) => esTarjeta(p.diamantes) === g.tarjetas) }))
-        .filter((g) => g.lista.length);
-      grupos.forEach((g) => {
-        const desde = g.lista.reduce((min, p) => (window.formatearMontoVES(p.precio) < window.formatearMontoVES(min.precio) ? p : min));
+      // Grupos que se abren y cierran tocándolos (uno por sección); las tarjetas quedan en el mismo orden que catalogoGlobal
+      const definidas = seccionesTienda.length ? seccionesTienda.map((s) => ({ clave: s.clave, titulo: s.titulo })) : GRUPOS_CATALOGO;
+      const conocidas = new Set(definidas.map((g) => g.clave));
+      const grupos = definidas.map((g) => ({ ...g, icono: (GRUPOS_CATALOGO.find((x) => x.clave === g.clave) || {}).icono || ICONO_EVO_GRUPO,
+        lista: paquetes.filter((p) => seccionDe(p) === g.clave) }));
+      const sueltos = paquetes.filter((p) => !conocidas.has(seccionDe(p)));
+      if (sueltos.length) grupos.push({ clave: 'otros', titulo: 'Otros', icono: GRUPOS_CATALOGO[1].icono, lista: sueltos });
+      grupos.filter((g) => g.lista.length).forEach((g) => {
+        const disponibles = g.lista.filter((p) => !p.agotado);
+        const desde = (disponibles.length ? disponibles : g.lista).reduce((min, p) => (window.formatearMontoVES(p.precio) < window.formatearMontoVES(min.precio) ? p : min));
         const grupo = document.createElement('section');
         grupo.className = 'grupo-paquetes';
         grupo.dataset.grupo = g.clave;
@@ -1088,6 +1106,8 @@
       });
     }
 
+    const ICONO_EVO_GRUPO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="url(#ffFuego)"/></svg>';
+    const ICONO_EVO = '<svg class="juego-icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="url(#ffFuego)"/></svg>';
     const GRUPOS_CATALOGO = [
       { clave: 'diamantes', tarjetas: false, titulo: 'Diamantes directos', icono: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10l5 6-10 12L2 9z" fill="url(#ffFuego)"/><path d="M2 9h20M7 3l5 18 5-18M7 3l5 6 5-6" fill="none" style="stroke: var(--ff-noche)" stroke-width="1" opacity=".45"/></svg>' },
       { clave: 'pases', tarjetas: true, titulo: 'Pases y membresías', icono: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5z" fill="url(#ffFuego)"/><path d="M12 8.2l1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4z" style="fill: var(--ff-noche)" opacity=".7"/></svg>' },
@@ -1108,7 +1128,7 @@
         const card = document.createElement('div');
         const esUltimoImpar = (paquetes.length % 2 !== 0) && (index === paquetes.length - 1);
         let delayClass = `delay-${Math.min((index % 3) + 1, 3)}`;
-        card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar || item.spanFull ? 'full-width' : ''} ${item.etiqueta ? 'has-badge' : ''}`;
+        card.className = `product-card anim-slide-up ${delayClass} ${esUltimoImpar || item.spanFull ? 'full-width' : ''} ${item.etiqueta ? 'has-badge' : ''} ${item.agotado ? 'agotado' : ''}`;
         card.dataset.paquete = String(item.diamantes);   // js/fichas-tienda.js: fichas de este paquete
         // Accesible con teclado y lectores de pantalla
         card.setAttribute('role', 'button');
@@ -1116,10 +1136,14 @@
         const cantidad = String(item.diamantes).replace(/diamantes/gi, '').trim();
         const precioTachado = item.precioOriginal !== undefined ? `<div class="price-original">${item.precioOriginal} Bs</div>` : '';
         // "etiqueta" es opcional en el catálogo (ej: "🔥 Más popular"); si no viene, no se muestra badge
-        const titulo = esTarjeta(item.diamantes)
+        const titulo = item.seccion === 'evo'
+          ? `${ICONO_EVO}<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="diamonds-label">Token Evo</div>`
+          : esTarjeta(item.diamantes)
           ? `${imagenProducto(item.diamantes)}<div class="diamonds-count diamonds-count--texto">${String(item.diamantes).trim()}</div><div class="diamonds-label">${etiquetaTarjeta(item.diamantes)}</div>`
           : `${ICONO_PAQUETE}<div class="diamonds-count">${cantidad}</div><div class="diamonds-label">Diamantes</div>`;
-        card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}${titulo}${precioTachado}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
+        const stock = item.limitado ? `<div class="quedan${!item.agotado && item.quedan <= 5 ? ' pocos' : ''}">${item.agotado ? 'Agotado' : `Quedan ${item.quedan}`}</div>` : '';
+        card.innerHTML = `${item.etiqueta ? `<div class="product-badge">${item.etiqueta}</div>` : ''}${titulo}${stock}${precioTachado}<div class="price-box"><div class="price-text">${item.precio} Bs</div></div>`;
+        if (item.agotado) card.setAttribute('aria-disabled', 'true');
         // Si la imagen no carga (archivo borrado o renombrado), se quita y la tarjeta queda solo con texto
         card.querySelector('.producto-imagen')?.addEventListener('error', (e) => e.target.remove());
         card.addEventListener('click', () => seleccionarProducto(card, item));
@@ -1151,7 +1175,20 @@
         if (paquete) marcarPaquete(paquete); else mostrarBurbuja('Ese paquete ya no está disponible: elige otro.', 'var(--warning)');
       } });
 
+    // Ventana de "recarga en proceso": con texto propio para un pedido que espera stock (tokens Evo)
+    const TEXTOS_EN_PROCESO = {};
+    function textosEnProceso(mensajeEspera) {
+      const m = document.getElementById('modalEnProceso');
+      const partes = { titulo: m.querySelector('.modal-titulo'), texto: m.querySelector('.modal-texto'), nota: m.querySelector('.modal-nota') };
+      if (!TEXTOS_EN_PROCESO.titulo) for (const [k, e] of Object.entries(partes)) TEXTOS_EN_PROCESO[k] = e.innerHTML;
+      if (!mensajeEspera) { for (const [k, e] of Object.entries(partes)) e.innerHTML = TEXTOS_EN_PROCESO[k]; return; }
+      partes.titulo.textContent = '¡PAGO VERIFICADO!';
+      partes.texto.textContent = mensajeEspera;
+      partes.nota.textContent = '📦 Tu pedido está guardado: lo verás en "Mis recargas" y en tu perfil. Si en 24 horas no hay stock, te escribimos para devolverte el dinero o cambiarlo por diamantes.';
+    }
+
     function seleccionarProducto(cardElement, paquete) {
+      if (paquete.agotado) { mostrarBurbuja('😕 Agotado por ahora. Central One repone seguido: vuelve en un rato.', 'var(--warning)'); return; }
       document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
       cardElement.classList.add('selected'); paqueteSeleccionado = paquete;
       // Si lo eligió el chat o el último pedido, su grupo se abre para que se vea
@@ -1159,6 +1196,67 @@
       if (grupo && !grupo.classList.contains('abierto')) abrirGrupo(grupo, true);
       document.getElementById('montoPagar').innerText = `${paquete.precio} Bs`;
       verificarEstadoDesbloqueo();
+      if (paquete.limitado) apartarPaquete(paquete); else ocultarApartado();
+    }
+
+    // =========================================================================
+    // APARTADO (tokens Evo y demás productos de stock contado): una unidad queda para este cliente 10 min
+    // mientras paga. Si no quedan, no se deja pagar. La clave es de esta pestaña y va con la compra.
+    // =========================================================================
+    const CLAVE_APARTADO = (() => {
+      try {
+        let c = sessionStorage.getItem('levelup_apartado');
+        if (!c) { c = Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(16).padStart(2, '0')).join(''); sessionStorage.setItem('levelup_apartado', c); }
+        return c;
+      } catch (e) { return Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(16).padStart(2, '0')).join(''); }
+    })();
+    let relojApartado = null;
+    function ocultarApartado() {
+      clearInterval(relojApartado);
+      const a = document.getElementById('avisoApartado');
+      a.hidden = true; a.classList.remove('vencido');
+    }
+    async function apartarPaquete(paquete) {
+      clearInterval(relojApartado);
+      const aviso = document.getElementById('avisoApartado');
+      aviso.classList.remove('vencido');
+      aviso.hidden = false;
+      aviso.textContent = '⏳ Apartando tu producto…';
+      let r;
+      try {
+        r = await (await fetch('/api/juego?juego=freefire&accion=apartar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paquete: String(paquete.diamantes), clave: CLAVE_APARTADO }),
+        })).json();
+      } catch (e) { aviso.hidden = true; return; }
+      if (paqueteSeleccionado !== paquete) return;   // ya eligió otro
+      if (r.status === 'success' && r.limitado && r.hasta) {
+        const fin = Date.parse(r.hasta);
+        const pintar = () => {
+          const s = Math.max(0, Math.round((fin - Date.now()) / 1000));
+          if (s <= 0) {
+            clearInterval(relojApartado);
+            aviso.classList.add('vencido');
+            aviso.textContent = '⌛ Se venció tu apartado. Toca el producto otra vez para apartarlo antes de pagar.';
+            return;
+          }
+          aviso.textContent = `🔒 Lo apartamos para ti: paga antes de ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} min. Después de pagar, escribe tu referencia y listo.`;
+        };
+        pintar();
+        relojApartado = setInterval(pintar, 1000);
+      } else if (r.status === 'success') {
+        aviso.hidden = true;
+      } else {
+        aviso.classList.add('vencido');
+        aviso.textContent = r.message || 'No se pudo apartar. Intenta de nuevo.';
+        if (r.agotado) {
+          paquete.agotado = true;
+          paqueteSeleccionado = null;
+          document.querySelectorAll('.product-card.selected').forEach((c) => c.classList.remove('selected'));
+          verificarEstadoDesbloqueo();
+          mostrarBurbuja('😕 Se agotó justo ahora. Elige otro o vuelve en un rato.', 'var(--warning)');
+          cargarCatalogoCliente();
+        }
+      }
     }
 
     let checkoutYaMostrado = false;
@@ -1587,15 +1685,19 @@
                 // Premio de cliente fiel que vio el cliente (firmado por el servidor; manda Firestore)
                 premioFidelidad: Fidelidad.firma(),
                 // WhatsApp opcional ("+58…" o ""): va a la hoja con el pedido
-                telefono: window.WhatsappCliente?.valor() || ''
+                telefono: window.WhatsappCliente?.valor() || '',
+                // Tokens Evo: el apartado de esta pestaña (api/_lib/esperas.js)
+                claveApartado: CLAVE_APARTADO
             })
           });
           
           const resultado = await respuestaServidor.json();
           
           if (resultado.status !== "success") {
-             if(resultado.message && resultado.message.toLowerCase().includes("fallo técnico")) {
+             if(resultado.espera || (resultado.message && resultado.message.toLowerCase().includes("fallo técnico"))) {
                 document.getElementById('pantallaProcesando').style.display = 'none';
+                textosEnProceso(resultado.espera ? resultado.message : null);
+                ocultarApartado();
                 document.getElementById('codigoTxnProceso').textContent = globalTxnCode;
                 MisRecargas.guardar({ paquete: nombreDelPaquete, cuenta: cuentaCliente, idJugador: playerId, precio: datosComplemento ? (PagoPendiente.leer()?.precio || '') : (paqueteSeleccionado ? paqueteSeleccionado.precio : ''), referencia: referenciaUsuario, txn: globalTxnCode, repetible: !datosComplemento, estado: 'en_revision' });
                 document.getElementById('modalEnProceso').style.display = 'flex';

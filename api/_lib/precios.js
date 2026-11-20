@@ -13,7 +13,7 @@
 //      (Central One pide no leer el catálogo en cada visita: 15 min por juego y por instancia).
 import { waitUntil } from '@vercel/functions';
 import { pedirJSON, conCache } from './externo.js';
-import { supabaseActivo, guardar, actualizar, rpc, esAdminToken } from './supabase.js';
+import { supabaseActivo, guardar, actualizar, rpc, leer, esAdminToken } from './supabase.js';
 import { tokenDe } from './historial.js';
 import { formatearVES } from './recarga-comun.js';
 
@@ -43,7 +43,7 @@ const DEL_JUEGO = {
 const corto = (t, max) => String(t ?? '').slice(0, max);
 
 /** Lee el catálogo de Central One del juego y lo guarda en centralone_catalogo. { total, conStock } */
-async function actualizarCatalogo(juego) {
+export async function actualizarCatalogo(juego) {
   const llave = String(LLAVES[juego]?.() || '').trim();
   if (!llave) throw new Error('falta la llave de Central One de este juego en Vercel');
   const datos = await pedirJSON(URL_CATALOGO, {
@@ -135,8 +135,13 @@ export async function conPreciosSupabase(juego, datos) {
   renovarSiHaceFalta(juego, filas);
   // Lo que la hoja trae de cada paquete (otros campos que la tienda pueda usar), por nombre
   const deLaHoja = new Map((Array.isArray(datos?.catalogo) ? datos.catalogo : []).map((p) => [String(p.diamantes ?? '').trim(), p]));
+  // Stock contado (tokens Evo; _lib/esperas.js): se muestran aunque se agoten ("Agotado") y con "Quedan X".
+  // Lo demás, como siempre: sin stock no sale.
+  // Por ahora solo Free Fire (su página sabe mostrar "Quedan X" / "Agotado" y su compra deja el pedido en espera)
+  const { quedanDe: quedanFila } = await import('./esperas.js');
+  const quedanDe = (f) => (juego === 'freefire' ? quedanFila(f) : null);
   const catalogo = filas
-    .filter((f) => f.activo && Number(f.precio) > 0 && f.en_stock)
+    .filter((f) => f.activo && Number(f.precio) > 0 && (f.en_stock || quedanDe(f) !== null))
     .map((f) => ({
       ...(deLaHoja.get(String(f.paquete).trim()) || {}),
       diamantes: f.paquete,
@@ -145,13 +150,28 @@ export async function conPreciosSupabase(juego, datos) {
       precioCobro: Number(f.precio_cobro) > 0 ? Number(f.precio_cobro) : Number(f.precio),
       // "2x<id>" = dos pedidos de ese producto (como la fila 3 de la hoja de Free Fire)
       producto: f.producto ? (f.cantidad > 1 ? `${f.cantidad}x${f.producto}` : f.producto) : '',
+      ...(f.seccion && { seccion: f.seccion }),
+      ...(quedanDe(f) !== null && { limitado: true, quedan: quedanDe(f), ...(quedanDe(f) <= 0 && { agotado: true }) }),
     }));
   // Supabase sin paquetes de este juego: mejor la hoja que una tienda vacía
   if (!catalogo.length) {
     console.error(`⚠️ precios: Supabase no tiene paquetes a la venta de ${juego}; se usan los de la hoja`);
     return datos;
   }
-  return { ...datos, catalogo, origenPrecios: 'supabase' };
+  return { ...datos, catalogo, secciones: await seccionesDe(juego), origenPrecios: 'supabase' };
+}
+
+// Secciones del juego en orden (título; el % de ganancia no sale de aquí). 5 min en memoria.
+async function seccionesDe(juego) {
+  try {
+    const { datos } = await conCache(`secciones:${juego}`, async () => {
+      const filas = await leer('precios_secciones', { juego }, 'clave,titulo,orden');
+      return (Array.isArray(filas) ? filas : []).sort((a, b) => a.orden - b.orden).map(({ clave, titulo }) => ({ clave, titulo }));
+    }, { frescoMs: 5 * 60_000, respaldoMs: 60 * 60_000, esValido: Array.isArray });
+    return datos;
+  } catch (error) {
+    return [];
+  }
 }
 
 // =========================================================================

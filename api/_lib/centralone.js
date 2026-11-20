@@ -15,10 +15,11 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 // Catálogo con el precio de revendedor. Central One pide no consultarlo en cada compra (60 lecturas
 // por minuto por llave): copia de 15 min por instancia, y la copia anterior si la API no responde.
 // La copia es por llave (Blood Strike y Roblox usan llaves distintas).
-export async function catalogo(apiKey) {
-  const { datos } = await conCache(`catalogo:centralone:${String(apiKey).slice(-8)}`,
+// frescoMs: los productos de stock contado (tokens Evo) lo piden de 1 minuto (copia aparte, para no tirar la de 15).
+export async function catalogo(apiKey, frescoMs = 15 * 60_000) {
+  const { datos } = await conCache(`catalogo:centralone:${String(apiKey).slice(-8)}${frescoMs < 15 * 60_000 ? ':fresco' : ''}`,
     () => pedirJSON(`${URL_API}/catalog`, { metodo: 'GET', cabeceras: cabeceras(apiKey), tiempoMs: 8000, reintentos: 1, reintentarTrasTimeout: true }),
-    { frescoMs: 15 * 60_000, esValido: (d) => Array.isArray(d?.items) });
+    { frescoMs, esValido: (d) => Array.isArray(d?.items) });
   return datos.items;
 }
 
@@ -33,10 +34,10 @@ export async function catalogo(apiKey) {
  * zona: solo los juegos que piden dos datos (Mobile Legends: ID + Zona ID). Va en el campo cuyo nombre
  * habla de zona/servidor (CAMPO_ZONA) y el ID en el otro.
  */
-export async function datosParaPedido({ apiKey, productId, idJugador, zona = '' }) {
+export async function datosParaPedido({ apiKey, productId, idJugador, zona = '', frescoMs }) {
   let items;
   try {
-    items = await catalogo(apiKey);
+    items = await catalogo(apiKey, frescoMs);
   } catch (error) {
     console.error(`⚠️ Central One: no se pudo leer el catálogo (${error.message}). Se envía solo player_id${zona ? ' y zone_id' : ''}.`);
     return { payload: zona ? { player_id: idJugador, zone_id: zona } : { player_id: idJugador } };

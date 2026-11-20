@@ -87,7 +87,14 @@ function anotarMotivo(aviso, idPedidoCO, idDelPerfil) {
       if (intento) await new Promise((r) => setTimeout(r, 6000));
       const filas = await actualizar('recargas', `id_pedido=eq.${encodeURIComponent(idDelPerfil)}`,
         { motivo_fallo: f.codigo, motivo_accion: f.accion }, 'id_pedido');
-      if (Array.isArray(filas) && filas.length) { console.info(`🧾 Central One: el pedido ${idDelPerfil} falló por ${f.codigo} (${f.accion || 'sin acción'})`); return; }
+      if (Array.isArray(filas) && filas.length) {
+        console.info(`🧾 Central One: el pedido ${idDelPerfil} falló por ${f.codigo} (${f.accion || 'sin acción'})`);
+        // Token Evo (stock contado) agotado después de aceptado: espera stock y se entrega solo (_lib/esperas.js)
+        if (['out_of_stock', 'insufficient_stock'].includes(f.codigo) && /^ff-/.test(String(idPedidoCO))) {
+          await (await import('./_lib/esperas.js')).esperarSiLimitado(idDelPerfil);
+        }
+        return;
+      }
     }
   })().catch((error) => console.error('⚠️ centralone-webhook: no se pudo anotar el motivo del fallo:', error.message)));
 }

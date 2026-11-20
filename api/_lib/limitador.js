@@ -24,7 +24,8 @@ const MAX_CLAVES_EN_MEMORIA = 10000;
 // Holgados: una compra normal sube 1-3 comprobantes y una conversación usa 10-20 mensajes.
 // "subida": comprobantes a Drive · "chat": mensajes a Gemini · "consulta": consultar órdenes por ID.
 // "fidelidad": consultas del premio de cliente fiel · "estado": seguimiento de pedidos manuales (cada 30 s).
-const MAX_FALLOS = { ip: 15, jugador: 8, descuento: 10, panel: 8, panelcodigo: 20, subida: 30, chat: 60, consulta: 30, fidelidad: 60, estado: 150, canje: 8, reto: 40 };
+// "apartar": apartados de productos con stock contado (tokens Evo; _lib/esperas.js).
+const MAX_FALLOS = { ip: 15, jugador: 8, descuento: 10, panel: 8, panelcodigo: 20, subida: 30, chat: 60, consulta: 30, fidelidad: 60, estado: 150, canje: 8, reto: 40, apartar: 40 };
 
 let avisoSinSupabase = false;
 function usarSupabase() {

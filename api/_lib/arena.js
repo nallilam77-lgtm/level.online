@@ -284,7 +284,10 @@ export async function tic(req, res) {
     console.error('⚠️ arena/tic (fichas):', error.message);
   }
   const entregas = await hacerEntregas(limite);
-  return res.status(200).json({ status: 'success', avisos, entregas });
+  // Tienda: stock de los productos limitados (tokens Evo) y pedidos que esperan stock (_lib/esperas.js)
+  const { revisarEsperas } = await import('./esperas.js');
+  const esperas = await revisarEsperas(limite);
+  return res.status(200).json({ status: 'success', avisos, entregas, esperas: esperas.entregadas });
 }
 
 // Premios y devoluciones pendientes, mientras quede tiempo. Cada paquete con su idPedido fijo:

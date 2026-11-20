@@ -109,6 +109,8 @@ function estadoDeRespuesta(juego, cuerpo) {
   // Central One aceptó el pedido pero no confirmó la entrega: "en proceso" hasta el webhook (que lo pasa a
   // "completado"; recién ahí el disparador de Supabase da las fichas del minijuego)
   if (cuerpo?.status === 'success' && cuerpo.entrega === 'en_camino') return 'en_proceso';
+  // Pago verificado y producto agotado: espera stock y se entrega solo (_lib/esperas.js)
+  if (cuerpo?.espera) return 'en_proceso';
   if (cuerpo?.status === 'success') return MANUALES.has(juego) ? 'pendiente' : 'completado';
   return 'en_revision';
 }
