@@ -8,14 +8,16 @@
 // los ataques de un objetivo a ir contra el Guerrero.
 //
 // Ataques de todas las clases:
-//   Ataque rápido (h 'r'): poco daño, NADIE lo puede esquivar (ni con Evasión).
+//   Ataque rápido (h 'r'): poco daño y casi nunca se esquiva (máximo 15 %; Evasión no lo detiene).
 //   Golpe fuerte (h 'f'): mucho daño, pero se puede esquivar según la esquiva del rival y la precisión propia.
 // Las habilidades de daño también se pueden esquivar, con la mitad de probabilidad que un golpe fuerte.
 // El daño de todo ataque depende de la flecha (p: 0 = lejos del centro, 1 = justo en el centro), que el
-// jugador detiene en su pantalla; los bots la "detienen" al azar.
+// jugador detiene en su pantalla; los bots la "detienen" al azar. En el centro ("¡Perfecto!") además suma
+// +25 % de probabilidad de crítico.
 //
 // Atributos fijos por clase (no se pueden cambiar): vida, velocidad (orden de turno), fuerza (multiplica el
-// ataque rápido y el golpe fuerte), defensa (resta daño), esquiva y precisión (resta esquiva al rival).
+// ataque rápido y el golpe fuerte), defensa (resta daño), esquiva, precisión (resta esquiva al rival) y
+// crítico (probabilidad de hacer el doble en cualquier golpe). Cada clase tiene además una pasiva (siempre activa).
 // Los efectos se cuentan en los turnos del que los tiene (o del que los puso): bajan al EMPEZAR su turno.
 // =========================================================================
 
@@ -24,14 +26,17 @@ const FUERTE = 27;                   // daño base del golpe fuerte (× fuerza)
 const ESQUIVA_FUERTE = 0.25;         // esquiva base de un golpe fuerte (+ esquiva del rival − precisión propia)
 const VENENO = { turnos: 3, dano: 8 };
 const CONTRAGOLPE = 15;
+const CRITICO_PERFECTO = 0.25;       // crítico extra si la flecha quedó en el centro
+const AURA = 4;                      // pasiva del Clérigo: curación al empezar su turno
 export const RONDAS_MAX = 40;        // por si nadie cae: gana quien conserve más vida
 
 // obj: 'enemigo' = uno alcanzable · 'cualquiera' = cualquier enemigo (ignora filas) · 'aliado' = tú o tu
 // compañero · 'todos' = sin elegir · 'yo' = sin elegir. dano: usa la flecha.
 export const CLASES = {
   guerrero: {
-    nombre: 'Guerrero', arma: 'Espada y escudo', vida: 135, vel: 3, fuerza: 1, defensa: 0.15, esquiva: 0.08, precision: 0,
+    nombre: 'Guerrero', arma: 'Espada y escudo', vida: 142, vel: 3, fuerza: 1.05, defensa: 0.15, esquiva: 0.08, precision: 0, critico: 0.08,
     alcance: 'enemigo', resumen: 'Aguanta mucho y protege a su compañero. Su armadura le quita daño a todo.',
+    pasiva: { n: 'Último aliento', d: 'Una vez por combate, un golpe que lo mataría lo deja con 1 de vida.' },
     hab: [
       { k: 'escudo', n: 'Golpe de escudo', cd: 3, obj: 'enemigo', dano: true, d: '12 de daño y lo aturde: pierde su próximo turno.' },
       { k: 'provocar', n: 'Provocar', cd: 4, obj: 'yo', d: 'Por 2 rondas los enemigos solo te pueden atacar a ti (estés donde estés).' },
@@ -39,7 +44,8 @@ export const CLASES = {
     ],
   },
   barbaro: {
-    nombre: 'Bárbaro', arma: 'Hacha', vida: 135, vel: 2, fuerza: 1.4, defensa: 0.08, esquiva: 0.03, precision: -0.05,
+    nombre: 'Bárbaro', arma: 'Hacha', vida: 135, vel: 2, fuerza: 1.4, defensa: 0.08, esquiva: 0.03, precision: -0.05, critico: 0.15,
+    pasiva: { n: 'Sed de sangre', d: 'Mientras menos vida le queda, más pega: hasta +40 % de daño.' },
     alcance: 'enemigo', resumen: 'El que más pega, pero es lento y sus golpes se ven venir: son fáciles de esquivar.',
     hab: [
       { k: 'tajo', n: 'Tajo giratorio', cd: 3, obj: 'todos', dano: true, d: '15 de daño a todos los enemigos, sin importar la fila.' },
@@ -48,7 +54,8 @@ export const CLASES = {
     ],
   },
   lancero: {
-    nombre: 'Lancero', arma: 'Lanza', vida: 115, vel: 4, fuerza: 1.08, defensa: 0.1, esquiva: 0.12, precision: 0.15,
+    nombre: 'Lancero', arma: 'Lanza', vida: 115, vel: 4, fuerza: 1.08, defensa: 0.1, esquiva: 0.15, precision: 0.15, critico: 0.1,
+    pasiva: { n: 'Primera sangre', d: 'Su primer golpe que acierta en el combate es crítico seguro.' },
     alcance: 'cualquiera', resumen: 'Su lanza llega a la fila de atrás y es precisa. Desordena al rival.',
     hab: [
       { k: 'estocada', n: 'Estocada', cd: 2, obj: 'todos', dano: true, d: 'Atraviesa: 22 al enemigo de adelante y 14 al de atrás.' },
@@ -57,7 +64,8 @@ export const CLASES = {
     ],
   },
   asesino: {
-    nombre: 'Asesino', arma: 'Dagas', vida: 90, vel: 5, fuerza: 0.7, defensa: 0, esquiva: 0.35, precision: 0.3, critico: 0.2,
+    nombre: 'Asesino', arma: 'Dagas', vida: 86, vel: 5, fuerza: 0.7, defensa: 0, esquiva: 0.35, precision: 0.3, critico: 0.2,
+    pasiva: { n: 'Remate', d: '+30 % de daño a enemigos envenenados, aturdidos o en la fila de atrás.' },
     alcance: 'enemigo', resumen: 'Esquiva casi todo y sus golpes casi no se pueden esquivar, pero pega suave y aguanta poco.',
     hab: [
       { k: 'veneno', n: 'Veneno', cd: 3, obj: 'enemigo', dano: true, d: '6 de daño y 8 más al inicio de sus 3 próximos turnos.' },
@@ -66,7 +74,8 @@ export const CLASES = {
     ],
   },
   clerigo: {
-    nombre: 'Clérigo', arma: 'Maza y libro', vida: 112, vel: 3, fuerza: 0.85, defensa: 0.12, esquiva: 0.1, precision: 0.05,
+    nombre: 'Clérigo', arma: 'Maza y libro', vida: 112, vel: 3, fuerza: 0.85, defensa: 0.12, esquiva: 0.1, precision: 0.05, critico: 0.05,
+    pasiva: { n: 'Aura de luz', d: `Al empezar su turno, él y su compañero recuperan ${AURA} de vida.` },
     alcance: 'enemigo', resumen: 'Cura a su equipo y castiga con luz. Pega poco con la maza.',
     hab: [
       { k: 'curar', n: 'Curar', cd: 2, obj: 'aliado', d: 'Cura 34 de vida a ti o a tu compañero.' },
@@ -88,12 +97,12 @@ export function infoClases() {
   const info = {};
   for (const [k, c] of Object.entries(CLASES)) {
     const llega = c.alcance === 'cualquiera' ? ' Llega a la fila de atrás.' : '';
-    const crit = c.critico ? ` ${pct(c.critico)} % de crítico (el doble).` : '';
     info[k] = {
       nombre: c.nombre, arma: c.arma, vida: c.vida, vel: c.vel, resumen: c.resumen,
-      attr: { fuerza: pct(c.fuerza), defensa: pct(c.defensa), esquiva: pct(c.esquiva), precision: pct(c.precision) },
-      rapido: { n: 'Ataque rápido', obj: c.alcance, dano: true, d: `${Math.round(RAPIDO * c.fuerza)} de daño. Nadie lo puede esquivar.${llega}` },
-      fuerte: { n: 'Golpe fuerte', obj: c.alcance, dano: true, d: `${Math.round(FUERTE * c.fuerza)} de daño, pero el rival lo puede esquivar.${crit}${llega}` },
+      attr: { fuerza: pct(c.fuerza), defensa: pct(c.defensa), esquiva: pct(c.esquiva), precision: pct(c.precision), critico: pct(c.critico) },
+      pasiva: c.pasiva,
+      rapido: { n: 'Ataque rápido', obj: c.alcance, dano: true, d: `${Math.round(RAPIDO * c.fuerza)} de daño. Casi nunca se esquiva.${llega}` },
+      fuerte: { n: 'Golpe fuerte', obj: c.alcance, dano: true, d: `${Math.round(FUERTE * c.fuerza)} de daño, pero el rival lo puede esquivar.${llega}` },
       hab: c.hab.map(({ n, cd, obj, d, dano }) => ({ n, cd, obj, d, dano: !!dano })),
     };
   }
@@ -112,6 +121,7 @@ export class Combate {
         e: x.e ?? (i < 2 ? 0 : 1), f: x.f ?? i % 2, v: c.vida, m: c.vida, vel: c.vel,
         cd: [0, 0, 0], at: false, pr: 0, mu: -1, fu: 0, ve: null, ev: false, gu: false,
         dano: 0, cura: 0, bajas: 0, desempate: azar(),
+        aliento: k === 'guerrero', primera: k === 'lancero',   // pasivas de un solo uso
       };
     });
     this.ronda = 0;
@@ -168,6 +178,9 @@ export class Combate {
           continue;
         }
       }
+      if (x.k === 'clerigo') {
+        for (const y of this.vivos(x.e)) if (y.v < y.m) this.curar(x, y, AURA, ev, 'aura');
+      }
       if (x.at) {
         x.at = false;
         ev.push({ t: 'aturdido', o: x.i });
@@ -213,18 +226,21 @@ export class Combate {
 
   // Probabilidad de que `o` esquive un ataque de `a` (tipo: 'rapido' | 'fuerte' | 'hab')
   probEsquiva(a, o, tipo) {
-    if (tipo === 'rapido') return 0;
     const ca = CLASES[a.k], co = CLASES[o.k];
+    if (tipo === 'rapido') return entre(0.03 + co.esquiva * 0.3 - ca.precision * 0.2, 0, 0.15);
     if (tipo === 'fuerte') return entre(ESQUIVA_FUERTE + co.esquiva - ca.precision, 0.05, 0.8);
     return entre((co.esquiva - ca.precision) / 2, 0, 0.4);
   }
 
   // Golpe de `a` a `o`. cuerpo: activa la Guardia del que recibe. mult: multiplicador de la flecha.
+  // critico: probabilidad (por defecto la de la clase; 0 = nunca). perfecto: la flecha quedó en el centro.
   // Devuelve el daño hecho (0 si lo esquivó).
-  golpear(a, o, base, ev, { cuerpo = true, critico = 0, tipo = 'hab', mult = 1 } = {}) {
+  golpear(a, o, base, ev, { cuerpo = true, critico, tipo = 'hab', mult = 1, perfecto = false } = {}) {
     if (o.v <= 0) return 0;
-    if (tipo !== 'rapido' && (o.ev || this.azar() < this.probEsquiva(a, o, tipo))) {
-      o.ev = false;
+    // Evasión (o.ev) asegura esquivar golpes fuertes y habilidades, pero no el ataque rápido
+    const usaEvasion = tipo !== 'rapido' && o.ev;
+    if (usaEvasion || this.azar() < this.probEsquiva(a, o, tipo)) {
+      if (usaEvasion) o.ev = false;
       ev.push({ t: 'esquiva', o: o.i, a: a.i });
       return 0;
     }
@@ -233,29 +249,39 @@ export class Combate {
     if (o.fu > 0) mult *= 1.2;
     if (o.mu >= 0) mult *= 0.5;
     mult *= 1 - CLASES[o.k].defensa;
-    const crit = critico > 0 && this.azar() < critico;
+    // Pasivas que suben el daño
+    if (a.k === 'barbaro') mult *= 1 + 0.4 * (1 - a.v / a.m);
+    if (a.k === 'asesino' && (o.ve || o.at || o.f === 1)) mult *= 1.3;
+    let pc = critico ?? CLASES[a.k].critico;
+    if (pc > 0 && perfecto) pc += CRITICO_PERFECTO;
+    let crit = pc > 0 && this.azar() < pc;
+    if (a.primera && critico !== 0) { a.primera = false; crit = true; }
     if (crit) mult *= 2;
-    const d = Math.min(o.v, Math.max(1, Math.round(base * mult)));
+    let d = Math.min(o.v, Math.max(1, Math.round(base * mult)));
+    let aliento = false;
+    if (d >= o.v && o.aliento && o.v > 1) { o.aliento = false; d = o.v - 1; aliento = true; }
     o.v -= d;
     if (a.e !== o.e) a.dano += d;
     ev.push({ t: 'dano', o: o.i, a: a.i, d, crit: crit || undefined });
+    if (aliento) ev.push({ t: 'pasiva', o: o.i, k: 'aliento' });
     if (o.v <= 0) {
       if (a.e !== o.e) a.bajas++;
       this.morir(o, ev);
     } else if (cuerpo && o.gu && a.v > 0) {
       o.gu = false;
       ev.push({ t: 'contra', o: a.i, a: o.i });
-      this.golpear(o, a, CONTRAGOLPE, ev, { cuerpo: false, tipo: 'rapido' });
+      this.golpear(o, a, CONTRAGOLPE, ev, { cuerpo: false, tipo: 'rapido', critico: 0 });
     }
     return d;
   }
 
-  curar(a, o, cant, ev) {
+  curar(a, o, cant, ev, por) {
     if (o.v <= 0) return;
     const d = Math.min(cant, o.m - o.v);
+    if (d <= 0) return;
     o.v += d;
     a.cura += d;
-    ev.push({ t: 'cura', o: o.i, a: a.i, d });
+    ev.push({ t: 'cura', o: o.i, a: a.i, d, por });
   }
 
   // Acción del que tiene el turno. h: 'r' | 'f' (ataques), 0-2 (habilidad) o 'cambiar'. o: luchador objetivo.
@@ -278,12 +304,13 @@ export class Combate {
     const mult = usaFlecha ? multFlecha(p) : 1;
     const ev = [{ t: 'accion', a: x.i, h, o: blanco ? blanco.i : undefined, p: usaFlecha ? Math.round(p * 100) / 100 : undefined }];
     const enemigos = () => this.vivos(1 - x.e);
-    const dano = (y, base) => this.golpear(x, y, base, ev, { mult });
+    const perfecto = usaFlecha && p >= 0.95;
+    const dano = (y, base) => this.golpear(x, y, base, ev, { mult, perfecto });
 
     if (h === 'r') {
-      this.golpear(x, blanco, RAPIDO * c.fuerza, ev, { tipo: 'rapido', mult, critico: c.critico || 0 });
+      this.golpear(x, blanco, RAPIDO * c.fuerza, ev, { tipo: 'rapido', mult, perfecto });
     } else if (h === 'f') {
-      this.golpear(x, blanco, FUERTE * c.fuerza, ev, { tipo: 'fuerte', mult, critico: c.critico || 0 });
+      this.golpear(x, blanco, FUERTE * c.fuerza, ev, { tipo: 'fuerte', mult, perfecto });
     } else if (h === 'cambiar') {
       const aliado = this.l.find((y) => y.e === x.e && y.i !== x.i);
       const f = x.f;
@@ -445,7 +472,7 @@ export class Combate {
       l: this.l.map((x) => ({
         n: x.n, k: x.k, j: x.jid, e: x.e, f: x.f, v: x.v, m: x.m, cd: x.cd,
         at: x.at || undefined, pr: x.pr || undefined, mu: x.mu >= 0 || undefined, fu: x.fu || undefined,
-        ve: x.ve ? x.ve.t : undefined, ev: x.ev || undefined, gu: x.gu || undefined,
+        ve: x.ve ? x.ve.t : undefined, ev: x.ev || undefined, gu: x.gu || undefined, al: x.aliento || undefined,
         dano: x.dano, cura: x.cura, bajas: x.bajas,
       })),
       op: this.turno >= 0 ? this.opciones().map(({ h, o }) => ({ h, o })) : [],

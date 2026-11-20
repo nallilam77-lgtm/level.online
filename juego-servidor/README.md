@@ -23,28 +23,29 @@ que lo permiten). En 2 vs 2 cualquiera puede gastar su turno en cambiar de fila 
 tienen enfriamiento.
 
 Todas las clases tienen dos ataques:
-- **Ataque rápido**: poco daño, nadie lo puede esquivar (ni con Evasión).
+- **Ataque rápido**: poco daño y casi nunca se esquiva: 3 % + 30 % de la esquiva del rival − 20 % de la precisión propia (máximo 15 %; hoy ~7 % de media). Evasión no lo detiene.
 - **Golpe fuerte**: mucho daño, pero se puede esquivar: 25 % + esquiva del rival − precisión del que ataca (entre 5 y 80 %).
   Las habilidades de daño se esquivan con la mitad de esa probabilidad (sin el 25 % base).
 
 **Flecha de precisión**: en todo ataque sale una barra con una flecha que va y viene (más rápida en el golpe fuerte).
 Mientras más cerca del centro la detengas, más daño: de ×0,4 en el borde a ×1,35; justo en el centro, ×1,5
-("¡Perfecto!"). Los bots la detienen al azar. La precisión la manda la página (p de 0 a 1); el servidor la limita a ese rango.
+("¡Perfecto!"), que además suma +25 % de probabilidad de crítico. Los bots la detienen al azar. La precisión la manda la página (p de 0 a 1); el servidor la limita a ese rango.
 
 **Atributos fijos** (no se pueden cambiar): fuerza multiplica el ataque rápido y el golpe fuerte; defensa resta daño;
-esquiva y precisión deciden los golpes esquivados.
+esquiva y precisión deciden los golpes esquivados; crítico es la probabilidad de hacer el doble en cualquier golpe
+(no en el veneno ni en el contragolpe). Cada clase tiene una **pasiva** siempre activa.
 
-| Clase | Vida / Vel. | Fuerza / Defensa / Esquiva / Precisión | Habilidades |
-|---|---|---|---|
-| Guerrero (espada y escudo) | 135 / 3 | 100 % / 15 % / 8 % / 0 | Golpe de escudo (aturde), Provocar, Muro |
-| Bárbaro (hacha) | 135 / 2 | 140 % / 8 % / 3 % / −5 | Tajo giratorio (a todos), Furia, Ejecutar |
-| Lancero (lanza, sus ataques llegan atrás) | 115 / 4 | 108 % / 10 % / 12 % / +15 | Estocada (atraviesa), Empujón (cambia las filas rivales), Guardia |
-| Asesino (dagas, 20 % de crítico) | 90 / 5 | 70 % / 0 % / 35 % / +30 | Veneno, Sombra (ignora filas), Evasión |
-| Clérigo (maza y libro) | 112 / 3 | 85 % / 12 % / 10 % / +5 | Curar (34 a ti o a tu compañero), Plegaria (cura 18 a los dos y quita veneno/aturdido), Juicio (ignora filas) |
+| Clase | Vida / Vel. | Fuerza / Defensa / Esquiva / Precisión / Crítico | Pasiva | Habilidades |
+|---|---|---|---|---|
+| Guerrero (espada y escudo) | 142 / 3 | 105 % / 15 % / 8 % / 0 / 8 % | Último aliento: una vez por combate queda con 1 de vida en vez de caer | Golpe de escudo (aturde), Provocar, Muro |
+| Bárbaro (hacha) | 135 / 2 | 140 % / 8 % / 3 % / −5 / 15 % | Sed de sangre: hasta +40 % de daño mientras menos vida tenga | Tajo giratorio (a todos), Furia, Ejecutar |
+| Lancero (lanza, sus ataques llegan atrás) | 115 / 4 | 108 % / 10 % / 15 % / +15 / 10 % | Primera sangre: su primer golpe que acierta es crítico seguro | Estocada (atraviesa), Empujón (cambia las filas rivales), Guardia |
+| Asesino (dagas) | 86 / 5 | 70 % / 0 % / 35 % / +30 / 20 % | Remate: +30 % a envenenados, aturdidos o de la fila de atrás | Veneno, Sombra (ignora filas), Evasión |
+| Clérigo (maza y libro) | 112 / 3 | 85 % / 12 % / 10 % / +5 / 5 % | Aura de luz: al empezar su turno, él y su compañero recuperan 4 | Curar (34 a ti o a tu compañero), Plegaria (cura 18 a los dos y quita veneno/aturdido), Juicio (ignora filas) |
 
 Para cambiar números o habilidades: `src/combate.js` (la página toma los textos de ahí). Después correr
 `node prueba/combate.mjs`: simula 5000 partidas de bots en 2 vs 2 y otras 5000 en 1 vs 1 y muestra el % de
-victorias de cada clase (hoy entre 41 y 55 %).
+victorias de cada clase (hoy entre 44 y 56 %), el % de rápidos esquivados y de críticos.
 
 Una sala se borra si se queda 2 minutos sin nadie conectado; su enlace deja de servir y hay que crear otra.
 

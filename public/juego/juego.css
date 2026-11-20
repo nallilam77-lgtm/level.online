@@ -230,6 +230,9 @@ button.puesto:hover, button.puesto:focus-visible { box-shadow: var(--shadow-lg),
 .clase-cabeza em { font-style: normal; color: var(--accent-cyan); font-weight: 800; }
 .clase ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 12px; line-height: 1.45; color: var(--text-muted); }
 .clase li b { color: var(--text-main); }
+.clase li.pasiva b { color: var(--warning); }
+.detalle--pasiva { font-size: 12px; padding-top: 8px; border-top: 1px solid var(--border-glass); }
+.detalle--pasiva b { color: var(--warning); }
 
 .modo { gap: 12px; }
 .modo-botones { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

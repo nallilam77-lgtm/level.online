@@ -403,7 +403,7 @@
       // Atributos fijos de la clase (no se pueden cambiar)
       const attr = el('dl', 'atributos');
       const signo = (n) => (n > 0 ? '+' + n : n < 0 ? '−' + -n : '0');
-      for (const [t, v] of [['Vida', c.vida], ['Velocidad', c.vel], ['Fuerza', c.attr.fuerza + ' %'], ['Defensa', c.attr.defensa + ' %'], ['Esquiva', c.attr.esquiva + ' %'], ['Precisión', signo(c.attr.precision)]]) {
+      for (const [t, v] of [['Vida', c.vida], ['Velocidad', c.vel], ['Fuerza', c.attr.fuerza + ' %'], ['Defensa', c.attr.defensa + ' %'], ['Esquiva', c.attr.esquiva + ' %'], ['Precisión', signo(c.attr.precision)], ['Crítico', c.attr.critico + ' %']]) {
         const d = el('div');
         d.append(el('dt', '', t), el('dd', '', String(v)));
         attr.append(d);
@@ -411,7 +411,9 @@
       cabeza.append(attr);
       const lista = el('ul');
       const item = (h) => { const li = el('li'); li.append(el('b', '', h.n), h.cd ? ` (cada ${h.cd + 1} turnos): ` : ': ', h.d); return li; };
-      lista.append(item(c.rapido), item(c.fuerte), ...c.hab.map(item));
+      const pasiva = el('li', 'pasiva');
+      pasiva.append(el('b', '', `Pasiva · ${c.pasiva.n}: `), c.pasiva.d);
+      lista.append(pasiva, item(c.rapido), item(c.fuerte), ...c.hab.map(item));
       b.append(lienzo, cabeza, lista);
       b.addEventListener('click', () => { sonido.tocar('clic'); mandar({ t: 'clase', k }); });
       caja.append(b);
@@ -730,6 +732,8 @@
     const ops = turno ? est.c.op : [];
     caja.replaceChildren();
     const acciones = est.c.l.length > 2 ? ['r', 'f', 0, 1, 2, 'cambiar'] : ['r', 'f', 0, 1, 2];
+    const pasiva = clases[x.k].pasiva;
+    $('pasivaAccion').replaceChildren(el('b', '', `Pasiva · ${pasiva.n}: `), pasiva.d, x.k === 'guerrero' && !x.al && x.v > 0 ? ' (ya la usó)' : '');
     for (const h of acciones) {
       const b = el('button', 'btn-accion' + (h === 'cambiar' ? ' btn-accion--ancho' : '') + (elegida && elegida.h === h ? ' elegida' : ''));
       b.type = 'button';
@@ -743,7 +747,7 @@
         const espera = x.cd[h];
         b.append(el('small', '', espera > 0 ? `Lista en ${espera} ${espera === 1 ? 'turno' : 'turnos'}` : 'Lista'));
       } else if (h === 'r' || h === 'f') {
-        b.append(el('small', '', `${infoDe(x.k, h).d.split('.')[0]}${h === 'r' ? ' · no se esquiva' : ' · se esquiva'}`));
+        b.append(el('small', '', `${infoDe(x.k, h).d.split('.')[0]}${h === 'r' ? ' · casi no se esquiva' : ' · se esquiva'}`));
       }
       b.addEventListener('click', () => elegir(h));
       caja.append(b);
@@ -925,6 +929,10 @@
         flotante(e.o, `+${e.d}`, 'vida', ahora + cuando, { grande: e.d >= 25 });
         luego(cuando, () => sonido.tocar('efecto', 0.8));
         t += 170;
+      } else if (e.t === 'pasiva') {
+        flotante(e.o, '¡Último aliento!', 'warning', ahora + t, { grande: true });
+        luego(t, () => { sonido.tocar('efecto'); temblor = performance.now() + 200; });
+        t += 200;
       } else if (e.t === 'contra') {
         flotante(e.a, '¡Contragolpe!', 'efecto-gu', ahora + t);
         t += 120;
@@ -987,6 +995,8 @@
         agregar(nombreB(e.o), ' esquivó');
       } else if (e.t === 'contra' && li) {
         agregar(nombreB(e.a), ' contraatacó');
+      } else if (e.t === 'pasiva' && li) {
+        agregar(nombreB(e.o), ' resistió con 1 de vida (Último aliento)');
       } else if (e.t === 'cae') {
         if (!li) nueva();
         agregar(nombreB(e.o), ' cayó');

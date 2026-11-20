@@ -7,7 +7,7 @@ const azarClase = () => NOMBRES_CLASES[Math.floor(Math.random() * NOMBRES_CLASES
 function simular(modo, N) {
   const victorias = { 0: 0, 1: 0, 2: 0 };
   const porClase = Object.fromEntries(NOMBRES_CLASES.map((k) => [k, { jugadas: 0, ganadas: 0 }]));
-  let rondas = 0, invalidas = 0, esquivas = 0, rapidosEsquivados = 0, curas = 0;
+  let rondas = 0, invalidas = 0, esquivas = 0, rapidos = 0, rapidosEsquivados = 0, curas = 0, criticos = 0, golpes = 0, alientos = 0;
   const puestos = modo === '1v1' ? [{ e: 0, f: 0 }, { e: 1, f: 0 }] : [0, 1, 2, 3].map((i) => ({ e: i < 2 ? 0 : 1, f: i % 2 }));
   for (let p = 0; p < N; p++) {
     const ks = puestos.map(() => azarClase());
@@ -18,7 +18,10 @@ function simular(modo, N) {
       const [h, o, pr] = c.automatica(Math.random() < 0.1);
       let ev = c.accion(c.turno, h, o, pr);
       if (!ev) { invalidas++; ev = c.accion(c.turno, 'r', c.opciones().find((x) => x.h === 'r').o[0], 0.5); }
-      if (ev[0].h === 'r' && ev.some((e) => e.t === 'esquiva' && e.a === ev[0].a)) rapidosEsquivados++;
+      if (ev[0].h === 'r') { rapidos++; if (ev.some((e) => e.t === 'esquiva' && e.a === ev[0].a)) rapidosEsquivados++; }
+      golpes += ev.filter((e) => e.t === 'dano').length;
+      criticos += ev.filter((e) => e.t === 'dano' && e.crit).length;
+      alientos += ev.filter((e) => e.t === 'pasiva').length;
       esquivas += ev.filter((e) => e.t === 'esquiva').length;
       curas += ev.filter((e) => e.t === 'cura').length;
       // Revisa reglas básicas
@@ -31,8 +34,9 @@ function simular(modo, N) {
     rondas += c.ronda;
     ks.forEach((k, i) => { porClase[k].jugadas++; if (c.ganador === puestos[i].e) porClase[k].ganadas++; });
   }
-  if (rapidosEsquivados) throw new Error('se esquivó un ataque rápido');
+  if (rapidosEsquivados / rapidos > 0.15) throw new Error('el ataque rápido se esquiva demasiado');
   console.log(`\n${modo} · partidas: ${N} · rondas promedio: ${(rondas / N).toFixed(1)} · inválidas de bots: ${invalidas} · esquivas: ${esquivas} · curas: ${curas}`);
+  console.log(`Rápidos esquivados: ${((rapidosEsquivados / rapidos) * 100).toFixed(1)} % · críticos: ${((criticos / golpes) * 100).toFixed(1)} % · Último aliento: ${alientos}`);
   console.log('Rojo/Azul/empate:', victorias);
   for (const [k, v] of Object.entries(porClase)) console.log(k.padEnd(9), ((v.ganadas / v.jugadas) * 100).toFixed(1) + ' % de victorias');
 }
