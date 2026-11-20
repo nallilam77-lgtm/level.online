@@ -1,8 +1,9 @@
 // =========================================================================
-// Duelo de Acero · el juego en el navegador (2 vs 2 por turnos).
+// Duelo de Acero · el juego en el navegador (2 vs 2 o 1 vs 1 por turnos).
 //
 // El servidor (juego-servidor/, Cloudflare) decide todo: turnos, daño, efectos y ganador. Aquí se muestra la
 // sala, se elige puesto y clase, y en el combate se manda la acción elegida; lo que pasa (ev) se anima.
+// En los ataques sale una flecha que va y viene: mientras más cerca del centro la detengas, más daño (p: 0 a 1).
 // Entrada: ?c=<código> (solo el del administrador, desde el panel → "Crear partida", que agrega &nueva=1) para
 // CREAR una sala, o ?s=<sala> (enlace que comparte el creador) para entrar a ella. Los personajes son pixel art dibujado aquí mismo (sin imágenes).
 // =========================================================================
@@ -35,6 +36,10 @@
   const EQUIPOS = ['Rojo', 'Azul'];
   const FILAS = ['Adelante', 'Atrás'];
   const NOMBRE_EFECTO = { at: 'Aturdido', pr: 'Provoca', mu: 'Muro', fu: 'Furia', ve: 'Veneno', ev: 'Evasión', gu: 'Guardia' };
+  const TURNO_MS = 25000;                        // como en juego-servidor/src/sala.js
+  const ARMAS = 'espadas, hachas, lanzas, dagas y mazas';
+  // Igual que multFlecha() de juego-servidor/src/combate.js
+  const multFlecha = (p) => (p >= 0.95 ? 1.5 : 0.4 + 0.95 * Math.min(1, Math.max(0, p)));
 
   // ---------------- Sonidos (Kenney, CC0) ----------------
   const ARCHIVOS = { golpe: 'hurt-a', golpe2: 'hurt-c', critico: 'explosion-a', efecto: 'coin-a', ganar: 'coin-d', perder: 'lose-a', esquiva: 'jump-a', mover: 'move-a', clic: 'select-a' };
@@ -112,12 +117,18 @@
       r(6, 2, 4, 2, P.acero); p(7, 1, P.acero); p(8, 1, P.aceroC); r(5, 4, 1, 2, P.acero);
       r(2, 9, 2, 8, P.eqO);                                       // capa
       r(12, 3, 1, 17, P.madera); p(12, 0, P.aceroC); r(11, 1, 3, 1, P.acero); p(12, 2, P.acero); r(11, 4, 3, 1, P.eq);  // lanza
-    } else if (k === 'picaro') {
+    } else if (k === 'asesino') {
       r(5, 2, 6, 3, P.eqO); r(5, 5, 1, 4, P.eqO); r(6, 1, 3, 1, P.eqO);         // capucha
       r(6, 7, 4, 2, P.ojo);                                       // pañuelo
       r(5, 9, 6, 6, P.eqO); r(6, 9, 4, 4, P.eq);
       r(12, 9, 1, 3, P.aceroC); p(12, 12, P.madera);              // daga delantera
       r(3, 12, 1, 3, P.acero); p(4, 13, P.piel);                  // daga trasera
+    } else if (k === 'clerigo') {
+      r(4, 9, 8, 8, P.eq); r(7, 9, 2, 8, P.aceroC); r(4, 16, 8, 1, P.eqO);   // túnica con franja blanca
+      r(6, 1, 4, 3, P.aceroC); r(7, 0, 2, 1, P.aceroC); r(7, 1, 2, 2, P.oro); // mitra con marca dorada
+      r(5, 4, 1, 3, P.aceroC);
+      r(1, 10, 3, 4, P.madera); r(2, 11, 1, 2, P.oro);            // libro
+      r(12, 6, 1, 7, P.madera); r(11, 3, 3, 3, P.acero); p(12, 2, P.aceroC); p(12, 4, P.aceroC);  // maza
     }
 
     const c = document.createElement('canvas');
@@ -177,7 +188,7 @@
   async function preparar() {
     mostrar('pantallaInicio');
     if (salaId) {
-      $('textoInicio').innerHTML = 'Te invitaron a una sala de <strong>Duelo de Acero</strong>: combate 2 vs 2 por turnos con espadas, hachas, lanzas y dagas.';
+      $('textoInicio').innerHTML = `Te invitaron a una sala de <strong>Duelo de Acero</strong>: combate por turnos con ${ARMAS}.`;
       botonEntrar('Entrar a la sala', true);
       // Recargó la página: vuelve directo a su puesto
       if (leerSesion(tokKey(salaId)) && $('nombre').value) entrar();
@@ -312,12 +323,23 @@
     $('enlaceSala').value = enlace;
     $('btnWhatsapp').href = `https://wa.me/?text=${encodeURIComponent('¡Ven a jugar Duelo de Acero conmigo! Entra a mi sala: ' + enlace)}`;
 
-    // Orden en pantalla como en el combate: Rojo (atrás, adelante) VS Azul (adelante, atrás)
-    const orden = [[1, 0], [2, 3]];
+    // Orden en pantalla como en el combate: Rojo (atrás, adelante) VS Azul (adelante, atrás); en 1 vs 1, uno por lado
+    const uno = est.modo === '1v1';
+    const orden = uno ? [[0], [2]] : [[1, 0], [2, 3]];
     document.querySelectorAll('.puestos').forEach((caja) => {
       const equipo = Number(caja.dataset.equipo);
+      caja.classList.toggle('puestos--uno', uno);
       caja.replaceChildren(...orden[equipo].map((p) => tarjetaPuesto(p, equipo)));
     });
+    document.querySelectorAll('.btn-modo').forEach((b) => {
+      const activo = b.dataset.modo === est.modo;
+      b.classList.toggle('elegido', activo);
+      b.setAttribute('aria-pressed', String(activo));
+      b.disabled = est.anf !== yo;
+    });
+    $('notaModo').textContent = est.anf === yo
+      ? (uno ? 'Duelo de uno contra uno. Si nadie se sienta enfrente, juegas contra un bot.' : 'Dos equipos de dos: uno adelante y otro atrás.')
+      : `${nombreAnfitrion()} elige el modo.`;
 
     const yoJ = miJugador();
     const sentado = yoJ && yoJ.p >= 0;
@@ -332,7 +354,7 @@
 
     const mirando = est.jug.filter((j) => j.p < 0);
     $('textoGente').textContent = mirando.length ? `Mirando: ${mirando.map((j) => j.n).join(', ')}` : '';
-    const libres = [0, 1, 2, 3].filter((p) => !jugadorEn(p)).length;
+    const libres = (uno ? [0, 2] : [0, 1, 2, 3]).filter((p) => !jugadorEn(p)).length;
     const soyAnf = est.anf === yo;
     $('btnEmpezar').hidden = !soyAnf;
     $('btnEmpezar').disabled = false;
@@ -347,9 +369,9 @@
     if (libre) {
       caja.type = 'button';
       caja.addEventListener('click', () => { sonido.tocar('clic'); mandar({ t: 'puesto', p }); });
-      caja.setAttribute('aria-label', `Sentarme en ${EQUIPOS[equipo]} ${FILAS[p % 2].toLowerCase()}`);
+      caja.setAttribute('aria-label', est.modo === '1v1' ? `Sentarme en ${EQUIPOS[equipo]}` : `Sentarme en ${EQUIPOS[equipo]} ${FILAS[p % 2].toLowerCase()}`);
     }
-    caja.append(el('span', 'puesto-fila', FILAS[p % 2]));
+    caja.append(el('span', 'puesto-fila', est.modo === '1v1' ? 'Luchador' : FILAS[p % 2]));
     const lienzo = el('canvas');
     miniatura(lienzo, j ? j.k : 'guerrero', equipo);
     if (libre) lienzo.style.opacity = '0.25';
@@ -377,12 +399,19 @@
       miniatura(lienzo, k, 0);
       const cabeza = el('div', 'clase-cabeza');
       cabeza.append(el('strong', '', c.nombre), el('span', '', c.arma));
-      const datos = el('span');
-      datos.append('Vida ', el('em', '', String(c.vida)), ' · Velocidad ', el('em', '', String(c.vel)));
-      cabeza.append(datos, el('span', '', c.resumen));
+      cabeza.append(el('span', '', c.resumen));
+      // Atributos fijos de la clase (no se pueden cambiar)
+      const attr = el('dl', 'atributos');
+      const signo = (n) => (n > 0 ? '+' + n : n < 0 ? '−' + -n : '0');
+      for (const [t, v] of [['Vida', c.vida], ['Velocidad', c.vel], ['Fuerza', c.attr.fuerza + ' %'], ['Defensa', c.attr.defensa + ' %'], ['Esquiva', c.attr.esquiva + ' %'], ['Precisión', signo(c.attr.precision)]]) {
+        const d = el('div');
+        d.append(el('dt', '', t), el('dd', '', String(v)));
+        attr.append(d);
+      }
+      cabeza.append(attr);
       const lista = el('ul');
       const item = (h) => { const li = el('li'); li.append(el('b', '', h.n), h.cd ? ` (cada ${h.cd + 1} turnos): ` : ': ', h.d); return li; };
-      lista.append(item(c.basico), ...c.hab.map(item));
+      lista.append(item(c.rapido), item(c.fuerte), ...c.hab.map(item));
       b.append(lienzo, cabeza, lista);
       b.addEventListener('click', () => { sonido.tocar('clic'); mandar({ t: 'clase', k }); });
       caja.append(b);
@@ -395,6 +424,11 @@
     catch (err) { $('enlaceSala').select(); b.textContent = 'Cópialo'; }
     setTimeout(() => { b.textContent = 'Copiar'; }, 2000);
   });
+  document.querySelectorAll('.btn-modo').forEach((b) => b.addEventListener('click', () => {
+    if (!est || est.anf !== yo || b.dataset.modo === est.modo) return;
+    sonido.tocar('clic');
+    mandar({ t: 'modo', m: b.dataset.modo });
+  }));
   $('btnEmpezar').addEventListener('click', (e) => { e.currentTarget.disabled = true; sonido.iniciar(); mandar({ t: 'empezar' }); });
   $('btnOtra').addEventListener('click', (e) => { e.currentTarget.disabled = true; mandar({ t: 'otra' }); });
 
@@ -648,18 +682,22 @@
   // ---------------- Combate: turno y botones ----------------
   const miLuchador = () => (est && est.c ? est.c.l.findIndex((x) => x.j === yo) : -1);
   const esMiTurno = () => !!est && est.fase === 'combate' && est.c.t >= 0 && est.c.l[est.c.t].j === yo;
-  const objDe = (k, h) => (h === 'b' ? clases[k].basico.obj : h === 'cambiar' ? 'yo' : clases[k].hab[h].obj);
-  const nombreDe = (k, h) => (h === 'b' ? 'Ataque' : h === 'cambiar' ? 'Cambiar de fila' : clases[k].hab[h].n);
+  // Info de una acción: 'r' (ataque rápido), 'f' (golpe fuerte), 0-2 (habilidad) o 'cambiar'
+  const infoDe = (k, h) => (h === 'r' ? clases[k].rapido : h === 'f' ? clases[k].fuerte : h === 'cambiar'
+    ? { n: 'Cambiar de fila', obj: 'yo', d: 'Cambias de fila con tu compañero (gasta tu turno).' } : clases[k].hab[h]);
+  const objDe = (k, h) => infoDe(k, h).obj;
+  const nombreDe = (k, h) => infoDe(k, h).n;
+  const conObjetivo = (obj) => obj === 'enemigo' || obj === 'cualquiera' || obj === 'aliado';
   function objetivosElegibles() {
-    if (!elegida || enviado || !esMiTurno()) return [];
+    if (!elegida || enviado || flecha || !esMiTurno()) return [];
     const op = est.c.op.find((o) => o.h === elegida.h);
-    return op && (elegida.obj === 'enemigo' || elegida.obj === 'cualquiera') ? op.o : [];
+    return op && conObjetivo(elegida.obj) ? op.o : [];
   }
 
   function actualizarCombate(m) {
     const c = m.c;
     prepararVis(c, !!m.ev);
-    if (!esMiTurno()) { elegida = null; enviado = false; }
+    if (!esMiTurno()) { elegida = null; enviado = false; cerrarFlecha(); }
     const actor = c.t >= 0 ? c.l[c.t] : null;
     const t = $('textoTurno');
     t.replaceChildren();
@@ -678,7 +716,7 @@
   function actualizarReloj(ahora) {
     if (!finTurno) return;
     const queda = Math.max(0, finTurno - ahora);
-    $('relojBarra').style.transform = `scaleX(${queda / 20000})`;
+    $('relojBarra').style.transform = `scaleX(${queda / TURNO_MS})`;
     $('reloj').classList.toggle('poco', queda < 6000);
   }
 
@@ -688,10 +726,10 @@
     $('acciones').hidden = i < 0;
     if (i < 0) return;
     const x = est.c.l[i];
-    const turno = esMiTurno() && !enviado;
+    const turno = esMiTurno() && !enviado && !flecha;
     const ops = turno ? est.c.op : [];
     caja.replaceChildren();
-    const acciones = ['b', 0, 1, 2, 'cambiar'];
+    const acciones = est.c.l.length > 2 ? ['r', 'f', 0, 1, 2, 'cambiar'] : ['r', 'f', 0, 1, 2];
     for (const h of acciones) {
       const b = el('button', 'btn-accion' + (h === 'cambiar' ? ' btn-accion--ancho' : '') + (elegida && elegida.h === h ? ' elegida' : ''));
       b.type = 'button';
@@ -704,8 +742,8 @@
       if (typeof h === 'number') {
         const espera = x.cd[h];
         b.append(el('small', '', espera > 0 ? `Lista en ${espera} ${espera === 1 ? 'turno' : 'turnos'}` : 'Lista'));
-      } else if (h === 'b') {
-        b.append(el('small', '', `${clases[x.k].basico.d.split('.')[0]}`));
+      } else if (h === 'r' || h === 'f') {
+        b.append(el('small', '', `${infoDe(x.k, h).d.split('.')[0]}${h === 'r' ? ' · no se esquiva' : ' · se esquiva'}`));
       }
       b.addEventListener('click', () => elegir(h));
       caja.append(b);
@@ -716,7 +754,8 @@
     obj.hidden = true;
     if (x.v <= 0) { detalle.textContent = 'Caíste. Mira cómo termina tu compañero.'; return; }
     if (!turno) {
-      if (enviado) detalle.textContent = 'Enviado…';
+      if (flecha) detalle.textContent = '¡Detén la flecha en el centro!';
+      else if (enviado) detalle.textContent = 'Enviado…';
       else if (leyendo !== null) detalle.replaceChildren(el('b', '', nombreDe(x.k, leyendo) + ': '), descripcion(x.k, leyendo));
       else detalle.textContent = 'Espera tu turno. Toca una habilidad para leer qué hace.';
       return;
@@ -724,13 +763,14 @@
     if (!elegida) { detalle.textContent = 'Elige qué hacer.'; return; }
     detalle.replaceChildren(el('b', '', nombreDe(x.k, elegida.h) + ': '), descripcion(x.k, elegida.h));
     obj.hidden = false;
-    if (elegida.obj === 'enemigo' || elegida.obj === 'cualquiera') {
+    if (conObjetivo(elegida.obj)) {
       const op = est.c.op.find((o) => o.h === elegida.h);
       for (const o of op ? op.o : []) {
         const y = est.c.l[o];
-        const b = el('button', 'btn-objetivo');
+        const b = el('button', 'btn-objetivo' + (elegida.obj === 'aliado' ? ' btn-objetivo--aliado' : ''));
         b.type = 'button';
-        b.append(y.n, el('small', '', `${FILAS[y.f]} · ${y.v} de vida`));
+        const fila = est.c.l.length > 2 ? `${FILAS[y.f]} · ` : '';
+        b.append(o === i ? `${y.n} (tú)` : y.n, el('small', '', `${fila}${y.v} de ${y.m} de vida`));
         b.addEventListener('click', () => usar(o));
         obj.append(b);
       }
@@ -744,8 +784,8 @@
   }
 
   function descripcion(k, h) {
-    if (h === 'cambiar') return 'Cambias de fila con tu compañero (gasta tu turno).';
-    return h === 'b' ? clases[k].basico.d : clases[k].hab[h].d;
+    const info = infoDe(k, h);
+    return info.dano ? `${info.d} El daño depende de dónde detengas la flecha.` : info.d;
   }
 
   function elegir(h) {
@@ -759,14 +799,80 @@
   }
 
   function usar(o) {
-    if (!elegida || !esMiTurno() || enviado) return;
-    mandar({ t: 'accion', h: elegida.h, o });
+    if (!elegida || !esMiTurno() || enviado || flecha) return;
+    const { h } = elegida;
+    const k = est.c.l[est.c.t].k;
+    if (infoDe(k, h).dano) {
+      // Ataque: primero la flecha; el daño depende de dónde la detenga
+      abrirFlecha(h, (p) => enviar(h, o, p));
+      pintarAcciones();
+    } else {
+      enviar(h, o);
+    }
+  }
+
+  function enviar(h, o, p) {
+    if (!esMiTurno()) return;
+    mandar({ t: 'accion', h, o, p });
     enviado = true;
     elegida = null;
     pintarAcciones();
     // Si el servidor no la aceptó (llegó tarde o no valía), se puede volver a elegir
     setTimeout(() => { if (enviado && esMiTurno()) { enviado = false; pintarAcciones(); } }, 3000);
   }
+
+  // ---------------- Flecha de precisión (estilo barra de ataque) ----------------
+  // Va y viene sobre la barra; en el golpe fuerte va más rápido. Si no la detienes en 3 pasadas, se detiene
+  // sola donde esté. p = 1 en el centro, 0 en los bordes.
+  const PASADA_MS = { r: 950, f: 620 };          // lo que tarda en cruzar la barra (habilidades: 800)
+  let flecha = null;                             // { t0, pasada, listo, fin }
+  function abrirFlecha(h, listo) {
+    flecha = { t0: performance.now(), pasada: PASADA_MS[h] || 800, listo, fin: false };
+    $('flechaResultado').textContent = '';
+    $('flechaTitulo').textContent = h === 'f' ? '¡Golpe fuerte! Detén la flecha en el centro' : '¡Detén la flecha en el centro!';
+    $('flecha').hidden = false;
+    $('flecha').classList.remove('detenida');
+    $('btnFlecha').disabled = false;
+    $('btnFlecha').focus({ preventScroll: true });
+    requestAnimationFrame(moverFlecha);
+  }
+  function posFlecha(ahora) {
+    const t = Math.max(0, ahora - flecha.t0) / flecha.pasada;
+    const ida = t % 2;
+    return { x: ida < 1 ? ida : 2 - ida, vueltas: t };
+  }
+  function moverFlecha(ahora) {
+    if (!flecha || flecha.fin) return;
+    const { x, vueltas } = posFlecha(ahora);
+    $('flechaMarca').style.left = `${x * 100}%`;
+    if (vueltas >= 3) { detenerFlecha(); return; }
+    requestAnimationFrame(moverFlecha);
+  }
+  function detenerFlecha() {
+    if (!flecha || flecha.fin) return;
+    flecha.fin = true;
+    const { x } = posFlecha(performance.now());
+    $('flechaMarca').style.left = `${x * 100}%`;
+    const p = Math.max(0, 1 - Math.abs(x - 0.5) * 2);
+    const m = multFlecha(p).toFixed(1).replace('.', ',');
+    $('flechaResultado').textContent = p >= 0.95 ? `¡PERFECTO! ×${m}` : p >= 0.7 ? `¡Bien! ×${m}` : p >= 0.4 ? `Regular ×${m}` : `Flojo ×${m}`;
+    $('flecha').classList.add('detenida');
+    $('btnFlecha').disabled = true;
+    sonido.tocar(p >= 0.95 ? 'critico' : 'clic', p >= 0.95 ? 0.6 : 0.8);
+    if (p >= 0.95 && navigator.vibrate) navigator.vibrate(80);
+    flecha.listo(Math.round(p * 1000) / 1000);
+    setTimeout(cerrarFlecha, 700);
+  }
+  function cerrarFlecha() {
+    if (!flecha) return;
+    flecha = null;
+    $('flecha').hidden = true;
+    if (est && est.c) pintarAcciones();
+  }
+  $('flecha').addEventListener('pointerdown', (e) => { e.preventDefault(); detenerFlecha(); });
+  document.addEventListener('keydown', (e) => {
+    if (flecha && !flecha.fin && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); detenerFlecha(); }
+  });
 
   // ---------------- Animación de lo que pasó ----------------
   function flotante(o, texto, colorVar, t0, extra = {}) {
@@ -785,8 +891,10 @@
       if (e.t === 'accion') {
         const a = c.l[e.a], v = vis[e.a];
         const k = a.k;
-        const ataca = e.h === 'b' || (typeof e.h === 'number' && clases[k].hab[e.h].obj !== 'yo');
-        if (e.h !== 'b') flotante(e.a, nombreDe(k, e.h), 'accent-cyan', ahora + t, { dura: 1300 });
+        const obj = objDe(k, e.h);
+        const ataca = obj !== 'yo' && obj !== 'aliado';
+        if (e.h !== 'r') flotante(e.a, nombreDe(k, e.h), 'accent-cyan', ahora + t, { dura: 1300 });
+        if (e.p >= 0.95) flotante(e.a, '¡Perfecto!', 'accent-neon', ahora + t, { dura: 1300 });
         if (ataca) {
           const blanco = e.o !== undefined ? e.o : c.l.findIndex((y) => y.e !== a.e && y.f === 0);
           const destino = vis[blanco >= 0 ? blanco : 0].x + (a.e ? 12 : -12);
@@ -811,6 +919,12 @@
         flotante(e.o, '¡Esquiva!', 'efecto-ev', ahora + t);
         luego(t, () => sonido.tocar('esquiva'));
         t += 170;
+      } else if (e.t === 'cura') {
+        const cuando = t;
+        metas.set(e.o, cuando);
+        flotante(e.o, `+${e.d}`, 'vida', ahora + cuando, { grande: e.d >= 25 });
+        luego(cuando, () => sonido.tocar('efecto', 0.8));
+        t += 170;
       } else if (e.t === 'contra') {
         flotante(e.a, '¡Contragolpe!', 'efecto-gu', ahora + t);
         t += 120;
@@ -822,6 +936,7 @@
         t += 200;
       } else if (e.t === 'efecto') {
         if (e.e === 'at' || e.e === 've') flotante(e.o, NOMBRE_EFECTO[e.e], 'efecto-' + e.e, ahora + t);
+        if (e.e === 'limpio') flotante(e.o, 'Purificado', 'efecto-mu', ahora + t);
       } else if (e.t === 'veneno') {
         metas.set(e.o, t);
         flotante(e.o, `-${e.d}`, 'efecto-ve', ahora + t);
@@ -862,9 +977,12 @@
     for (const e of ev) {
       if (e.t === 'accion') {
         nueva().append(nombreB(e.a), ` · ${nombreDe(c.l[e.a].k, e.h)}`);
+        if (e.p >= 0.95) li.append(' ', el('span', 'perfecto', '¡perfecto!'));
         li.append(': ');
       } else if (e.t === 'dano' && li) {
         agregar(nombreB(e.o), ' ', el('span', e.crit ? 'crit' : 'num', `-${e.d}${e.crit ? ' (crítico)' : ''}`));
+      } else if (e.t === 'cura' && li) {
+        agregar(nombreB(e.o), ' ', el('span', 'cura', `+${e.d}`));
       } else if (e.t === 'esquiva' && li) {
         agregar(nombreB(e.o), ' esquivó');
       } else if (e.t === 'contra' && li) {
@@ -874,6 +992,7 @@
         agregar(nombreB(e.o), ' cayó');
       } else if (e.t === 'efecto' && li) {
         if (e.e === 'at' || e.e === 've') agregar(nombreB(e.o), ` ${NOMBRE_EFECTO[e.e].toLowerCase()}`);
+        if (e.e === 'limpio') agregar(nombreB(e.o), ' purificado');
       } else if (e.t === 'veneno') {
         nueva().append('Veneno: ', nombreB(e.o), ' ', el('span', 'num', `-${e.d}`));
       } else if (e.t === 'aturdido') {
@@ -909,14 +1028,16 @@
       else if (miEquipo === null) titulo.textContent = `Ganó el equipo ${EQUIPOS[c.g]}`;
       else if (c.g === miEquipo) { titulo.textContent = '¡Victoria!'; titulo.className = 'gana'; sonido.tocar('ganar'); }
       else { titulo.textContent = 'Derrota'; titulo.className = 'pierde'; sonido.tocar('perder', 0.7); }
-      $('textoFin').textContent = c.g === 2 ? 'Nadie cayó y quedaron con la misma vida.' : `El equipo ${EQUIPOS[c.g]} se quedó con la arena en ${c.r} ${c.r === 1 ? 'ronda' : 'rondas'}.`;
+      const rondas = `${c.r} ${c.r === 1 ? 'ronda' : 'rondas'}`;
+      const ganadorSolo = c.l.length === 2 && c.g !== 2 ? c.l.find((x) => x.e === c.g).n : null;
+      $('textoFin').textContent = c.g === 2 ? 'Nadie cayó y quedaron con la misma vida.' : ganadorSolo ? `${ganadorSolo} se quedó con la arena en ${rondas}.` : `El equipo ${EQUIPOS[c.g]} se quedó con la arena en ${rondas}.`;
       const cuerpo = $('tablaFin');
       cuerpo.replaceChildren();
       [...c.l].sort((a, b) => b.dano - a.dano).forEach((x) => {
         const tr = el('tr', x.j === yo ? 'yo' : '');
         const td = el('td');
         td.append(el('span', x.e ? 'azul' : 'rojo', x.n), ` · ${clases[x.k].nombre}${x.j ? '' : ' (bot)'}`);
-        tr.append(td, el('td', '', String(x.dano)), el('td', '', String(x.bajas)));
+        tr.append(td, el('td', '', String(x.dano)), el('td', '', String(x.cura || 0)), el('td', '', String(x.bajas)));
         cuerpo.append(tr);
       });
       const soyAnf = est.anf === yo;

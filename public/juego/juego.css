@@ -71,6 +71,13 @@
   --efecto-ve: #39ff14;
   --efecto-ev: #e2e8f0;
   --efecto-gu: #a78bfa;
+
+  /* Flecha de precisión */
+  --flecha-barra: rgba(2, 6, 23, 0.85);
+  --flecha-buena: rgba(57, 255, 20, 0.22);
+  --flecha-centro: #39ff14;
+  --flecha-marca: #fbbf24;
+  --flecha-brillo: rgba(251, 191, 36, 0.55);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -224,6 +231,24 @@ button.puesto:hover, button.puesto:focus-visible { box-shadow: var(--shadow-lg),
 .clase ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 12px; line-height: 1.45; color: var(--text-muted); }
 .clase li b { color: var(--text-main); }
 
+.modo { gap: 12px; }
+.modo-botones { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.btn-modo {
+  min-height: 48px; border-radius: 12px; border: 1px solid var(--border-glass); background: var(--bg-deep);
+  color: var(--text-main); font-weight: 900; font-size: 16px; letter-spacing: 0.04em; cursor: pointer;
+  transition: box-shadow 0.25s, border-color 0.25s;
+}
+.btn-modo:hover:not(:disabled), .btn-modo:focus-visible { border-color: var(--accent-cyan); box-shadow: var(--shadow-glow-fuerte); }
+.btn-modo.elegido { border-color: var(--accent-neon); color: var(--accent-neon); box-shadow: var(--shadow-lg), var(--shadow-glow); }
+.btn-modo:disabled { cursor: default; }
+.btn-modo:disabled:not(.elegido) { opacity: 0.45; }
+.puestos--uno { grid-template-columns: minmax(0, 200px); justify-content: center; }
+
+.atributos { margin: 4px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.atributos div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.atributos dt { color: var(--text-muted); }
+.atributos dd { margin: 0; font-weight: 800; color: var(--accent-cyan); }
+
 .pie-sala { padding: 24px; display: grid; gap: 12px; text-align: center; }
 .esperando { margin: 0; font-weight: 800; color: var(--accent-cyan); }
 .esperando:empty { display: none; }
@@ -238,6 +263,28 @@ button.puesto:hover, button.puesto:focus-visible { box-shadow: var(--shadow-lg),
   background: var(--capa-fondo); border: 1px solid var(--border-glass);
   font-size: 14px; font-weight: 900; text-align: center; pointer-events: none;
 }
+
+/* Flecha de precisión: cubre la escena mientras se elige el golpe */
+.flecha {
+  position: absolute; inset: 0; z-index: 2;
+  display: grid; align-content: center; justify-items: center; gap: 12px; padding: 16px;
+  background: var(--capa-fondo); cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+}
+.flecha-titulo { margin: 0; font-weight: 900; font-size: 15px; text-align: center; color: var(--text-main); }
+.flecha-barra {
+  position: relative; width: min(100%, 520px); height: 40px; border-radius: 10px;
+  background: var(--flecha-barra); border: 2px solid var(--border-glass); overflow: hidden;
+}
+.flecha-zona { position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); }
+.flecha-zona--buena { width: 30%; background: var(--flecha-buena); }
+.flecha-zona--centro { width: 5%; background: var(--flecha-centro); }
+.flecha-marca {
+  position: absolute; top: -2px; bottom: -2px; left: 0; width: 6px; margin-left: -3px; border-radius: 3px;
+  background: var(--flecha-marca); box-shadow: 0 0 12px var(--flecha-brillo);
+}
+.flecha-resultado { margin: 0; min-height: 1.4em; font-weight: 900; font-size: 18px; color: var(--accent-neon); }
+.flecha-btn { min-width: 160px; }
+.flecha.detenida .flecha-btn { opacity: 0.6; }
 
 .lateral { display: grid; gap: 16px; align-content: start; }
 .turno { padding: 16px 20px; display: grid; gap: 10px; }
@@ -281,6 +328,9 @@ button.puesto:hover, button.puesto:focus-visible { box-shadow: var(--shadow-lg),
 .registro b.azul { color: var(--azul); }
 .registro .num { color: var(--dano); font-weight: 800; }
 .registro .crit { color: var(--critico); font-weight: 900; }
+.registro .cura { color: var(--vida); font-weight: 800; }
+.registro .perfecto { color: var(--accent-neon); font-weight: 900; }
+.btn-objetivo--aliado { border-color: var(--vida); }
 
 .capa {
   position: fixed; inset: 0; z-index: 6;
@@ -309,7 +359,7 @@ button.puesto:hover, button.puesto:focus-visible { box-shadow: var(--shadow-lg),
 }
 @media (min-width: 980px) {
   .pantalla--combate { grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
-  .clases { grid-template-columns: repeat(4, 1fr); }
+  .clases { grid-template-columns: repeat(5, 1fr); gap: 16px; }
   .clase { grid-template-columns: 1fr; justify-items: start; }
   .clase canvas { grid-row: auto; }
   .registro { max-height: 260px; }
@@ -324,7 +374,18 @@ button.puesto:hover, button.puesto:focus-visible { box-shadow: var(--shadow-lg),
   .btn-accion { min-height: 48px; }
   .registro { max-height: 96px; padding: 12px; }
 }
+@media (max-height: 500px) and (orientation: landscape) {
+  .flecha { gap: 8px; padding: 8px; }
+  .flecha-barra { height: 32px; }
+}
+@media (max-width: 480px) {
+  .flecha { gap: 6px; padding: 8px 16px; }
+  .flecha-resultado { font-size: 16px; }
+  .flecha-btn { min-height: 44px; font-size: 15px; }
+}
 @media (max-width: 380px) {
+  .flecha-titulo { font-size: 13px; }
+  .flecha-barra { height: 34px; }
   .puesto canvas { width: 48px; height: 60px; }
   .puesto { min-height: 156px; }
   .btn-accion { font-size: 13px; padding: 8px; }

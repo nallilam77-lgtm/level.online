@@ -1,89 +1,122 @@
 // =========================================================================
-// Duelo de Acero · el combate 2 vs 2 por turnos (sin red ni relojes: sala.js decide cuándo llamar a cada cosa).
+// Duelo de Acero · el combate por turnos, 2 vs 2 o 1 vs 1 (sin red ni relojes: sala.js decide cuándo llamar a cada cosa).
 //
-// Puestos fijos: 0 = Rojo adelante, 1 = Rojo atrás, 2 = Azul adelante, 3 = Azul atrás.
+// Cada luchador trae su equipo (e: 0 Rojo, 1 Azul) y su fila (f: 0 adelante, 1 atrás). En 2 vs 2 el orden
+// es 0 = Rojo adelante, 1 = Rojo atrás, 2 = Azul adelante, 3 = Azul atrás; en 1 vs 1, 0 = Rojo y 1 = Azul.
 // Cuerpo a cuerpo: solo se le pega al enemigo de adelante; el de atrás se alcanza cuando el de adelante cae
-// o con ataques que lo permiten (básico del Lancero, Sombra, Tajo giratorio, Estocada). "Provocar" obliga a
+// o con ataques que lo permiten (Lancero, Sombra, Tajo giratorio, Estocada, Juicio). "Provocar" obliga a
 // los ataques de un objetivo a ir contra el Guerrero.
+//
+// Ataques de todas las clases:
+//   Ataque rápido (h 'r'): poco daño, NADIE lo puede esquivar (ni con Evasión).
+//   Golpe fuerte (h 'f'): mucho daño, pero se puede esquivar según la esquiva del rival y la precisión propia.
+// Las habilidades de daño también se pueden esquivar, con la mitad de probabilidad que un golpe fuerte.
+// El daño de todo ataque depende de la flecha (p: 0 = lejos del centro, 1 = justo en el centro), que el
+// jugador detiene en su pantalla; los bots la "detienen" al azar.
+//
+// Atributos fijos por clase (no se pueden cambiar): vida, velocidad (orden de turno), fuerza (multiplica el
+// ataque rápido y el golpe fuerte), defensa (resta daño), esquiva y precisión (resta esquiva al rival).
 // Los efectos se cuentan en los turnos del que los tiene (o del que los puso): bajan al EMPEZAR su turno.
 // =========================================================================
 
-// obj: 'enemigo' = uno alcanzable · 'cualquiera' = cualquier enemigo (ignora filas) · 'todos' = sin elegir · 'yo' = sin elegir
+const RAPIDO = 10;                   // daño base del ataque rápido (× fuerza)
+const FUERTE = 27;                   // daño base del golpe fuerte (× fuerza)
+const ESQUIVA_FUERTE = 0.25;         // esquiva base de un golpe fuerte (+ esquiva del rival − precisión propia)
+const VENENO = { turnos: 3, dano: 8 };
+const CONTRAGOLPE = 15;
+export const RONDAS_MAX = 40;        // por si nadie cae: gana quien conserve más vida
+
+// obj: 'enemigo' = uno alcanzable · 'cualquiera' = cualquier enemigo (ignora filas) · 'aliado' = tú o tu
+// compañero · 'todos' = sin elegir · 'yo' = sin elegir. dano: usa la flecha.
 export const CLASES = {
   guerrero: {
-    nombre: 'Guerrero', arma: 'Espada y escudo', vida: 140, vel: 3, basico: 16, alcance: 'enemigo',
-    resumen: 'Aguanta mucho y protege a su compañero.',
+    nombre: 'Guerrero', arma: 'Espada y escudo', vida: 135, vel: 3, fuerza: 1, defensa: 0.15, esquiva: 0.08, precision: 0,
+    alcance: 'enemigo', resumen: 'Aguanta mucho y protege a su compañero. Su armadura le quita daño a todo.',
     hab: [
-      { k: 'escudo', n: 'Golpe de escudo', cd: 3, obj: 'enemigo', d: '12 de daño y lo aturde: pierde su próximo turno.' },
+      { k: 'escudo', n: 'Golpe de escudo', cd: 3, obj: 'enemigo', dano: true, d: '12 de daño y lo aturde: pierde su próximo turno.' },
       { k: 'provocar', n: 'Provocar', cd: 4, obj: 'yo', d: 'Por 2 rondas los enemigos solo te pueden atacar a ti (estés donde estés).' },
       { k: 'muro', n: 'Muro', cd: 3, obj: 'yo', d: 'Tú y tu compañero reciben la mitad del daño hasta tu próximo turno.' },
     ],
   },
   barbaro: {
-    nombre: 'Bárbaro', arma: 'Hacha', vida: 120, vel: 2, basico: 21, alcance: 'enemigo',
-    resumen: 'El que más pega, pero es lento.',
+    nombre: 'Bárbaro', arma: 'Hacha', vida: 135, vel: 2, fuerza: 1.4, defensa: 0.08, esquiva: 0.03, precision: -0.05,
+    alcance: 'enemigo', resumen: 'El que más pega, pero es lento y sus golpes se ven venir: son fáciles de esquivar.',
     hab: [
-      { k: 'tajo', n: 'Tajo giratorio', cd: 3, obj: 'todos', d: '15 de daño a los dos enemigos, sin importar la fila.' },
+      { k: 'tajo', n: 'Tajo giratorio', cd: 3, obj: 'todos', dano: true, d: '15 de daño a todos los enemigos, sin importar la fila.' },
       { k: 'furia', n: 'Furia', cd: 4, obj: 'yo', d: '+50 % de daño en tus 2 próximos turnos, pero recibes +20 %.' },
-      { k: 'ejecutar', n: 'Ejecutar', cd: 3, obj: 'enemigo', d: '22 de daño; el doble (44) si le queda menos del 35 % de vida.' },
+      { k: 'ejecutar', n: 'Ejecutar', cd: 3, obj: 'enemigo', dano: true, d: '22 de daño; el doble (44) si le queda menos del 35 % de vida.' },
     ],
   },
   lancero: {
-    nombre: 'Lancero', arma: 'Lanza', vida: 112, vel: 4, basico: 17, alcance: 'cualquiera',
-    resumen: 'Su lanza llega a la fila de atrás y desordena al rival.',
+    nombre: 'Lancero', arma: 'Lanza', vida: 115, vel: 4, fuerza: 1.08, defensa: 0.1, esquiva: 0.12, precision: 0.15,
+    alcance: 'cualquiera', resumen: 'Su lanza llega a la fila de atrás y es precisa. Desordena al rival.',
     hab: [
-      { k: 'estocada', n: 'Estocada', cd: 2, obj: 'todos', d: 'Atraviesa: 22 al enemigo de adelante y 14 al de atrás.' },
-      { k: 'empujon', n: 'Empujón', cd: 3, obj: 'enemigo', d: '10 de daño y los dos enemigos cambian de fila.' },
+      { k: 'estocada', n: 'Estocada', cd: 2, obj: 'todos', dano: true, d: 'Atraviesa: 22 al enemigo de adelante y 14 al de atrás.' },
+      { k: 'empujon', n: 'Empujón', cd: 3, obj: 'enemigo', dano: true, d: '10 de daño y los dos enemigos cambian de fila.' },
       { k: 'guardia', n: 'Guardia', cd: 3, obj: 'yo', d: 'El próximo que te golpee cuerpo a cuerpo recibe 15 de daño.' },
     ],
   },
-  picaro: {
-    nombre: 'Pícaro', arma: 'Dagas', vida: 100, vel: 5, basico: 16, alcance: 'enemigo', critico: 0.25,
-    resumen: 'Rápido: críticos, veneno y esquivas.',
+  asesino: {
+    nombre: 'Asesino', arma: 'Dagas', vida: 90, vel: 5, fuerza: 0.7, defensa: 0, esquiva: 0.35, precision: 0.3, critico: 0.2,
+    alcance: 'enemigo', resumen: 'Esquiva casi todo y sus golpes casi no se pueden esquivar, pero pega suave y aguanta poco.',
     hab: [
-      { k: 'veneno', n: 'Veneno', cd: 3, obj: 'enemigo', d: '6 de daño y 8 más al inicio de sus 3 próximos turnos.' },
-      { k: 'sombra', n: 'Sombra', cd: 2, obj: 'cualquiera', d: '24 de daño a cualquier enemigo, sin importar la fila.' },
-      { k: 'evasion', n: 'Evasión', cd: 4, obj: 'yo', d: 'Esquivas el próximo ataque (hasta tu próximo turno).' },
+      { k: 'veneno', n: 'Veneno', cd: 3, obj: 'enemigo', dano: true, d: '6 de daño y 8 más al inicio de sus 3 próximos turnos.' },
+      { k: 'sombra', n: 'Sombra', cd: 2, obj: 'cualquiera', dano: true, d: '24 de daño a cualquier enemigo, sin importar la fila.' },
+      { k: 'evasion', n: 'Evasión', cd: 4, obj: 'yo', d: 'Esquivas seguro el próximo golpe fuerte o habilidad (el ataque rápido no).' },
+    ],
+  },
+  clerigo: {
+    nombre: 'Clérigo', arma: 'Maza y libro', vida: 112, vel: 3, fuerza: 0.85, defensa: 0.12, esquiva: 0.1, precision: 0.05,
+    alcance: 'enemigo', resumen: 'Cura a su equipo y castiga con luz. Pega poco con la maza.',
+    hab: [
+      { k: 'curar', n: 'Curar', cd: 2, obj: 'aliado', d: 'Cura 34 de vida a ti o a tu compañero.' },
+      { k: 'plegaria', n: 'Plegaria', cd: 4, obj: 'yo', d: 'Tú y tu compañero se curan 18 y se quitan el veneno y el aturdido.' },
+      { k: 'juicio', n: 'Juicio', cd: 3, obj: 'cualquiera', dano: true, d: '24 de daño a cualquier enemigo, sin importar la fila.' },
     ],
   },
 };
 export const NOMBRES_CLASES = Object.keys(CLASES);
+const CURAR = 34, PLEGARIA = 18;
+
+const pct = (x) => Math.round(x * 100);
+const entre = (x, a, b) => Math.min(b, Math.max(a, x));
+// Multiplicador de daño según dónde se detuvo la flecha: 0,4 (en el borde) a 1,35; en el centro, 1,5
+export const multFlecha = (p) => (p >= 0.95 ? 1.5 : 0.4 + 0.95 * entre(p, 0, 1));
 
 // Lo que la página necesita para mostrar las clases (sin funciones)
 export function infoClases() {
   const info = {};
   for (const [k, c] of Object.entries(CLASES)) {
+    const llega = c.alcance === 'cualquiera' ? ' Llega a la fila de atrás.' : '';
+    const crit = c.critico ? ` ${pct(c.critico)} % de crítico (el doble).` : '';
     info[k] = {
       nombre: c.nombre, arma: c.arma, vida: c.vida, vel: c.vel, resumen: c.resumen,
-      basico: { n: 'Ataque', obj: c.alcance, d: `${c.basico} de daño${c.critico ? ' (25 % de crítico: el doble)' : ''}${c.alcance === 'cualquiera' ? '. Llega a la fila de atrás' : ''}.` },
-      hab: c.hab.map(({ n, cd, obj, d }) => ({ n, cd, obj, d })),
+      attr: { fuerza: pct(c.fuerza), defensa: pct(c.defensa), esquiva: pct(c.esquiva), precision: pct(c.precision) },
+      rapido: { n: 'Ataque rápido', obj: c.alcance, dano: true, d: `${Math.round(RAPIDO * c.fuerza)} de daño. Nadie lo puede esquivar.${llega}` },
+      fuerte: { n: 'Golpe fuerte', obj: c.alcance, dano: true, d: `${Math.round(FUERTE * c.fuerza)} de daño, pero el rival lo puede esquivar.${crit}${llega}` },
+      hab: c.hab.map(({ n, cd, obj, d, dano }) => ({ n, cd, obj, d, dano: !!dano })),
     };
   }
   return info;
 }
 
-export const RONDAS_MAX = 40;        // por si nadie cae: gana quien conserve más vida
-const VENENO = { turnos: 3, dano: 8 };
-const CONTRAGOLPE = 15;
-
-const equipoDe = (puesto) => (puesto < 2 ? 0 : 1);
-
 export class Combate {
-  // luchadores: 4 en orden de puesto → { n, k, jid (id del jugador o null si es bot) }
+  // luchadores: en orden → { n, k, jid (id del jugador o null si es bot), e, f }
   constructor(luchadores, azar = Math.random) {
     this.azar = azar;
     this.l = luchadores.map((x, i) => {
-      const c = CLASES[x.k] || CLASES.guerrero;
+      const k = CLASES[x.k] ? x.k : 'guerrero';
+      const c = CLASES[k];
       return {
-        i, n: x.n, k: CLASES[x.k] ? x.k : 'guerrero', jid: x.jid || null,
-        e: equipoDe(i), f: i % 2, v: c.vida, m: c.vida, vel: c.vel,
+        i, n: x.n, k, jid: x.jid || null,
+        e: x.e ?? (i < 2 ? 0 : 1), f: x.f ?? i % 2, v: c.vida, m: c.vida, vel: c.vel,
         cd: [0, 0, 0], at: false, pr: 0, mu: -1, fu: 0, ve: null, ev: false, gu: false,
-        dano: 0, bajas: 0, desempate: azar(),
+        dano: 0, cura: 0, bajas: 0, desempate: azar(),
       };
     });
     this.ronda = 0;
     this.orden = [];
-    this.turno = -1;        // puesto que está jugando (-1 = entre turnos)
+    this.turno = -1;        // luchador que está jugando (-1 = entre turnos)
     this.ganador = null;    // 0 Rojo · 1 Azul · 2 empate
   }
 
@@ -95,8 +128,8 @@ export class Combate {
     const rojo = this.vivos(0).length, azul = this.vivos(1).length;
     if (!rojo || !azul) this.ganador = rojo ? 0 : azul ? 1 : 2;
     else if (this.ronda > RONDAS_MAX) {
-      const pct = (e) => this.l.filter((x) => x.e === e).reduce((s, x) => s + x.v / x.m, 0);
-      const a = pct(0), b = pct(1);
+      const vida = (e) => this.l.filter((x) => x.e === e).reduce((s, x) => s + x.v / x.m, 0);
+      const a = vida(0), b = vida(1);
       this.ganador = Math.abs(a - b) < 0.01 ? 2 : a > b ? 0 : 1;
     }
     if (this.ganador !== null) this.turno = -1;
@@ -154,9 +187,10 @@ export class Combate {
     ev.push({ t: 'cae', o: x.i });
   }
 
-  // A quién puede atacar `x` con un ataque de tipo obj
+  // A quién puede apuntar `x` con una acción de tipo obj
   objetivos(x, obj) {
     if (obj === 'yo' || obj === 'todos') return [];
+    if (obj === 'aliado') return this.vivos(x.e).map((y) => y.i);
     const enemigos = this.vivos(1 - x.e);
     const provoca = enemigos.find((y) => y.pr > 0 && y.k === 'guerrero');
     if (provoca) return [provoca.i];
@@ -169,7 +203,7 @@ export class Combate {
   opciones(x = this.actual()) {
     if (!x) return [];
     const c = CLASES[x.k];
-    const ops = [{ h: 'b', obj: c.alcance, listo: true }];
+    const ops = [{ h: 'r', obj: c.alcance, listo: true }, { h: 'f', obj: c.alcance, listo: true }];
     c.hab.forEach((hab, n) => ops.push({ h: n, obj: hab.obj, listo: x.cd[n] === 0 }));
     for (const op of ops) op.o = this.objetivos(x, op.obj);
     const aliado = this.l.find((y) => y.e === x.e && y.i !== x.i && y.v > 0);
@@ -177,18 +211,28 @@ export class Combate {
     return ops.filter((op) => op.listo && (op.obj === 'yo' || op.obj === 'todos' || op.o.length));
   }
 
-  // Golpe de `a` a `o`. cuerpo: activa la Guardia del que recibe. Devuelve el daño hecho.
-  golpear(a, o, base, ev, { cuerpo = true, critico = 0 } = {}) {
+  // Probabilidad de que `o` esquive un ataque de `a` (tipo: 'rapido' | 'fuerte' | 'hab')
+  probEsquiva(a, o, tipo) {
+    if (tipo === 'rapido') return 0;
+    const ca = CLASES[a.k], co = CLASES[o.k];
+    if (tipo === 'fuerte') return entre(ESQUIVA_FUERTE + co.esquiva - ca.precision, 0.05, 0.8);
+    return entre((co.esquiva - ca.precision) / 2, 0, 0.4);
+  }
+
+  // Golpe de `a` a `o`. cuerpo: activa la Guardia del que recibe. mult: multiplicador de la flecha.
+  // Devuelve el daño hecho (0 si lo esquivó).
+  golpear(a, o, base, ev, { cuerpo = true, critico = 0, tipo = 'hab', mult = 1 } = {}) {
     if (o.v <= 0) return 0;
-    if (o.ev) {
+    if (tipo !== 'rapido' && (o.ev || this.azar() < this.probEsquiva(a, o, tipo))) {
       o.ev = false;
       ev.push({ t: 'esquiva', o: o.i, a: a.i });
       return 0;
     }
-    let mult = 0.9 + this.azar() * 0.2;
+    mult *= 0.95 + this.azar() * 0.1;
     if (a.fu > 0) mult *= 1.5;
     if (o.fu > 0) mult *= 1.2;
     if (o.mu >= 0) mult *= 0.5;
+    mult *= 1 - CLASES[o.k].defensa;
     const crit = critico > 0 && this.azar() < critico;
     if (crit) mult *= 2;
     const d = Math.min(o.v, Math.max(1, Math.round(base * mult)));
@@ -201,29 +245,45 @@ export class Combate {
     } else if (cuerpo && o.gu && a.v > 0) {
       o.gu = false;
       ev.push({ t: 'contra', o: a.i, a: o.i });
-      this.golpear(o, a, CONTRAGOLPE, ev, { cuerpo: false });
+      this.golpear(o, a, CONTRAGOLPE, ev, { cuerpo: false, tipo: 'rapido' });
     }
     return d;
   }
 
-  // Acción del que tiene el turno. h: 'b' (ataque), 0-2 (habilidad) o 'cambiar'. o: puesto objetivo.
-  // Devuelve los eventos, o null si no vale (no es su turno, en enfriamiento, objetivo no alcanzable…).
-  accion(puesto, h, o) {
+  curar(a, o, cant, ev) {
+    if (o.v <= 0) return;
+    const d = Math.min(cant, o.m - o.v);
+    o.v += d;
+    a.cura += d;
+    ev.push({ t: 'cura', o: o.i, a: a.i, d });
+  }
+
+  // Acción del que tiene el turno. h: 'r' | 'f' (ataques), 0-2 (habilidad) o 'cambiar'. o: luchador objetivo.
+  // p: dónde detuvo la flecha (0 a 1). Devuelve los eventos, o null si no vale (no es su turno, en
+  // enfriamiento, objetivo no alcanzable…).
+  accion(turno, h, o, p = 0.5) {
     const x = this.actual();
-    if (!x || x.i !== puesto) return null;
+    if (!x || x.i !== turno) return null;
     const op = this.opciones(x).find((y) => y.h === h);
     if (!op) return null;
     let blanco = null;
-    if (op.obj === 'enemigo' || op.obj === 'cualquiera') {
+    if (op.obj === 'enemigo' || op.obj === 'cualquiera' || op.obj === 'aliado') {
       if (!op.o.includes(o)) return null;
       blanco = this.l[o];
     }
     const c = CLASES[x.k];
-    const ev = [{ t: 'accion', a: x.i, h, o: blanco ? blanco.i : undefined }];
+    p = Number.isFinite(p) ? entre(p, 0, 1) : 0.5;
+    const hab = typeof h === 'number' ? c.hab[h] : null;
+    const usaFlecha = h === 'r' || h === 'f' || (hab && hab.dano);
+    const mult = usaFlecha ? multFlecha(p) : 1;
+    const ev = [{ t: 'accion', a: x.i, h, o: blanco ? blanco.i : undefined, p: usaFlecha ? Math.round(p * 100) / 100 : undefined }];
     const enemigos = () => this.vivos(1 - x.e);
+    const dano = (y, base) => this.golpear(x, y, base, ev, { mult });
 
-    if (h === 'b') {
-      this.golpear(x, blanco, c.basico, ev, { critico: c.critico || 0 });
+    if (h === 'r') {
+      this.golpear(x, blanco, RAPIDO * c.fuerza, ev, { tipo: 'rapido', mult, critico: c.critico || 0 });
+    } else if (h === 'f') {
+      this.golpear(x, blanco, FUERTE * c.fuerza, ev, { tipo: 'fuerte', mult, critico: c.critico || 0 });
     } else if (h === 'cambiar') {
       const aliado = this.l.find((y) => y.e === x.e && y.i !== x.i);
       const f = x.f;
@@ -232,11 +292,10 @@ export class Combate {
       if (x.f === aliado.f) x.f = 1 - x.f;       // no debería pasar, pero nunca dos en la misma fila
       ev.push({ t: 'cambio', e: x.e });
     } else {
-      const hab = c.hab[h];
       x.cd[h] = hab.cd + 1;                        // +1: el inicio de su próximo turno ya descuenta uno
       switch (hab.k) {
         case 'escudo':
-          if (this.golpear(x, blanco, 12, ev) > 0 && blanco.v > 0) { blanco.at = true; ev.push({ t: 'efecto', o: blanco.i, e: 'at' }); }
+          if (dano(blanco, 12) > 0 && blanco.v > 0) { blanco.at = true; ev.push({ t: 'efecto', o: blanco.i, e: 'at' }); }
           break;
         case 'provocar':
           x.pr = 2; ev.push({ t: 'efecto', o: x.i, e: 'pr' });
@@ -245,42 +304,54 @@ export class Combate {
           for (const y of this.vivos(x.e)) { y.mu = x.i; ev.push({ t: 'efecto', o: y.i, e: 'mu' }); }
           break;
         case 'tajo':
-          for (const y of enemigos()) this.golpear(x, y, 15, ev);
+          for (const y of enemigos()) dano(y, 15);
           break;
         case 'furia':
           x.fu = 3; ev.push({ t: 'efecto', o: x.i, e: 'fu' });
           break;
         case 'ejecutar':
-          this.golpear(x, blanco, blanco.v / blanco.m < 0.35 ? 44 : 22, ev);
+          dano(blanco, blanco.v / blanco.m < 0.35 ? 44 : 22);
           break;
         case 'estocada': {
           const vivos = enemigos();
           const primero = vivos.find((y) => y.f === 0) || vivos[0];
-          if (primero) this.golpear(x, primero, 22, ev);
+          if (primero) dano(primero, 22);
           const segundo = vivos.find((y) => y !== primero);
-          if (segundo && segundo.v > 0) this.golpear(x, segundo, 14, ev);
+          if (segundo && segundo.v > 0) dano(segundo, 14);
           break;
         }
         case 'empujon': {
-          this.golpear(x, blanco, 10, ev);
-          const [p, q] = this.l.filter((y) => y.e !== x.e);
-          if (p.v > 0 && q.v > 0) { const f = p.f; p.f = q.f; q.f = f; ev.push({ t: 'cambio', e: p.e }); }
+          dano(blanco, 10);
+          const [a, b] = this.l.filter((y) => y.e !== x.e);
+          if (a && b && a.v > 0 && b.v > 0) { const f = a.f; a.f = b.f; b.f = f; ev.push({ t: 'cambio', e: a.e }); }
           break;
         }
         case 'guardia':
           x.gu = true; ev.push({ t: 'efecto', o: x.i, e: 'gu' });
           break;
         case 'veneno':
-          if (this.golpear(x, blanco, 6, ev) > 0 && blanco.v > 0) {
+          if (dano(blanco, 6) > 0 && blanco.v > 0) {
             blanco.ve = { t: VENENO.turnos, d: VENENO.dano, de: x.i };
             ev.push({ t: 'efecto', o: blanco.i, e: 've' });
           }
           break;
         case 'sombra':
-          this.golpear(x, blanco, 24, ev);
+          dano(blanco, 24);
           break;
         case 'evasion':
           x.ev = true; ev.push({ t: 'efecto', o: x.i, e: 'ev' });
+          break;
+        case 'curar':
+          this.curar(x, blanco, CURAR, ev);
+          break;
+        case 'plegaria':
+          for (const y of this.vivos(x.e)) {
+            this.curar(x, y, PLEGARIA, ev);
+            if (y.ve || y.at) { y.ve = null; y.at = false; ev.push({ t: 'efecto', o: y.i, e: 'limpio' }); }
+          }
+          break;
+        case 'juicio':
+          dano(blanco, 24);
           break;
       }
     }
@@ -289,20 +360,38 @@ export class Combate {
     return ev;
   }
 
-  // Jugada automática: bots, jugadores desconectados y (con soloAtaque) cuando se acaba el tiempo
-  automatica(soloAtaque = false) {
+  // Jugada automática: bots, jugadores desconectados y (con tiempoAgotado) cuando se acaba el tiempo.
+  // Devuelve [h, o, p].
+  automatica(tiempoAgotado = false) {
     const x = this.actual();
     if (!x) return null;
+    if (tiempoAgotado) {
+      const o = this.opciones(x).find((op) => op.h === 'r').o;
+      return ['r', this.masDebil(o), 0.3];
+    }
+    // Los bots detienen la flecha al azar (a veces en el centro)
+    const p = this.azar() < 0.12 ? 1 : 0.35 + this.azar() * 0.6;
+    const [h, o] = this.decidir(x);
+    return [h, o, p];
+  }
+
+  masDebil(lista) { return lista.map((i) => this.l[i]).sort((a, b) => a.v - b.v)[0].i; }
+
+  decidir(x) {
     const ops = this.opciones(x);
     const de = (h) => ops.find((op) => op.h === h);
-    const masDebil = (lista) => lista.map((i) => this.l[i]).sort((a, b) => a.v - b.v)[0].i;
-    const ataque = () => ['b', masDebil(de('b').o)];
-    if (soloAtaque || this.azar() < 0.15) return ataque();
+    // Rápido o fuerte contra el más débil: fuerte si no es muy probable que lo esquive
+    const ataque = () => {
+      const o = this.masDebil(de('r').o);
+      const esq = this.probEsquiva(x, this.l[o], 'fuerte');
+      return [esq < 0.5 && this.azar() > 0.2 ? 'f' : 'r', o];
+    };
+    if (this.azar() < 0.15) return ataque();
 
     const enemigos = this.vivos(1 - x.e);
     const aliado = this.vivos(x.e).find((y) => y !== x);
     const vida = x.v / x.m;
-    const usar = (n, o) => (de(n) ? [n, o === undefined ? undefined : o] : null);
+    const usar = (n, o) => (de(n) ? [n, o] : null);
 
     // Muy herido adelante y el compañero entero atrás: cambiar de fila
     if (x.f === 0 && aliado && vida < 0.3 && aliado.v / aliado.m > 0.6 && this.azar() < 0.6) return ['cambiar'];
@@ -312,14 +401,14 @@ export class Combate {
       case 'guerrero':
         if (aliado && aliado.v / aliado.m < 0.5) jugada = usar(2);
         if (!jugada && vida > 0.5 && aliado && aliado.v < x.v) jugada = usar(1);
-        if (!jugada && de(0)) jugada = usar(0, enemigos.filter((y) => de(0).o.includes(y.i)).sort((a, b) => b.vel - a.vel)[0].i);
+        if (!jugada && de(0)) jugada = usar(0, de(0).o.map((i) => this.l[i]).sort((a, b) => b.vel - a.vel)[0].i);
         break;
       case 'barbaro': {
         const debil = de(2) ? de(2).o.find((i) => this.l[i].v / this.l[i].m < 0.35) : undefined;
         if (debil !== undefined) jugada = usar(2, debil);
         if (!jugada && enemigos.length > 1) jugada = usar(0);
         if (!jugada && vida > 0.5) jugada = usar(1);
-        if (!jugada && de(2)) jugada = usar(2, masDebil(de(2).o));
+        if (!jugada && de(2)) jugada = usar(2, this.masDebil(de(2).o));
         break;
       }
       case 'lancero':
@@ -330,14 +419,22 @@ export class Combate {
           if (atras && adelante && atras.v < adelante.v) jugada = usar(1, de(1).o[0]);
         }
         break;
-      case 'picaro':
-        if (de(1)) jugada = usar(1, masDebil(de(1).o));
+      case 'asesino':
+        if (de(1)) jugada = usar(1, this.masDebil(de(1).o));
         if (!jugada && de(0)) {
           const sin = de(0).o.map((i) => this.l[i]).filter((y) => !y.ve).sort((a, b) => b.v - a.v)[0];
           if (sin) jugada = usar(0, sin.i);
         }
         if (!jugada && vida < 0.5) jugada = usar(2);
         break;
+      case 'clerigo': {
+        const equipo = this.vivos(x.e);
+        const herido = equipo.filter((y) => y.v / y.m < 0.6).sort((a, b) => a.v / a.m - b.v / b.m)[0];
+        if (equipo.length > 1 && equipo.every((y) => y.v / y.m < 0.75 || y.ve || y.at)) jugada = usar(1);
+        if (!jugada && herido) jugada = usar(0, herido.i);
+        if (!jugada && de(2)) jugada = usar(2, this.masDebil(de(2).o));
+        break;
+      }
     }
     return jugada || ataque();
   }
@@ -349,7 +446,7 @@ export class Combate {
         n: x.n, k: x.k, j: x.jid, e: x.e, f: x.f, v: x.v, m: x.m, cd: x.cd,
         at: x.at || undefined, pr: x.pr || undefined, mu: x.mu >= 0 || undefined, fu: x.fu || undefined,
         ve: x.ve ? x.ve.t : undefined, ev: x.ev || undefined, gu: x.gu || undefined,
-        dano: x.dano, bajas: x.bajas,
+        dano: x.dano, cura: x.cura, bajas: x.bajas,
       })),
       op: this.turno >= 0 ? this.opciones().map(({ h, o }) => ({ h, o })) : [],
     };

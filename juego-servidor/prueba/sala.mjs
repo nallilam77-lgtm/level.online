@@ -18,7 +18,7 @@ function jugador(nombre, url, tok) {
         j.jugando = true;
         setTimeout(() => {
           const op = c.op[Math.floor(Math.random() * c.op.length)];
-          j.ws.send(JSON.stringify({ t: 'accion', h: op.h, o: op.o[0] }));
+          j.ws.send(JSON.stringify({ t: 'accion', h: op.h, o: op.o[0], p: Math.random() }));
           j.jugadas = (j.jugadas || 0) + 1;
           j.jugando = false;
         }, 100);
@@ -35,7 +35,7 @@ console.log('Sala creada:', sala, '· anfitrión:', a.est.anf === a.id, '· pues
 let b = jugador('Invitado', `${BASE}/ws?s=${sala}`);
 await espera(600);
 console.log('Invitado en puesto', b.est.jug.find((x) => x.id === b.id).p);
-b.ws.send(JSON.stringify({ t: 'clase', k: 'picaro' }));
+b.ws.send(JSON.stringify({ t: 'clase', k: 'asesino' }));
 b.ws.send(JSON.stringify({ t: 'empezar' }));          // no es anfitrión: no debe empezar
 await espera(300);
 console.log('Fase tras empezar del invitado:', a.est.fase);
@@ -56,10 +56,27 @@ b = jugador('Invitado', `${BASE}/ws?s=${sala}`, tok);
 await espera(800);
 console.log('Invitado volvió con el mismo id:', b.id === a.est.jug.find((x) => x.n === 'Invitado').id, '· jugadores:', a.est.jug.length);
 
-for (let i = 0; i < 120 && a.est.fase !== 'fin'; i++) await espera(1000);
+for (let i = 0; i < 400 && a.est.fase !== 'fin'; i++) await espera(1000);
 console.log('Fin:', a.est.fase, '· ganó:', ['Rojo', 'Azul', 'empate'][a.est.c.g], '· rondas:', a.est.c.r, '· jugadas anfitrión:', a.jugadas, '· invitado:', b.jugadas);
 a.ws.send(JSON.stringify({ t: 'otra' }));
 await espera(500);
 console.log('Otra partida → fase:', a.est.fase, '· puestos:', a.est.jug.map((x) => `${x.n}:${x.p}:${x.k}`).join(' '));
+
+// 1 vs 1: el invitado no puede cambiar el modo; el anfitrión sí. Los de atrás pasan adelante o quedan mirando.
+b.ws.send(JSON.stringify({ t: 'modo', m: '1v1' }));
+await espera(300);
+console.log('Modo tras pedirlo el invitado:', a.est.modo);
+a.ws.send(JSON.stringify({ t: 'modo', m: '1v1' }));
+a.ws.send(JSON.stringify({ t: 'clase', k: 'clerigo' }));
+await espera(400);
+console.log('Modo:', a.est.modo, '· puestos:', a.est.jug.map((x) => `${x.n}:${x.p}:${x.k}`).join(' '));
+b.ws.send(JSON.stringify({ t: 'puesto', p: 3 }));     // en 1 vs 1 no existe
+await espera(300);
+console.log('Puesto 3 en 1 vs 1 rechazado:', !a.est.jug.some((x) => x.p === 3));
+a.ws.send(JSON.stringify({ t: 'empezar' }));
+await espera(500);
+console.log('1v1 luchadores:', a.est.c.l.map((x) => `${x.n}(${x.k}${x.j ? '' : ',bot'}) e${x.e} f${x.f}`).join(' '));
+for (let i = 0; i < 400 && a.est.fase !== 'fin'; i++) await espera(1000);
+console.log('Fin 1v1:', a.est.fase, '· ganó:', ['Rojo', 'Azul', 'empate'][a.est.c.g], '· rondas:', a.est.c.r, '· curó el clérigo:', a.est.c.l[0].cura);
 a.ws.close(); b.ws.close();
 process.exit(0);

@@ -7,7 +7,7 @@
     // Modo ligero en todos los celulares y tablets (pantalla táctil), con ahorro de datos o "reducir movimiento": sin desenfoque ni brillos (css/ligero.css)
     (function () { var n = navigator, c = n.connection || {}; if ((n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData || /(^|\D)2g/.test(c.effectiveType || '') || (window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches))) { document.documentElement.classList.add('ligero'); var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '../css/ligero.css?v=3'; document.head.appendChild(l); } })();
   </script>
-  <meta name="description" content="Duelo de Acero de Level Up: combate 2 vs 2 por turnos con armas cuerpo a cuerpo y habilidades.">
+  <meta name="description" content="Duelo de Acero de Level Up: combate 2 vs 2 o 1 vs 1 por turnos con armas cuerpo a cuerpo y habilidades.">
   <meta name="theme-color" content="#0f172a">
   <meta name="robots" content="noindex">
   <title>Duelo de Acero - Level Up</title>
@@ -15,8 +15,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="juego.css?v=8">
-  <script src="juego.js?v=8" defer></script>
+  <link rel="stylesheet" href="juego.css?v=9">
+  <script src="juego.js?v=9" defer></script>
 </head>
 <body>
   <header class="barra glass">
@@ -31,7 +31,7 @@
     <section class="pantalla" id="pantallaInicio">
       <form class="panel glass" id="formEntrar" novalidate>
         <h1>Duelo <span>de Acero</span></h1>
-        <p class="panel-texto" id="textoInicio">Combate 2 vs 2 por turnos con espadas, hachas, lanzas y dagas.</p>
+        <p class="panel-texto" id="textoInicio">Combate 2 vs 2 o 1 vs 1 por turnos con espadas, hachas, lanzas, dagas y mazas.</p>
         <label class="campo" id="campoNombre">Tu nombre
           <input type="text" id="nombre" maxlength="14" autocomplete="nickname" placeholder="Ej. ElRey" spellcheck="false">
         </label>
@@ -54,6 +54,15 @@
             <a class="btn-sec btn-wa" id="btnWhatsapp" target="_blank" rel="noopener">WhatsApp</a>
           </div>
         </div>
+      </div>
+
+      <div class="tarjeta glass modo" id="bloqueModo">
+        <h2>Modo de juego</h2>
+        <div class="modo-botones" role="group" aria-label="Modo de juego">
+          <button type="button" class="btn-modo" data-modo="2v2" aria-pressed="true">2 vs 2</button>
+          <button type="button" class="btn-modo" data-modo="1v1" aria-pressed="false">1 vs 1</button>
+        </div>
+        <p class="nota" id="notaModo"></p>
       </div>
 
       <div class="equipos" id="equipos">
@@ -86,6 +95,17 @@
       <div class="escena">
         <canvas id="lienzo" aria-label="Campo de batalla"></canvas>
         <p class="aviso-centro" id="avisoCentro" hidden></p>
+        <!-- Flecha de precisión: mientras más cerca del centro la detengas, más daño -->
+        <div class="flecha" id="flecha" hidden>
+          <p class="flecha-titulo" id="flechaTitulo">¡Detén la flecha en el centro!</p>
+          <div class="flecha-barra" aria-hidden="true">
+            <span class="flecha-zona flecha-zona--buena"></span>
+            <span class="flecha-zona flecha-zona--centro"></span>
+            <span class="flecha-marca" id="flechaMarca"></span>
+          </div>
+          <p class="flecha-resultado" id="flechaResultado" role="status"></p>
+          <button type="button" class="btn-principal flecha-btn" id="btnFlecha">¡Ahora!</button>
+        </div>
       </div>
       <div class="lateral">
         <div class="turno glass">
@@ -105,7 +125,7 @@
           <h1 id="tituloFin">¡Victoria!</h1>
           <p class="panel-texto" id="textoFin"></p>
           <table class="tabla-final">
-            <thead><tr><th>Luchador</th><th>Daño</th><th>Bajas</th></tr></thead>
+            <thead><tr><th>Luchador</th><th>Daño</th><th>Curó</th><th>Bajas</th></tr></thead>
             <tbody id="tablaFin"></tbody>
           </table>
           <button type="button" class="btn-principal" id="btnOtra" hidden>Otra partida</button>
