@@ -140,34 +140,3 @@ export async function validarJugador(juego, id, zona = '') {
   if (copias.size > MAX_COPIAS) copias.delete(copias.keys().next().value);
   return resultado;
 }
-
-/**
- * Panel admin → "Respuesta de Central One al verificar un ID" (solo administrador, api/juego.js?accion=verificar_crudo):
- * la MISMA consulta que hace la tienda, sin copia ni filtro: { producto, enviado, http, respuesta } con todo lo
- * que contesta Central One. No compra ni toca el saldo.
- */
-export async function validarCrudo(juego, id, zona = '') {
-  const datos = JUEGOS[juego];
-  if (!datos) return { error: 'Juego no válido.' };
-  const apiKey = String(datos.llave() || '').trim();
-  if (!apiKey) return { error: `Falta la llave de Central One de ${datos.nombre} en Vercel.` };
-  const producto = await productoParaValidar(datos, apiKey);
-  if (!producto) return { error: `No hay un producto de ${datos.nombre} que sirva para verificar (con stock y que pida solo el ID).` };
-  const items = await catalogo(apiKey);
-  const info = items.find((p) => p.product_id === producto.id) || {};
-  const enviado = { product_id: producto.id, target_payload: { [producto.campo]: id, ...(producto.campoZona && { [producto.campoZona]: zona }) } };
-  const inicio = Date.now();
-  const respuesta = await fetch(`${URL_API}/player/validate`, {
-    method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(enviado), signal: AbortSignal.timeout(TIEMPO_MS),
-  });
-  const texto = await respuesta.text();
-  let cuerpo;
-  try { cuerpo = JSON.parse(texto); } catch (e) { cuerpo = texto; }
-  return {
-    producto: { id: producto.id, nombre: info.name || '', region: info.region || '' },
-    enviado, http: respuesta.status, ms: Date.now() - inicio,
-    cabeceras: { 'x-request-id': respuesta.headers.get('x-request-id') || undefined },
-    respuesta: cuerpo,
-  };
-}

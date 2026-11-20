@@ -382,34 +382,6 @@
   });
   setInterval(() => { if (cliente && document.visibilityState === 'visible') cargarVigilante().catch(() => {}); }, 60000);
 
-  // Respuesta completa de Central One al verificar un ID (solo administrador)
-  $('crudoJuego').addEventListener('change', () => { $('crudoCampoZona').hidden = $('crudoJuego').value !== 'mobilelegends'; });
-  $('formCrudo').addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const id = $('crudoId').value.trim();
-    const zona = $('crudoZona').value.trim();
-    if (!/^\d{3,20}$/.test(id)) { $('mensajeCrudo').textContent = 'Escribe el ID (solo números).'; return; }
-    $('btnCrudo').disabled = true;
-    $('mensajeCrudo').textContent = 'Preguntando a Central One…';
-    $('salidaCrudo').hidden = true;
-    try {
-      const { data: s } = await cliente.auth.getSession();
-      const res = await fetch('/api/juego?accion=verificar_crudo', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ((s && s.session && s.session.access_token) || '') },
-        body: JSON.stringify({ juego: $('crudoJuego').value, id, zona: $('crudoJuego').value === 'mobilelegends' ? zona : '' }),
-      });
-      const r = await res.json();
-      if (r.status !== 'success') { $('mensajeCrudo').textContent = r.message || 'No se pudo.'; return; }
-      $('mensajeCrudo').textContent = `Central One respondió HTTP ${r.http} en ${r.ms} ms (producto usado: ${r.producto.nombre || r.producto.id}).`;
-      $('salidaCrudo').textContent = JSON.stringify({ enviado: r.enviado, respuesta: r.respuesta, cabeceras: r.cabeceras }, null, 2);
-      $('salidaCrudo').hidden = false;
-    } catch (e) {
-      $('mensajeCrudo').textContent = 'Sin conexión. Intenta de nuevo.';
-    } finally {
-      $('btnCrudo').disabled = false;
-    }
-  });
-
   // Avisos del vigilante en este equipo (Web Push; sw.js los muestra). Misma suscripción que la Arena.
   const base64aBytes = (b64) => Uint8Array.from(atob((b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
   async function estadoAvisosAdmin() {
