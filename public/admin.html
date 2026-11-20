@@ -20,7 +20,7 @@
        está en la tabla "administradores" (supabase/tienda.sql). Todo lo protege la base (RLS), no esta página.
        Los datos de Pago Móvil (desde 2026-11-15) se eligen aquí: Ajustes → "Pago Móvil que ven los clientes". -->
   <script src="/js/sesion.js?v=6" defer></script>
-  <script src="/js/admin.js?v=60" defer></script>
+  <script src="/js/admin.js?v=61" defer></script>
 </head>
 <body>
   <div class="barra">
@@ -83,6 +83,19 @@
 
       <!-- RESUMEN: alarma, ventas y saldo. Los interruptores (Free Fire, Google Sheets) están en Ajustes. -->
       <section class="seccion" id="seccion-resumen">
+        <!-- Vigilante de pagos y recargas (supabase/vigilante.sql, api/_lib/vigilante.js): revisa cada minuto -->
+        <div class="tarjeta" id="tarjetaVigilante">
+          <div class="fila-titulo">
+            <h2>🔎 Vigilante <span class="contador-pestana" id="contadorVigilante" hidden></span></h2>
+            <div class="acciones-cuenta">
+              <button type="button" class="btn-ver" id="btnAvisosAdmin">🔔 Activar avisos</button>
+              <button type="button" class="btn-ver" id="btnVigilanteTodas" hidden>Marcar todo revisado</button>
+            </div>
+          </div>
+          <p class="nota" id="notaVigilante">Revisa cada minuto los pagos y las recargas: pagos sin usar, pagos marcados a mano con alguien esperando, recargas dobles, en revisión o sin confirmar. Lo que se resuelve solo desaparece solo.</p>
+          <ul class="pedidos" id="listaVigilante"><li class="vacio">Cargando…</li></ul>
+        </div>
+
         <div class="tarjeta alarma-referencias" id="alarmaReferencias" role="alert" hidden>
           <h2>Están probando referencias al azar</h2>
           <p id="alarmaTexto"></p>

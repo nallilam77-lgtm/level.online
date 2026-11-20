@@ -347,6 +347,77 @@
   });
   setInterval(() => { if (cliente && document.visibilityState === 'visible') cargarAlarma().catch(() => {}); }, 60000);
 
+  // ---------------------------------------------------------------- vigilante (supabase/vigilante.sql)
+  const ICONO_ALERTA = { pago_libre: '💸', usado_a_mano: '✋', pago_sin_recarga: '❗', cobro_trabado: '⏸️', doble: '⚠️', revision: '🔧', en_proceso: '⏳', esperando: '🕐' };
+  async function cargarVigilante() {
+    const { data, error } = await cliente.rpc('admin_alertas', { p_vistas: false });
+    const lista = $('listaVigilante');
+    if (error) { lista.replaceChildren(el('li', 'vacio', 'No se pudo cargar. ¿Ya corriste supabase/vigilante.sql?')); return; }
+    const alertas = data || [];
+    $('contadorVigilante').hidden = !alertas.length;
+    $('contadorVigilante').textContent = alertas.length;
+    $('btnVigilanteTodas').hidden = alertas.length < 2;
+    lista.replaceChildren();
+    if (!alertas.length) { lista.append(el('li', 'vacio', '✅ Todo en orden: nada raro en pagos ni recargas.')); return; }
+    alertas.forEach((a) => {
+      const { li, cuerpo } = filaCompacta({ clave: 'alerta:' + a.id, hora: horaCorta(a.creada), titulo: `${ICONO_ALERTA[a.tipo] || '🔎'} ${a.titulo}`,
+        monto: '', etiqueta: a.tipo === 'doble' || a.tipo === 'pago_sin_recarga' ? 'Urgente' : 'Revisar', claseEtiqueta: a.tipo === 'doble' || a.tipo === 'pago_sin_recarga' ? 'etiqueta--problema' : 'etiqueta--pendiente' });
+      cuerpo.append(el('span', '', a.detalle || ''));
+      const acciones = el('div', 'acciones-cuenta');
+      acciones.append(boton('✅ Ya lo revisé', 'btn-ver', async (b) => {
+        b.disabled = true;
+        const { error: e } = await cliente.rpc('admin_alerta_vista', { p_id: a.id });
+        if (e) { b.disabled = false; alert(textoError(e, 'No se pudo.')); return; }
+        cargarVigilante();
+      }));
+      cuerpo.append(acciones);
+      lista.append(li);
+    });
+  }
+  $('btnVigilanteTodas').addEventListener('click', async () => {
+    if (!confirm('¿Marcar todas las alertas como revisadas?')) return;
+    const { error } = await cliente.rpc('admin_alerta_vista', { p_id: null });
+    if (error) { alert(textoError(error, 'No se pudo.')); return; }
+    cargarVigilante();
+  });
+  setInterval(() => { if (cliente && document.visibilityState === 'visible') cargarVigilante().catch(() => {}); }, 60000);
+
+  // Avisos del vigilante en este equipo (Web Push; sw.js los muestra). Misma suscripción que la Arena.
+  const base64aBytes = (b64) => Uint8Array.from(atob((b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+  async function estadoAvisosAdmin() {
+    const b = $('btnAvisosAdmin');
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) { b.hidden = true; return null; }
+    const reg = await navigator.serviceWorker.register('/sw.js').catch(() => null);
+    if (!reg) { b.hidden = true; return null; }
+    const ya = await reg.pushManager.getSubscription();
+    if (ya && Notification.permission === 'granted') { b.textContent = '🔔 Avisos activos'; b.disabled = true; await guardarSuscripcionAdmin(ya); }
+    return reg;
+  }
+  async function guardarSuscripcionAdmin(sus) {
+    const { data: s } = await cliente.auth.getSession();
+    await fetch('/api/juego?accion=arena_push', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ((s && s.session && s.session.access_token) || '') },
+      body: JSON.stringify(sus.toJSON()),
+    }).catch(() => {});
+  }
+  $('btnAvisosAdmin').addEventListener('click', async () => {
+    const b = $('btnAvisosAdmin');
+    const reg = await estadoAvisosAdmin();
+    if (!reg) { alert('Este navegador no permite avisos. En iPhone, instala la tienda como app y abre el panel desde ahí.'); return; }
+    if (b.disabled) return;
+    const permiso = await Notification.requestPermission();
+    if (permiso !== 'granted') { alert('Sin permiso no te puedo avisar. Actívalo en los permisos del navegador.'); return; }
+    try {
+      const conf = await (await fetch('/api/juego?accion=arena_config', { cache: 'no-store' })).json();
+      const sus = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64aBytes(conf.push) });
+      await guardarSuscripcionAdmin(sus);
+      b.textContent = '🔔 Avisos activos';
+      b.disabled = true;
+    } catch (e) {
+      alert('No se pudieron activar los avisos en este equipo.');
+    }
+  });
+
   // ---------------------------------------------------------------- pedidos
   // Motivo de Central One (failure.code / failure.action) para el administrador
   const MOTIVO_ADMIN = {
@@ -2873,7 +2944,7 @@ Monto que llegó (Bs) del pago …${s.ultimos5}:`, r.monto ? bs(r.monto) : '');
     if (error || esAdmin !== true) return estado('Esta cuenta no es administradora. Entra con la cuenta correcta.', true);
     $('panelEstado').hidden = true;
     $('panel').hidden = false;
-    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarManuales().catch(() => {}), cargarAlarma().catch(() => {}), cargarModoFF().catch(() => {}), cargarHojas().catch(() => {}), cargarMantenimiento().catch(() => {}), cargarPorAprobar().catch(() => {})]);
+    await Promise.all([cargarResumen(), cargarPedidos(), cargarSaldo(), cargarRevision(), cargarManuales().catch(() => {}), cargarAlarma().catch(() => {}), cargarVigilante().catch(() => {}), estadoAvisosAdmin().catch(() => {}), cargarModoFF().catch(() => {}), cargarHojas().catch(() => {}), cargarMantenimiento().catch(() => {}), cargarPorAprobar().catch(() => {})]);
     escuchar();
   })();
 })();

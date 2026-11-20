@@ -292,6 +292,9 @@ export async function tic(req, res) {
   // Tienda: stock de los productos limitados (tokens Evo) y pedidos que esperan stock (_lib/esperas.js)
   const { revisarEsperas } = await import('./esperas.js');
   const esperas = await revisarEsperas(limite);
+  // Vigilante de pagos y recargas (_lib/vigilante.js): lo raro se le avisa al administrador
+  const { vigilar } = await import('./vigilante.js');
+  await vigilar();
   return res.status(200).json({ status: 'success', avisos, entregas, esperas: esperas.entregadas });
 }
 

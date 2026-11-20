@@ -160,6 +160,12 @@ async function otroFormato(ultimos5, escrita, distinto) {
   const iguales = (await leerDonde('pagos', `referencia=like.*${ultimos5}&recibido=gt.${desde}&order=recibido.desc`, 'referencia,monto,estado')
     .catch(() => [])) || [];
   if (iguales.some((p) => p.referencia === escrita)) return null;   // es exactamente ese: se usa ese
+  // Los usados que la limpieza diaria ya pasó a pagos_usados también cuentan (no tienen monto guardado)
+  if (!iguales.length) {
+    const usados = (await leerDonde('pagos_usados', `referencia=like.*${ultimos5}&usado=gt.${desde}`, 'referencia').catch(() => [])) || [];
+    const u = usados.find((x) => x.referencia !== escrita);
+    if (u) iguales.push({ referencia: u.referencia, monto: 0, estado: 'usado' });
+  }
   const p = iguales[0];
   if (!p) return null;
   return { status: 'error', llego: { referencia: p.referencia, monto: Number(p.monto) || 0, estado: p.estado },
@@ -272,6 +278,12 @@ export async function solicitudResolver(req, res) {
       if (soltada) return res.status(409).json({ status: 'error', message: `En los últimos 3 días ya soltaste otro pago que termina en ${fila.ultimos5}. Para soltar este, escribe su referencia completa del banco (tiene que ser distinta).` });
       const [llego] = (await leerDonde('pagos', `referencia=like.*${fila.ultimos5}&recibido=gt.${desde}&order=recibido.desc`, 'estado')) || [];
       if (llego) return res.status(409).json({ status: 'error', message: `Ya llegó un pago que termina en ${fila.ultimos5} (está "${llego.estado}"). Si es el mismo pago, escribe su referencia completa y se usa ese; si es otro, escribe la referencia completa de este.` });
+      // La limpieza diaria pasa los pagos usados a "pagos_usados": también cuentan (2026-11-20: un pago de 780 Bs
+      // dio dos recargas porque el cliente recargó con el pago real y después se soltó su solicitud sin referencia)
+      const [usado] = (await leerDonde('pagos_usados', `referencia=like.*${fila.ultimos5}&usado=gt.${desde}`, 'referencia')) || [];
+      if (usado) return res.status(409).json({ status: 'error', message: `Ya se usó un pago que termina en ${fila.ultimos5} (${usado.referencia}) en los últimos 3 días: casi seguro el cliente ya recargó con él. Revisa sus recargas; si de verdad es otro pago, escribe su referencia completa.` });
+      const [hecha] = (await leerDonde('recargas', `referencia=eq.${fila.ultimos5}&estado=in.(completado,en_proceso)&id_pedido=neq.${encodeURIComponent(fila.id_pedido || '-')}&creado=gt.${desde}`, 'cuenta,paquete')) || [];
+      if (hecha) return res.status(409).json({ status: 'error', message: `Ya hay una recarga hecha con la referencia …${fila.ultimos5} (${hecha.paquete}, ${hecha.cuenta}) en los últimos 3 días. Si es el mismo pago, ya se entregó: rechaza esta. Si es otro pago, escribe su referencia completa.` });
     } catch (error) {
       console.error('⚠️ pagos a mano: no se pudo revisar si el pago ya se usó:', error.message);
       return res.status(503).json({ status: 'error', message: 'No se pudo comprobar el pago. Intenta de nuevo o escribe la referencia completa.' });
