@@ -12,7 +12,20 @@ import { supabaseActivo, guardar, leer, leerDonde, actualizar, rpc, esAdminToken
 import { limpiarMontoVES } from './recarga-comun.js';
 import { tokenDe } from './historial.js';
 import { cambiarPago } from './motor-pagos.js';
-import { guardarPagoManual } from './pagos-manual.js';
+import { guardarPagoManual, buscarParaSoltar, pedirSoltar } from './pagos-manual.js';
+
+// El pago que acaba de llegar es de un cliente que esperaba en "Revisar pagos": se le hace la recarga (en recargar.js,
+// que tiene 180 s; aquí la función de MacroDroid solo tiene 30). Nunca lanza.
+async function soltarSiEsperaban(ultimos5, base) {
+  try {
+    for (const p of await buscarParaSoltar(ultimos5)) {
+      const ok = await pedirSoltar(base, p.id, p.referencia);
+      console.info(`🤖 pago_recibido: …${ultimos5} era de alguien en Revisar pagos → ${ok ? 'se suelta solo' : 'no se pudo pedir (lo intenta el tic)'}`);
+    }
+  } catch (error) {
+    console.error('⚠️ pago_recibido: no se pudo revisar si alguien lo esperaba:', error.message);
+  }
+}
 
 // Limpieza diaria (pagos_limpiar de supabase/pagos.sql): la primera vez que llega un pago cada día
 // (hora de Venezuela) en esta instancia, después de responder.
@@ -119,6 +132,8 @@ export async function pagoRecibido(req, res) {
     }
     console.info(`💵 Pago recibido en Supabase: …${referencia.slice(-5)} · ${monto} Bs · ${origen}`);
     limpiarSiToca();
+    // ¿Alguien lo esperaba en "Revisar pagos"? Se le suelta solo (_lib/pagos-manual.js → soltarAutomatico)
+    waitUntil(soltarSiEsperaban(referencia.slice(-5), `https://${String(req.headers['x-forwarded-host'] || req.headers.host || 'www.levelupstore.online')}`));
     return responder(200, { status: 'success', message: 'Pago guardado en Supabase' });
   } catch (error) {
     if (/Supabase 409/.test(error.message)) return responder(200, { status: 'success', duplicado: true, message: 'Pago ya registrado' });

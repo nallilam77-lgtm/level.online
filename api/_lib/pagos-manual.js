@@ -432,3 +432,93 @@ async function deshacerRechazo(req, res, fila, b) {
   return res.status(200).json({ status: 'success', recarga: ok ? '✅ Recarga pedida a Central One: pasa sola a "Entregada".'
     : `⚠️ El pago quedó guardado, pero la recarga no salió: ${String(r.cuerpo?.message || 'sin detalle').slice(0, 200)} Está en Revisión: usa "Hacer de nuevo".` });
 }
+
+// =========================================================================
+// SOLTADO AUTOMÁTICO (desde 2026-11-20): el cliente escribió su referencia ANTES de que llegara la notificación del
+// banco (su pedido quedó en "Revisar pagos") y después el pago llegó por la macro con esos mismos 5 dígitos.
+// Se hace lo mismo que haría el administrador al soltar con la referencia completa: la solicitud queda aprobada con
+// esa referencia (nota "auto") y la recarga se repite por el camino normal, que usa ESE pago. Solo si hay UNA
+// solicitud pendiente y UN pago libre con esos 5 dígitos, el monto coincide (±1 Bs), el pago llegó en la hora
+// siguiente y esa conexión no tiene otras solicitudes esperando; si no, lo decide el administrador.
+// Lo llaman: api/_lib/pagos.js al llegar el pago (por /api/recargar?accion=solicitud_auto, que tiene 180 s) y el tic
+// de cada minuto como respaldo (buscarParaSoltar).
+// =========================================================================
+export async function soltarAutomatico(id, referencia) {
+  const [fila] = (await leer('pagos_solicitudes', { id }, 'id,ultimos5,juego,monto,estado,id_pedido')) || [];
+  if (!fila || fila.estado !== 'pendiente' || !String(referencia).endsWith(fila.ultimos5)) return { ok: false, motivo: 'no aplica' };
+  const [pago] = (await leer('pagos', { referencia }, 'estado,monto')) || [];
+  if (!pago || pago.estado !== 'verificado') return { ok: false, motivo: 'el pago ya no está libre' };
+  const ahora = new Date().toISOString();
+  const tomada = await actualizar('pagos_solicitudes', `id=eq.${id}&estado=eq.pendiente`, { estado: 'aprobado', resuelto: ahora, referencia, nota: 'auto' }, 'id');
+  if (!tomada?.length) return { ok: false, motivo: 'ya no está pendiente' };
+  let resultado;
+  try {
+    resultado = await repetirRecarga(id);
+  } catch (error) {
+    console.error('🚨 soltado automático: falló la recarga:', error.message);
+    resultado = { error: 'La recarga dio un error inesperado.' };
+  }
+  const cuerpo = resultado.cuerpo || {};
+  const exito = !resultado.error && cuerpo.status === 'success';
+  const pagoLibre = !exito && (await leer('pagos', { referencia }, 'estado').catch(() => []))?.[0]?.estado === 'verificado';
+  if (pagoLibre && fila.id_pedido) {
+    await actualizar('recargas', `id_pedido=eq.${encodeURIComponent(fila.id_pedido)}&estado=eq.pendiente`, { estado: 'en_revision', motivo_fallo: 'pago_no_tomado', actualizado: new Date().toISOString(),
+      nota_admin: corto(`🤖 Pago …${fila.ultimos5} llegó y se soltó solo, pero la recarga no se hizo (el pago quedó libre): ${resultado.error || cuerpo.message || 'sin detalle'}`, 500) })
+      .catch((error) => console.error('⚠️ soltado automático: no se pudo pasar el pedido a revisión:', error.message));
+  }
+  console.info(`🤖 soltado automático: …${fila.ultimos5} (${fila.juego}) con ${referencia} → ${exito ? 'recarga hecha' : `no salió: ${resultado.error || cuerpo.message || cuerpo.status || '?'}`}`);
+  return { ok: exito, cuerpo, error: resultado.error };
+}
+
+/** Solicitudes pendientes cuyo pago ya llegó (una sola solicitud y un solo pago libre con esos 5 dígitos). */
+export async function buscarParaSoltar(ultimos5) {
+  const desde = new Date(Date.now() - 3 * 864e5).toISOString();
+  const filtro = ultimos5 ? `ultimos5=eq.${ultimos5}&` : '';
+  const pendientes = (await leerDonde('pagos_solicitudes', `${filtro}estado=eq.pendiente&creado=gt.${desde}&order=creado.asc`, 'id,ultimos5,creado,monto,ip')) || [];
+  // Una conexión con varias solicitudes esperando (podría estar probando números al azar): nada automático
+  const todas = (await leerDonde('pagos_solicitudes', `estado=eq.pendiente&creado=gt.${desde}`, 'ip')) || [];
+  const porIp = new Map();
+  for (const t of todas) if (t.ip) porIp.set(t.ip, (porIp.get(t.ip) || 0) + 1);
+  const parejas = [];
+  const porCinco = new Map();
+  for (const s of pendientes) porCinco.set(s.ultimos5, [...(porCinco.get(s.ultimos5) || []), s]);
+  for (const [cinco, lista] of porCinco) {
+    if (lista.length !== 1) continue;                       // dos clientes esperando con los mismos 5: lo decide el administrador
+    const s = lista[0];
+    if (s.ip && (porIp.get(s.ip) || 0) > 1) continue;
+    const libres = (await leerDonde('pagos', `referencia=like.*${cinco}&estado=eq.verificado&recibido=gt.${desde}`, 'referencia,recibido,monto')) || [];
+    if (libres.length !== 1) continue;                      // ninguno o varios pagos posibles: lo decide el administrador
+    // El pago llegó entre 10 min antes y 60 min después de que el cliente escribiera la referencia, y por el monto
+    // de su pedido (±1 Bs): así nadie se queda con el pago de otro dejando números al azar en "Revisar pagos"
+    const llego = Date.parse(libres[0].recibido), pidio = Date.parse(s.creado);
+    if (llego < pidio - 10 * 60_000 || llego > pidio + 60 * 60_000) continue;
+    if (!(Number(s.monto) > 0) || Math.abs(Number(libres[0].monto) - Number(s.monto)) > 1) continue;
+    parejas.push({ id: s.id, referencia: libres[0].referencia });
+  }
+  return parejas;
+}
+
+// POST /api/recargar?accion=solicitud_auto { id, referencia } con la cabecera X-Arena (llamada interna: pagos.js y el
+// tic). Responde enseguida y hace la recarga después (waitUntil, dentro de los 180 s de recargar.js).
+export async function solicitudAuto(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  const { esDelWorker } = await import('./arena-secretos.js');
+  if (req.method !== 'POST' || !(await esDelWorker(req))) return res.status(403).json({ status: 'error' });
+  const id = String(req.body?.id || '');
+  const referencia = String(req.body?.referencia || '').replace(/\D/g, '');
+  if (!UUID.test(id) || !/^\d{5,30}$/.test(referencia)) return res.status(400).json({ status: 'error' });
+  waitUntil(soltarAutomatico(id, referencia).catch((error) => console.error('🚨 soltado automático:', error.message)));
+  return res.status(202).json({ status: 'success' });
+}
+
+/** Pide a /api/recargar que suelte (llamada interna con el secreto). No espera la recarga. */
+export async function pedirSoltar(base, id, referencia) {
+  const { secretosArena } = await import('./arena-secretos.js');
+  const s = await secretosArena();
+  if (!s.arena_secreto) return false;
+  const r = await fetch(`${base}/api/recargar?accion=solicitud_auto`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Arena': s.arena_secreto },
+    body: JSON.stringify({ id, referencia }), signal: AbortSignal.timeout(10_000),
+  });
+  return r.status === 202;
+}

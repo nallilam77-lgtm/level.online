@@ -292,6 +292,14 @@ export async function tic(req, res) {
   // Tienda: stock de los productos limitados (tokens Evo) y pedidos que esperan stock (_lib/esperas.js)
   const { revisarEsperas } = await import('./esperas.js');
   const esperas = await revisarEsperas(limite);
+  // Respaldo del soltado automático: pagos que llegaron para alguien en "Revisar pagos" (_lib/pagos-manual.js)
+  try {
+    const { buscarParaSoltar, pedirSoltar } = await import('./pagos-manual.js');
+    const base = `https://${String(req.headers['x-forwarded-host'] || req.headers.host || 'www.levelupstore.online')}`;
+    for (const p of await buscarParaSoltar(null)) await pedirSoltar(base, p.id, p.referencia).catch(() => false);
+  } catch (error) {
+    console.error('⚠️ arena/tic (soltar):', error.message);
+  }
   // Vigilante de pagos y recargas (_lib/vigilante.js): lo raro se le avisa al administrador
   const { vigilar } = await import('./vigilante.js');
   await vigilar();

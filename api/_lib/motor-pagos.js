@@ -50,8 +50,22 @@ async function llamar(funcion, args) {
  * Aparta un pago (últimos 5) para un pedido. { encontrado, referencia, monto, repetido } o { encontrado: false, message }.
  * precio: lo que cuesta el paquete (solo para la solicitud de pago a mano).
  */
+// Espera corta (desde 2026-11-20): si la referencia todavía no está, se busca otra vez cada 4 s durante 20 s antes
+// de mandar el pedido a "Revisar pagos" (la notificación del banco suele llegar segundos después del pago).
+// Cabe en el tiempo de "verificar" de cada tienda (32 s de holgura en juegos/freefire.js). Repetir la misma
+// referencia no dispara la alarma de "referencias al azar" (cuenta referencias distintas).
+const ESPERA_PAGO_MS = 20_000;
+const CADA_MS = 4_000;
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export async function tomarPago(ultimos5, idPedido, juego, precio = 0) {
-  const r = await llamar('pagos_tomar', { p_ultimos5: String(ultimos5), p_id_pedido: String(idPedido), p_juego: juego });
+  const args = { p_ultimos5: String(ultimos5), p_id_pedido: String(idPedido), p_juego: juego };
+  let r = await llamar('pagos_tomar', args);
+  for (const hasta = Date.now() + ESPERA_PAGO_MS; r?.motivo === 'no_existe' && Date.now() + CADA_MS <= hasta;) {
+    await esperar(CADA_MS);
+    r = await llamar('pagos_tomar', args);
+  }
+  if (r?.encontrado && r.repetido === false) console.info(`⏱️ pagos: …${ultimos5} llegó durante la espera corta (pedido ${idPedido})`);
   if (r?.encontrado) return { encontrado: true, referencia: String(r.referencia), monto: Number(r.monto) || 0, repetido: r.repetido === true };
   // No llegó la notificación: con "Verificar a mano" encendido queda por aprobar en el panel (_lib/pagos-manual.js;
   // import dinámico: pagos-manual usa externo.js, que importa este archivo)
