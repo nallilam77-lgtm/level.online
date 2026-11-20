@@ -3,7 +3,8 @@
 //
 // El navegador se conecta a /cola y manda { t: 'hola', jwt }. Con dos clientes distintos esperando, arma
 // una sala 'ranking' (1 vs 1, el resultado da puntos) y les manda { t: 'emparejado', s: <sala> }. Si en
-// 20 s no aparece nadie, arma una sala 'bot' (contra la máquina, sin puntos) y manda { t: 'emparejado', s, bot: true }.
+// 20 s no aparece nadie, arma una sala 'bot' (la máquina, presentada como un jugador más: ver sala.js) y manda
+// { t: 'emparejado', s } igual que con una persona.
 // Mientras espera recibe { t: 'esperando', gente: <cuántos buscan> }.
 // /cola?modo=fichas: duelo por fichas (mejor de 3, cuesta 2 fichas que se cobran al empezar): salas 'fichas'
 // o, sin nadie en 20 s, 'fichas_bot' (contra un bot experto). Cada modo tiene su propia fila de espera.
@@ -88,7 +89,7 @@ export class Cola {
       return;
     }
     for (const x of jugadores) {
-      try { x.ws.send(JSON.stringify({ t: 'emparejado', s, bot: tipo === 'bot' || tipo === 'fichas_bot' || undefined })); x.ws.close(1000, 'emparejado'); } catch (e) { /* se fue: su rival lo espera 45 s */ }
+      try { x.ws.send(JSON.stringify({ t: 'emparejado', s, bot: tipo === 'fichas_bot' || undefined })); x.ws.close(1000, 'emparejado'); } catch (e) { /* se fue: su rival lo espera 45 s */ }
     }
   }
 }

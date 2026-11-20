@@ -4,7 +4,10 @@
 //   'arena'   partida del torneo pagado (?a=<partida>): solo los inscritos se sientan (con su sesión de Google),
 //             puestos fijos, empieza sola, mejor de 3, y avisa el resultado a la tienda (premio).
 //   'ranking' duelo rápido entre dos clientes (la crea la cola, cola.js): un combate; el resultado da puntos.
-//   'bot'     duelo rápido contra un bot (nadie más en la cola): un combate, sin puntos.
+//   'bot'     duelo rápido gratis sin nadie más en la cola (pedido del dueño, 2026-11-20): el rival es la máquina
+//             pero se presenta como un jugador más (nombre de jugador, piensa unos segundos, sala 'ranking' para el
+//             navegador) y el resultado suma puntos como contra una persona (máx. 5 por día, ranking_bot).
+//             Solo en el duelo GRATIS: en el de fichas el rival de la casa se muestra como tal (se apuestan fichas).
 //   'fichas'  duelo por fichas entre dos clientes (cola ?modo=fichas): mejor de 3; al empezar se cobran 2 fichas
 //             a cada uno (por la tienda, todos o ninguno) y al terminar el ganador recibe el doble.
 //   'fichas_bot'  igual, contra un bot experto (nadie más en la cola): si gana el cliente, recibe el doble.
@@ -47,6 +50,9 @@ const RANKING_ESPERA_MS = 45_000;    // duelo rápido: si el rival no entra en 4
 const RTT_MAX = 300;                 // margen máximo de la flecha por ping (quien finja un ping alto no gana más que esto)
 const ABANDONO_MS = 30000;           // serie con algo en juego sin nadie conectado: a los 30 s la máquina la termina
 const NOMBRES_EXPERTO = ['Maestro Kael', 'Maestra Vega', 'Maestro Draco', 'Maestra Nyx'];
+// Duelo gratis sin rival: nombres de jugador (el navegador no sabe que es la máquina)
+const NOMBRES_RIVAL = ['ElTigre07', 'Kiara_ff', 'DarkNeo', 'Yeiko', 'LaMorocha', 'Brayan_x', 'NicoGamer', 'Valen.21', 'Zeus_VE',
+  'Mafer', 'Jhonny22', 'Cris.ff', 'Ruso', 'Dayana', 'Kevin_mk', 'ElGocho', 'Sofi', 'Panita', 'Leo_Mrd', 'Andrés'];
 const NOMBRES_BOT = ['Bot Rayo', 'Bot Toro', 'Bot Sombra', 'Bot Hierro', 'Bot Lobo', 'Bot Puma', 'Bot Trueno', 'Bot Cobra'];
 const CLASE_INICIAL = ['guerrero', 'clerigo', 'barbaro', 'asesino'];
 const PUESTOS = { '2v2': [0, 1, 2, 3], '1v1': [0, 2] };
@@ -157,6 +163,14 @@ export class Sala {
     this.id = id;
     this.modo = modo;
     this.serie = { meta: tipo === 'arena' || tipo === 'fichas' || tipo === 'fichas_bot' ? 2 : 1, gan: [0, 0], num: 1, fin: null };
+    // Duelo gratis sin rival: un jugador "de mentira" en el puesto de enfrente (lo juega la máquina)
+    if (tipo === 'bot') {
+      const n = NOMBRES_RIVAL[Math.floor(Math.random() * NOMBRES_RIVAL.length)];
+      const falso = { id: 'j' + this.siguienteId++, n, tok: azarHex(16), usuario: null, con: null, p: 2,
+        k: NOMBRES_CLASES[Math.floor(Math.random() * NOMBRES_CLASES.length)], salidaReloj: null, inscrito: true, falso: true };
+      this.jugadores.set(falso.id, falso);
+      this.demoraRival = 2500 + Math.random() * 3000;   // "entra" a los pocos segundos
+    }
     (jugadores || []).forEach((x, i) => {
       const j = { id: 'j' + this.siguienteId++, n: limpiarNombre(x.nombre), tok: azarHex(16), usuario: x.usuario, con: null,
         p: Number(x.puesto), k: CLASE_INICIAL[Number(x.puesto)] || 'guerrero', salidaReloj: null, inscrito: true };
@@ -175,8 +189,8 @@ export class Sala {
   difundir(ev) {
     this.seq++;
     const datos = JSON.stringify({
-      t: 's', seq: this.seq, fase: this.fase, sala: this.id, anf: this.anfitrion, modo: this.modo, tipo: this.tipo,
-      jug: [...this.jugadores.values()].map((j) => ({ id: j.id, n: j.n, p: j.p, k: j.k, on: !!j.con, ins: j.inscrito || undefined })),
+      t: 's', seq: this.seq, fase: this.fase, sala: this.id, anf: this.anfitrion, modo: this.modo, tipo: this.tipo === 'bot' ? 'ranking' : this.tipo,
+      jug: [...this.jugadores.values()].map((j) => ({ id: j.id, n: j.n, p: j.p, k: j.k, on: j.falso ? Date.now() - this.creadaEn > (this.demoraRival || 0) : !!j.con, ins: j.inscrito || undefined })),
       c: this.combate ? this.combate.foto() : null,
       queda: this.limite ? Math.max(0, this.limite - Date.now()) : 0,
       serie: this.serie || undefined,
@@ -393,7 +407,10 @@ export class Sala {
     const alguno = inscritos.some((j) => j.con);
     const ahora = Date.now();
     if (this.cobrando) return;
-    if (this.tipo === 'bot' || this.tipo === 'fichas_bot') {
+    if (this.tipo === 'bot') {
+      if (alguno && ahora - this.creadaEn > (this.demoraRival || 0)) this.empezarSerie();
+      else if (alguno) this.difundir();
+    } else if (this.tipo === 'fichas_bot') {
       if (alguno) this.empezarSerie();
     } else if (this.tipo === 'ranking' || this.tipo === 'fichas') {
       if (todos) this.empezarSerie();
@@ -474,8 +491,10 @@ export class Sala {
     const x = this.combate.actual();
     const j = x.jid && this.jugadores.get(x.jid);
     const solo = !j || !j.con;
-    this.limite = solo ? 0 : Date.now() + TURNO_MS;
-    this.reloj = setTimeout(() => this.jugarSolo(!solo), solo ? BOT_MS : TURNO_MS + 300);
+    // Rival "de mentira" del duelo gratis: con reloj de turno y unos segundos para "pensar", como una persona
+    const falso = !!(j && j.falso);
+    this.limite = solo && !falso ? 0 : Date.now() + TURNO_MS;
+    this.reloj = setTimeout(() => this.jugarSolo(!solo), falso ? 2500 + Math.random() * 4500 : solo ? BOT_MS : TURNO_MS + 300);
     this.difundir(ev);
     if (!solo) this.enviar(j.con, { t: 'pi', k: Date.now() });   // mide su ping (margen de la flecha)
   }
@@ -540,6 +559,9 @@ export class Sala {
       // Ganador: el cliente de ese lado (contra el bot, el lado 1 es el bot → null). Empate imposible aquí.
       const lado = [...this.jugadores.values()].find((j) => j.inscrito && (j.p >= 2 ? 1 : 0) === ganador);
       avisarTienda(this.env, { tipo: 'fichas_resultado', sala: this.id, ganador: lado ? lado.usuario : null });
+    } else if (this.tipo === 'bot' && ganador !== 2) {
+      const yo = [...this.jugadores.values()].find((j) => j.inscrito && !j.falso);
+      if (yo) avisarTienda(this.env, { tipo: 'ranking_bot', usuario: yo.usuario, nombre: yo.n, gano: ganador === (yo.p >= 2 ? 1 : 0) });
     } else if (this.tipo === 'ranking' && ganador !== 2) {
       const lado = (e) => [...this.jugadores.values()].find((j) => j.inscrito && (j.p >= 2 ? 1 : 0) === e);
       const a = lado(ganador), b = lado(1 - ganador);

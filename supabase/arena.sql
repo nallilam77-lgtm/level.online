@@ -656,3 +656,35 @@ grant execute on function public.arena_mis_fichas() to authenticated;
 
 -- Por ahora el torneo con Bs queda apagado (se enciende en admin.html → Arena)
 update public.configuracion set valor = jsonb_set(valor, '{activo}', 'false') where clave = 'arena' and (valor->>'activo') is distinct from 'false';
+
+-- =====================================================================
+-- Duelo gratis contra la máquina (2026-11-20): el rival se presenta como un jugador más y el resultado suma
+-- puntos como contra una persona (+25 / −10), máximo 5 de estos duelos por día y cliente (arena_duelos con b = 0).
+-- =====================================================================
+create or replace function public.arena_ranking_uno(p_usuario uuid, p_nombre text, p_gano boolean)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_semana date := arena_semana();
+  v_dia date := (now() at time zone 'America/Caracas')::date;
+  v_cuenta integer;
+begin
+  insert into arena_duelos (dia, a, b, cuenta) values (v_dia, p_usuario, '00000000-0000-0000-0000-000000000000', 1)
+  on conflict (dia, a, b) do update set cuenta = arena_duelos.cuenta + 1
+  returning cuenta into v_cuenta;
+  if v_cuenta > 5 then return jsonb_build_object('cuenta', false); end if;
+  if p_gano then
+    insert into arena_ranking (semana, usuario, nombre, puntos, ganadas) values (v_semana, p_usuario, left(p_nombre, 14), 25, 1)
+    on conflict (semana, usuario) do update set puntos = arena_ranking.puntos + 25, ganadas = arena_ranking.ganadas + 1, nombre = excluded.nombre;
+  else
+    insert into arena_ranking (semana, usuario, nombre, puntos, perdidas) values (v_semana, p_usuario, left(p_nombre, 14), 0, 1)
+    on conflict (semana, usuario) do update set puntos = greatest(0, arena_ranking.puntos - 10), perdidas = arena_ranking.perdidas + 1, nombre = excluded.nombre;
+  end if;
+  return jsonb_build_object('cuenta', true);
+end;
+$$;
+revoke execute on function public.arena_ranking_uno(uuid, text, boolean) from public, anon, authenticated;
+grant execute on function public.arena_ranking_uno(uuid, text, boolean) to service_role;

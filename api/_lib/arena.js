@@ -236,6 +236,11 @@ export async function evento(req, res) {
       });
       return res.status(200).json({ status: 'success', costo: COSTO_DUELO, ...r });
     }
+    // Duelo gratis contra la máquina (presentada como un jugador): puntos como contra una persona, máx. 5 por día
+    if (b.tipo === 'ranking_bot' && UUID.test(String(b.usuario))) {
+      const r = await rpc('arena_ranking_uno', { p_usuario: b.usuario, p_nombre: limpiarNombre(b.nombre) || 'Jugador', p_gano: b.gano === true });
+      return res.status(200).json({ status: 'success', ...r });
+    }
     if (b.tipo === 'fichas_saldo' && UUID.test(String(b.usuario))) {
       const filas = await leer('juego_fichas', { usuario: b.usuario }, 'fichas');
       return res.status(200).json({ status: 'success', fichas: Number(filas && filas[0] && filas[0].fichas) || 0, costo: COSTO_DUELO });

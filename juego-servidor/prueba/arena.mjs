@@ -126,9 +126,18 @@ await terminar(d);
 const rk = eventos.find((x) => x.tipo === 'ranking');
 ok(rk && [dani, eva].includes(rk.ganador.usuario) && rk.ganador.usuario !== rk.perdedor.usuario, `Puntos para ${rk && rk.ganador.nombre}`);
 [d, e2].forEach((c) => c.ws.close());
-const solo = cliente('Solo', `${BASE}/cola`, jwt(uuid(), 'Solo'));
+const soloId = uuid();
+const solo = cliente('Solo', `${BASE}/cola`, jwt(soloId, 'Solo'));
 await espera(21500);
-ok(solo.emparejado && solo.emparejado.bot, 'Solo en la cola: a los 20 s, contra un bot');
+ok(solo.emparejado && !solo.emparejado.bot, 'Solo en la cola gratis: a los 20 s, rival (la máquina, sin decir que es bot)');
+const sj = cliente('Solo', `${BASE}/ws?s=${solo.emparejado.s}`, jwt(soloId, 'Solo'));
+await espera(7000);
+const rivalN = sj.est && sj.est.c && sj.est.c.l[1].n;
+ok(sj.est && sj.est.tipo === 'ranking' && sj.est.c && !/bot/i.test(rivalN) && sj.est.c.l[1].j, `Se ve como un duelo con persona (tipo ${sj.est && sj.est.tipo}, rival "${rivalN}")`);
+await terminar(sj);
+const rb0 = eventos.find((x) => x.tipo === 'ranking_bot' && x.usuario === soloId);
+ok(rb0 && typeof rb0.gano === 'boolean', `Suma al ranking (${rb0 && (rb0.gano ? 'ganó' : 'perdió')})`);
+sj.ws.close();
 
 // ---------- 5. Duelo por fichas ----------
 const fede = uuid(), gabi = uuid(), pobre = uuid();

@@ -213,7 +213,7 @@
         ? 'Tu partida del <strong>torneo</strong> de Duelo de Acero, al mejor de 3 combates.'
         : modoCola === 'fichas'
           ? '<strong>Duelo por 2 fichas</strong>, al mejor de 3. Si ganas, te llevas las fichas de tu rival. Si nadie aparece en 20 segundos, juegas contra un <strong>bot experto</strong>.'
-          : '<strong>Duelo rápido</strong>: te buscamos un rival. Si no hay nadie en 20 segundos, juegas contra un bot.';
+          : '<strong>Duelo rápido</strong>: te buscamos un rival.';
       botonEntrar('Revisando tu sesión…', false);
       jwt = await sesionJwt();
       if (!jwt) {
@@ -344,7 +344,7 @@
     // Cola del duelo rápido
     if (m.t === 'esperando') {
       botonEntrar(m.gente > 1 ? `Buscando rival… (${m.gente} buscando)` : 'Buscando rival…', false);
-      aviso(modoCola === 'fichas' ? 'Si nadie aparece en 20 segundos, juegas contra un bot experto.' : 'Si nadie aparece en 20 segundos, juegas contra un bot.', true);
+      aviso(modoCola === 'fichas' ? 'Si nadie aparece en 20 segundos, juegas contra un bot experto.' : 'Buscando a alguien conectado…', true);
       return;
     }
     if (m.t === 'emparejado') {
